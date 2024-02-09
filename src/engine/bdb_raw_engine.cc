@@ -50,6 +50,10 @@
 bvar::Adder<uint64_t> bdb_snapshot_alive_count("bdb_snapshot_alive_count");
 bvar::Adder<uint64_t> bdb_transaction_alive_count("bdb_transaction_alive_count");
 
+namespace bthread {
+DECLARE_int32(bthread_concurrency);
+}  // namespace bthread
+
 namespace dingodb {
 
 DEFINE_int32(bdb_base_backoff_ms, 10, "bdb dead lock backoff time(ms)");
@@ -75,9 +79,7 @@ DEFINE_int32(bdb_dead_lock_detect_time_s, 1, "bdb dead_lock_detect interval(s)")
 DEFINE_int32(bdb_stat_time_s, 60, "bdb stat time interval(s)");
 
 DEFINE_bool(bdb_use_db_pool, false, "bdb use db pool");
-DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than brpc_worker_thread_num");
-
-DECLARE_int32(brpc_worker_thread_num);
+DEFINE_int32(bdb_db_pool_size, 4096, "bdb db pool size, must bigger than bthread_connecurrency");
 
 namespace bdb {
 
@@ -1974,11 +1976,11 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
     }
   }
 
-  if (FLAGS_bdb_db_pool_size < FLAGS_brpc_worker_thread_num) {
-    DINGO_LOG(WARNING) << fmt::format("[bdb] db pool size: {} < brpc worker thread num: {}, set db pool size to {}.",
-                                      FLAGS_bdb_db_pool_size, FLAGS_brpc_worker_thread_num,
-                                      FLAGS_brpc_worker_thread_num);
-    FLAGS_bdb_db_pool_size = FLAGS_brpc_worker_thread_num;
+  if (FLAGS_bdb_db_pool_size < bthread::FLAGS_bthread_concurrency) {
+    DINGO_LOG(WARNING) << fmt::format("[bdb] db pool size: {} < brpc_concurrency: {}, set db pool size to {}.",
+                                      FLAGS_bdb_db_pool_size, bthread::FLAGS_bthread_concurrency,
+                                      bthread::FLAGS_bthread_concurrency);
+    FLAGS_bdb_db_pool_size = bthread::FLAGS_bthread_concurrency;
   }
 
   // Initialize our handles

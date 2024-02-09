@@ -64,8 +64,6 @@ DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
 
-DEFINE_int32(brpc_worker_thread_num, 32, "brpc worker thread num");
-
 Server& Server::GetInstance() {
   static Server instance;
   return instance;

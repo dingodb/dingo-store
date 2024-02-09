@@ -117,7 +117,6 @@ DECLARE_int32(bthread_concurrency);
 }  // namespace bthread
 
 namespace dingodb {
-DECLARE_int32(brpc_worker_thread_num);
 DECLARE_int32(vector_background_worker_num);
 DECLARE_int32(vector_fast_background_worker_num);
 DECLARE_int64(vector_max_background_task_count);
@@ -414,8 +413,8 @@ bool SetGflagVariable() {
 }
 
 // Get worker thread num used by config
-int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
-  int num = config->GetInt("server.worker_thread_num");
+int InitBthreadWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
+  int32_t num = config->GetInt("server.worker_thread_num");
   if (num <= 0) {
     double ratio = config->GetDouble("server.worker_thread_ratio");
     if (ratio > 0) {
@@ -423,15 +422,9 @@ int GetWorkerThreadNum(std::shared_ptr<dingodb::Config> config) {
     }
   }
 
-  if (num < bthread::FLAGS_bthread_concurrency) {
-    if (google::SetCommandLineOption("bthread_concurrency", std::to_string(num).c_str()).empty()) {
-      DINGO_LOG(ERROR) << "Fail to set bthread_concurrency";
-    }
-  }
+  bthread::FLAGS_bthread_concurrency = num;
 
-  dingodb::FLAGS_brpc_worker_thread_num = num;
-
-  return num;
+  return bthread::FLAGS_bthread_concurrency;
 }
 
 int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb::pb::common::ClusterRole role) {
@@ -473,10 +466,11 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
   }
   DINGO_LOG(INFO) << "server.raft_apply_worker_num is set to " << FLAGS_raft_apply_worker_num;
 
-  if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num > GetWorkerThreadNum(config)) {
+  if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num >
+      bthread::FLAGS_bthread_concurrency) {
     DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num << "] + server.write_worker_num["
                      << FLAGS_write_worker_num << "] + server.raft_apply_worker_num[" << FLAGS_raft_apply_worker_num
-                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+                     << "] is greater than server.worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
     return -1;
   }
 
@@ -541,12 +535,12 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
 
     if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num +
             dingodb::FLAGS_vector_fast_background_worker_num + dingodb::FLAGS_vector_background_worker_num >
-        GetWorkerThreadNum(config)) {
+        bthread::FLAGS_bthread_concurrency) {
       DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num << "] + server.write_worker_num["
                        << FLAGS_write_worker_num << "] + server.raft_apply_worker_num[" << FLAGS_raft_apply_worker_num
                        << "] + vector.fast_background_worker_num[" << dingodb::FLAGS_vector_fast_background_worker_num
                        << "] + vector.background_worker_num[" << dingodb::FLAGS_vector_background_worker_num
-                       << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+                       << "] is greater than server.worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
       return -1;
     }
 
@@ -573,9 +567,9 @@ int InitCoordinatorServiceWorkerParameters(std::shared_ptr<dingodb::Config> conf
   }
   DINGO_LOG(INFO) << "server.coordinator_service_worker_num is set to " << FLAGS_coordinator_service_worker_num;
 
-  if (FLAGS_coordinator_service_worker_num > GetWorkerThreadNum(config)) {
+  if (FLAGS_coordinator_service_worker_num > bthread::FLAGS_bthread_concurrency) {
     DINGO_LOG(ERROR) << "server.coordinator_service_worker_num[" << FLAGS_coordinator_service_worker_num
-                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+                     << "] is greater than server.worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
     return -1;
   }
 
@@ -598,9 +592,9 @@ int InitCoordinatorServiceWorkerParameters(std::shared_ptr<dingodb::Config> conf
   DINGO_LOG(INFO) << "server.meta_service_worker_num is set to " << FLAGS_meta_service_worker_num;
 
   // meta num
-  if (FLAGS_meta_service_worker_num > GetWorkerThreadNum(config)) {
+  if (FLAGS_meta_service_worker_num > bthread::FLAGS_bthread_concurrency) {
     DINGO_LOG(ERROR) << "server.meta_service_worker_num[" << FLAGS_meta_service_worker_num
-                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+                     << "] is greater than server.worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
     return -1;
   }
 
@@ -623,9 +617,9 @@ int InitCoordinatorServiceWorkerParameters(std::shared_ptr<dingodb::Config> conf
   }
   DINGO_LOG(INFO) << "server.version_service_worker_num is set to " << FLAGS_version_service_worker_num;
 
-  if (FLAGS_version_service_worker_num > GetWorkerThreadNum(config)) {
+  if (FLAGS_version_service_worker_num > bthread::FLAGS_bthread_concurrency) {
     DINGO_LOG(ERROR) << "server.version_service_worker_num[" << FLAGS_version_service_worker_num
-                     << "] is greater than server.worker_thread_num[" << GetWorkerThreadNum(config) << "]";
+                     << "] is greater than server.worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
     return -1;
   }
 
@@ -838,8 +832,12 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "h2_settings.max_frame_size: " << options.h2_settings.max_frame_size;
   DINGO_LOG(INFO) << "h2_settings.max_header_list_size: " << options.h2_settings.max_header_list_size;
 
-  options.num_threads = GetWorkerThreadNum(config);
-  DINGO_LOG(INFO) << "bthread worker_thread_num: " << options.num_threads;
+  // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
+  InitBthreadWorkerThreadNum(config);
+
+  // options.num_threads = bthread::FLAGS_bthread_concurrency;
+
+  DINGO_LOG(INFO) << "bthread worker_thread_num: " << bthread::FLAGS_bthread_concurrency;
 
   if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
     DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
@@ -940,11 +938,11 @@ int main(int argc, char *argv[]) {
     }
 
     if (FLAGS_coordinator_service_worker_num + FLAGS_meta_service_worker_num + FLAGS_version_service_worker_num >=
-        options.num_threads) {
+        bthread::FLAGS_bthread_concurrency) {
       DINGO_LOG(ERROR) << "service_worker_num["
                        << FLAGS_coordinator_service_worker_num + FLAGS_meta_service_worker_num +
                               FLAGS_version_service_worker_num
-                       << "] is greater than worker_thread_num[" << options.num_threads << "]";
+                       << "] is greater than worker_thread_num[" << bthread::FLAGS_bthread_concurrency << "]";
       return -1;
     }
 
