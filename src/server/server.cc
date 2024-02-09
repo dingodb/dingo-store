@@ -63,6 +63,7 @@ DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
+DEFINE_string(pid_file_name, "pid", "pid file name");
 
 Server& Server::GetInstance() {
   static Server instance;
@@ -107,7 +108,12 @@ bool Server::InitLog() {
 
   dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
 
-  FLAGS_log_dir = config->GetString("log.path");
+  if (!Helper::IsExistPath(log_dir_)) {
+    DINGO_LOG(ERROR) << "log_dir: " << log_dir_ << " not exist";
+    return false;
+  }
+
+  FLAGS_log_dir = log_dir_;
   auto role_name = GetRoleName();
   DingoLogger::InitLogger(FLAGS_log_dir, GetRoleName(), log_level);
 
@@ -172,10 +178,10 @@ bool Server::InitDirectory() {
   }
 
   // program log path
-  auto log_path = config->GetString("log.path");
-  ret = Helper::CreateDirectories(log_path);
+  log_dir_ = config->GetString("log.path");
+  ret = Helper::CreateDirectories(log_dir_);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create log directory failed: " << log_path;
+    DINGO_LOG(ERROR) << "Create log directory failed: " << log_dir_;
     return false;
   }
 
@@ -784,6 +790,10 @@ int64_t Server::Id() const {
 std::string Server::Keyring() const { return keyring_; }
 
 std::string Server::ServerAddr() { return server_addr_; }
+
+std::string Server::LogDir() { return log_dir_; }
+
+std::string Server::PidFilePath() { return Helper::ConcatPath(log_dir_, FLAGS_pid_file_name); }
 
 butil::EndPoint Server::ServerEndpoint() { return server_endpoint_; }
 

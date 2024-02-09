@@ -286,6 +286,7 @@ class Helper {
   static std::vector<uint8_t> AddByteArrays(const std::vector<uint8_t>& a, const std::vector<uint8_t>& b);
 
   // filesystem operations
+  static std::string ConcatPath(const std::string& path1, const std::string& path2);
   static std::vector<std::string> TraverseDirectory(const std::string& path, bool ignore_dir = false,
                                                     bool ignore_file = false);
   static std::vector<std::string> TraverseDirectory(const std::string& path, const std::string& prefix,
