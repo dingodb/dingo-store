@@ -1194,20 +1194,18 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
 
   if (!kvs.empty()) {
     for (auto& kv : kvs) {
-      if (kv.value().empty()) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("empty value of vector kv value");
-        return;
-      }
       pb::common::VectorWithId vector_with_id;
-      auto parse_ret = vector_with_id.ParseFromString(kv.value());
-      if (!parse_ret) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("parse vector_with_id failed");
-        return;
+
+      if (!kv.value().empty()) {
+        auto parse_ret = vector_with_id.ParseFromString(kv.value());
+        if (!parse_ret) {
+          auto* err = response->mutable_error();
+          err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
+          err->set_errmsg("parse vector_with_id failed");
+          return;
+        }
       }
+
       response->mutable_vector()->Swap(&vector_with_id);
     }
   }
@@ -1321,20 +1319,18 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   if (!kvs.empty()) {
     for (auto& kv : kvs) {
-      if (kv.value().empty()) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("empty value of vector kv value");
-        return;
-      }
       pb::common::VectorWithId vector_with_id;
-      auto parse_ret = vector_with_id.ParseFromString(kv.value());
-      if (!parse_ret) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("parse vector_with_id failed");
-        return;
+
+      if (!kv.value().empty()) {
+        auto parse_ret = vector_with_id.ParseFromString(kv.value());
+        if (!parse_ret) {
+          auto* err = response->mutable_error();
+          err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
+          err->set_errmsg("parse vector_with_id failed");
+          return;
+        }
       }
+
       response->add_vectors()->Swap(&vector_with_id);
     }
   }
@@ -2095,20 +2091,18 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
 
   if (!kvs.empty()) {
     for (auto& kv : kvs) {
-      if (kv.value().empty()) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("empty value of vector kv value");
-        return;
-      }
       pb::common::VectorWithId vector_with_id;
-      auto parse_ret = vector_with_id.ParseFromString(kv.value());
-      if (!parse_ret) {
-        auto* err = response->mutable_error();
-        err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
-        err->set_errmsg("parse vector_with_id failed");
-        return;
+
+      if (!kv.value().empty()) {
+        auto parse_ret = vector_with_id.ParseFromString(kv.value());
+        if (!parse_ret) {
+          auto* err = response->mutable_error();
+          err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
+          err->set_errmsg("parse vector_with_id failed");
+          return;
+        }
       }
+
       response->add_vectors()->Swap(&vector_with_id);
     }
   }
