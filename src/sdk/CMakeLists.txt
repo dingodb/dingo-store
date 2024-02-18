@@ -38,6 +38,7 @@ add_library(sdk
   vector/vector_delete_task.cc
   vector/vector_search_task.cc
   utils/thread_pool_actuator.cc
+  common/param_config.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
   ${PROJECT_SOURCE_DIR}/src/common/role.cc

@@ -56,7 +56,6 @@ class StoreRpcController {
   // backoff
   void MaybeDelay();
   bool NeedDelay() const;
-  int64_t DelayTimeMs() const;
 
   bool PickNextLeader(butil::EndPoint& leader);
 

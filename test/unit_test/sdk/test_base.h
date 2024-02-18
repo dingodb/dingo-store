@@ -71,7 +71,7 @@ class TestBase : public ::testing::Test {
     EXPECT_CALL(*stub, GetTxnLockResolver).Times(testing::AnyNumber());
 
     actuator.reset(new ThreadPoolActuator());
-    actuator->Start(kActuatorThreadNum);
+    actuator->Start(FLAGS_actuator_thread_num);
     ON_CALL(*stub, GetActuator).WillByDefault(testing::Return(actuator));
     EXPECT_CALL(*stub, GetActuator).Times(testing::AnyNumber());
 

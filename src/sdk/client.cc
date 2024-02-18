@@ -393,20 +393,20 @@ Status RegionCreator::Create(int64_t& out_region_id) {
 
   if (data_->wait) {
     int retry = 0;
-    while (retry < kCoordinatorInteractionMaxRetry) {
+    while (retry < FLAGS_coordinator_interaction_max_retry) {
       bool creating = false;
       DINGO_RETURN_NOT_OK(data_->stub.GetAdminTool()->IsCreateRegionInProgress(out_region_id, creating));
 
       if (creating) {
         retry++;
-        usleep(kCoordinatorInteractionDelayMs * 1000);
+        usleep(FLAGS_coordinator_interaction_delay_ms * 1000);
       } else {
         return Status::OK();
       }
     }
 
     std::string msg = fmt::format("Fail query region:{} state retry:{} exceed limit:{}, delay ms:{}", out_region_id,
-                                  retry, kCoordinatorInteractionMaxRetry, kCoordinatorInteractionDelayMs);
+                                  retry, FLAGS_coordinator_interaction_max_retry, FLAGS_coordinator_interaction_delay_ms);
     DINGO_LOG(INFO) << msg;
     return Status::Incomplete(msg);
   }

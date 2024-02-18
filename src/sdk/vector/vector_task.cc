@@ -14,6 +14,7 @@
 
 #include "sdk/vector/vector_task.h"
 
+#include "sdk/common/param_config.h"
 #include "sdk/utils/async_util.h"
 
 namespace dingodb {
@@ -70,7 +71,7 @@ bool VectorTask::NeedRetry() {
     if (error_code == pb::error::EREGION_VERSION || error_code == pb::error::EREGION_NOT_FOUND ||
         error_code == pb::error::EKEY_OUT_OF_RANGE) {
       retry_count_++;
-      if (retry_count_ < kRawkvMaxRetry) {
+      if (retry_count_ < FLAGS_vector_op_max_retry) {
         return true;
       } else {
         std::string msg =
@@ -84,7 +85,7 @@ bool VectorTask::NeedRetry() {
 }
 
 void VectorTask::BackoffAndRetry() {
-  stub.GetActuator()->Schedule([this] { DoAsync(); }, kRawkvBackoffMs);
+  stub.GetActuator()->Schedule([this] { DoAsync(); }, FLAGS_vector_op_delay_ms);
 }
 
 void VectorTask::FireCallback() {

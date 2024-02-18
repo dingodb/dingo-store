@@ -37,8 +37,8 @@ Status ClientStub::Open(std::string naming_service_url) {
 
   // TODO: pass use gflag or add options
   brpc::ChannelOptions options;
-  options.timeout_ms = kRpcChannelTimeOutMs;
-  options.connect_timeout_ms = kRpcChannelConnectTimeOutMs;
+  options.timeout_ms = FLAGS_rpc_channel_timeout_ms;
+  options.connect_timeout_ms = FLAGS_rpc_channel_connect_timeout_ms;
   store_rpc_interaction_.reset(new RpcInteraction(options));
 
   meta_cache_.reset(new MetaCache(coordinator_proxy_));
@@ -52,7 +52,7 @@ Status ClientStub::Open(std::string naming_service_url) {
   txn_lock_resolver_.reset(new TxnLockResolver(*(this)));
 
   actuator_.reset(new ThreadPoolActuator());
-  actuator_->Start(kActuatorThreadNum);
+  actuator_->Start(FLAGS_actuator_thread_num);
 
   vector_index_cache_.reset(new VectorIndexCache(*coordinator_proxy_));
 

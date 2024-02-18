@@ -129,8 +129,8 @@ class ClientRpc : public Rpc {
     response->Clear();
     controller.Reset();
     controller.set_log_id(butil::fast_rand());
-    controller.set_timeout_ms(kRpcTimeOutMs);
-    controller.set_max_retry(kRpcCallMaxRetry);
+    controller.set_timeout_ms(FLAGS_rpc_time_out_ms);
+    controller.set_max_retry(FLAGS_rpc_max_retry);
     status = Status::OK();
   }
 

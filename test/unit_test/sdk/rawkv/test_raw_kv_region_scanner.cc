@@ -198,7 +198,7 @@ TEST_F(RawKvRegionScannerImplTest, SetBatchSize) {
 
   RawKvRegionScannerImpl scanner(*stub, region, region->Range().start_key(), region->Range().end_key());
 
-  EXPECT_EQ(scanner.GetBatchSize(), kScanBatchSize);
+  EXPECT_EQ(scanner.GetBatchSize(), FLAGS_scan_batch_size);
 
   scanner.SetBatchSize(0);
   EXPECT_EQ(scanner.GetBatchSize(), kMinScanBatchSize);
@@ -232,7 +232,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchFail) {
         CHECK_NOTNULL(kv_rpc);
 
         EXPECT_EQ(kv_rpc->Request()->scan_id(), scan_id);
-        EXPECT_EQ(kv_rpc->Request()->max_fetch_cnt(), kScanBatchSize);
+        EXPECT_EQ(kv_rpc->Request()->max_fetch_cnt(), FLAGS_scan_batch_size);
 
         auto* error = kv_rpc->MutableResponse()->mutable_error();
         error->set_errcode(pb::error::EINTERNAL);
@@ -282,7 +282,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchNoData) {
         CHECK_NOTNULL(kv_rpc);
 
         EXPECT_EQ(kv_rpc->Request()->scan_id(), scan_id);
-        EXPECT_EQ(kv_rpc->Request()->max_fetch_cnt(), kScanBatchSize);
+        EXPECT_EQ(kv_rpc->Request()->max_fetch_cnt(), FLAGS_scan_batch_size);
 
         cb();
       })
