@@ -93,8 +93,8 @@ Status Transaction::TxnImpl::DoTxnGet(const std::string& key, std::string& value
 
     if (NeedRetryAndInc(retry)) {
       // TODO: set txn retry ms
-      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
-      DelayRetry(kRpcRetryDelayMs);
+      DINGO_LOG(INFO) << "try to delay:" << FLAGS_txn_op_delay_ms << "ms";
+      DelayRetry(FLAGS_txn_op_delay_ms);
     } else {
       break;
     }
@@ -166,8 +166,8 @@ void Transaction::TxnImpl::ProcessTxnBatchGetSubTask(TxnSubTask* sub_task) {
 
     if (NeedRetryAndInc(retry)) {
       // TODO: set txn retry ms
-      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
-      DelayRetry(kRpcRetryDelayMs);
+      DINGO_LOG(INFO) << "try to delay:" << FLAGS_txn_op_delay_ms << "ms";
+      DelayRetry(FLAGS_txn_op_delay_ms);
     } else {
       break;
     }
@@ -563,8 +563,8 @@ Status Transaction::TxnImpl::PreCommitPrimaryKey() {
 
     if (NeedRetryAndInc(retry)) {
       // TODO: set txn retry ms
-      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
-      DelayRetry(kRpcRetryDelayMs);
+      DINGO_LOG(INFO) << "try to delay:" << FLAGS_txn_op_delay_ms << "ms";
+      DelayRetry(FLAGS_txn_op_delay_ms);
     } else {
       break;
     }
@@ -597,8 +597,8 @@ void Transaction::TxnImpl::ProcessTxnPrewriteSubTask(TxnSubTask* sub_task) {
     }
     if (NeedRetryAndInc(retry)) {
       // TODO: set txn retry ms
-      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
-      DelayRetry(kRpcRetryDelayMs);
+      DINGO_LOG(INFO) << "try to delay:" << FLAGS_txn_op_delay_ms << "ms";
+      DelayRetry(FLAGS_txn_op_delay_ms);
     } else {
       // TODO: maybe set ret as meaningful status
       break;
@@ -1024,7 +1024,7 @@ Status Transaction::TxnImpl::Rollback() {
 }
 
 bool Transaction::TxnImpl::NeedRetryAndInc(int& times) {
-  bool retry = times < kTxnOpMaxRetry;
+  bool retry = times < FLAGS_txn_op_max_retry;
   times++;
   return retry;
 }

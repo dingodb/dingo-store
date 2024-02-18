@@ -36,7 +36,7 @@ TxnRegionScannerImpl::TxnRegionScannerImpl(const ClientStub& stub, std::shared_p
       end_key_(std::move(end_key)),
       opened_(false),
       has_more_(false),
-      batch_size_(kScanBatchSize),
+      batch_size_(FLAGS_scan_batch_size),
       next_key_(start_key_),
       include_next_key_(true) {}
 
@@ -104,8 +104,8 @@ Status TxnRegionScannerImpl::NextBatch(std::vector<KVPair>& kvs) {
     }
 
     if (NeedRetryAndInc(retry)) {
-      DINGO_LOG(INFO) << "try to delay:" << kRpcRetryDelayMs << "ms";
-      DelayRetry(kRpcRetryDelayMs);
+      DINGO_LOG(INFO) << "try to delay:" << FLAGS_txn_op_delay_ms << "ms";
+      DelayRetry(FLAGS_txn_op_delay_ms);
     } else {
       break;
     }
@@ -157,7 +157,7 @@ Status TxnRegionScannerImpl::SetBatchSize(int64_t size) {
 }
 
 bool TxnRegionScannerImpl::NeedRetryAndInc(int& times) {
-  bool retry = times < kTxnOpMaxRetry;
+  bool retry = times < FLAGS_txn_op_max_retry;
   times++;
   return retry;
 }

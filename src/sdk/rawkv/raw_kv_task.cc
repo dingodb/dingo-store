@@ -14,6 +14,7 @@
 
 #include "sdk/rawkv/raw_kv_task.h"
 
+#include "sdk/common/param_config.h"
 #include "sdk/utils/async_util.h"
 
 namespace dingodb {
@@ -69,7 +70,7 @@ bool RawKvTask::NeedRetry() {
     if (error_code == pb::error::EREGION_VERSION || error_code == pb::error::EREGION_NOT_FOUND ||
         error_code == pb::error::EKEY_OUT_OF_RANGE) {
       retry_count_++;
-      if (retry_count_ < kRawkvMaxRetry) {
+      if (retry_count_ < FLAGS_raw_kv_max_retry) {
         return true;
       } else {
         std::string msg =
@@ -83,7 +84,7 @@ bool RawKvTask::NeedRetry() {
 }
 
 void RawKvTask::BackoffAndRetry() {
-  stub.GetActuator()->Schedule([this] { DoAsync(); }, kRawkvBackoffMs);
+  stub.GetActuator()->Schedule([this] { DoAsync(); }, FLAGS_raw_kv_delay_ms);
 }
 
 void RawKvTask::FireCallback() {

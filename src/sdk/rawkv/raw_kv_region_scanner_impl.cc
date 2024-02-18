@@ -37,7 +37,7 @@ RawKvRegionScannerImpl::RawKvRegionScannerImpl(const ClientStub& stub, std::shar
       end_key_(std::move(end_key)),
       opened_(false),
       has_more_(false),
-      batch_size_(kScanBatchSize) {}
+      batch_size_(FLAGS_scan_batch_size) {}
 
 static void RawKvRegionScannerImplDeleted(Status status, std::string scan_id) {
   VLOG(kSdkVlogLevel) << "RawKvRegionScannerImpl deleted, scanner id: " << scan_id << " status:" << status.ToString();

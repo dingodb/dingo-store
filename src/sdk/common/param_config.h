@@ -17,41 +17,44 @@
 
 #include <cstdint>
 
+#include "gflags/gflags.h"
+
 // TODO: make params in this file use glfags
 
 const int64_t kSdkVlogLevel = 60;
 
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
-const int64_t kRpcChannelTimeOutMs = 500000;
-const int64_t kRpcChannelConnectTimeOutMs  = 3000;
+DECLARE_int64(rpc_channel_timeout_ms);
+DECLARE_int64(rpc_channel_connect_timeout_ms);
 
-// each rpc call params
-const int64_t kRpcCallMaxRetry = 3;
-const int64_t kRpcTimeOutMs = 500000;
+// each rpc call params, set for brpc::Controller
+DECLARE_int64(rpc_max_retry);
+DECLARE_int64(rpc_time_out_ms);
 
-// use case: wrong leader or request range invalid
-const int64_t kRpcMaxRetry = 5;
-
-const int64_t kRpcRetryDelayMs = 1000;
+// each store rpc params, used for store rpc controller
+DECLARE_int64(store_rpc_max_retry);
+DECLARE_int64(store_rpc_retry_delay_ms);
 
 // start: use for region scanner
-const int64_t kScanBatchSize = 10;
-
+DECLARE_int64(scan_batch_size);
 const int64_t kMinScanBatchSize = 1;
-
 const int64_t kMaxScanBatchSize = 100;
 // end: use for region scanner
 
 const int64_t kPrefetchRegionCount = 3;
 
-const int64_t kCoordinatorInteractionDelayMs = 200;
-const int64_t kCoordinatorInteractionMaxRetry = 300;
+DECLARE_int64(coordinator_interaction_delay_ms);
+DECLARE_int64(coordinator_interaction_max_retry);
 
-const int64_t kTxnOpMaxRetry = 2;
+DECLARE_int64(actuator_thread_num);
 
-const int64_t kActuatorThreadNum = 8;
+DECLARE_int64(raw_kv_delay_ms);
+DECLARE_int64(raw_kv_max_retry);
 
-const int64_t kRawkvBackoffMs = 200;
-const int64_t kRawkvMaxRetry = 10;
+DECLARE_int64(txn_op_delay_ms);
+DECLARE_int64(txn_op_max_retry);
+
+DECLARE_int64(vector_op_delay_ms);
+DECLARE_int64(vector_op_max_retry);
 
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_
