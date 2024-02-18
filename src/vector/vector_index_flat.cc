@@ -267,11 +267,15 @@ butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId>
     std::thread t(
         [&](std::promise<butil::Status>& promise_status) {
           try {
+            std::unique_ptr<faiss::SearchParameters> params;
+            std::unique_ptr<FlatIDSelector> flat_filter;
             if (!filters.empty()) {
-              DoRangeSearch(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(), filters);
-            } else {
-              index_id_map2_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get());
+              params = std::make_unique<faiss::SearchParameters>();
+              flat_filter = std::make_unique<FlatIDSelector>(filters);
+              params->sel = flat_filter.get();
             }
+            index_id_map2_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
+                                         params.get());
             promise_status.set_value(butil::Status());
           } catch (std::exception& e) {
             std::string s = fmt::format("VectorIndexFlat::RangeSearch failed. error : {}", e.what());
