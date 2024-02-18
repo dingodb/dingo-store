@@ -116,9 +116,9 @@ class VectorIndexFlat : public VectorIndex {
                                                                    faiss::idx_t* labels,
                                                                    std::shared_ptr<FlatIDSelector> filters);
 
-  void DoRangeSearch(faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
-                     faiss::RangeSearchResult* result,
-                     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
+  [[deprecated("faiss add feature. never use.")]] void DoRangeSearch(
+      faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
+      faiss::RangeSearchResult* result, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
 
   // Dimension of the elements
   faiss::idx_t dimension_;
