@@ -221,7 +221,7 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
   status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs, has_more);
   if (!status.ok()) {
     manager.DeleteScan(scan_id);
-    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanContinue failed scan : {} max_fetch_cnt : {}", scan_id,
                                     max_fetch_cnt);
     return status;
   }
@@ -305,7 +305,7 @@ butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_
   status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs, has_more);
   if (!status.ok()) {
     manager.DeleteScan(scan_id);
-    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed scan : {} max_fetch_cnt : {}", scan_id,
+    DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanContinue failed scan : {} max_fetch_cnt : {}", scan_id,
                                     max_fetch_cnt);
     return status;
   }
