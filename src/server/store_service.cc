@@ -2962,11 +2962,11 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_key >= end_key");
   }
 
-  std::vector<std::string_view> keys;
-  keys.push_back(request->start_key());
-  keys.push_back(request->end_key());
+  pb::common::Range req_range;
+  req_range.set_start_key(request->start_key());
+  req_range.set_end_key(request->end_key());
 
-  status = ServiceHelper::ValidateRegion(region, keys);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
   if (!status.ok()) {
     return status;
   }
