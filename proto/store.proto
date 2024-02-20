@@ -259,8 +259,9 @@ message KvScanBeginRequest {
 }
 
 message KvScanBeginResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 
   // uniquely identifies this scan
@@ -287,8 +288,9 @@ message KvScanContinueRequest {
 }
 
 message KvScanContinueResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 
   // return key value pair. if kvs.size == 0 means no data
@@ -305,8 +307,9 @@ message KvScanReleaseRequest {
 }
 
 message KvScanReleaseResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 }
 
@@ -370,8 +373,9 @@ message KvScanContinueRequestV2 {
 }
 
 message KvScanContinueResponseV2 {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 
   // return key value pair. if kvs.size == 0 means no data
@@ -391,8 +395,9 @@ message KvScanReleaseRequestV2 {
 }
 
 message KvScanReleaseResponseV2 {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 }
 
@@ -526,8 +531,9 @@ message TxnGetRequest {
 }
 
 message TxnGetResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // A value could not be retrieved due to the state of the database for the
   // requested key.
@@ -574,8 +580,9 @@ message TxnScanRequest {
 // if txn_result is not null, the kvs may not null, client can use kvs as a partial result, and should continue to scan
 // after resolve lock.
 message TxnScanResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // This txn_result exists when some key is locked but we cannot check locks of
   // all keys. In this case, `kvs` should be empty and the client should redo
@@ -613,8 +620,9 @@ message TxnPessimisticLockRequest {
 }
 
 message TxnPessimisticLockResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // if there are many keys can't be locked, there will be many txn_result, each txn_result is for one key
   // the txn_result is one of the following:
@@ -637,8 +645,9 @@ message TxnPessimisticRollbackRequest {
 }
 
 message TxnPessimisticRollbackResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   repeated TxnResultInfo txn_result = 3;
 }
@@ -702,8 +711,9 @@ message TxnPrewriteRequest {
 }
 
 message TxnPrewriteResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // for prewrite, txn_result will be one of the following:
   // 1. LockInfo: prewrite meet a lock and can't proceed, the lock is returned
@@ -736,8 +746,9 @@ message TxnCommitRequest {
 }
 
 message TxnCommitResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
@@ -773,8 +784,9 @@ message TxnCheckTxnStatusRequest {
 }
 
 message TxnCheckTxnStatusResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. PrimaryMismatch: CheckTxnStatus is sent to a lock that's not the primary.
@@ -808,8 +820,9 @@ message TxnResolveLockRequest {
 }
 
 message TxnResolveLockResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // now the txn_result is not used, maybe used in the future
   TxnResultInfo txn_result = 3;
@@ -823,8 +836,9 @@ message TxnBatchGetRequest {
 }
 
 message TxnBatchGetResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 
   // This txn_result exists when some key is locked but we cannot check locks of
@@ -861,8 +875,9 @@ message TxnBatchRollbackRequest {
 }
 
 message TxnBatchRollbackResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. LockInfo: Commit meets a lock and can't proceed, the lock is returned
@@ -886,12 +901,18 @@ message TxnScanLockRequest {
 }
 
 message TxnScanLockResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   TxnResultInfo txn_result = 3;
   // Info on all locks found by the scan.
   repeated LockInfo locks = 4;
+  // if scan_lock is not finished, has_more is true, otherwise false
+  bool has_more = 5;
+  // the last iteratered key of this scan_lock response.
+  // if end_key is null, means scan do not successfully iterate any key.
+  bytes end_key = 6;
 }
 
 // Update the lock_ttl of a large transaction to
@@ -909,8 +930,9 @@ message TxnHeartBeatRequest {
 }
 
 message TxnHeartBeatResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   // the txn_result is one of the following:
   // 1. PrimaryMismatch: Heartbeat is sent to a lock that's not the primary.
@@ -929,8 +951,9 @@ message TxnGcRequest {
 }
 
 message TxnGcResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   TxnResultInfo txn_result = 3;
 }
@@ -948,8 +971,9 @@ message TxnDeleteRangeRequest {
 }
 
 message TxnDeleteRangeResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
 }
 
@@ -993,8 +1017,9 @@ message TxnDumpRequest {
 }
 
 message TxnDumpResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   TxnResultInfo txn_result = 3;
 
@@ -1020,8 +1045,9 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   int64 region_count = 3;
   int64 region_leader_count = 4;

@@ -102,8 +102,9 @@ class TxnEngineHelper {
   static butil::Status GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key, pb::store::LockInfo &lock_info);
 
   static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
-                                    const std::string &start_key, const std::string &end_key, int64_t limit,
-                                    std::vector<pb::store::LockInfo> &lock_infos);
+                                    const pb::common::Range &range, int64_t limit,
+                                    std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
+                                    std::string &end_scan_key);
 
   static butil::Status BatchGet(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
                                 int64_t start_ts, const std::vector<std::string> &keys,
@@ -114,7 +115,7 @@ class TxnEngineHelper {
                             const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
                             const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                             const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
-                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_key);
+                            std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_scan_key);
 
   static butil::Status GetWriteInfo(RawEnginePtr raw_engine, int64_t min_commit_ts, int64_t max_commit_ts,
                                     int64_t start_ts, const std::string &key, bool include_rollback,

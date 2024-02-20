@@ -610,7 +610,7 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
 butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
                                int64_t limit, bool key_only, bool is_reverse, const std::set<int64_t>& resolved_locks,
                                pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                               bool& has_more, std::string& end_key, bool disable_coprocessor,
+                               bool& has_more, std::string& end_scan_key, bool disable_coprocessor,
                                const pb::common::CoprocessorV2& coprocessor) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
@@ -623,7 +623,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
                    << ", start_ts: " << start_ts << ", key_only: " << key_only << ", is_reverse: " << is_reverse
                    << ", resolved_locks size: " << resolved_locks.size()
                    << ", txn_result_info: " << txn_result_info.ShortDebugString() << ", kvs size: " << kvs.size()
-                   << ", has_more: " << has_more << ", end_key: " << Helper::StringToHex(end_key);
+                   << ", has_more: " << has_more << ", end_key: " << Helper::StringToHex(end_scan_key);
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
@@ -631,7 +631,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
   status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, resolved_locks, disable_coprocessor,
-                           coprocessor, txn_result_info, kvs, has_more, end_key);
+                           coprocessor, txn_result_info, kvs, has_more, end_scan_key);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
@@ -814,28 +814,26 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
   return butil::Status();
 }
 
-butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const std::string& start_key,
-                                   int64_t limit, const std::string& end_key, pb::store::TxnResultInfo& txn_result_info,
-                                   std::vector<pb::store::LockInfo>& lock_infos) {
+butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const pb::common::Range& range,
+                                   int64_t limit, pb::store::TxnResultInfo& txn_result_info,
+                                   std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,
+                                   std::string& end_scan_key) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
   }
 
-  DINGO_LOG(DEBUG) << "TxnScanLock max_ts : " << max_ts << " start_key : " << start_key << " limit : " << limit
-                   << " end_key : " << end_key << " txn_result_info : " << txn_result_info.ShortDebugString()
+  DINGO_LOG(DEBUG) << "TxnScanLock max_ts : " << max_ts << " start_key : " << Helper::StringToHex(range.start_key())
+                   << " limit : " << limit << " end_key : " << Helper::StringToHex(range.end_key())
+                   << " txn_result_info : " << txn_result_info.ShortDebugString()
                    << " lock_infos size : " << lock_infos.size();
-
-  pb::common::Range range;
-  range.set_start_key(start_key);
-  range.set_end_key(end_key);
 
   auto reader = engine_->NewTxnReader(ctx->RawEngineType());
   if (reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("reader is nullptr, region_id : {}", ctx->RegionId());
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "reader is nullptr");
   }
-  status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos);
+  status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos, has_more, end_scan_key);
   if (!status.ok()) {
     return status;
   }
