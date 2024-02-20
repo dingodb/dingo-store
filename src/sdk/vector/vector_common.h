@@ -268,6 +268,8 @@ static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal
     case VectorIndexType::kFlat:
       FillSearchFlatParamPB(internal_parameter->mutable_flat(), parameter);
       break;
+    case VectorIndexType::kBruteForce:
+      break;
     case VectorIndexType::kIvfFlat:
       FillSearchIvfFlatParamPB(internal_parameter->mutable_ivf_flat(), parameter);
       break;

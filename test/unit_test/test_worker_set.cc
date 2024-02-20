@@ -19,7 +19,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "bvar/reducer.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/runnable.h"
