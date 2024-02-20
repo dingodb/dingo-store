@@ -15,6 +15,7 @@
 #include "vector/vector_reader.h"
 
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,8 +24,8 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
-#include "coprocessor/coprocessor_v2.h"
 #include "coprocessor/coprocessor_scalar.h"
+#include "coprocessor/coprocessor_v2.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -1334,17 +1335,18 @@ class DistanceResult {
 // Overload the < operator.
 bool operator<(const DistanceResult& result1, const DistanceResult& result2) {
   if (result1.distance != result2.distance) {
-    return result1.distance > result2.distance;
-  } else {
-    return result1.vector_with_distance.vector_with_id().id() > result2.vector_with_distance.vector_with_id().id();
-  }
-}
-// Overload the > operator.
-bool operator>(const DistanceResult& result1, const DistanceResult& result2) {
-  if (result1.distance != result2.distance) {
     return result1.distance < result2.distance;
   } else {
     return result1.vector_with_distance.vector_with_id().id() < result2.vector_with_distance.vector_with_id().id();
+  }
+}
+
+// Overload the > operator.
+bool operator>(const DistanceResult& result1, const DistanceResult& result2) {
+  if (result1.distance != result2.distance) {
+    return result1.distance > result2.distance;
+  } else {
+    return result1.vector_with_distance.vector_with_id().id() > result2.vector_with_distance.vector_with_id().id();
   }
 }
 
@@ -1495,15 +1497,23 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   // we don't do sorting by distance here
   // the client will do sorting by distance
   results.resize(top_results.size());
+
   for (int i = 0; i < top_results.size(); i++) {
     auto& top_result = top_results[i];
     auto& result = results[i];
 
+    std::deque<pb::common::VectorWithDistance> vector_with_distances_deque;
+
     while (!top_result.empty()) {
       auto top = top_result.top();
-      auto& vector_with_distance = *result.add_vector_with_distances();
-      vector_with_distance.Swap(&top.vector_with_distance);
+      vector_with_distances_deque.emplace_front(top.vector_with_distance);
       top_result.pop();
+    }
+
+    while (!vector_with_distances_deque.empty()) {
+      auto& vector_with_distance = *result.add_vector_with_distances();
+      vector_with_distance.Swap(&vector_with_distances_deque.front());
+      vector_with_distances_deque.pop_front();
     }
   }
 
