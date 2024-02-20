@@ -13,11 +13,9 @@
 // limitations under the License.
 
 #include <csignal>
-#include <cstdint>
 #include <string>
 
 #include "benchmark/benchmark.h"
-#include "benchmark/dataset.h"
 #include "common/helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"

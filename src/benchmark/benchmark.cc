@@ -29,6 +29,7 @@
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "proto/common.pb.h"
 #include "sdk/client.h"
 #include "sdk/vector.h"
 
@@ -58,7 +59,7 @@ DEFINE_string(vector_index_type, "HNSW", "Vector index type");
 DEFINE_validator(vector_index_type, [](const char*, const std::string& value) -> bool {
   auto vector_index_type = dingodb::Helper::ToUpper(value);
   return vector_index_type == "HNSW" || vector_index_type == "FLAT" || vector_index_type == "IVF_FLAT" ||
-         vector_index_type == "IVF_PQ";
+         vector_index_type == "IVF_PQ" || vector_index_type == "BRUTE_FORCE";
 });
 
 // vector
@@ -540,17 +541,19 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
     Helper::SplitString(FLAGS_vector_partition_vector_ids, ',', separator_id);
   }
 
-  creator->SetName(name).SetSchemaId(1).SetRangePartitions(separator_id).SetReplicaNum(3);
+  creator->SetName(name)
+      .SetSchemaId(pb::meta::ReservedSchemaIds::DINGO_SCHEMA)
+      .SetRangePartitions(separator_id)
+      .SetReplicaNum(3);
 
   if (vector_index_type == "HNSW") {
     creator->SetHnswParam(GenHnswParam());
-
+  } else if (vector_index_type == "BRUTE_FORCE") {
+    creator->SetBruteForceParam(GenBruteForceParam());
   } else if (vector_index_type == "FLAT") {
     creator->SetFlatParam(GenFlatParam());
-
   } else if (vector_index_type == "IVF_FLAT") {
     creator->SetIvfFlatParam(GenIvfFlatParam());
-
   } else if (vector_index_type == "IVF_PQ") {
     creator->SetIvfPqParam(GenIvfPqParam());
   } else {

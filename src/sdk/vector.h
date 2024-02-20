@@ -16,7 +16,6 @@
 #define DINGODB_SDK_VECTOR_H_
 
 #include <cstdint>
-#include <optional>
 #include <unordered_map>
 #include <vector>
 
@@ -274,9 +273,9 @@ struct SearchParameter {
 struct VectorWithDistance {
   VectorWithId vector_data;
   float distance;
-  MetricType metric_type;
+  MetricType metric_type{};
 
-  explicit VectorWithDistance() : metric_type(kNoneMetricType) {}
+  explicit VectorWithDistance() = default;
 
   VectorWithDistance(VectorWithDistance&& other) noexcept
       : vector_data(std::move(other.vector_data)), distance(other.distance), metric_type(other.metric_type) {}
