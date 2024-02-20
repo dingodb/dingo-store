@@ -203,9 +203,10 @@ static butil::Status ValidateVectorSearchRequest(StoragePtr storage, const pb::i
   // for response, the limit is 10 times of request, which may be 40M
   // this size is less than the default max message size 64M
   if (request->parameter().top_n() * request->vector_with_ids_size() > FLAGS_vector_max_batch_count * 10) {
-    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
-                         fmt::format("Param top_n {} is exceed max batch count {}", request->parameter().top_n(),
-                                     FLAGS_vector_max_batch_count));
+    return butil::Status(
+        pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+        fmt::format("Param top_n {} * vector_with_ids_size {} is exceed max batch count {} * 10",
+                    request->parameter().top_n(), request->vector_with_ids_size(), FLAGS_vector_max_batch_count));
   }
 
   if (request->parameter().top_n() < 0) {
