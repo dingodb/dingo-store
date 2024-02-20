@@ -242,8 +242,9 @@ message HelloRequest {
 }
 
 message HelloResponse {
-  // error code
+  // response info
   dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
   dingodb.pb.error.Error error = 2;
   int64 region_count = 3;
   int64 region_leader_count = 4;

@@ -650,13 +650,14 @@ butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const st
 bvar::LatencyRecorder g_txn_scan_lock_latency("dingo_txn_scan_lock");
 
 butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_lock_ts, int64_t max_lock_ts,
-                                            const std::string &start_key, const std::string &end_key, int64_t limit,
-                                            std::vector<pb::store::LockInfo> &lock_infos) {
+                                            const pb::common::Range &range, int64_t limit,
+                                            std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
+                                            std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_lock_latency);
 
   DINGO_LOG(INFO) << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
-                  << ", start_key: " << Helper::StringToHex(start_key) << ", end_key: " << Helper::StringToHex(end_key)
-                  << ", limit: " << limit;
+                  << ", start_key: " << Helper::StringToHex(range.start_key())
+                  << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit;
 
   if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_lock_limit)) {
     DINGO_LOG(ERROR) << "[txn]ScanLockInfo limit: " << limit
@@ -664,14 +665,18 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scan lock limit is too large");
   }
 
+  if (has_more || !end_scan_key.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_scan_key is not empty");
+  }
+
   IteratorOptions iter_options;
-  iter_options.lower_bound = Helper::EncodeTxnKey(start_key, Constant::kLockVer);
-  iter_options.upper_bound = Helper::EncodeTxnKey(end_key, Constant::kLockVer);
+  iter_options.lower_bound = Helper::EncodeTxnKey(range.start_key(), Constant::kLockVer);
+  iter_options.upper_bound = Helper::EncodeTxnKey(range.end_key(), Constant::kLockVer);
 
   auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
   if (iter == nullptr) {
-    DINGO_LOG(FATAL) << "[txn]GetLockInfo NewIterator failed, start_key: " << Helper::StringToHex(start_key)
-                     << ", end_key: " << Helper::StringToHex(end_key);
+    DINGO_LOG(FATAL) << "[txn]GetLockInfo NewIterator failed, start_key: " << Helper::StringToHex(range.start_key())
+                     << ", end_key: " << Helper::StringToHex(range.end_key());
   }
 
   iter->Seek(iter_options.lower_bound);
@@ -690,6 +695,8 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
       "parse lock info failed, key: " << Helper::StringToHex(iter->Key())
                                       << ", lock_value(hex): " << Helper::StringToHex(lock_value);
     }
+
+    end_scan_key = lock_info.key();
 
     DINGO_LOG(INFO) << "get lock_info lock_ts: " << lock_info.lock_ts()
                     << ", lock_info: " << lock_info.ShortDebugString()
@@ -718,6 +725,7 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
     DINGO_LOG(INFO) << "[txn] ScanLock push_back lock_info: " << lock_info.ShortDebugString();
 
     if (limit > 0 && lock_infos.size() >= limit) {
+      has_more = true;
       break;
     }
 
@@ -920,7 +928,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
                                     bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                                     const pb::common::CoprocessorV2 &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
-                                    bool &has_more, std::string &end_key) {
+                                    bool &has_more, std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
 
   DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
@@ -956,8 +964,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
 
-  if (has_more || !end_key.empty()) {
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_key is not empty");
+  if (has_more || !end_scan_key.empty()) {
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_scan_key is not empty");
   }
 
   std::shared_ptr<TxnIterator> txn_iter =
@@ -981,7 +989,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
       return status;
     }
 
-    status = txn_coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    status =
+        txn_coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_scan_key);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "[txn]Scan coprocessor::Execute failed " << status.error_cstr();
       return status;
@@ -1010,7 +1019,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
       response_memory_size += kv.ByteSizeLong();
     }
 
-    end_key = key;
+    end_scan_key = key;
 
     txn_iter->Next();
 
@@ -2956,8 +2965,9 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   // scan for keys to rollback
   else {
     std::vector<pb::store::LockInfo> tmp_lock_infos;
-    auto ret = ScanLockInfo(raw_engine, start_ts, start_ts + 1, region->Range().start_key(), region->Range().end_key(),
-                            0, tmp_lock_infos);
+    bool has_more = false;
+    std::string end_key{};
+    auto ret = ScanLockInfo(raw_engine, start_ts, start_ts + 1, region->Range(), 0, tmp_lock_infos, has_more, end_key);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
                        << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();

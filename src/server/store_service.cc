@@ -3007,9 +3007,14 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::LockInfo> locks;
+  bool has_more = false;
+  std::string end_key;
+  pb::common::Range range;
+  range.set_start_key(request->start_key());
+  range.set_end_key(request->end_key());
 
-  status = storage->TxnScanLock(ctx, request->max_ts(), request->start_key(), request->limit(), request->end_key(),
-                                txn_result_info, locks);
+  status =
+      storage->TxnScanLock(ctx, request->max_ts(), range, request->limit(), txn_result_info, locks, has_more, end_key);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -3019,6 +3024,12 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   *response->mutable_txn_result() = txn_result_info;
   for (const auto& lock : locks) {
     *response->add_locks() = lock;
+  }
+  if (has_more) {
+    response->set_has_more(has_more);
+  }
+  if (!end_key.empty()) {
+    response->set_end_key(end_key);
   }
 }
 
