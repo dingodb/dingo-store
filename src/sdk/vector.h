@@ -273,7 +273,7 @@ struct SearchParameter {
 struct VectorWithDistance {
   VectorWithId vector_data;
   float distance;
-  MetricType metric_type{};
+  MetricType metric_type{kNoneMetricType};
 
   explicit VectorWithDistance() = default;
 
