@@ -777,6 +777,11 @@ butil::Status CoordinatorControl::DropTable(int64_t schema_id, int64_t table_id,
       DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
       return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
     }
+
+    if (table_internal.schema_id() != schema_id) {
+      DINGO_LOG(ERROR) << "ERRROR: table_id not belong to schema_id" << table_id << " schema_id=" << schema_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "table_id not belong to schema_id");
+    }
   }
 
   // call DropRegion
@@ -1396,6 +1401,11 @@ butil::Status CoordinatorControl::DropIndex(int64_t schema_id, int64_t index_id,
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
       return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
+    }
+
+    if (table_internal.schema_id() != schema_id) {
+      DINGO_LOG(ERROR) << "ERRROR: schema_id not match, index_id=" << index_id << " schema_id=" << schema_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id not match");
     }
 
     // this is for interface compatibility, index created by new interface cannot be dropped in this function.
