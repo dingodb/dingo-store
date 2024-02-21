@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.google.common.base.CaseFormat;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.StackTraces;
 import io.dingodb.sdk.service.entity.Message;
@@ -14,6 +15,8 @@ import lombok.SneakyThrows;
 
 import java.io.IOException;
 
+import static com.google.common.base.CaseFormat.LOWER_CAMEL;
+import static com.google.common.base.CaseFormat.UPPER_CAMEL;
 import static io.dingodb.sdk.common.utils.StackTraces.CURRENT_STACK;
 
 public class JsonMessageUtils {
@@ -66,7 +69,7 @@ public class JsonMessageUtils {
                 .trace(trace)
                 .options(options)
                 .method(method)
-                .step(StackTraces.methodName(CURRENT_STACK + 1))
+                .step(LOWER_CAMEL.to(UPPER_CAMEL, StackTraces.methodName(CURRENT_STACK + 1)))
                 .request(request)
                 .response(response)
                 .build()
@@ -87,7 +90,7 @@ public class JsonMessageUtils {
                 .trace(trace)
                 .options(options)
                 .method(method)
-                .step(StackTraces.methodName(CURRENT_STACK + 1))
+                .step(LOWER_CAMEL.to(UPPER_CAMEL, StackTraces.methodName(CURRENT_STACK + 1)))
                 .remote(remote)
                 .request(request)
                 .response(response)
@@ -111,7 +114,7 @@ public class JsonMessageUtils {
                 .trace(trace)
                 .options(options)
                 .method(method)
-                .step(StackTraces.methodName(CURRENT_STACK + 1))
+                .step(LOWER_CAMEL.to(UPPER_CAMEL, StackTraces.methodName(CURRENT_STACK + 1)))
                 .remote(remote)
                 .request(request)
                 .response(response)
