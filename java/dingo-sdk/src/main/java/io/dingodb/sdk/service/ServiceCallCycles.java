@@ -163,7 +163,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void before(REQ req, CallOptions options, long trace) {
         if (Before.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            Before.log.debug(
+            logger.debug(
                 toJson(method.getFullMethodName(), trace, req, null, options)
             );
         }
@@ -176,7 +176,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void rBefore(REQ req, CallOptions options, String remote, long trace) {
         if (RBefore.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            RBefore.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, null, options)
             );
         }
@@ -188,7 +188,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void after(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (After.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            After.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
@@ -200,7 +200,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void rAfter(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (RAfter.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            RAfter.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
@@ -212,7 +212,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void rError(REQ req, CallOptions options, String remote, long trace, String statusMessage) {
         if (RError.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            RError.log.debug(
+            logger.debug(
                 toJson(statusMessage, remote, method.getFullMethodName(), trace, req, null, options, null)
             );
         }
@@ -233,7 +233,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
         long trace
     ) {
         if (ServiceCallCycles.OnErrRes.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnErrRes.log.debug(
+            logger.debug(
                 "Service call [{}:{}] error on [{}], trace [{}], retry: {}, remain: {}, req: {}, res: {}, options: {}",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, retry, remain, req, res, options
             );
@@ -244,7 +244,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
             strategy = onErrRes.onErrStrategy(strategy, retry, remain, req, res, options, remote, trace);
         }
         if (before != strategy && ServiceCallCycles.OnErrRes.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnErrRes.log.debug(
+            logger.debug(
                 "Service call [{}:{}] error on [{}], trace [{}], before strategy [{}], change to [{}]",
                 remote, method.getFullMethodName(), System.currentTimeMillis(), trace, before, strategy
             );
@@ -255,7 +255,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onException(REQ req, Exception ex, CallOptions options, String remote, long trace) {
         if (OnException.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnException.log.debug(
+            logger.debug(
                 toJson(null, remote, method.getFullMethodName(), trace, req, null, options, ex)
             );
         }
@@ -267,7 +267,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onRetry(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnRetry.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnRetry.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
@@ -279,7 +279,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onFailed(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnFailed.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnFailed.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
@@ -291,7 +291,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onIgnore(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnIgnore.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnIgnore.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
 
             );
@@ -304,7 +304,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onRefresh(REQ req, RES res, CallOptions options, String remote, long trace) {
         if (OnRefresh.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            OnRefresh.log.debug(
+            logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
         }
@@ -316,7 +316,9 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onNonConnection(REQ req, CallOptions options, long trace) {
         if (OnNonConnection.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            toJson(method.getFullMethodName(), trace, req, null, options);
+            logger.debug(
+                toJson(method.getFullMethodName(), trace, req, null, options)
+            );
         }
         for (ServiceCallCycle.OnNonConnection<REQ, RES> onNonConnection : onNonConnection.list) {
             onNonConnection.onNonConnection(req, options, trace);
@@ -326,7 +328,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
     @Override
     public void onThrow(REQ req, ExhaustedRetryException ex, CallOptions options, long trace) {
         if (ServiceCallCycles.OnThrow.log.isDebugEnabled() && logger.isDebugEnabled()) {
-            ServiceCallCycles.OnThrow.log.debug(
+            logger.debug(
                 toJson(null, null, method.getFullMethodName(), trace, req, null, options, ex)
             );
         }
