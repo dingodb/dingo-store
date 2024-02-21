@@ -113,6 +113,13 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 class TxnGcTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
+    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
+
+    // Set whether log messages go to stderr in addition to logfiles.
+    FLAGS_alsologtostderr = true;
+
+    // If set this flag to true, the log will show in the terminal
+    FLAGS_logtostderr = true;
     std::srand(std::time(nullptr));
 
     Helper::CreateDirectories(kStorePath);
@@ -189,6 +196,9 @@ static void DoGcCore(bool gc_stop, int64_t safe_point_ts, bool force_gc_stop) {
   store::RegionPtr region_ptr = std::make_shared<store::Region>(region_id);
   std::string region_start_key(TxnGcTest::prefix_start_key);
   std::string region_end_key(TxnGcTest::prefix_end_key);
+
+  ctx = std::make_shared<Context>();
+  ctx->SetRegionId(region_id);
 
   status = TxnEngineHelper::DoGc(TxnGcTest::engine, raft_engine, ctx, TxnGcTest::safe_point_ts, gc_safe_point,
                                  region_start_key, region_end_key);

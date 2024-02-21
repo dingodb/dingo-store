@@ -185,7 +185,8 @@ class TxnEngineHelper {
                             const std::string &region_start_key, const std::string &region_end_key);
 
   static butil::Status CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
-                                      const std::string &start_key, const std::string &end_key, int64_t safe_point_ts);
+                                      const std::string &start_key, const std::string &end_key, int64_t safe_point_ts,
+                                      int64_t region_id);
 
   static butil::Status RaftEngineWriteForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                             const std::vector<std::string> &kv_deletes_lock,

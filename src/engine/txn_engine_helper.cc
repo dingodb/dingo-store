@@ -3182,10 +3182,11 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
   int64_t start_time_ms = Helper::TimestampMs();
   int64_t end_time_ms = 0;
   int64_t total_delete_count = 0;
+  int64_t region_id = ctx->RegionId();
 
-  DINGO_LOG(INFO) << fmt::format("[txn_gc][statics] start region start_key: {} end_key: {} safe_point_ts : {}",
-                                 Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key),
-                                 safe_point_ts);
+  DINGO_LOG(INFO) << fmt::format(
+      "[txn_gc][statics][region({})] start region start_key: {} end_key: {} safe_point_ts : {}", region_id,
+      Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts);
 
   std::vector<std::string> kv_deletes_lock;
   std::vector<std::string> kv_deletes_data;
@@ -3206,8 +3207,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
   auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
   if (nullptr == write_iter) {
-    std::string s = fmt::format("[txn_gc][write] NewIterator failed. region start_key: {} end_key: {} ",
-                                Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
+    std::string s = fmt::format("[txn_gc][write][region({})] NewIterator failed.  start_key: {} end_key: {} ",
+                                region_id, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
@@ -3230,7 +3231,7 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
     butil::Status status = Helper::DecodeTxnKey(write_iter_key, write_key, write_ts);
     if (!status.ok()) {
-      std::string s = fmt::format("[txn_gc][write] DecodeTxnKey failed, write_iter->key : {} ",
+      std::string s = fmt::format("[txn_gc][write][region({})] DecodeTxnKey failed, write_iter->key : {} ", region_id,
                                   Helper::StringToHex(write_iter_key));
       DINGO_LOG(FATAL) << s;
     }
@@ -3239,9 +3240,9 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
     bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
     if (!parse_success) {
       std::string s = fmt::format(
-          "[txn_gc][write] ParseFromArray failed, write_iter->key : {}  write_key : {}  write_ts : {}, "
+          "[txn_gc][write][region({})] ParseFromArray failed, write_iter->key : {}  write_key : {}  write_ts : {}, "
           "write_iter->value : {} ",
-          Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+          region_id, Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
           Helper::StringToHex(write_iter_value));
       DINGO_LOG(FATAL) << s;
     }
@@ -3298,18 +3299,16 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
           } else {
             if (pb::error::Errno::EKEY_NOT_FOUND == status.error_code()) {
               std::string s = fmt::format(
-                  "[txn_gc][data] key not found. maybe key already deleted or txn error. ignore. key: {} raw_key : "
-                  "{}  "
-                  "start_ts : {} "
-                  "status : {} write_info: {}",
-                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  "[txn_gc][data][region({})] key not found.  maybe key already deleted or txn error. ignore. key: "
+                  "{} raw_key : {}  start_ts : {} status : {} write_info: {}",
+                  region_id, Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
                   status.error_cstr(), write_info.ShortDebugString());
               DINGO_LOG(INFO) << s;
             } else {  // other error
               std::string s = fmt::format(
-                  "[txn_gc][data] get key failed. key: {} raw_key : {}  start_ts : {}"
+                  "[txn_gc][data][region({})] get key failed. key: {} raw_key : {}  start_ts : {}"
                   "status : {} write_info: {}",
-                  Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
+                  region_id, Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
                   status.error_cstr(), write_info.ShortDebugString());
               DINGO_LOG(ERROR) << s;
             }
@@ -3346,12 +3345,10 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
         [[fallthrough]];
       default: {
         std::string s = fmt::format(
-            "[txn_gc][write] invalid pb::store::Op type : {} type string : {} , write_iter->key : {}  write_key : "
-            "{}  "
-            "write_ts : {} write_iter->value "
-            ": {} "
-            "ignore. ",
-            static_cast<int>(op), pb::store::Op_Name(op), Helper::StringToHex(write_iter_key),
+            "[txn_gc][write][region({})] invalid pb::store::Op type : {} type string : {} , write_iter->key : {}  "
+            "write_key : "
+            "{}  write_ts : {} write_iter->value : {} ignore. ",
+            region_id, static_cast<int>(op), pb::store::Op_Name(op), Helper::StringToHex(write_iter_key),
             Helper::StringToHex(write_key), write_ts, write_info.ShortDebugString());
         DINGO_LOG(ERROR) << s;
         break;
@@ -3361,7 +3358,7 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
     if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
-        DINGO_LOG(INFO) << fmt::format("gc_stop set stop, region_id : {}.  start_key : {} end_key : {}. return",
+        DINGO_LOG(INFO) << fmt::format("[txn_gc][region({})] gc_stop set stop.  start_key : {} end_key : {}. return",
                                        ctx->RegionId(), Helper::StringToHex(region_start_key),
                                        Helper::StringToHex(region_end_key));
         gc_safe_point->SetForceGcStop(true);
@@ -3370,10 +3367,9 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
       if (safe_point_ts < internal_safe_point_ts) {
         DINGO_LOG(INFO) << fmt::format(
-            "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. "
-            "ignore. "
-            "region_id : {}.  start_key : {} end_key : {}",
-            safe_point_ts, internal_safe_point_ts, ctx->RegionId(), Helper::StringToHex(region_start_key),
+            "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with "
+            "it next time. ignore.  start_key : {} end_key : {}",
+            ctx->RegionId(), safe_point_ts, internal_safe_point_ts, Helper::StringToHex(region_start_key),
             Helper::StringToHex(region_end_key));
       }
 
@@ -3389,15 +3385,16 @@ _interrupt1:
 
   auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
   if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
-    DINGO_LOG(INFO) << "set internal_gc_stop stop, return";
+    DINGO_LOG(INFO) << fmt::format("[txn_gc][region({})] set internal_gc_stop stop, return", ctx->RegionId());
     gc_safe_point->SetForceGcStop(true);
     goto _interrupt2;
   }
 
   if (safe_point_ts < internal_safe_point_ts) {
     DINGO_LOG(INFO) << fmt::format(
-        "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore.",
-        safe_point_ts, internal_safe_point_ts);
+        "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it "
+        "next time. ignore.",
+        ctx->RegionId(), safe_point_ts, internal_safe_point_ts);
   }
 
   total_delete_count += (kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size());
@@ -3408,9 +3405,9 @@ _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[txn_gc][statics] end region start_key: {} end_key: {} safe_point_ts : {} time consuming : {} ms "
+      "[txn_gc][statics][region({})] end region start_key: {} end_key: {} safe_point_ts : {} time consuming : {} ms "
       "total_delete_count : {}",
-      Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
+      region_id, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
       (end_time_ms - start_time_ms), total_delete_count);
 
   return butil::Status();
@@ -3420,7 +3417,7 @@ bvar::LatencyRecorder g_txn_check_lock_for_gc_latency("dingo_txn_check_lock_for_
 
 butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
                                               const std::string &start_key, const std::string &end_key,
-                                              int64_t safe_point_ts) {
+                                              int64_t safe_point_ts, int64_t region_id) {
   BvarLatencyGuard bvar_guard(&g_txn_check_lock_for_gc_latency);
 
   auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
@@ -3444,8 +3441,9 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
 
   std::shared_ptr<dingodb::Iterator> lock_iter = reader->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
   if (nullptr == lock_iter) {
-    std::string s = fmt::format("[txn_gc][lock] NewIterator failed, start_key: {} end_key : {} safe_point_ts : {}",
-                                Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts);
+    std::string s =
+        fmt::format("[txn_gc][lock][region({})] NewIterator failed, start_key: {} end_key : {} safe_point_ts : {}",
+                    region_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
@@ -3457,9 +3455,10 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
     std::string_view lock_iter_value = lock_iter->Value();
 
     if (lock_iter_value.empty()) {
-      std::string s = fmt::format("[txn_gc][lock] lock info empty. lock_iter_key: {} lock_key : {} safe_point_ts : {}",
-                                  Helper::StringToHex(lock_iter_key),
-                                  Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts);
+      std::string s =
+          fmt::format("[txn_gc][lock][region({})] lock info empty. lock_iter_key: {} lock_key : {} safe_point_ts : {}",
+                      region_id, Helper::StringToHex(lock_iter_key),
+                      Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts);
       DINGO_LOG(ERROR) << s;
       lambda_add_error_statics_function();
       lock_iter->Next();
@@ -3470,10 +3469,11 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
     bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
     if (!parse_success) {
       std::string s = fmt::format(
-          "[txn_gc][lock] parse lock info failed, lock_iter_key : {} lock_key: {} , lock_value : {} safe_point_ts "
-          ": {}",
-          Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
-          Helper::StringToHex(lock_iter_value), safe_point_ts);
+          "[txn_gc][lock][region({})] parse lock info failed, lock_iter_key : {} lock_key: {} , lock_value : {} "
+          "safe_point_ts : {}",
+          region_id, Helper::StringToHex(lock_iter_key),
+          Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), Helper::StringToHex(lock_iter_value),
+          safe_point_ts);
       DINGO_LOG(ERROR) << s;
       lambda_add_error_statics_function();
       lock_iter->Next();
@@ -3483,11 +3483,10 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
     int64_t lock_ts = lock_info.lock_ts();
     if (lock_ts <= safe_point_ts) {
       std::string s = fmt::format(
-          "[txn_gc][lock] find lock error. exist lock_ts : {} <= safe_point_ts : {}, lock_iter_key : {} lock_key: "
-          "{}  "
-          ", safe_point_ts : {} "
-          "lock_value : {}",
-          lock_ts, safe_point_ts, Helper::StringToHex(lock_iter_key),
+          "[txn_gc][lock][region({})] find lock error. exist lock_ts : {} <= safe_point_ts : {}, lock_iter_key : {} "
+          "lock_key: "
+          "{}  , safe_point_ts : {} lock_value : {}",
+          region_id, lock_ts, safe_point_ts, Helper::StringToHex(lock_iter_key),
           Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), safe_point_ts, lock_info.ShortDebugString());
       DINGO_LOG(ERROR) << s;
       lambda_add_error_statics_function();
@@ -3500,10 +3499,9 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
   }
 
   std::string s = fmt::format(
-      "[txn_gc][lock] scan lock column family. start_key : {} end_key : {} safe_point_ts : {} total : {} success : "
-      "{} "
-      "failed : {}",
-      Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts, total_count,
+      "[txn_gc][lock][region({})] scan lock column family. start_key : {} end_key : {} safe_point_ts : {} total : {} "
+      "success : {} failed : {}",
+      region_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts, total_count,
       (total_count - failed_count), failed_count);
   DINGO_LOG(INFO) << s;
 
@@ -3579,11 +3577,12 @@ butil::Status TxnEngineHelper::DoFinalWorkForGc(std::shared_ptr<Engine> raft_eng
   lock_end_key = write_key;
   // optimization . already checked Ignore.
   if (lock_start_key != last_lock_start_key && lock_end_key != last_lock_end_key) {
-    status = CheckLockForGc(reader, snapshot, lock_start_key, lock_end_key, safe_point_ts);
+    status = CheckLockForGc(reader, snapshot, lock_start_key, lock_end_key, safe_point_ts, ctx->RegionId());
     if (!status.ok()) {
       std::string s = fmt::format(
-          "[txn_gc][lock] CheckLockForGc failed. lock_start_key : {} lock_end_key : {} safe_point_ts : {}. ignore.",
-          Helper::StringToHex(lock_start_key), Helper::StringToHex(lock_end_key), safe_point_ts);
+          "[txn_gc][lock][region({})] CheckLockForGc failed. lock_start_key : {} lock_end_key : {} "
+          "safe_point_ts : {}. ignore.",
+          ctx->RegionId(), Helper::StringToHex(lock_start_key), Helper::StringToHex(lock_end_key), safe_point_ts);
       DINGO_LOG(ERROR) << s + status.error_str();
     }
   }
@@ -3591,9 +3590,10 @@ butil::Status TxnEngineHelper::DoFinalWorkForGc(std::shared_ptr<Engine> raft_eng
   status = RaftEngineWriteForGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write);
   if (!status.ok()) {
     std::string s = fmt::format(
-        "[txn_gc][write] RaftEngineWriteForGc failed. kv_deletes_lock size : {} kv_deletes_data size : {} "
+        "[txn_gc][write][region({})] RaftEngineWriteForGc failed. kv_deletes_lock size : {} kv_deletes_data size : "
+        "{} "
         "kv_deletes_write : {} safe_point_ts : {}. ignore.",
-        kv_deletes_lock.size(), kv_deletes_data.size(), kv_deletes_write.size(), safe_point_ts);
+        ctx->RegionId(), kv_deletes_lock.size(), kv_deletes_data.size(), kv_deletes_write.size(), safe_point_ts);
     DINGO_LOG(ERROR) << s + status.error_str();
   }
 
@@ -3679,8 +3679,12 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   auto [gc_stop, safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
 
   if (gc_stop) {
-    DINGO_LOG(INFO) << "set gc_flag stop, return"
-                    << " safe_point_ts:" << safe_point_ts;
+    DINGO_LOG(INFO) << fmt::format("[txn_gc] set gc_flag stop, return. safe_point_ts : {}", safe_point_ts);
+    return;
+  }
+
+  if (safe_point_ts <= 0) {
+    DINGO_LOG(INFO) << fmt::format("[txn_gc] safe_point_ts({}) <= 0, ignore. return.", safe_point_ts);
     return;
   }
 
