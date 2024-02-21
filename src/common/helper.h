@@ -362,6 +362,20 @@ class Helper {
 
   static void SplitString(const std::string& str, char c, std::vector<std::string>& vec);
   static void SplitString(const std::string& str, char c, std::vector<int64_t>& vec);
+
+  static float DingoFaissInnerProduct(const float* x, const float* y, size_t d);
+
+  static float DingoFaissL2sqr(const float* x, const float* y, size_t d);
+
+  static float DingoHnswInnerProduct(const float* p_vect1, const float* p_vect2, size_t d);
+
+  static float DingoHnswInnerProductDistance(const float* p_vect1, const float* p_vect2, size_t d);
+
+  static float DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d);
+
+  static std::string VectorToString(const std::vector<float>& vec);
+
+  static std::vector<float> StringToVector(const std::string& str);
 };
 
 }  // namespace dingodb

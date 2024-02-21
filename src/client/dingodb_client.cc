@@ -452,6 +452,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorCalcDistance") {
       client::SendVectorCalcDistance(FLAGS_dimension, FLAGS_alg_type, FLAGS_metric_type, FLAGS_left_vector_size,
                                      FLAGS_right_vector_size, FLAGS_is_return_normlize);
+    } else if (method == "CalcDistance") {
+      client::SendCalcDistance();
     } else if (method == "VectorCount") {
       client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
     } else if (method == "CountVectorTable") {

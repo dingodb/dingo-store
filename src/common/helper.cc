@@ -1842,4 +1842,85 @@ void Helper::SplitString(const std::string& str, char c, std::vector<int64_t>& v
   }
 }
 
+#if 1  // NOLINT
+#define DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN _Pragma("float_control(precise, off, push)")
+#define DINGO_PRAGMA_IMPRECISE_FUNCTION_END _Pragma("float_control(pop)")
+#define DINGO_PRAGMA_IMPRECISE_LOOP _Pragma("clang loop vectorize(enable) interleave(enable)")
+#else
+#define DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN
+#define DINGO_PRAGMA_IMPRECISE_FUNCTION_END
+#define DINGO_PRAGMA_IMPRECISE_LOOP
+#endif
+
+DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN
+float Helper::DingoFaissInnerProduct(const float* x, const float* y, size_t d) {
+  float res = 0.F;
+  DINGO_PRAGMA_IMPRECISE_LOOP
+  for (size_t i = 0; i != d; ++i) {
+    res += x[i] * y[i];
+  }
+  return res;
+}
+DINGO_PRAGMA_IMPRECISE_FUNCTION_END
+
+DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN
+float Helper::DingoFaissL2sqr(const float* x, const float* y, size_t d) {
+  size_t i;
+  float res = 0;
+  DINGO_PRAGMA_IMPRECISE_LOOP
+  for (i = 0; i < d; i++) {
+    const float tmp = x[i] - y[i];
+    res += tmp * tmp;
+  }
+  return res;
+}
+DINGO_PRAGMA_IMPRECISE_FUNCTION_END
+
+float Helper::DingoHnswInnerProduct(const float* p_vect1, const float* p_vect2, size_t d) {
+  float res = 0;
+  for (unsigned i = 0; i < d; i++) {
+    res += ((float*)p_vect1)[i] * ((float*)p_vect2)[i];
+  }
+  return res;
+}
+
+float Helper::DingoHnswInnerProductDistance(const float* p_vect1, const float* p_vect2, size_t d) {
+  return 1.0f - DingoHnswInnerProduct(p_vect1, p_vect2, d);
+}
+
+float Helper::DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d) {
+  float* p_vect1 = (float*)p_vect1v;
+  float* p_vect2 = (float*)p_vect2v;
+
+  float res = 0;
+  for (size_t i = 0; i < d; i++) {
+    float t = *p_vect1 - *p_vect2;
+    p_vect1++;
+    p_vect2++;
+    res += t * t;
+  }
+  return (res);
+}
+
+std::string Helper::VectorToString(const std::vector<float>& vec) {
+  std::stringstream ss;
+  for (size_t i = 0; i < vec.size(); ++i) {
+    if (i != 0) ss << ", ";
+    ss << vec[i];
+  }
+  return ss.str();
+}
+
+std::vector<float> Helper::StringToVector(const std::string& str) {
+  std::vector<float> vec;
+  std::stringstream ss(str);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    vec.push_back(std::stof(token));
+  }
+
+  return vec;
+}
+
 }  // namespace dingodb

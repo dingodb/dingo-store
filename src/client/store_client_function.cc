@@ -22,6 +22,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
@@ -68,6 +69,11 @@ DECLARE_bool(bruteforce);
 DECLARE_string(vector_data);
 DECLARE_string(csv_data);
 DECLARE_string(csv_output);
+DECLARE_int32(dimension);
+
+// for calc distance
+DEFINE_string(vector_data1, "", "vector data 1");
+DEFINE_string(vector_data2, "", "vector data 2");
 
 namespace client {
 
@@ -350,26 +356,59 @@ int64_t SendGetTableByName(const std::string& table_name) {
 
 // ============================== meta service ===========================
 
-std::string VectorToString(const std::vector<float>& vec) {
-  std::stringstream ss;
-  for (size_t i = 0; i < vec.size(); ++i) {
-    if (i != 0) ss << ", ";
-    ss << vec[i];
-  }
-  return ss.str();
-}
+// #define DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN _Pragma("float_control(precise, off, push)")
+// #define DINGO_PRAGMA_IMPRECISE_FUNCTION_END _Pragma("float_control(pop)")
+// #define DINGO_PRAGMA_IMPRECISE_LOOP _Pragma("clang loop vectorize(enable) interleave(enable)")
 
-std::vector<float> StringToVector(const std::string& str) {
-  std::vector<float> vec;
-  std::stringstream ss(str);
-  std::string token;
+// DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN
+// static float DingoFaissInnerProduct(const float* x, const float* y, size_t d) {
+//   float res = 0.F;
+//   DINGO_PRAGMA_IMPRECISE_LOOP
+//   for (size_t i = 0; i != d; ++i) {
+//     res += x[i] * y[i];
+//   }
+//   return res;
+// }
+// DINGO_PRAGMA_IMPRECISE_FUNCTION_END
 
-  while (std::getline(ss, token, ',')) {
-    vec.push_back(std::stof(token));
-  }
+// DINGO_PRAGMA_IMPRECISE_FUNCTION_BEGIN
+// static float DingoFaissL2sqr(const float* x, const float* y, size_t d) {
+//   size_t i;
+//   float res = 0;
+//   DINGO_PRAGMA_IMPRECISE_LOOP
+//   for (i = 0; i < d; i++) {
+//     const float tmp = x[i] - y[i];
+//     res += tmp * tmp;
+//   }
+//   return res;
+// }
+// DINGO_PRAGMA_IMPRECISE_FUNCTION_END
 
-  return vec;
-}
+// static float DingoHnswInnerProduct(const float* p_vect1, const float* p_vect2, size_t d) {
+//   float res = 0;
+//   for (unsigned i = 0; i < d; i++) {
+//     res += ((float*)p_vect1)[i] * ((float*)p_vect2)[i];
+//   }
+//   return res;
+// }
+
+// static float DingoHnswInnerProductDistance(const float* p_vect1, const float* p_vect2, size_t d) {
+//   return 1.0f - DingoHnswInnerProduct(p_vect1, p_vect2, d);
+// }
+
+// static float DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d) {
+//   float* p_vect1 = (float*)p_vect1v;
+//   float* p_vect2 = (float*)p_vect2v;
+
+//   float res = 0;
+//   for (size_t i = 0; i < d; i++) {
+//     float t = *p_vect1 - *p_vect2;
+//     p_vect1++;
+//     p_vect2++;
+//     res += t * t;
+//   }
+//   return (res);
+// }
 
 // We cant use FLAGS_vector_data to define the vector we want to search, the format is:
 // 1.0, 2.0, 3.0, 4.0
@@ -401,7 +440,7 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
       vector->mutable_vector()->add_float_values(1.0 * i);
     }
   } else {
-    std::vector<float> row = StringToVector(FLAGS_vector_data);
+    std::vector<float> row = dingodb::Helper::StringToVector(FLAGS_vector_data);
 
     CHECK(dimension == row.size()) << "dimension not match";
 
@@ -530,7 +569,7 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
     DINGO_LOG(INFO) << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size();
 
     for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
-      std::string vector_string = VectorToString(
+      std::string vector_string = dingodb::Helper::VectorToString(
           dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values()));
 
       DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id() << ", vector: [" << vector_string
@@ -542,8 +581,20 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
     }
 
     for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
+      std::vector<float> x_i = dingodb::Helper::PbRepeatedToVector(vector->vector().float_values());
+      std::vector<float> y_j =
+          dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values());
+
+      auto faiss_l2 = dingodb::Helper::DingoFaissL2sqr(x_i.data(), y_j.data(), dimension);
+      auto faiss_ip = dingodb::Helper::DingoFaissInnerProduct(x_i.data(), y_j.data(), dimension);
+      auto hnsw_l2 = dingodb::Helper::DingoHnswL2Sqr(x_i.data(), y_j.data(), dimension);
+      auto hnsw_ip = dingodb::Helper::DingoHnswInnerProduct(x_i.data(), y_j.data(), dimension);
+      auto hnsw_ip_dist = dingodb::Helper::DingoHnswInnerProductDistance(x_i.data(), y_j.data(), dimension);
+
       DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id()
-                      << ", distance: " << vector_with_distance.distance();
+                      << ", distance: " << vector_with_distance.distance() << ", [faiss_l2: " << faiss_l2
+                      << ", faiss_ip: " << faiss_ip << ", hnsw_l2: " << hnsw_l2 << ", hnsw_ip: " << hnsw_ip
+                      << ", hnsw_ip_dist: " << hnsw_ip_dist << "]";
     }
   }
 
@@ -1580,7 +1631,7 @@ void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int
     return;
   }
 
-  int64_t batch_count = limit > 1000 ? 1000 : limit;
+  int64_t batch_count = limit > 1000 || limit == 0 ? 1000 : limit;
 
   int64_t new_start_id = start_id - 1;
 
@@ -1605,7 +1656,7 @@ void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int
     }
 
     for (const auto& vector_data : vector_datas) {
-      std::string vector_string = VectorToString(vector_data);
+      std::string vector_string = dingodb::Helper::VectorToString(vector_data);
       file << vector_string << '\n';
     }
 
@@ -2249,6 +2300,37 @@ void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t cou
                                  static_cast<long double>(total) / count);
 
   out.close();
+}
+
+// vector_data1: "1.0, 2.0, 3.0, 4.0"
+// vector_data2: "1.1, 2.0, 3.0, 4.1"
+void SendCalcDistance() {
+  if (FLAGS_vector_data1.empty() || FLAGS_vector_data2.empty()) {
+    DINGO_LOG(ERROR) << "vector_data1 or vector_data2 is empty";
+    return;
+  }
+
+  std::vector<float> x_i = dingodb::Helper::StringToVector(FLAGS_vector_data1);
+  std::vector<float> y_j = dingodb::Helper::StringToVector(FLAGS_vector_data2);
+
+  if (x_i.size() != y_j.size() || x_i.empty() || y_j.empty()) {
+    DINGO_LOG(ERROR) << "vector_data1 size must be equal to vector_data2 size";
+    return;
+  }
+
+  auto dimension = x_i.size();
+
+  auto faiss_l2 = dingodb::Helper::DingoFaissL2sqr(x_i.data(), y_j.data(), dimension);
+  auto faiss_ip = dingodb::Helper::DingoFaissInnerProduct(x_i.data(), y_j.data(), dimension);
+  auto hnsw_l2 = dingodb::Helper::DingoHnswL2Sqr(x_i.data(), y_j.data(), dimension);
+  auto hnsw_ip = dingodb::Helper::DingoHnswInnerProduct(x_i.data(), y_j.data(), dimension);
+  auto hnsw_ip_dist = dingodb::Helper::DingoHnswInnerProductDistance(x_i.data(), y_j.data(), dimension);
+
+  DINGO_LOG(INFO) << "vector_data1: " << FLAGS_vector_data1;
+  DINGO_LOG(INFO) << " vector_data2: " << FLAGS_vector_data2;
+
+  DINGO_LOG(INFO) << "[faiss_l2: " << faiss_l2 << ", faiss_ip: " << faiss_ip << ", hnsw_l2: " << hnsw_l2
+                  << ", hnsw_ip: " << hnsw_ip << ", hnsw_ip_dist: " << hnsw_ip_dist << "]";
 }
 
 void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, const std::string& metric_type,
