@@ -39,7 +39,7 @@
 DEFINE_bool(log_each_request, false, "Print log for each request");
 DEFINE_bool(use_bthread, false, "Use bthread to send requests");
 DEFINE_int32(thread_num, 1, "Number of threads sending requests");
-DEFINE_int64(timeout_ms, 5000, "Timeout for each request");
+DEFINE_int64(timeout_ms, 60000, "Timeout for each request");
 DEFINE_int32(req_num, 1, "Number of requests");
 DEFINE_string(method, "", "Request method");
 DEFINE_string(id, "", "Request parameter id, for example: table_id for CreateTable/DropTable");
@@ -157,6 +157,10 @@ DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre f
 DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
 DEFINE_bool(with_table_pre_filter, false, "Search vector with table data pre filter");
 DEFINE_int32(vector_ids_count, 100, "vector ids count");
+DEFINE_string(csv_data, "", "csv data");
+DEFINE_string(json_data, "", "json data");
+DEFINE_string(vector_data, "", "vector data");
+DEFINE_string(csv_output, "", "csv output");
 
 DEFINE_string(lock_name, "", "Request lock_name");
 DEFINE_string(client_uuid, "", "Request client_uuid");
@@ -388,6 +392,9 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
 
     // Vector operation
     else if (method == "VectorSearch") {
+      // We cant use FLAGS_vector_data to define the vector we want to search, the format is:
+      // 1.0, 2.0, 3.0, 4.0
+      // only one vector data, no new line at the end of the file, and only float value and , is allowed
       client::SendVectorSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn);
     } else if (method == "VectorSearchDebug") {
       client::SendVectorSearchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn, FLAGS_batch_count,
@@ -403,6 +410,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_vector_id)});
     } else if (method == "VectorScanQuery") {
       client::SendVectorScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
+    } else if (method == "VectorScanDump") {
+      client::SendVectorScanDump(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
     } else if (method == "VectorGetRegionMetrics") {
       client::SendVectorGetRegionMetrics(FLAGS_region_id);
     } else if (method == "VectorAdd") {
@@ -414,6 +423,14 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->step_count = FLAGS_step_count;
       ctx->with_scalar = !FLAGS_without_scalar;
       ctx->with_table = !FLAGS_without_table;
+      ctx->csv_data = FLAGS_csv_data;
+      ctx->json_data = FLAGS_json_data;
+
+      // We can use a csv file to import vector_data
+      // The csv file format is:
+      // 1.0, 2.0, 3.0, 4.0
+      // 1.1, 2.1, 3.1, 4.1
+      // the line count must equal to the vector count, no new line at the end of the file
 
       if (ctx->table_id > 0) {
         client::SendVectorAddRetry(ctx);
@@ -590,6 +607,15 @@ int64_t DecodeUint64(const std::string& str) {
 }
 
 void CoordinatorSendDebug() {
+  dingodb::pb::common::VectorWithDistance vector_with_distance;
+  vector_with_distance.set_distance(-1.1920929e-07);
+
+  DINGO_LOG(INFO) << " 1111 " << vector_with_distance.DebugString();
+
+  vector_with_distance.set_distance(1.0F - (-1.1920929e-07));
+
+  DINGO_LOG(INFO) << " 2222 " << vector_with_distance.DebugString();
+
   int64_t test1 = 1001;
   auto encode_result = EncodeUint64(test1);
   DINGO_LOG(INFO) << encode_result.size();

@@ -15,6 +15,7 @@
 #include "client/store_client_function.h"
 
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -24,6 +25,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -63,6 +65,9 @@ DECLARE_int32(vector_ids_count);
 DECLARE_bool(key_is_hex);
 DECLARE_int64(ef_search);
 DECLARE_bool(bruteforce);
+DECLARE_string(vector_data);
+DECLARE_string(csv_data);
+DECLARE_string(csv_output);
 
 namespace client {
 
@@ -345,6 +350,30 @@ int64_t SendGetTableByName(const std::string& table_name) {
 
 // ============================== meta service ===========================
 
+std::string VectorToString(const std::vector<float>& vec) {
+  std::stringstream ss;
+  for (size_t i = 0; i < vec.size(); ++i) {
+    if (i != 0) ss << ", ";
+    ss << vec[i];
+  }
+  return ss.str();
+}
+
+std::vector<float> StringToVector(const std::string& str) {
+  std::vector<float> vec;
+  std::stringstream ss(str);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    vec.push_back(std::stof(token));
+  }
+
+  return vec;
+}
+
+// We cant use FLAGS_vector_data to define the vector we want to search, the format is:
+// 1.0, 2.0, 3.0, 4.0
+// only one vector data, no new line at the end of the file, and only float value and , is allowed
 void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
   dingodb::pb::index::VectorSearchRequest request;
   dingodb::pb::index::VectorSearchResponse response;
@@ -367,8 +396,18 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
     return;
   }
 
-  for (int i = 0; i < dimension; i++) {
-    vector->mutable_vector()->add_float_values(1.0 * i);
+  if (FLAGS_vector_data.empty()) {
+    for (int i = 0; i < dimension; i++) {
+      vector->mutable_vector()->add_float_values(1.0 * i);
+    }
+  } else {
+    std::vector<float> row = StringToVector(FLAGS_vector_data);
+
+    CHECK(dimension == row.size()) << "dimension not match";
+
+    for (auto v : row) {
+      vector->mutable_vector()->add_float_values(v);
+    }
   }
 
   request.mutable_parameter()->set_top_n(topn);
@@ -477,6 +516,40 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
   }
 
   DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+
+  std::ofstream file;
+  if (!FLAGS_csv_output.empty()) {
+    file = std::ofstream(FLAGS_csv_output, std::ios::out | std::ios::app);
+    if (!file.is_open()) {
+      DINGO_LOG(ERROR) << "open file failed";
+      return;
+    }
+  }
+
+  for (const auto& batch_result : response.batch_results()) {
+    DINGO_LOG(INFO) << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size();
+
+    for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
+      std::string vector_string = VectorToString(
+          dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values()));
+
+      DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id() << ", vector: [" << vector_string
+                      << "]";
+
+      if (!FLAGS_csv_output.empty()) {
+        file << vector_string << '\n';
+      }
+    }
+
+    for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
+      DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id()
+                      << ", distance: " << vector_with_distance.distance();
+    }
+  }
+
+  if (file.is_open()) {
+    file.close();
+  }
 
   // match compare
   if (FLAGS_with_vector_ids) {
@@ -1448,6 +1521,99 @@ void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, in
                   << " vector count: " << response.vectors().size();
 }
 
+butil::Status ScanVectorData(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse,
+                             std::vector<std::vector<float>>& vector_datas, int64_t& last_vector_id) {
+  dingodb::pb::index::VectorScanQueryRequest request;
+  dingodb::pb::index::VectorScanQueryResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.set_vector_id_start(start_id);
+  request.set_vector_id_end(end_id);
+  request.set_max_scan_count(limit);
+  request.set_is_reverse_scan(is_reverse);
+  request.set_without_vector_data(false);
+  request.set_without_scalar_data(true);
+  request.set_without_table_data(true);
+
+  auto ret =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorScanQuery", request, response);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "VectorScanQuery failed: " << ret.error_str();
+    return ret;
+  }
+
+  if (response.error().errcode() != 0) {
+    DINGO_LOG(ERROR) << "VectorScanQuery failed: " << response.error().errcode() << " " << response.error().errmsg();
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  DINGO_LOG(DEBUG) << "VectorScanQuery response: " << response.DebugString()
+                   << " vector count: " << response.vectors().size();
+
+  if (response.vectors_size() > 0) {
+    for (const auto& vector : response.vectors()) {
+      std::vector<float> vector_data;
+      vector_data.reserve(vector.vector().float_values_size());
+      for (int i = 0; i < vector.vector().float_values_size(); i++) {
+        vector_data.push_back(vector.vector().float_values(i));
+        if (vector.id() > last_vector_id) {
+          last_vector_id = vector.id();
+        }
+      }
+      vector_datas.push_back(vector_data);
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse) {
+  if (FLAGS_csv_output.empty()) {
+    DINGO_LOG(ERROR) << "csv_output is empty";
+    return;
+  }
+
+  std::ofstream file(FLAGS_csv_output, std::ios::out);
+
+  if (!file.is_open()) {
+    DINGO_LOG(ERROR) << "open file failed";
+    return;
+  }
+
+  int64_t batch_count = limit > 1000 ? 1000 : limit;
+
+  int64_t new_start_id = start_id - 1;
+
+  for (;;) {
+    std::vector<std::vector<float>> vector_datas;
+    int64_t last_vector_id = 0;
+
+    if (new_start_id >= end_id) {
+      DINGO_LOG(INFO) << "new_start_id: " << new_start_id << " end_id: " << end_id << ", will break";
+      break;
+    }
+
+    auto ret = ScanVectorData(region_id, new_start_id + 1, end_id, batch_count, is_reverse, vector_datas, new_start_id);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "ScanVectorData failed: " << ret.error_str();
+      return;
+    }
+
+    if (vector_datas.empty()) {
+      DINGO_LOG(INFO) << "vector_datas is empty, finish";
+      break;
+    }
+
+    for (const auto& vector_data : vector_datas) {
+      std::string vector_string = VectorToString(vector_data);
+      file << vector_string << '\n';
+    }
+
+    DINGO_LOG(INFO) << "new_start_id: " << new_start_id << " end_id: " << end_id
+                    << " vector_datas.size(): " << vector_datas.size();
+  }
+}
+
 void SendVectorGetRegionMetrics(int64_t region_id) {
   dingodb::pb::index::VectorGetRegionMetricsRequest request;
   dingodb::pb::index::VectorGetRegionMetricsResponse response;
@@ -1459,23 +1625,53 @@ void SendVectorGetRegionMetrics(int64_t region_id) {
   DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
 }
 
-int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_t> vector_ids, bool with_scalar,
+int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_t> vector_ids,
+                       std::vector<std::vector<float>> vector_datas, uint32_t vector_datas_offset, bool with_scalar,
                        bool with_table) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
+
+  uint32_t max_size = 0;
+  if (vector_datas.size() > vector_datas_offset + vector_ids.size()) {
+    max_size = vector_ids.size();
+  } else {
+    max_size = vector_datas.size() > vector_datas_offset ? vector_datas.size() - vector_datas_offset : 0;
+  }
+
+  if (max_size == 0) {
+    DINGO_LOG(INFO) << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size;
+    return 0;
+  } else {
+    DINGO_LOG(DEBUG) << "vector_datas.size(): " << vector_datas.size()
+                     << " vector_datas_offset: " << vector_datas_offset << " vector_ids.size(): " << vector_ids.size()
+                     << " max_size: " << max_size;
+  }
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
 
-  for (auto vector_id : vector_ids) {
+  for (int i = 0; i < max_size; ++i) {
+    const auto& vector_id = vector_ids[i];
+
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(vector_id);
     vector_with_id->mutable_vector()->set_dimension(dimension);
     vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-    for (int j = 0; j < dimension; j++) {
-      vector_with_id->mutable_vector()->add_float_values(distrib(rng));
+
+    if (vector_datas.empty()) {
+      for (int j = 0; j < dimension; j++) {
+        vector_with_id->mutable_vector()->add_float_values(distrib(rng));
+      }
+
+    } else {
+      const auto& vector_data = vector_datas[i + vector_datas_offset];
+      CHECK(vector_data.size() == dimension);
+
+      for (int j = 0; j < dimension; j++) {
+        vector_with_id->mutable_vector()->add_float_values(vector_data[j]);
+      }
     }
 
     if (with_scalar) {
@@ -1567,6 +1763,11 @@ void PrintIndexRange(dingodb::pb::meta::IndexRange& index_range) {  // NOLINT
   }
 }
 
+// We can use a csv file to import vector_data
+// The csv file format is:
+// 1.0, 2.0, 3.0, 4.0
+// 1.1, 2.1, 3.1, 4.1
+// the line count must equal to the vector count, no new line at the end of the file
 void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
   auto index_range = SendGetIndexRange(ctx->table_id);
   if (index_range.range_distribution().empty()) {
@@ -1575,11 +1776,47 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
   }
   PrintIndexRange(index_range);
 
-  int end_id = ctx->start_id + ctx->count;
+  std::vector<std::vector<float>> vector_datas;
+
+  if (!ctx->csv_data.empty()) {
+    if (!dingodb::Helper::IsExistPath(ctx->csv_data)) {
+      DINGO_LOG(ERROR) << fmt::format("csv data file {} not exist", ctx->csv_data);
+      return;
+    }
+
+    std::ifstream file(ctx->csv_data);
+
+    if (file.is_open()) {
+      std::string line;
+      while (std::getline(file, line)) {
+        std::vector<float> row;
+        std::stringstream ss(line);
+        std::string value;
+        while (std::getline(ss, value, ',')) {
+          row.push_back(std::stof(value));
+        }
+        vector_datas.push_back(row);
+      }
+      file.close();
+    }
+
+    DINGO_LOG(INFO) << fmt::format("csv data size: {}", vector_datas.size());
+  }
+
+  uint32_t total_count = 0;
+
+  int64_t end_id = 0;
+  if (vector_datas.empty()) {
+    end_id = ctx->start_id + ctx->count;
+  } else {
+    end_id = ctx->start_id + vector_datas.size();
+  }
+  DINGO_LOG(INFO) << "start_id: " << ctx->start_id << " end_id: " << end_id << ", step_count: " << ctx->step_count;
+
   std::vector<int64_t> vector_ids;
   vector_ids.reserve(ctx->step_count);
-  for (int i = ctx->start_id; i < end_id; i += ctx->step_count) {
-    for (int j = i; j < i + ctx->step_count; ++j) {
+  for (int64_t i = ctx->start_id; i < end_id; i += ctx->step_count) {
+    for (int64_t j = i; j < i + ctx->step_count; ++j) {
       vector_ids.push_back(j);
     }
 
@@ -1589,7 +1826,8 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
       return;
     }
 
-    int ret = SendBatchVectorAdd(region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar, !FLAGS_without_table);
+    int ret = SendBatchVectorAdd(region_id, ctx->dimension, vector_ids, vector_datas, total_count,
+                                 !FLAGS_without_scalar, !FLAGS_without_table);
     if (ret == dingodb::pb::error::EKEY_OUT_OF_RANGE || ret == dingodb::pb::error::EREGION_REDIRECT) {
       bthread_usleep(1000 * 500);  // 500ms
       index_range = SendGetIndexRange(ctx->table_id);
@@ -1598,21 +1836,67 @@ void SendVectorAddRetry(std::shared_ptr<Context> ctx) {  // NOLINT
 
     DINGO_LOG(INFO) << fmt::format("schedule: {}/{}", i, end_id);
 
+    total_count += vector_ids.size();
+
     vector_ids.clear();
   }
 }
 
-void SendVectorAdd(std::shared_ptr<Context> ctx) {  // NOLINT
-  int end_id = ctx->start_id + ctx->count;
+// We can use a csv file to import vector_data
+// The csv file format is:
+// 1.0, 2.0, 3.0, 4.0
+// 1.1, 2.1, 3.1, 4.1
+// the line count must equal to the vector count, no new line at the end of the file
+void SendVectorAdd(std::shared_ptr<Context> ctx) {
   std::vector<int64_t> vector_ids;
   vector_ids.reserve(ctx->step_count);
+
+  std::vector<std::vector<float>> vector_datas;
+
+  if (!ctx->csv_data.empty()) {
+    if (!dingodb::Helper::IsExistPath(ctx->csv_data)) {
+      DINGO_LOG(ERROR) << fmt::format("csv data file {} not exist", ctx->csv_data);
+      return;
+    }
+
+    std::ifstream file(ctx->csv_data);
+
+    if (file.is_open()) {
+      std::string line;
+      while (std::getline(file, line)) {
+        std::vector<float> row;
+        std::stringstream ss(line);
+        std::string value;
+        while (std::getline(ss, value, ',')) {
+          row.push_back(std::stof(value));
+        }
+        vector_datas.push_back(row);
+      }
+      file.close();
+    }
+
+    DINGO_LOG(INFO) << fmt::format("csv data size: {}", vector_datas.size());
+  }
+
+  uint32_t total_count = 0;
+
+  int64_t end_id = 0;
+  if (vector_datas.empty()) {
+    end_id = ctx->start_id + ctx->count;
+  } else {
+    end_id = ctx->start_id + vector_datas.size();
+  }
+  DINGO_LOG(INFO) << "start_id: " << ctx->start_id << " end_id: " << end_id << ", step_count: " << ctx->step_count;
+
   for (int i = ctx->start_id; i < end_id; i += ctx->step_count) {
     for (int j = i; j < i + ctx->step_count; ++j) {
       vector_ids.push_back(j);
     }
 
-    int ret =
-        SendBatchVectorAdd(ctx->region_id, ctx->dimension, vector_ids, !FLAGS_without_scalar, !FLAGS_without_table);
+    SendBatchVectorAdd(ctx->region_id, ctx->dimension, vector_ids, vector_datas, total_count, !FLAGS_without_scalar,
+                       !FLAGS_without_table);
+
+    total_count += vector_ids.size();
 
     vector_ids.clear();
   }
