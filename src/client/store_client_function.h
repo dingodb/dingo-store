@@ -84,6 +84,9 @@ struct Context {
   std::string key;
 
   bool show_vector;
+
+  std::string csv_data;
+  std::string json_data;
 };
 
 // meta
@@ -112,6 +115,7 @@ void SendVectorGetMinId(int64_t region_id);
 void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                         const std::string& file);
 void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
+void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
 void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
                              int64_t start_id, const std::string& file);
 void SendVectorGetRegionMetrics(int64_t region_id);

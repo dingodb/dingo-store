@@ -485,11 +485,13 @@ void Benchmark::DropRegion(int64_t region_id) {
 }
 
 sdk::MetricType GetMetricType(const std::string& metric_type) {
-  if (metric_type == "L2") {
+  auto upper_metric_type = dingodb::Helper::ToUpper(metric_type);
+
+  if (upper_metric_type == "L2") {
     return sdk::MetricType::kL2;
-  } else if (metric_type == "IP") {
+  } else if (upper_metric_type == "IP") {
     return sdk::MetricType::kInnerProduct;
-  } else if (metric_type == "COSINE") {
+  } else if (upper_metric_type == "COSINE") {
     return sdk::MetricType::kCosine;
   }
 

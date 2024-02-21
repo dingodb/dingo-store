@@ -912,6 +912,8 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     index_definition->set_auto_increment(100);
   }
 
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
   auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
