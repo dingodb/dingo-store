@@ -52,6 +52,11 @@ add_library(sdk
   ${SERIAL2_SRCS}
   ${VERSION_SRCS})
 
+
+if(ENABLE_COVERAGE)
+  set(GCOV_LIBRAR gcov)
+endif()
+
 # CAUTION: the order of the libraries is important, because of the dependencies between them.
 target_link_libraries(
   sdk
@@ -73,6 +78,8 @@ target_link_libraries(
     ${LIBUNWIND_GENERIC_LIBRARIES}
     ${LIBUNWIND_ARCH_LIBRARIES}
     dl
-    Threads::Threads)
+    Threads::Threads
+    ${GCOV_LIBRAR}
+    )
 
 add_dependencies(sdk ${DEPEND_LIBS})

@@ -37,6 +37,7 @@ project(dingo-store C CXX)
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" OFF)
+option(ENABLE_COVERAGE "Enable unit test code coverage" OFF)
 option(BUILD_INTEGRATION_TESTS "Build integration test" OFF)
 option(BUILD_BENCHMARK "Build benchmark" OFF)
 option(BUILD_SDK_EXAMPLE "Build sdk example" OFF)
@@ -89,6 +90,11 @@ if(BUILD_GOOGLE_SANITIZE)
     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
     add_definitions(-DUSE_SANITIZE=ON)
     message(STATUS "enable google sanitize")
+endif()
+
+if(ENABLE_COVERAGE)
+    message(STATUS "Enable coverage")
+    add_compile_options(-fprofile-arcs -ftest-coverage)
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -164,7 +170,7 @@ include(bdb)
 include(brpc)
 include(braft)
 
-if(BUILD_BENCHMARK)
+if(BUILD_BENCHMARK STREQUAL "ON")
     include(hdf5)
 endif()
 
@@ -281,6 +287,13 @@ set(DYNAMIC_LIB
     dl
     Threads::Threads
 )
+
+if(ENABLE_COVERAGE)
+    set(DYNAMIC_LIB
+        ${DYNAMIC_LIB}
+        gcov
+    )
+endif()
 
 set(DEPEND_LIBS
     openssl
