@@ -1533,6 +1533,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
       continue;
     }
 
+    // we have implement the elastic max_elements for hnsw index, so we don't need to check the max_elements memory
     // for hnsw calc memory
     int64_t vector_index_used_memory = 0;
     int64_t hnsw_memory_plan_used = 0;
@@ -1551,21 +1552,25 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
                     << ", hnsw_memory_plan=" << hnsw_memory_plan_used << ", store_id=" << store.id()
                     << ", region_count=" << store_metrics.region_metrics_map_size();
 
-    if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 0.30 < store_own_metrics.system_total_memory()) {
-      DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 0.30 < system_total_memory, store_id=" << store.id()
-                      << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
-                      << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                      << ", system_total_memory=" << store_own_metrics.system_total_memory();
-      tmp_stores_for_regions.push_back(store);
-      continue;
-    } else {
-      DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 0.30 >= system_total_memory, store_id=" << store.id()
-                       << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
-                       << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
-                       << ", system_total_memory=" << store_own_metrics.system_total_memory();
-      status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
-      continue;
-    }
+    tmp_stores_for_regions.push_back(store);
+
+    // DEPRECATED
+    // if ((hnsw_memory_plan_used + new_hnsw_index_plan_memory) * 0.30 < store_own_metrics.system_total_memory()) {
+    //   DINGO_LOG(INFO) << "Store metrics hnsw_memory_plan_used * 0.30 < system_total_memory, store_id=" << store.id()
+    //                   << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
+    //                   << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
+    //                   << ", system_total_memory=" << store_own_metrics.system_total_memory();
+    //   tmp_stores_for_regions.push_back(store);
+    //   continue;
+    // } else {
+    //   DINGO_LOG(ERROR) << "Store metrics hnsw_memory_plan_used * 0.30 >= system_total_memory, store_id=" <<
+    //   store.id()
+    //                    << ", hnsw_memory_plan_used=" << hnsw_memory_plan_used
+    //                    << ", new_hnsw_memory_plan_used=" << new_hnsw_index_plan_memory
+    //                    << ", system_total_memory=" << store_own_metrics.system_total_memory();
+    //   status = butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
+    //   continue;
+    // }
   }
 
   // if not enough stores is selected, return -1
