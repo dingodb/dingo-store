@@ -86,15 +86,11 @@ class RaftSnapshotTest : public testing::Test {
     std::srand(std::time(nullptr));
 
     std::shared_ptr<dingodb::Config> config = std::make_shared<dingodb::YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<dingodb::RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
 
     std::filesystem::create_directories(kRaftSnapshotPath);
   }
@@ -135,7 +131,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   delete_range.set_end_key("eeaf");
   writer->KvDeleteRange(kDefaultCf, delete_range);
 
-  std::cout << fmt::format("Rut data used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
+  LOG(INFO) << fmt::format("Rut data used time: {} ms", dingodb::Helper::TimestampMs() - start_time);
   start_time = dingodb::Helper::TimestampMs();
 
   // Save snapshot
@@ -166,7 +162,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   snapshot_writer->save_meta(meta);
   snapshot_storage->close(snapshot_writer);
 
-  std::cout << fmt::format("Save snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
+  LOG(INFO) << fmt::format("Save snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time);
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key before load snapshot
@@ -174,7 +170,7 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   int64_t expect_count = 0;
   reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), expect_count);
 
-  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
+  LOG(INFO) << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time);
   start_time = dingodb::Helper::TimestampMs();
 
   // Load snapshot
@@ -182,15 +178,15 @@ TEST_F(RaftSnapshotTest, RaftSnapshotByCheckoutpoint) {
   EXPECT_EQ(true, raft_snapshot->LoadSnapshot(snapshot_reader, region));
   snapshot_storage->close(snapshot_reader);
 
-  std::cout << fmt::format("Load snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
+  LOG(INFO) << fmt::format("Load snapshot used time: {} ms", dingodb::Helper::TimestampMs() - start_time);
   start_time = dingodb::Helper::TimestampMs();
 
   // Count key after load snapshot
   int64_t actual_count = 0;
   reader->KvCount(kDefaultCf, range->start_key(), range->end_key(), actual_count);
-  std::cout << fmt::format("Count expect {} actual {}", expect_count, actual_count) << '\n';
+  LOG(INFO) << fmt::format("Count expect {} actual {}", expect_count, actual_count);
   EXPECT_EQ(expect_count, actual_count);
 
-  std::cout << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time) << '\n';
+  LOG(INFO) << fmt::format("Count used time: {} ms", dingodb::Helper::TimestampMs() - start_time);
   start_time = dingodb::Helper::TimestampMs();
 }

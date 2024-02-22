@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
@@ -34,14 +35,18 @@
 
 namespace dingodb {
 
+static const std::string kTempDataDirectory = "./unit_test/vector_index_flat";
+
 class VectorIndexFlatTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
 
   static void TearDownTestSuite() {
     vector_index_flat_l2.reset();
     vector_index_flat_ip.reset();
     vector_index_flat_cosine.reset();
+
+    Helper::RemoveAllFileOrDirectory(kTempDataDirectory);
   }
 
   void SetUp() override {}
@@ -234,16 +239,16 @@ TEST_F(VectorIndexFlatTest, SearchNoData) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -288,16 +293,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -330,17 +335,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_l2) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -349,17 +354,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_ip) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
@@ -367,16 +372,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_cosine) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
   }
 
   // ok  all with filter
@@ -417,17 +422,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_l2) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -436,17 +441,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_ip) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {},
                                                results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -455,16 +460,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       int i = 0;
       for (const auto& result : results_cosine) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
   }
 }
 
@@ -511,16 +516,16 @@ TEST_F(VectorIndexFlatTest, Add) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -695,16 +700,16 @@ TEST_F(VectorIndexFlatTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -786,16 +791,16 @@ TEST_F(VectorIndexFlatTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -936,16 +941,16 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -955,16 +960,16 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -973,15 +978,15 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1007,17 +1012,17 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1026,17 +1031,17 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
 
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -1046,15 +1051,15 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1085,17 +1090,17 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1104,15 +1109,15 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
 
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -1122,15 +1127,15 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1172,17 +1177,17 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results_l2) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1191,17 +1196,17 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results_ip) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {},
                                                results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1210,16 +1215,16 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       int i = 0;
       for (const auto& result : results_cosine) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
   }
 }
 
@@ -1233,18 +1238,18 @@ TEST_F(VectorIndexFlatTest, Save) {
   ok = vector_index_flat_cosine->Save("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_flat_l2->Save("/var/flat");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-  ok = vector_index_flat_ip->Save("/var/flat");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-  ok = vector_index_flat_cosine->Save("/var/flat");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_flat_l2->Save(kTempDataDirectory + "/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_ip->Save(kTempDataDirectory + "/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  ok = vector_index_flat_cosine->Save(kTempDataDirectory + "/flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-  ok = vector_index_flat_l2->Save("./flat_l2");
+  ok = vector_index_flat_l2->Save(kTempDataDirectory + "/flat_l2");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  ok = vector_index_flat_ip->Save("./flat_ip");
+  ok = vector_index_flat_ip->Save(kTempDataDirectory + "/flat_ip");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  ok = vector_index_flat_cosine->Save("./flat_cosine");
+  ok = vector_index_flat_cosine->Save(kTempDataDirectory + "/flat_cosine");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 }
 
@@ -1258,18 +1263,18 @@ TEST_F(VectorIndexFlatTest, Load) {
   ok = vector_index_flat_cosine->Load("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_flat_l2->Load("/var/ivf_flat");
+  ok = vector_index_flat_l2->Load(kTempDataDirectory + "/ivf_flat");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-  ok = vector_index_flat_ip->Load("/var/ivf_flat");
+  ok = vector_index_flat_ip->Load(kTempDataDirectory + "/ivf_flat");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
-  ok = vector_index_flat_cosine->Load("/var/ivf_flat");
+  ok = vector_index_flat_cosine->Load(kTempDataDirectory + "/ivf_flat");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
-  ok = vector_index_flat_l2->Load("./flat_l2");
+  ok = vector_index_flat_l2->Load(kTempDataDirectory + "/flat_l2");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  ok = vector_index_flat_ip->Load("./flat_ip");
+  ok = vector_index_flat_ip->Load(kTempDataDirectory + "/flat_ip");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  ok = vector_index_flat_cosine->Load("./flat_cosine");
+  ok = vector_index_flat_cosine->Load(kTempDataDirectory + "/flat_cosine");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 }
 
@@ -1462,16 +1467,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -1481,16 +1486,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1499,15 +1504,15 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1533,17 +1538,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1552,17 +1557,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
 
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -1572,15 +1577,15 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1611,17 +1616,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     results.clear();
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1630,15 +1635,15 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
 
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
@@ -1648,15 +1653,15 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
-      std::cout << '\n';
+      LOG(INFO);
     }
   }
 
@@ -1698,17 +1703,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results_l2) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
 
     ok = vector_index_flat_ip->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_ip);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1717,17 +1722,17 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results_ip) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
 
-    std::cout << '\n';
+    LOG(INFO);
     ok = vector_index_flat_cosine->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {},
                                                results_cosine);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1736,16 +1741,16 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       int i = 0;
       for (const auto& result : results_cosine) {
         int j = 0;
-        std::cout << "i : " << i << '\n';
+        LOG(INFO) << "i : " << i;
         for (const auto& vector_with_distance : result.vector_with_distances()) {
-          std::cout << "\tj : " << j << " ";
-          std::cout << vector_with_distance.ShortDebugString() << '\n';
+          LOG(INFO) << "\tj : " << j << " ";
+          LOG(INFO) << vector_with_distance.ShortDebugString();
           j++;
         }
         i++;
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
   }
 }
 

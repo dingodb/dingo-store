@@ -51,16 +51,7 @@ namespace dingodb {
 
 class RelExprHelperTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {
-    // DingoLogger::InitLogger("./", "RelExprHelperTest", dingodb::pb::node::LogLevel::DEBUG);
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
-  }
+  static void SetUpTestSuite() {}
 
   static void TearDownTestSuite() {}
 
@@ -393,69 +384,69 @@ TEST_F(RelExprHelperTest, TransToOperand) {
     for (const auto &operand : *operand_ptr) {
       try {
         auto v = operand.GetValue<bool>();
-        std::cout << "bool : " << v << '\n';
+        LOG(INFO) << "bool : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<int>();
-        std::cout << "int : " << v << '\n';
+        LOG(INFO) << "int : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<float>();
-        std::cout << "float : " << v << '\n';
+        LOG(INFO) << "float : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<int64_t>();
-        std::cout << "int64_t : " << v << '\n';
+        LOG(INFO) << "int64_t : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<double>();
-        std::cout << "double : " << v << '\n';
+        LOG(INFO) << "double : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<dingodb::expr::String>();
-        std::cout << "std::shared_ptr<std::string> : " << *v << '\n';
+        LOG(INFO) << "std::shared_ptr<std::string> : " << *v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<std::monostate>();
-        std::cout << "std::monostate : "
-                  << "nullptr" << '\n';
+        LOG(INFO) << "std::monostate : "
+                  << "nullptr";
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       auto lambda_show_function = [](const std::string &name, auto v) {
-        std::cout << name;
+        LOG(INFO) << name;
         if (v) {
           for (const auto &elem : *v) {
-            std::cout << elem << ", ";
+            LOG(INFO) << elem << ", ";
           }
         }
-        std::cout << "\n";
+        LOG(INFO) << "\n";
       };
 
       try {
@@ -463,7 +454,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<bool>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
@@ -471,7 +462,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<int32_t>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
@@ -479,7 +470,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<int64_t>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
@@ -487,7 +478,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<float>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
@@ -495,7 +486,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<double>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
@@ -503,7 +494,7 @@ TEST_F(RelExprHelperTest, TransToOperand) {
         lambda_show_function("std::shared_ptr<std::vector<std::string>> : ", v);
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
     }
   }
@@ -563,7 +554,7 @@ TEST_F(RelExprHelperTest, TransFromOperand) {
         if constexpr (std::is_same_v<std::shared_ptr<std::string>, decltype(t)>) {
           // if constexpr (std::is_same_v<std::remove_reference_t<std::remove_cv_t<decltype(value.value())>>,
           // decltype(t)>) { // bad
-          std::cout << (*value.value().get()) << '\n';
+          LOG(INFO) << (*value.value().get());
         } else if constexpr (std::is_same_v<std::shared_ptr<std::vector<bool>>, decltype(t)> ||
                              std::is_same_v<std::shared_ptr<std::vector<int32_t>>, decltype(t)> ||
                              std::is_same_v<std::shared_ptr<std::vector<int64_t>>, decltype(t)> ||
@@ -571,13 +562,13 @@ TEST_F(RelExprHelperTest, TransFromOperand) {
                              std::is_same_v<std::shared_ptr<std::vector<double>>, decltype(t)> ||
                              std::is_same_v<std::shared_ptr<std::vector<std::string>>, decltype(t)>) {
           auto lambda_show_function = [](const std::string &name, auto v) {
-            std::cout << name;
+            LOG(INFO) << name;
             if (v) {
               for (const auto &elem : *v) {
-                std::cout << elem << ", ";
+                LOG(INFO) << elem << ", ";
               }
             }
-            std::cout << "\n";
+            LOG(INFO) << "\n";
           };
 
           auto lambda_get_name_function = [](auto t) {
@@ -587,11 +578,11 @@ TEST_F(RelExprHelperTest, TransFromOperand) {
           lambda_show_function(lambda_get_name_function(t), value.value());
 
         } else {
-          std::cout << value.value() << '\n';
+          LOG(INFO) << value.value();
         }
 
       } else {
-        std::cout << "nullptr" << '\n';
+        LOG(INFO) << "nullptr";
       }
     }
   };
@@ -912,59 +903,59 @@ TEST_F(RelExprHelperTest, TransToOperandWrapper) {
     for (const auto &operand : *operand_ptr) {
       try {
         auto v = operand.GetValue<bool>();
-        std::cout << "bool : " << v << '\n';
+        LOG(INFO) << "bool : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<int>();
-        std::cout << "int : " << v << '\n';
+        LOG(INFO) << "int : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<float>();
-        std::cout << "float : " << v << '\n';
+        LOG(INFO) << "float : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<int64_t>();
-        std::cout << "int64_t : " << v << '\n';
+        LOG(INFO) << "int64_t : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<double>();
-        std::cout << "double : " << v << '\n';
+        LOG(INFO) << "double : " << v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<dingodb::expr::String>();
-        std::cout << "std::shared_ptr<std::string> : " << *v << '\n';
+        LOG(INFO) << "std::shared_ptr<std::string> : " << *v;
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
 
       try {
         auto v = operand.GetValue<std::monostate>();
-        std::cout << "std::monostate : "
-                  << "nullptr" << '\n';
+        LOG(INFO) << "std::monostate : "
+                  << "nullptr";
         continue;
       } catch (const std::exception &e) {
-        std::cout << "exception : " << e.what() << '\n';
+        LOG(INFO) << "exception : " << e.what();
       }
     }
   }
@@ -1115,21 +1106,21 @@ TEST_F(RelExprHelperTest, TransFromOperandWrapper) {
           }
 
           const auto &value = std::any_cast<std::optional<decltype(t)>>(&record);
-          std::cout << abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr) << " : ";
+          LOG(INFO) << abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr) << " : ";
 
           if (value->has_value()) {
             if constexpr (std::is_same_v<std::shared_ptr<std::string>, decltype(t)>) {
-              // std::cout << *(value->value().get()) << '\n';
-              std::cout << *(value->value()) << '\n';
+              // LOG(INFO) << *(value->value().get());
+              LOG(INFO) << *(value->value());
             } else {
-              std::cout << value->value() << '\n';
+              LOG(INFO) << value->value();
             }
             is_ok = true;
           } else {
-            std::cout << "nullptr" << '\n';
+            LOG(INFO) << "nullptr";
           }
         } catch (std::exception &e) {
-          std::cout << "exception : std::get: wrong index for variant"
+          LOG(INFO) << "exception : std::get: wrong index for variant"
                     << "\n";
         }
       };
@@ -1287,21 +1278,21 @@ TEST_F(RelExprHelperTest, TransFromOperandWrapper) {
           }
 
           const auto &value = std::any_cast<std::optional<decltype(t)>>(&record);
-          std::cout << abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr) << " : ";
+          LOG(INFO) << abi::__cxa_demangle(typeid(t).name(), nullptr, nullptr, nullptr) << " : ";
 
           if (value->has_value()) {
             if constexpr (std::is_same_v<std::shared_ptr<std::string>, decltype(t)>) {
-              // std::cout << *(value->value().get()) << '\n';
-              std::cout << *(value->value()) << '\n';
+              // LOG(INFO) << *(value->value().get());
+              LOG(INFO) << *(value->value());
             } else {
-              std::cout << value->value() << '\n';
+              LOG(INFO) << value->value();
             }
             is_ok = true;
           } else {
-            std::cout << "nullptr" << '\n';
+            LOG(INFO) << "nullptr";
           }
         } catch (std::exception &e) {
-          std::cout << "exception : std::get: wrong index for variant"
+          LOG(INFO) << "exception : std::get: wrong index for variant"
                     << "\n";
         }
       };

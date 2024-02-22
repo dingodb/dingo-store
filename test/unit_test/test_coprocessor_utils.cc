@@ -34,16 +34,7 @@ namespace dingodb {  // NOLINT
 
 class CoprocessorUtilsTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {
-    // DingoLogger::InitLogger("./", "CoprocessorUtilsTest", dingodb::pb::node::LogLevel::DEBUG);
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
-  }
+  static void SetUpTestSuite() {}
 
   static void TearDownTestSuite() {}
 

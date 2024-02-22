@@ -23,9 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
-
 #include <memory>
-
 #include <optional>
 #include <random>
 #include <string>
@@ -106,28 +104,18 @@ static std::string GenRandomString(int len) {
 class CoprocessorTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
     dingodb::Helper::CreateDirectories(kStorePath);
     std::srand(std::time(nullptr));
 
     std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
 
     coprocessor = std::make_shared<Coprocessor>();
+    ASSERT_TRUE(coprocessor != nullptr);
   }
 
   static void TearDownTestSuite() {
@@ -821,7 +809,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 2
@@ -880,7 +868,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 3
@@ -939,7 +927,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 4
@@ -998,7 +986,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 5
@@ -1057,7 +1045,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 6
@@ -1104,7 +1092,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 7
@@ -1163,7 +1151,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 8
@@ -1222,7 +1210,7 @@ TEST_F(CoprocessorTest, Prepare) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 }
 
@@ -1236,10 +1224,10 @@ TEST_F(CoprocessorTest, Execute) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -1263,7 +1251,7 @@ TEST_F(CoprocessorTest, Execute) {
     }
     kvs.clear();
   }
-  std::cout << "key_values aggregation cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values aggregation cnt : " << cnt;
 }
 
 // without Aggregation only selection
@@ -1455,10 +1443,10 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -1483,7 +1471,7 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
     }
     kvs.clear();
   }
-  std::cout << "key_values selection cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values selection cnt : " << cnt;
 }
 
 // without Aggregation Key
@@ -1663,10 +1651,10 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -1691,7 +1679,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
     }
     kvs.clear();
   }
-  std::cout << "key_values no aggregation key cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values no aggregation key cnt : " << cnt;
 }
 
 // without Aggregation Value
@@ -1842,10 +1830,10 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -1870,7 +1858,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
     }
     kvs.clear();
   }
-  std::cout << "key_values no aggregation value cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values no aggregation value cnt : " << cnt;
 }
 
 // without Aggregation only selection one
@@ -2005,10 +1993,10 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -2033,7 +2021,7 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
     }
     kvs.clear();
   }
-  std::cout << "key_values selection one  cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values selection one  cnt : " << cnt;
 }
 
 // without Aggregation Key
@@ -2147,10 +2135,10 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -2175,7 +2163,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
     }
     kvs.clear();
   }
-  std::cout << "key_values no aggregation key cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values no aggregation key cnt : " << cnt;
 }
 
 // without Aggregation Value one
@@ -2280,10 +2268,10 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -2308,7 +2296,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
     }
     kvs.clear();
   }
-  std::cout << "key_values no aggregation value cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values no aggregation value cnt : " << cnt;
 }
 
 // without Aggregation Value one test empty
@@ -2413,10 +2401,10 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -2441,7 +2429,7 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
     }
     kvs.clear();
   }
-  std::cout << "key_values empty value cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values empty value cnt : " << cnt;
 }
 
 // without Aggregation only selection bad
@@ -2571,10 +2559,10 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
   std::string my_max_key(max_key.c_str(), 8);
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -2595,7 +2583,7 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     break;
   }
-  std::cout << "key_values selection cnt : " << cnt << '\n';
+  LOG(INFO) << "key_values selection cnt : " << cnt;
 }
 
 TEST_F(CoprocessorTest, KvDeleteRange) {
@@ -2610,10 +2598,10 @@ TEST_F(CoprocessorTest, KvDeleteRange) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -2631,10 +2619,10 @@ TEST_F(CoprocessorTest, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    LOG(INFO) << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ");
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -2758,7 +2746,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 2
@@ -2818,7 +2806,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 3
@@ -2878,7 +2866,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 4
@@ -2938,7 +2926,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 5
@@ -2998,7 +2986,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 6
@@ -3046,7 +3034,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 7
@@ -3106,7 +3094,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 8
@@ -3166,7 +3154,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     }
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 }
 
@@ -3295,10 +3283,10 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -3319,7 +3307,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    LOG(INFO) << "key_values selection cnt : " << cnt;
   }
 }
 
@@ -3422,10 +3410,10 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -3446,7 +3434,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    LOG(INFO) << "key_values selection cnt : " << cnt;
   }
 }
 
@@ -3621,10 +3609,10 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -3645,7 +3633,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    LOG(INFO) << "key_values selection cnt : " << cnt;
   }
 }
 
@@ -3837,10 +3825,10 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
@@ -3861,7 +3849,7 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
       EXPECT_EQ(ok.error_code(), pb::error::OK);
       break;
     }
-    std::cout << "key_values selection cnt : " << cnt << '\n';
+    LOG(INFO) << "key_values selection cnt : " << cnt;
   }
 }
 
@@ -3877,10 +3865,10 @@ TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
     std::string my_max_key(max_key.c_str(), 8);
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -3898,10 +3886,10 @@ TEST_F(CoprocessorTest, KvDeleteRangeForDisorder) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    LOG(INFO) << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ");
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 

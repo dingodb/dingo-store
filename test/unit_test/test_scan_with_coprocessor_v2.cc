@@ -111,26 +111,14 @@ class ScanWithCoprocessorV2 : public testing::Test {
 
  protected:
   static void SetUpTestSuite() {
-    // DingoLogger::InitLogger("./", "ScanWithCoprocessorV2", dingodb::pb::node::LogLevel::DEBUG);
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
     Helper::CreateDirectories(kStorePath);
 
     config_ = std::make_shared<YamlConfig>();
-    if (config_->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config_->Load(kYamlConfigContent));
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config_, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config_, kAllCFs));
 
     ScanManagerV2::GetInstance().Init(config_);
   }
@@ -245,7 +233,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 2
@@ -283,7 +271,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 3
@@ -321,7 +309,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 4
@@ -359,7 +347,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 5
@@ -397,7 +385,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 6
@@ -435,7 +423,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 7
@@ -473,7 +461,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 8
@@ -511,7 +499,7 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 }
 
@@ -524,7 +512,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
   ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
@@ -546,10 +534,10 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   std::string my_max_key(keys.back());
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   range.set_start_key(my_min_key);
   range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -691,7 +679,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   EXPECT_EQ(kvs.size(), 0);
@@ -705,7 +693,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << StrToHex(kv.key(), " ") << ":" << StrToHex(kv.value(), " ") << '\n';
+      LOG(INFO) << StrToHex(kv.key(), " ") << ":" << StrToHex(kv.value(), " ");
     }
 
     cnt += kvs.size();
@@ -716,7 +704,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
     kvs.clear();
   }
 
-  std::cout << "cnt : " << cnt << '\n';
+  LOG(INFO) << "cnt : " << cnt;
 
   EXPECT_EQ(cnt, keys.size());
 
@@ -741,10 +729,10 @@ TEST_F(ScanWithCoprocessorV2, KvDeleteRange) {
     std::string my_max_key(keys.back());
 
     std::string my_min_key_s = StrToHex(my_min_key, " ");
-    std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+    LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
     std::string my_max_key_s = StrToHex(my_max_key, " ");
-    std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+    LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
     range.set_start_key(my_min_key);
     range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -762,10 +750,10 @@ TEST_F(ScanWithCoprocessorV2, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    LOG(INFO) << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ");
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }

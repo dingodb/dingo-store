@@ -117,22 +117,22 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapGetRangeValues) {
       safe_map.GetRangeValues(values, "900", "999", [](const std::string& value) { return value.compare("990") > 0; });
 
   for (auto& value : values) {
-    std::cout << value << '\n';
+    LOG(INFO) << value;
   }
 
   EXPECT_EQ(ret, 8);
 
-  std::cout << std::string("91").compare("900") << '\n';
-  std::cout << std::string("900").compare("91") << '\n';
-  std::cout << std::string("900").compare("910") << '\n';
-  std::cout << std::string("998").compare("990") << '\n';
+  LOG(INFO) << std::string("91").compare("900");
+  LOG(INFO) << std::string("900").compare("91");
+  LOG(INFO) << std::string("900").compare("910");
+  LOG(INFO) << std::string("998").compare("990");
 
   values.clear();
   ret = safe_map.GetRangeValues(
       values, "900", "999", [](const std::string& key) { return key.compare("990") < 0; }, nullptr);
 
   for (auto& value : values) {
-    std::cout << value << '\n';
+    LOG(INFO) << value;
   }
 
   EXPECT_EQ(ret, 90);
@@ -154,8 +154,8 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
-              << value << '\n';
+    LOG(INFO) << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
+              << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -166,8 +166,8 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
-              << value << '\n';
+    LOG(INFO) << "[" << dingodb::Helper::StringToHex(start_key) << "," << dingodb::Helper::StringToHex(end_key) << "]"
+              << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -187,7 +187,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -198,7 +198,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 0);
@@ -209,7 +209,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 0);
@@ -220,7 +220,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -231,7 +231,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -242,7 +242,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -253,7 +253,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 5);
@@ -266,7 +266,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
       [start_key, end_key](const std::string& value) { return value.compare(end_key) >= 0; });
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -277,7 +277,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -288,7 +288,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -299,7 +299,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -310,7 +310,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 3);
@@ -321,7 +321,7 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapFindIntervalValues) {
   ret = safe_map.FindIntervalValues(values, start_key, end_key);
 
   for (auto& value : values) {
-    std::cout << "[" << start_key << "," << end_key << "]" << value << '\n';
+    LOG(INFO) << "[" << start_key << "," << end_key << "]" << value;
   }
 
   EXPECT_EQ(ret, 1);
@@ -344,11 +344,11 @@ TEST(DingoSafeStdMapTest, DingoSafeStdMapMultiGet) {
   auto ret = safe_map.MultiGet(keys, values, exists);
 
   for (auto& value : values) {
-    std::cout << value << '\n';
+    LOG(INFO) << value;
   }
 
   for (auto exist : exists) {
-    std::cout << exist << '\n';
+    LOG(INFO) << exist;
   }
 
   EXPECT_EQ(ret, 1);

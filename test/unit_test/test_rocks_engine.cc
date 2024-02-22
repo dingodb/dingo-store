@@ -90,15 +90,11 @@ class RawRocksEngineTest : public testing::Test {
     Helper::CreateDirectories(kStorePath);
 
     config = std::make_shared<YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
   }
 
   static void TearDownTestSuite() {
@@ -663,10 +659,10 @@ TEST_F(RawRocksEngineTest, KvScan) {
     butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 
@@ -679,10 +675,10 @@ TEST_F(RawRocksEngineTest, KvScan) {
     butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -720,8 +716,8 @@ TEST_F(RawRocksEngineTest, KvCount) {
     butil::Status ok = reader->KvCount(cf_name, start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << " count : " << count << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key << " count : " << count;
 
     std::vector<pb::common::KeyValue> kvs;
 
@@ -1027,10 +1023,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     std::string key = "key";
@@ -1062,10 +1058,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     std::string key = "key100";
@@ -1097,10 +1093,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -1154,10 +1150,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 
@@ -1180,10 +1176,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(8, kvs.size());
@@ -1240,10 +1236,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(10, kvs.size());
@@ -1268,10 +1264,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(10, kvs.size());
@@ -1339,10 +1335,10 @@ TEST_F(RawRocksEngineTest, KvDeleteRangeWithRangeWithOptions) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(10, kvs.size());
@@ -1480,10 +1476,10 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(10, kvs.size());
@@ -1493,10 +1489,10 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(20, kvs.size());
@@ -1568,10 +1564,10 @@ TEST_F(RawRocksEngineTest, KvBatchDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(10, kvs.size());
@@ -1626,7 +1622,7 @@ TEST_F(RawRocksEngineTest, Iterator) {
 //   const std::string store_path = std::filesystem::path(RawRocksEngineTest::engine->DbPath()).parent_path().string();
 //   std::filesystem::create_directories(store_path);
 //   const std::string checkpoint_path = store_path + "/checkpoint_" + std::to_string(Helper::Timestamp());
-//   std::cout << "checkpoint_path: " << checkpoint_path << '\n';
+//   LOG(INFO) << "checkpoint_path: " << checkpoint_path;
 //   //  checkpoint->Create("/tmp/dingo-store/data/store/checkpoint");
 //   std::vector<pb::store_internal::SstFileInfo> sst_files;
 //   auto status = checkpoint->Create(checkpoint_path, RawRocksEngineTest::engine->GetColumnFamily(kDefaultCf),
@@ -1654,7 +1650,7 @@ TEST_F(RawRocksEngineTest, Iterator) {
 //   const std::string store_path = std::filesystem::path(RawRocksEngineTest::engine->DbPath()).parent_path().string();
 //   std::filesystem::create_directories(store_path);
 //   const std::string checkpoint_path = store_path + "/checkpoint_" + std::to_string(Helper::Timestamp());
-//   std::cout << "checkpoint_path: " << checkpoint_path << '\n';
+//   LOG(INFO) << "checkpoint_path: " << checkpoint_path;
 
 //   std::vector<pb::store_internal::SstFileInfo> sst_files;
 //   auto status = checkpoint->Create(checkpoint_path, RawRocksEngineTest::engine->GetColumnFamily(kDefaultCf),
@@ -1666,27 +1662,27 @@ TEST_F(RawRocksEngineTest, Iterator) {
 
 //   std::vector<std::string> files;
 //   for (auto& sst_file : sst_files) {
-//     std::cout << "sst file path: " << sst_file.path() << " " << sst_file.start_key() << "-" << sst_file.end_key()
-//               << '\n';
+//     LOG(INFO) << "sst file path: " << sst_file.path() << " " << sst_file.start_key() << "-" << sst_file.end_key()
+//              ;
 //     if (sst_file.start_key() < range.end_key() && range.start_key() < sst_file.end_key()) {
-//       std::cout << "pick up: " << sst_file.path() << '\n';
+//       LOG(INFO) << "pick up: " << sst_file.path();
 //       files.push_back(sst_file.path());
 //     }
 //   }
 
 //   int64_t count = 0;
 //   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
-//   std::cout << "count before delete: " << count << '\n';
+//   LOG(INFO) << "count before delete: " << count;
 
 //   writer->KvDeleteRange(kDefaultCf, range);
 
 //   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
-//   std::cout << "count after delete: " << count << '\n';
+//   LOG(INFO) << "count after delete: " << count;
 
 //   RawRocksEngineTest::engine->IngestExternalFile(kDefaultCf, files);
 
 //   reader->KvCount(kDefaultCf, range.start_key(), range.end_key(), count);
-//   std::cout << "count after ingest: " << count << '\n';
+//   LOG(INFO) << "count after ingest: " << count;
 // }
 
 }  // namespace dingodb

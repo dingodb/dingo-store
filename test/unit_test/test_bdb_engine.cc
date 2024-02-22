@@ -39,8 +39,8 @@ namespace dingodb {
 DEFINE_uint32(bdb_test_max_count, 30000, "bdb_test_max_count");
 
 static const std::string kDefaultCf = "default";
-// static const std::string kDefaultCf = "d";
 
+static const std::string kTempDataDirectory = "./unit_test/bdb_unit_test";
 const std::string kYamlConfigContent =
     "cluster:\n"
     "  name: dingodb\n"
@@ -51,16 +51,8 @@ const std::string kYamlConfigContent =
     "  host: 127.0.0.1\n"
     "  port: 23000\n"
     "  heartbeat_interval: 10000 # ms\n"
-    "raft:\n"
-    "  host: 127.0.0.1\n"
-    "  port: 23100\n"
-    "  path: /tmp/dingo-store/data/store/raft\n"
-    "  election_timeout: 1000 # ms\n"
-    "  snapshot_interval: 3600 # s\n"
-    "log:\n"
-    "  path: /tmp/dingo-store/log\n"
     "store:\n"
-    "  path: ./bdb_unit_test\n"
+    "  path: ./unit_test/bdb_unit_test\n"
     "  base:\n"
     "    block_size: 131072\n"
     "    block_cache: 67108864\n"
@@ -83,24 +75,20 @@ class RawBdbEngineTest : public testing::Test {
   static void SetUpTestSuite() {
     std::srand(std::time(nullptr));
 
-    Helper::CreateDirectories("/tmp/bdb_unit_test");
+    Helper::CreateDirectories(kTempDataDirectory);
 
     config = std::make_shared<YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<BdbRawEngine>();
-    if (!engine->Init(config, {})) {
-      std::cout << "BdbRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, {}));
   }
 
   static void TearDownTestSuite() {
     engine->Close();
     engine->Destroy();
-    Helper::RemoveAllFileOrDirectory("./bdb_unit_test");
+    Helper::RemoveAllFileOrDirectory(kTempDataDirectory);
   }
 
   void SetUp() override {}
@@ -228,7 +216,7 @@ TEST_F(RawBdbEngineTest, KvPut) {
   auto writer = RawBdbEngineTest::engine->Writer();
 
   if (writer == nullptr) {
-    std::cout << "writer is null ptr." << '\n';
+    LOG(INFO) << "writer is null ptr.";
     EXPECT_EQ(111, pb::error::Errno::EKEY_EMPTY);
     return;
   }
@@ -585,7 +573,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, "value3");
-    std::cout << key << " | " << value << '\n';
+    LOG(INFO) << key << " | " << value;
   }
 
   {
@@ -595,7 +583,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(value, "value2");
-    std::cout << key << " | " << value << '\n';
+    LOG(INFO) << key << " | " << value;
   }
 
   {
@@ -604,7 +592,7 @@ TEST_F(RawBdbEngineTest, KvGet) {
 
     butil::Status ok = reader->KvGet(cf_name, key, value);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EKEY_NOT_FOUND);
-    std::cout << key << " | " << value << '\n';
+    LOG(INFO) << key << " | " << value;
   }
 }
 
@@ -641,10 +629,10 @@ TEST_F(RawBdbEngineTest, KvScan) {
     butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
     }
   }
 
@@ -657,10 +645,10 @@ TEST_F(RawBdbEngineTest, KvScan) {
     butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -698,14 +686,14 @@ TEST_F(RawBdbEngineTest, KvCount) {
     butil::Status ok = reader->KvCount(cf_name, start_key, end_key, count);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << " count : " << count << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key << " count : " << count;
 
     std::vector<pb::common::KeyValue> kvs;
 
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
     }
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(count, kvs.size());
@@ -1023,10 +1011,10 @@ TEST_F(RawBdbEngineTest, KvDeleteRange4) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     std::string key = "key";
@@ -1063,10 +1051,10 @@ TEST_F(RawBdbEngineTest, KvDeleteRange5) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     std::string key = "key100";
@@ -1103,10 +1091,10 @@ TEST_F(RawBdbEngineTest, KvDeleteRange6) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -1138,10 +1126,10 @@ TEST_F(RawBdbEngineTest, Iterator1) {
     butil::Status ok = reader->KvScan(cf_name, start_key, end_key, kvs);
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
     }
   }
 
@@ -1152,23 +1140,23 @@ TEST_F(RawBdbEngineTest, Iterator1) {
     count = 0;
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("aaaaaaaaaa"); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value();
       ++count;
     }
 
     EXPECT_EQ(count, 2);
 
-    std::cout << "--------- iter reuse ---------" << '\n';
+    LOG(INFO) << "--------- iter reuse ---------";
 
     count = 0;
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value();
       ++count;
     }
     EXPECT_EQ(count, 2);
   }
 
-  std::cout << "------------------" << '\n';
+  LOG(INFO) << "------------------";
 
   {
     pb::common::KeyValue kv;
@@ -1189,7 +1177,7 @@ TEST_F(RawBdbEngineTest, Iterator1) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
     }
 
     EXPECT_EQ(count, 4);
@@ -1200,7 +1188,7 @@ TEST_F(RawBdbEngineTest, Iterator1) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToLast(); iter->Valid(); iter->Prev()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
     }
 
     EXPECT_EQ(count, 4);
@@ -1242,19 +1230,19 @@ TEST_F(RawBdbEngineTest, Iterator2) {
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
 
     int32_t count = 0;
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
       count++;
     }
 
     EXPECT_EQ(count, 3);
   }
 
-  std::cout << "------------------scan1" << '\n';
+  LOG(INFO) << "------------------scan1";
 
   {
     {
@@ -1263,11 +1251,11 @@ TEST_F(RawBdbEngineTest, Iterator2) {
       kv.set_value("555555");
       writer->KvPut(kDefaultCf, kv);
     }
-    std::cout << "write tttt_03 to 555555" << '\n';
+    LOG(INFO) << "write tttt_03 to 555555";
 
     {
       auto snapshot = engine->GetSnapshot();
-      std::cout << "create snapshot" << '\n';
+      LOG(INFO) << "create snapshot";
     }
 
     const std::string &cf_name = kDefaultCf;
@@ -1282,17 +1270,17 @@ TEST_F(RawBdbEngineTest, Iterator2) {
 
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
 
     int32_t count = 0;
     for (const auto &kv : kvs) {
-      std::cout << "KvScan ret: " << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << "KvScan ret: " << kv.key() << ":" << kv.value();
       count++;
     }
   }
 
-  std::cout << "------------------scan2" << '\n';
+  LOG(INFO) << "------------------scan2";
 
   int count = 0;
   IteratorOptions options;
@@ -1308,10 +1296,10 @@ TEST_F(RawBdbEngineTest, Iterator2) {
       writer->KvPut(kDefaultCf, kv);
     }
 
-    std::cout << "count=" << count << '\n';
+    LOG(INFO) << "count=" << count;
     for (iter->Seek("tttt_01"); iter->Valid(); iter->Next()) {
       count = count + 1;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << ", count=" << count << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << ", count=" << count;
 
       {
         pb::common::KeyValue kv;
@@ -1324,33 +1312,33 @@ TEST_F(RawBdbEngineTest, Iterator2) {
     EXPECT_EQ(count, 3);
   }
 
-  std::cout << "------------------1" << '\n';
+  LOG(INFO) << "------------------1";
 
   {
     count = 0;
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("tttt_01"); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value();
       ++count;
     }
 
     EXPECT_EQ(count, 3);
   }
 
-  std::cout << "------------------2" << '\n';
+  LOG(INFO) << "------------------2";
 
   {
     count = 0;
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("tttt_02"); iter->Valid(); iter->Next()) {
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value();
       ++count;
     }
 
     EXPECT_EQ(count, 2);
   }
 
-  std::cout << "------------------3" << '\n';
+  LOG(INFO) << "------------------3";
 }
 
 TEST_F(RawBdbEngineTest, GetApproximateSizes) {
@@ -1390,11 +1378,11 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
     }
   }
 
-  std::cout << "-----------------------------------" << '\n';
+  LOG(INFO) << "-----------------------------------";
   {
     int count = 0;
 
@@ -1403,7 +1391,7 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     auto iter = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
     for (iter->Seek("00"); iter->Valid(); iter->Next()) {
       ++count;
-      std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+      LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
     }
   }
 
@@ -1421,7 +1409,7 @@ TEST_F(RawBdbEngineTest, GetApproximateSizes) {
     if (!count_vec.empty()) {
       // EXPECT_EQ(count_vec[0], 4);
       // it is an estimated count
-      std::cout << "GetApproximateSizes, cout: " << count_vec[0] << '\n';
+      LOG(INFO) << "GetApproximateSizes, cout: " << count_vec[0];
     }
   }
 }
@@ -1445,7 +1433,7 @@ TEST_F(RawBdbEngineTest, IngestExternalFile) {
 
   std::string sst_file_name = "/tmp/sst_file.sst";
   if (Helper::IsExistPath(sst_file_name)) {
-    std::cout << "find sst file: " << sst_file_name << '\n';
+    LOG(INFO) << "find sst file: " << sst_file_name;
     std::vector<std::string> sst_files;
     sst_files.push_back(sst_file_name);
     butil::Status status = RawBdbEngineTest::engine->IngestExternalFile(cf_name, sst_files);
@@ -1459,7 +1447,7 @@ TEST_F(RawBdbEngineTest, IngestExternalFile) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ("value_099", value);
   } else {
-    std::cout << "Warning: cannot find sst file: " << sst_file_name << ", skip IngestExternalFile test!" << '\n';
+    LOG(INFO) << "Warning: cannot find sst file: " << sst_file_name << ", skip IngestExternalFile test!";
   }
 }
 
@@ -1542,7 +1530,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
 
       for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
         ++count;
-        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        // LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
       }
 
       EXPECT_EQ(count, 69);
@@ -1571,7 +1559,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
 
       for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
         ++count;
-        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        // LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
       }
 
       EXPECT_EQ(count, 59);
@@ -1589,7 +1577,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
 
       for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
         ++count;
-        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        // LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
       }
 
       EXPECT_EQ(count, 49);
@@ -1612,7 +1600,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
 
       for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
         ++count;
-        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        // LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
       }
 
       EXPECT_EQ(count, 49);
@@ -1621,7 +1609,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
       auto iter2 = RawBdbEngineTest::engine->Reader()->NewIterator(kDefaultCf, snapshot, options);
       for (iter->Seek("KvDeleteRange7"); iter->Valid(); iter->Next()) {
         ++count;
-        // std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        // LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
       }
 
       EXPECT_EQ(count, 49);
@@ -1644,7 +1632,7 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
       std::vector<std::string> values;
       for (iter->Seek("KvDeleteRange71038"); iter->Valid(); iter->Next()) {
         ++count;
-        std::cout << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count << '\n';
+        LOG(INFO) << "kv: " << iter->Key() << " | " << iter->Value() << " | " << count;
         keys.emplace_back(iter->Key());
         values.emplace_back(iter->Value());
       }
@@ -1677,10 +1665,10 @@ TEST_F(RawBdbEngineTest, KvDeleteRange7) {
     // ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     // EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-    // std::cout << "start_key : " << start_key << " "
-    //           << "end_key : " << end_key << '\n';
+    // LOG(INFO) << "start_key : " << start_key << " "
+    //           << "end_key : " << end_key;
     // for (const auto &kv : kvs) {
-    //   std::cout << kv.key() << ":" << kv.value() << '\n';
+    //   LOG(INFO) << kv.key() << ":" << kv.value();
     // }
   }
 }

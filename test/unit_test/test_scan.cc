@@ -95,15 +95,11 @@ class ScanTest : public testing::Test {
     Helper::CreateDirectories(kStorePath);
 
     config_ = std::make_shared<YamlConfig>();
-    if (config_->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config_->Load(kYamlConfigContent));
 
     engine_ = std::make_shared<RocksRawEngine>();
-    if (!engine_->Init(config_, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine_ != nullptr);
+    ASSERT_TRUE(engine_->Init(config_, kAllCFs));
   }
 
   static void TearDownTestSuite() {
@@ -132,19 +128,19 @@ static std::chrono::milliseconds GetCurrentTime() {
 
 TEST_F(ScanTest, Time) {
   std::string t = Helper::NowTime();
-  std::cout << "now : " << t << '\n';
+  LOG(INFO) << "now : " << t;
 
   auto ms = GetCurrentTime();
   std::string formate_str;
   formate_str = Helper::FormatMsTime(ms.count(), "%Y-%m-%d %H:%M:%S");
-  std::cout << "formate_str : " << formate_str << '\n';
+  LOG(INFO) << "formate_str : " << formate_str;
 }
 
 TEST_F(ScanTest, Open) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
 
@@ -183,7 +179,7 @@ TEST_F(ScanTest, ScanBegin) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
 
@@ -368,7 +364,7 @@ TEST_F(ScanTest, ScanBeginEqual) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
   std::string scan_id;
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
 
@@ -395,7 +391,7 @@ TEST_F(ScanTest, ScanBeginEqual) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   this->DeleteScan();
@@ -411,7 +407,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
   // test start_key end_key equal start_key >= keyAA and end_key <=keyAA
   {
     auto scan = this->GetScan(&scan_id);
-    std::cout << "scan_id : " << scan_id << '\n';
+    LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
     ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -435,7 +431,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(kvs.size(), 4);
@@ -451,7 +447,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
   // test start_key >= keyAA and end_key < keyABB
   {
     auto scan = this->GetScan(&scan_id);
-    std::cout << "scan_id : " << scan_id << '\n';
+    LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
     ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -475,7 +471,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(kvs.size(), 6);
@@ -493,7 +489,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
   // test start_key > keyAA and end_key < keyABB
   {
     auto scan = this->GetScan(&scan_id);
-    std::cout << "scan_id : " << scan_id << '\n';
+    LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
     ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -517,7 +513,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(kvs.size(), 6);
@@ -531,7 +527,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
   // test start_key > keyAA and end_key <= keyABB
   {
     auto scan = this->GetScan(&scan_id);
-    std::cout << "scan_id : " << scan_id << '\n';
+    LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
     ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -555,7 +551,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(kvs.size(), 6);
@@ -571,7 +567,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
   // test start_key >= keyAA and end_key <= keyABB
   {
     auto scan = this->GetScan(&scan_id);
-    std::cout << "scan_id : " << scan_id << '\n';
+    LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
     ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -595,7 +591,7 @@ TEST_F(ScanTest, ScanBeginOthers) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     EXPECT_EQ(kvs.size(), 6);
@@ -619,7 +615,7 @@ TEST_F(ScanTest, ScanBeginNormal) {
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
   ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -643,7 +639,7 @@ TEST_F(ScanTest, ScanBeginNormal) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   EXPECT_EQ(kvs.size(), 0);
@@ -654,7 +650,7 @@ TEST_F(ScanTest, ScanContinue) {
   std::string scan_id;
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   butil::Status ok;
 
@@ -674,21 +670,21 @@ TEST_F(ScanTest, ScanContinue) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   ok = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, &kvs, has_more);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 }
 
@@ -697,7 +693,7 @@ TEST_F(ScanTest, ScanRelease) {
   std::string scan_id;
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   butil::Status ok;
 
@@ -714,7 +710,7 @@ TEST_F(ScanTest, IsRecyclable) {
   std::string scan_id;
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   bool ret = scan->IsRecyclable();
 
@@ -736,7 +732,7 @@ TEST_F(ScanTest, scan) {
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
   auto scan = this->GetScan(&scan_id);
-  std::cout << "scan_id : " << scan_id << '\n';
+  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
   ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
@@ -760,7 +756,7 @@ TEST_F(ScanTest, scan) {
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
-    std::cout << kv.key() << ":" << kv.value() << '\n';
+    LOG(INFO) << kv.key() << ":" << kv.value();
   }
 
   EXPECT_EQ(kvs.size(), 0);
@@ -773,7 +769,7 @@ TEST_F(ScanTest, scan) {
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
     if (kvs.empty()) {
@@ -905,19 +901,18 @@ TEST_F(ScanTest, max_times) {
   try {
     interval = config->GetInt(Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS) * 1000;
   } catch (const std::exception &e) {
-    std::cout << "exception GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS
-              << " failed. use default" << '\n';
+    LOG(INFO) << "exception GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS
+              << " failed. use default";
     interval = 60000;
   }
 
   if (interval <= 0) {
-    std::cout << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS << " failed. use default"
-              << '\n';
+    LOG(INFO) << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS << " failed. use default";
     interval = 60000;
   }
 
-  std::cout << "name : " << name << '\n';
-  std::cout << "interval : " << interval << '\n';
+  LOG(INFO) << "name : " << name;
+  LOG(INFO) << "interval : " << interval;
 
   crontab_manager.AddAndRunCrontab(crontab);
   std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -949,10 +944,10 @@ TEST_F(ScanTest, KvDeleteRange) {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << start_key << " "
-              << "end_key : " << end_key << '\n';
+    LOG(INFO) << "start_key : " << start_key << " "
+              << "end_key : " << end_key;
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 

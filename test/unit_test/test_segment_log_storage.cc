@@ -33,8 +33,9 @@ class SegmentLogStorageTest : public testing::Test {
     dingodb::Helper::CreateDirectories(kLogPath);
 
     log_stroage = std::make_shared<dingodb::SegmentLogStorage>(kLogPath, 100, 8 * 1024 * 1024, INT64_MAX);
+    ASSERT_TRUE(log_stroage != nullptr);
     static braft::ConfigurationManager configuration_manager;
-    log_stroage->Init(&configuration_manager);
+    ASSERT_EQ(0, log_stroage->Init(&configuration_manager));
   }
   static void TearDownTestSuite() {
     log_stroage->Reset(log_stroage->LastLogIndex() + 1);

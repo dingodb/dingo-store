@@ -53,7 +53,7 @@ class VectorIndexMemoryFlatTest : public testing::Test {
 
 TEST_F(VectorIndexMemoryFlatTest, Create) {
   static const pb::common::Range kRange;
-  std::cout << "pid : " << getpid() << '\n';
+  LOG(INFO) << "pid : " << getpid();
   static pb::common::RegionEpoch k_epoch;
   k_epoch.set_conf_version(1);
   k_epoch.set_version(10);
@@ -80,33 +80,29 @@ TEST_F(VectorIndexMemoryFlatTest, Add) {
 
     data_base.resize(dimension * data_base_size, 0.0f);
 
-    std::cerr << "create data index : ";
     auto start = std::chrono::steady_clock::now();
     for (int i = 0; i < data_base_size; i++) {
       for (int j = 0; j < dimension; j++) {
         data_base[dimension * i + j] = distrib(rng);
       }
       data_base[dimension * i] += i / 1000.;
-      if (0 == i % 10000) {
-        std::cerr << ".";
-      }
     }
-    std::cerr << '\n';
+
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
-    std::cout << "create data index : span : " << diff << " s  ";
+    LOG(INFO) << "create data index : span : " << diff << " s  ";
 
     // for (size_t i = 0; i < data_base_size_; i++) {
-    //   // std::cout << "[" << i << "]"
+    //   // LOG(INFO) << "[" << i << "]"
     //   //           << " [";
     //   for (faiss::idx_t j = 0; j < dimension_; j++) {
     //     if (0 != j) {
-    //       // std::cout << ",";
+    //       // LOG(INFO) << ",";
     //     }
-    //     // std::cout << std::setw(10) << data_base_[i * dimension_ + j];
+    //     // LOG(INFO) << std::setw(10) << data_base_[i * dimension_ + j];
     //   }
 
-    //   // std::cout << "]" << std::endl;
+    //   // LOG(INFO) << "]" << std::endl;
     // }
   }
 
@@ -177,7 +173,7 @@ TEST_F(VectorIndexMemoryFlatTest, Add) {
 
   // stop
   // {
-  //   std::cout << "program will exit !!! pid : " << getpid() << '\n';
+  //   LOG(INFO) << "program will exit !!! pid : " << getpid();
   //   // system("pause");
   //   int c = getchar();
   //   (void)c;  // to silence the unused variable warning

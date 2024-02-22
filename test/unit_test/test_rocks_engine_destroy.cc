@@ -66,9 +66,9 @@ TEST_F(RawRocksEngineBugTest, test) {
   auto engine = std::make_shared<dingodb::RocksRawEngine>();
 
   auto config = std::make_shared<dingodb::YamlConfig>();
-  EXPECT_EQ(0, config->Load(kYamlConfigContent));
+  ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
-  EXPECT_TRUE(engine->Init(config, kAllCFs));
+  ASSERT_TRUE(engine->Init(config, kAllCFs));
 
   {
     auto reader = engine->Reader();

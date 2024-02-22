@@ -47,11 +47,7 @@ class VectorIndexMemoryTest : public testing::Test {
     }
   }
 
-  static void TearDownTestSuite() {
-    // google::ParseCommandLineFlags(&argc, &argv, false);
-    std::cout << "FLAGS_vector_index_type : " << FLAGS_vector_index_type << '\n';
-    vector_index.reset();
-  }
+  static void TearDownTestSuite() { vector_index.reset(); }
 
   void SetUp() override {}
 

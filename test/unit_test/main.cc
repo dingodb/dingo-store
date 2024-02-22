@@ -14,14 +14,36 @@
 
 #include <gtest/gtest.h>
 
+#include "common/helper.h"
 #include "glog/logging.h"
 
+void InitLog(const std::string& log_dir) {
+  if (!dingodb::Helper::IsExistPath(log_dir)) {
+    dingodb::Helper::CreateDirectories(log_dir);
+  }
+
+  FLAGS_logbufsecs = 0;
+  FLAGS_stop_logging_if_full_disk = true;
+  FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logbuflevel = google::GLOG_INFO;
+  FLAGS_logtostdout = false;
+  FLAGS_logtostderr = false;
+  FLAGS_alsologtostderr = false;
+
+  std::string program_name = "dingodb_unit_test";
+
+  google::InitGoogleLogging(program_name.c_str());
+  google::SetLogDestination(google::GLOG_INFO, fmt::format("{}/{}.info.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_WARNING, fmt::format("{}/{}.warn.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_ERROR, fmt::format("{}/{}.error.log.", log_dir, program_name).c_str());
+  google::SetLogDestination(google::GLOG_FATAL, fmt::format("{}/{}.fatal.log.", log_dir, program_name).c_str());
+  google::SetStderrLogging(google::GLOG_FATAL);
+}
+
 int main(int argc, char* argv[]) {
+  InitLog("./log");
+
   testing::InitGoogleTest(&argc, argv);
-
-  FLAGS_minloglevel = google::GLOG_ERROR;
-
-  google::InitGoogleLogging(argv[0]);
   google::ParseCommandLineFlags(&argc, &argv, true);
 
   if (testing::FLAGS_gtest_filter == "*") {
@@ -36,12 +58,18 @@ int main(int argc, char* argv[]) {
     default_run_case += ":CoprocessorTest.*";
     default_run_case += ":CoprocessorUtilsTest.*";
     default_run_case += ":CoprocessorAggregationManagerTest.*";
+
     default_run_case += ":DingoSafeMapTest.*";
     default_run_case += ":SegmentLogStorageTest.*";
     default_run_case += ":DingoSerialListTypeTest.*";
     default_run_case += ":DingoSerialTest.*";
     default_run_case += ":ServiceHelperTest.*";
     default_run_case += ":SplitCheckerTest.*";
+
+    default_run_case += ":ScanTest.*";
+    default_run_case += ":ScanV2Test.*";
+    default_run_case += ":ScanWithCoprocessor.*";
+    default_run_case += ":ScanWithCoprocessorV2.*";
 
     // default_run_case += ":StoreRegionMetaTest.*";
     // default_run_case += ":StoreRegionMetricsTest.*";

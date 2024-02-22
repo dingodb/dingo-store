@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
@@ -35,14 +36,18 @@
 
 namespace dingodb {
 
+static const std::string kTempDataDirectory = "./unit_test/vector_index_ivf_flat";
+
 class VectorIndexIvfFlatTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
 
   static void TearDownTestSuite() {
     vector_index_ivf_flat_l2.reset();
     vector_index_ivf_flat_ip.reset();
     vector_index_ivf_flat_cosine.reset();
+
+    Helper::RemoveAllFileOrDirectory(kTempDataDirectory);
   }
 
   static void ReCreate() {
@@ -98,9 +103,9 @@ class VectorIndexIvfFlatTest : public testing::Test {
   inline static int32_t ncentroids = 10;
   inline static std::vector<float> data_base;
   inline static int32_t start_id = 1000;
-  inline static std::string path_l2 = "./l2_ivf_flat";
-  inline static std::string path_ip = "./ip_ivf_flat";
-  inline static std::string path_cosine = "./cosine_ivf_flat";
+  inline static std::string path_l2 = kTempDataDirectory + "/l2_ivf_flat";
+  inline static std::string path_ip = kTempDataDirectory + "/ip_ivf_flat";
+  inline static std::string path_cosine = kTempDataDirectory + "/cosine_ivf_flat";
 };
 
 TEST_F(VectorIndexIvfFlatTest, Create) {
@@ -293,16 +298,16 @@ TEST_F(VectorIndexIvfFlatTest, SearchNotTrain) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -348,16 +353,16 @@ TEST_F(VectorIndexIvfFlatTest, RangeSearchNotTrain) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -444,16 +449,16 @@ TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -565,16 +570,16 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -1241,8 +1246,8 @@ TEST_F(VectorIndexIvfFlatTest, Save) {
   ok = vector_index_ivf_flat_l2->Save("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_ivf_flat_l2->Save("/var/ivf_flat");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_ivf_flat_l2->Save(kTempDataDirectory + "/ivf_flat");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
   ok = vector_index_ivf_flat_l2->Save(path_l2);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1260,7 +1265,7 @@ TEST_F(VectorIndexIvfFlatTest, Load) {
   ok = vector_index_ivf_flat_l2->Load("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_ivf_flat_l2->Load("/var/ivf_flat");
+  ok = vector_index_ivf_flat_l2->Load(kTempDataDirectory + "/ivf_flat_not_exist");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
   ok = vector_index_ivf_flat_l2->Load(path_l2);

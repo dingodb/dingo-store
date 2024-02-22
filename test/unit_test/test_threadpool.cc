@@ -40,13 +40,13 @@ TEST_F(ThreadPoolTest, Normal) {
 
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { std::cout << "thread priority 1" << '\n'; }, nullptr, 1));
+  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 1"; }, nullptr, 1));
 
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { std::cout << "thread priority 2 1" << '\n'; }, nullptr, 2));
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { std::cout << "thread priority 2 3" << '\n'; }, nullptr, 2));
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { std::cout << "thread priority 2 2" << '\n'; }, nullptr, 2));
+  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 1"; }, nullptr, 2));
+  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 3"; }, nullptr, 2));
+  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 2"; }, nullptr, 2));
 
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { std::cout << "thread priority 3" << '\n'; }, nullptr, 3));
+  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 3"; }, nullptr, 3));
 
   for (auto &task : tasks) {
     task->Join();
@@ -61,16 +61,16 @@ static int GetThreadPolicy(pthread_attr_t &attr) {
   assert(rs == 0);
   switch (policy) {
     case SCHED_FIFO:
-      std::cout << "policy = SCHED_FIFO" << '\n';
+      LOG(INFO) << "policy = SCHED_FIFO";
       break;
     case SCHED_RR:
-      std::cout << "policy = SCHED_RR" << '\n';
+      LOG(INFO) << "policy = SCHED_RR";
       break;
     case SCHED_OTHER:
-      std::cout << "policy = SCHED_OTHER" << '\n';
+      LOG(INFO) << "policy = SCHED_OTHER";
       break;
     default:
-      std::cout << "policy = UNKNOWN" << '\n';
+      LOG(INFO) << "policy = UNKNOWN";
       break;
   }
   return policy;
@@ -79,17 +79,17 @@ static int GetThreadPolicy(pthread_attr_t &attr) {
 static void ShowThreadPriority(pthread_attr_t &, int policy) {
   int priority = sched_get_priority_max(policy);
   assert(priority != -1);
-  std::cout << "max_priority = " << priority << '\n';
+  LOG(INFO) << "max_priority = " << priority;
   priority = sched_get_priority_min(policy);
   assert(priority != -1);
-  std::cout << "min_priority = " << priority << '\n';
+  LOG(INFO) << "min_priority = " << priority;
 }
 
 static int GetThreadPriority(pthread_attr_t &attr) {
   struct sched_param param;
   int rs = pthread_attr_getschedparam(&attr, &param);
   assert(rs == 0);
-  std::cout << "priority = " << param.__sched_priority << '\n';
+  LOG(INFO) << "priority = " << param.__sched_priority;
   return param.__sched_priority;
 }
 
@@ -110,20 +110,20 @@ TEST_F(ThreadPoolTest, Priority) {
 
   assert(rs == 0);
   int policy = GetThreadPolicy(attr);
-  std::cout << "Show current configuration of priority" << '\n';
+  LOG(INFO) << "Show current configuration of priority";
   ShowThreadPriority(attr, policy);
-  std::cout << "Show SCHED_FIFO of priority" << '\n';
+  LOG(INFO) << "Show SCHED_FIFO of priority";
   ShowThreadPriority(attr, SCHED_FIFO);
-  std::cout << "Show SCHED_RR of priority" << '\n';
+  LOG(INFO) << "Show SCHED_RR of priority";
   ShowThreadPriority(attr, SCHED_RR);
-  std::cout << "Show priority of current thread" << '\n';
+  LOG(INFO) << "Show priority of current thread";
   int priority = GetThreadPriority(attr);
-  std::cout << "Set thread policy" << '\n';
-  std::cout << "Set SCHED_FIFO policy" << '\n';
+  LOG(INFO) << "Set thread policy";
+  LOG(INFO) << "Set SCHED_FIFO policy";
   SetThreadPolicy(attr, SCHED_FIFO);
-  std::cout << "Set SCHED_RR policy" << '\n';
+  LOG(INFO) << "Set SCHED_RR policy";
   SetThreadPolicy(attr, SCHED_RR);
-  std::cout << "Restore current policy" << '\n';
+  LOG(INFO) << "Restore current policy";
   SetThreadPolicy(attr, policy);
 
   rs = pthread_attr_destroy(&attr);
