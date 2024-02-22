@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -82,31 +83,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    // std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    // std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -123,46 +124,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    // std::cout << "CalcDistanceEntry:distances : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -206,31 +207,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    // std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -247,46 +248,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    // std::cout << "CalcDistanceEntry:distances : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -330,31 +331,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    // std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -371,46 +372,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    // std::cout << "CalcDistanceEntry:distances : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -454,31 +455,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    // std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -495,46 +496,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    // std::cout << "CalcDistanceEntry:distances : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    // std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    // std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    // LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -578,31 +579,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -619,46 +620,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -702,31 +703,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -743,46 +744,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceEntry:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceEntry:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceEntry:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -826,31 +827,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -905,31 +906,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -984,31 +985,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     }
 
     // print op left
-    std::cout << "CalcDistanceEntry:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceEntry:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceEntry:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1087,31 +1088,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1123,46 +1124,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1204,31 +1205,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1240,46 +1241,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1321,31 +1322,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1357,46 +1358,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1438,31 +1439,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1512,31 +1513,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1548,46 +1549,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1629,31 +1630,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1665,46 +1666,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1746,31 +1747,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1782,46 +1783,46 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1863,31 +1864,31 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1936,31 +1937,31 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcL2DistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcL2DistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -1972,46 +1973,46 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcL2DistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcL2DistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcL2DistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2052,31 +2053,31 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcL2DistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcL2DistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2088,46 +2089,46 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcL2DistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcL2DistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcL2DistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2170,31 +2171,31 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcIpDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcIpDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2206,46 +2207,46 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcIpDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcIpDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcIpDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2286,31 +2287,31 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcIpDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcIpDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2322,46 +2323,46 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcIpDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcIpDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcIpDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2404,31 +2405,31 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcCosineDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcCosineDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2440,46 +2441,46 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcCosineDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcCosineDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcCosineDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2520,31 +2521,31 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     }
 
     // print op left
-    std::cout << "CalcCosineDistanceByFaiss:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcCosineDistanceByFaiss:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2556,46 +2557,46 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcCosineDistanceByFaiss:distances : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcCosineDistanceByFaiss:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcCosineDistanceByFaiss:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByFaiss:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2638,31 +2639,31 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcL2DistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcL2DistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2674,46 +2675,46 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcL2DistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcL2DistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcL2DistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2754,31 +2755,31 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcL2DistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcL2DistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2790,46 +2791,46 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcL2DistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcL2DistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcL2DistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcL2DistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2872,31 +2873,31 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcIpDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcIpDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2908,46 +2909,46 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcIpDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcIpDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcIpDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -2988,31 +2989,31 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcIpDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcIpDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3024,46 +3025,46 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcIpDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcIpDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcIpDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcIpDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3106,31 +3107,31 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcCosineDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcCosineDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3142,46 +3143,46 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcCosineDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcCosineDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcCosineDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3222,31 +3223,31 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     }
 
     // print op left
-    std::cout << "CalcCosineDistanceByHnswlib:op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op right
-    std::cout << "CalcCosineDistanceByHnswlib:op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3258,46 +3259,46 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     // print distances
-    std::cout << "CalcCosineDistanceByHnswlib:distances : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:distances : ";
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (auto dis : distance) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result left
-    std::cout << "CalcCosineDistanceByHnswlib:result_op_left_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:result_op_left_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
 
     // print op result right
-    std::cout << "CalcCosineDistanceByHnswlib:result_op_right_vectors : " << '\n';
+    LOG(INFO) << "CalcCosineDistanceByHnswlib:result_op_right_vectors : ";
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        std::cout << "[" << i << "]"
+        LOG(INFO) << "[" << i << "]"
                   << " ";
         for (const auto& elem : vector.float_values()) {
-          std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
+          LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
-        std::cout << '\n';
+
         i++;
       }
     }
@@ -3316,22 +3317,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcL2DistanceByFaiss) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3352,27 +3351,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcL2DistanceByFaiss) {
         VectorIndexUtils::DoCalcL2DistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                   result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcL2DistanceByFaiss:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcL2DistanceByFaiss:left" << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:left";
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcL2DistanceByFaiss:right" << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcL2DistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:right";
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcL2DistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3388,22 +3385,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcIpDistanceByFaiss) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3424,27 +3419,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcIpDistanceByFaiss) {
         VectorIndexUtils::DoCalcIpDistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                   result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcIpDistanceByFaiss:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcIpDistanceByFaiss:left" << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:left";
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcIpDistanceByFaiss:right" << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcIpDistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:right";
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcIpDistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3460,22 +3453,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcCosineDistanceByFaiss) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3496,27 +3487,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcCosineDistanceByFaiss) {
         VectorIndexUtils::DoCalcCosineDistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                       result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcCosineDistanceByFaiss:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcCosineDistanceByFaiss:left" << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:left";
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcCosineDistanceByFaiss:right" << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcCosineDistanceByFaiss:data : \t\t";
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:right";
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcCosineDistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3532,22 +3521,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcL2DistanceByHnswlib) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3568,27 +3555,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcL2DistanceByHnswlib) {
         VectorIndexUtils::DoCalcL2DistanceByHnswlib(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                     result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcL2DistanceByHnswlib:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcL2DistanceByHnswlib:left" << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:left";
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcL2DistanceByHnswlib:right" << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcL2DistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:right";
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcL2DistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3604,22 +3589,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcIpDistanceByHnswlib) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3640,27 +3623,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcIpDistanceByHnswlib) {
         VectorIndexUtils::DoCalcIpDistanceByHnswlib(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                     result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcIpDistanceByHnswlib:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcIpDistanceByHnswlib:left" << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:left";
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcIpDistanceByHnswlib:right" << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcIpDistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:right";
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcIpDistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3676,22 +3657,20 @@ TEST_F(VectorIndexUtilsTest, DoCalcCosineDistanceByHnswlib) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3712,27 +3691,25 @@ TEST_F(VectorIndexUtilsTest, DoCalcCosineDistanceByHnswlib) {
         VectorIndexUtils::DoCalcCosineDistanceByHnswlib(op_left_vectors, op_right_vectors, is_return_normlize, distance,
                                                         result_op_left_vectors, result_op_right_vectors);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    std::cout << "DoCalcCosineDistanceByHnswlib:distance:" << distance << '\n';
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:distance:" << distance;
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcCosineDistanceByHnswlib:left" << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:left";
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "DoCalcCosineDistanceByHnswlib:right" << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "DoCalcCosineDistanceByHnswlib:data : \t\t";
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:right";
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcCosineDistanceByHnswlib:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3748,11 +3725,10 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignment) {
       elem = distrib(rng);
     }
 
-    std::cout << "data : \t\t";
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : data) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_vectors;
     ::dingodb::pb::common::Vector op_vectors;
@@ -3765,13 +3741,12 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignment) {
 
     EXPECT_EQ(result_op_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
 
-    std::cout << "value_type : " << result_op_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -3787,22 +3762,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3824,22 +3797,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
 
-    std::cout << "value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 
   // is_return_normlize true.  result_op_left_vectors not empty.
@@ -3853,22 +3824,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3892,22 +3861,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
 
-    std::cout << "value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 
   // is_return_normlize true.  result_op_right_vectors not empty.
@@ -3921,22 +3888,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -3960,22 +3925,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
 
-    std::cout << "value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 
   // ok
@@ -3989,22 +3952,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
       elem = distrib(rng);
     }
 
-    std::cout << "left_data : \t";
+    LOG(INFO) << "left_data : \t";
     for (const auto elem : data_left) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     std::array<float, kDimension> data_right{};
     for (auto& elem : data_right) {
       elem = distrib(rng);
     }
 
-    std::cout << "right_data : \t";
+    LOG(INFO) << "right_data : \t";
     for (const auto elem : data_right) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     ::dingodb::pb::common::Vector result_op_left_vectors;
     ::dingodb::pb::common::Vector result_op_right_vectors;
@@ -4026,22 +3987,20 @@ TEST_F(VectorIndexUtilsTest, ResultOpVectorAssignmentWrapper) {
 
     EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
 
-    std::cout << "value_type : " << result_op_left_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_left_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_left_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
 
     EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::FLOAT);
-    std::cout << "value_type : " << result_op_right_vectors.value_type() << '\n';
-    std::cout << "dimension : " << result_op_right_vectors.dimension() << '\n';
-    std::cout << "data : \t\t";
+    LOG(INFO) << "value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -4057,19 +4016,17 @@ TEST_F(VectorIndexUtilsTest, NormalizeVectorForFaiss) {
       elem = distrib(rng);
     }
 
-    std::cout << "faiss data : \t\t";
+    LOG(INFO) << "faiss data : \t\t";
     for (const auto elem : data) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     VectorIndexUtils::NormalizeVectorForFaiss(data.data(), kDimension);
 
-    std::cout << "faiss data : \t\t";
+    LOG(INFO) << "faiss data : \t\t";
     for (const auto elem : data) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 
@@ -4086,19 +4043,17 @@ TEST_F(VectorIndexUtilsTest, NormalizeVectorForHnsw) {
       elem = distrib(rng);
     }
 
-    std::cout << "hnsw data : \t\t";
+    LOG(INFO) << "hnsw data : \t\t";
     for (const auto elem : data) {
-      std::cout << std::setw(8) << elem << " ";
+      LOG(INFO) << std::setw(8) << elem << " ";
     }
-    std::cout << '\n';
 
     VectorIndexUtils::NormalizeVectorForHnsw(data.data(), kDimension, norm_array.data());
 
-    std::cout << "hnsw norm_array : \t";
+    LOG(INFO) << "hnsw norm_array : \t";
     for (const auto elem : norm_array) {
-      std::cout << elem << " ";
+      LOG(INFO) << elem << " ";
     }
-    std::cout << '\n';
   }
 }
 

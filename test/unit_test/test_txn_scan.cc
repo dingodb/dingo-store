@@ -106,27 +106,15 @@ static std::string GenRandomString(int len) {
 class TxnScanTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    // DingoLogger::InitLogger("./", "TxnScanTest", dingodb::pb::node::LogLevel::DEBUG);
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
     dingodb::Helper::CreateDirectories(kStorePath);
     std::srand(std::time(nullptr));
 
     std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
   }
 
   static void TearDownTestSuite() {
@@ -167,10 +155,10 @@ void TxnScanTest::DeleteRange() {
   std::string my_max_key(Helper::GenMaxStartKey());
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   range.set_start_key(my_min_key);
   range.set_end_key(Helper::PrefixNext(my_max_key));
@@ -190,10 +178,10 @@ void TxnScanTest::DeleteRange() {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    LOG(INFO) << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ");
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 
@@ -212,10 +200,10 @@ void TxnScanTest::DeleteRange() {
     ok = reader->KvScan(cf_name, start_key, end_key, kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::cout << "start_key : " << StrToHex(start_key, " ") << "\n"
-              << "end_key : " << StrToHex(end_key, " ") << '\n';
+    LOG(INFO) << "start_key : " << StrToHex(start_key, " ") << "\n"
+              << "end_key : " << StrToHex(end_key, " ");
     for (const auto &kv : kvs) {
-      std::cout << kv.key() << ":" << kv.value() << '\n';
+      LOG(INFO) << kv.key() << ":" << kv.value();
     }
   }
 }
@@ -348,7 +336,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 2
@@ -384,7 +372,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 3
@@ -421,7 +409,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 4
@@ -458,7 +446,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 5
@@ -495,7 +483,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 6
@@ -532,7 +520,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 7
@@ -569,7 +557,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 
   // 8
@@ -606,7 +594,7 @@ TEST_F(TxnScanTest, Prepare) {
     keys.push_back(key);
 
     std::string s = StrToHex(key, " ");
-    std::cout << "s : " << s << '\n';
+    LOG(INFO) << "s : " << s;
   }
 }
 
@@ -754,10 +742,10 @@ TEST_F(TxnScanTest, Scan) {
   std::string my_max_key(Helper::PrefixNext(keys.back()));
 
   std::string my_min_key_s = StrToHex(my_min_key, " ");
-  std::cout << "my_min_key_s : " << my_min_key_s << '\n';
+  LOG(INFO) << "my_min_key_s : " << my_min_key_s;
 
   std::string my_max_key_s = StrToHex(my_max_key, " ");
-  std::cout << "my_max_key_s : " << my_max_key_s << '\n';
+  LOG(INFO) << "my_max_key_s : " << my_max_key_s;
 
   pb::common::Range range;
   // range.set_start_key(my_min_key);
@@ -780,7 +768,7 @@ TEST_F(TxnScanTest, Scan) {
 
   cnt = kvs.size();
 
-  std::cout << "ExecuteTxn key_values cnt : " << cnt << '\n';
+  LOG(INFO) << "ExecuteTxn key_values cnt : " << cnt;
   EXPECT_EQ(cnt, keys.size());
   EXPECT_FALSE(has_more);
 }

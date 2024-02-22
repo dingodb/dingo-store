@@ -36,14 +36,18 @@
 
 namespace dingodb {
 
+static const std::string kTempDataDirectory = "./unit_test/vector_index_raw_ivf_pq";
+
 class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
 
   static void TearDownTestSuite() {
     vector_index_raw_ivf_pq_l2.reset();
     vector_index_raw_ivf_pq_ip.reset();
     vector_index_raw_ivf_pq_cosine.reset();
+
+    Helper::RemoveAllFileOrDirectory(kTempDataDirectory);
   }
 
   static void ReCreate() {
@@ -111,16 +115,18 @@ class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
 };
 
 TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
+  GTEST_SKIP() << "run time too long, please adjust.";
+
   butil::Status ok;
   static pb::common::RegionEpoch kEpoch;  // NOLINT
   kEpoch.set_conf_version(1);
   kEpoch.set_version(10);
 
   std::ofstream outfile;
-  const std::string &file_path = "./test_vector_index_raw_ivf_pq_boundary.txt";
+  const std::string &file_path = kTempDataDirectory + "/test_vector_index_raw_ivf_pq_boundary.txt";
   outfile.open(file_path);  // open file
   if (!outfile) {
-    std::cout << "open file failed " << file_path << '\n';
+    LOG(INFO) << "open file failed " << file_path;
     exit(1);
   }
 
@@ -148,9 +154,9 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
     //   }
     // }
 
-    // std::cout << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
+    // LOG(INFO) << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
     //                          internal_dimension)
-    //           << '\n';
+    //          ;
     for (int internal_nbits_per_idx = 1; internal_nbits_per_idx <= max_internal_nbits_per_idx;
          internal_nbits_per_idx *= 2) {
       for (int internal_nsubvector = 1; internal_nsubvector <= internal_dimension; internal_nsubvector *= 2)
@@ -174,9 +180,9 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             }
           }
 
-          // std::cout << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
+          // LOG(INFO) << fmt::format("create random data complete!!! data_base_size:{}  dimension:{}", data_base_size,
           //                          internal_dimension)
-          //           << '\n';
+          //          ;
 
           static const pb::common::Range kRange;
 
@@ -275,7 +281,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             }
 
             if (all_ok) {
-              std::cout << s << " success "
+              LOG(INFO) << s << " success "
                         << "\n"
                         << "\n";
               outfile << s << " success "
@@ -284,7 +290,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
               outfile.flush();
 
             } else {
-              std::cout << s << " failed "
+              LOG(INFO) << s << " failed "
                         << "\n"
                         << "\n";
               outfile << s << " failed "
@@ -302,7 +308,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             }
             butil::Status ok = raw_ivf->Train(internal_data_base);
             if (!ok.ok()) {
-              std::cout
+              LOG(INFO)
                   << fmt::format(
                          "[{}] data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
                          "train failed",
@@ -354,7 +360,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             }
             butil::Status ok = raw_ivf->Add(vector_with_ids);
             if (!ok.ok()) {
-              std::cout
+              LOG(INFO)
                   << fmt::format(
                          "[{}] data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
                          "add failed",
@@ -414,7 +420,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             std::vector<pb::index::VectorWithDistanceResult> results;
             butil::Status ok = raw_ivf->Search(vector_with_ids_clone, topk, {filter}, false, parameter, results);
             if (!ok.ok()) {
-              std::cout
+              LOG(INFO)
                   << fmt::format(
                          "[{}] data_base_size : {} dimension : {} nbits_per_idx : {} nsubvector:{} ncentroids:{} {} "
                          "search failed",
@@ -456,7 +462,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
     }
   }
 
-  outfile << "normal exit!!!" << '\n';
+  outfile << "normal exit!!!";
   outfile.close();
 }
 

@@ -32,14 +32,11 @@ TEST(StorePbTest, GetTypeName) {
   dingodb::pb::store::KvBatchPutIfAbsentResponse kv_batch_put_if_absent_response;
   auto batch_put_if_absent_name = kv_batch_put_if_absent_response.GetTypeName();
 
-  // std::cout << "batch_put_if_absent_name : " << batch_put_if_absent_name << std::endl;
-
   EXPECT_EQ(batch_put_if_absent_name, "dingodb.pb.store.KvBatchPutIfAbsentResponse");
 
   dingodb::pb::store::KvPutIfAbsentResponse kv_put_if_absent_response;
   auto put_if_absent_name = kv_put_if_absent_response.GetTypeName();
 
-  // std::cout << "put_if_absent_name : " << put_if_absent_name << std::endl;
   EXPECT_EQ(put_if_absent_name, "dingodb.pb.store.KvPutIfAbsentResponse");
 }
 

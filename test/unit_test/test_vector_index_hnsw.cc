@@ -160,16 +160,16 @@ TEST_F(VectorIndexHnswTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -243,7 +243,7 @@ TEST_F(VectorIndexHnswTest, Upsert) {
     int64_t count = 0;
     vector_index_hnsw->GetCount(count);
 
-    std::cout << "count : " << count << '\n';
+    LOG(INFO) << "count : " << count;
 
     auto *p = vector_index_hnsw.get();
 
@@ -251,11 +251,11 @@ TEST_F(VectorIndexHnswTest, Upsert) {
 
     for (size_t i = 0; i < 10; i++) {
       auto vt = pp->GetHnswIndex()->getDataByLabel<float>(i);
-      std::cout << "i : " << i << " size : " << vt.size() << " [";
+      LOG(INFO) << "i : " << i << " size : " << vt.size() << " [";
       for (auto v : vt) {
-        std::cout << " " << v;
+        LOG(INFO) << " " << v;
       }
-      std::cout << " ]" << '\n';
+      LOG(INFO) << " ]";
     }
   }
 }
@@ -284,17 +284,17 @@ TEST_F(VectorIndexHnswTest, Search) {
 
     for (const auto &result : results) {
       for (const auto &vector_with_distances : result.vector_with_distances()) {
-        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
-        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
-        // std::cout << "value : [";
-        std::cout << "distance : " << vector_with_distances.distance();
-        std::cout << " [";
+        LOG(INFO) << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // LOG(INFO) << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // LOG(INFO) << "value : [";
+        LOG(INFO) << "distance : " << vector_with_distances.distance();
+        LOG(INFO) << " [";
         for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
-          std::cout << value << " ";
+          LOG(INFO) << value << " ";
         }
-        std::cout << "] ";
+        LOG(INFO) << "] ";
 
-        std::cout << '\n';
+        LOG(INFO);
       }
       EXPECT_EQ(result.vector_with_distances_size(), 10);
     }
@@ -328,17 +328,17 @@ TEST_F(VectorIndexHnswTest, EfSearch) {
 
     for (const auto &result : results) {
       for (const auto &vector_with_distances : result.vector_with_distances()) {
-        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
-        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
-        // std::cout << "value : [";
-        std::cout << "distance : " << vector_with_distances.distance();
-        std::cout << " [";
+        LOG(INFO) << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // LOG(INFO) << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // LOG(INFO) << "value : [";
+        LOG(INFO) << "distance : " << vector_with_distances.distance();
+        LOG(INFO) << " [";
         for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
-          std::cout << value << " ";
+          LOG(INFO) << value << " ";
         }
-        std::cout << "] ";
+        LOG(INFO) << "] ";
 
-        std::cout << '\n';
+        LOG(INFO);
       }
       EXPECT_EQ(result.vector_with_distances_size(), 10);
     }
@@ -409,16 +409,16 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 
@@ -483,19 +483,19 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
       auto hnsw_index = std::dynamic_pointer_cast<VectorIndexHnsw>(vector_index_hnsw);
 
       VectorIndexUtils::NormalizeVectorForHnsw(data_base.data() + id * dimension, dimension, norm_array.data());
-      std::cout << "normalized [";
+      LOG(INFO) << "normalized [";
       for (size_t i = 0; i < dimension; i++) {
-        std::cout << norm_array[i] << ", ";
+        LOG(INFO) << norm_array[i] << ", ";
       }
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
 
-      std::cout << "orignal [";
+      LOG(INFO) << "orignal [";
       for (size_t i = 0; i < dimension; i++) {
-        std::cout << data_base[id * dimension + i] << ", ";
+        LOG(INFO) << data_base[id * dimension + i] << ", ";
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
         // vector_with_id.mutable_vector()->add_float_values(data_base[1 * dimension + i]);
       }
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -506,7 +506,7 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
     int64_t count = 0;
     vector_index_hnsw->GetCount(count);
 
-    std::cout << "count : " << count << '\n';
+    LOG(INFO) << "count : " << count;
 
     auto *p = vector_index_hnsw.get();
 
@@ -514,11 +514,11 @@ TEST_F(VectorIndexHnswTest, UpsertCosine) {
 
     for (size_t i = 0; i < 10; i++) {
       auto vt = pp->GetHnswIndex()->getDataByLabel<float>(i);
-      std::cout << "i : " << i << " size : " << vt.size() << " [";
+      LOG(INFO) << "i : " << i << " size : " << vt.size() << " [";
       for (auto v : vt) {
-        std::cout << " " << v;
+        LOG(INFO) << " " << v;
       }
-      std::cout << " ]" << '\n';
+      LOG(INFO) << " ]";
     }
   }
 }
@@ -546,17 +546,17 @@ TEST_F(VectorIndexHnswTest, SearchCosine) {
 
     for (const auto &result : results) {
       for (const auto &vector_with_distances : result.vector_with_distances()) {
-        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
-        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
-        // std::cout << "value : [";
-        std::cout << "distance : " << vector_with_distances.distance();
-        std::cout << " [";
+        LOG(INFO) << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // LOG(INFO) << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // LOG(INFO) << "value : [";
+        LOG(INFO) << "distance : " << vector_with_distances.distance();
+        LOG(INFO) << " [";
         for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
-          std::cout << fmt::format("{}", value) << " ";
+          LOG(INFO) << fmt::format("{}", value) << " ";
         }
-        std::cout << "] ";
+        LOG(INFO) << "] ";
 
-        std::cout << '\n';
+        LOG(INFO);
       }
       EXPECT_EQ(result.vector_with_distances_size(), topk);
     }
@@ -590,17 +590,17 @@ TEST_F(VectorIndexHnswTest, EfSearchCosine) {
 
     for (const auto &result : results) {
       for (const auto &vector_with_distances : result.vector_with_distances()) {
-        std::cout << "id : " << vector_with_distances.vector_with_id().id() << " ";
-        // std::cout << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
-        // std::cout << "value : [";
-        std::cout << "distance : " << vector_with_distances.distance();
-        std::cout << " [";
+        LOG(INFO) << "id : " << vector_with_distances.vector_with_id().id() << " ";
+        // LOG(INFO) << "float size : " << vector_with_distances.vector_with_id().vector().float_values().size() << " ";
+        // LOG(INFO) << "value : [";
+        LOG(INFO) << "distance : " << vector_with_distances.distance();
+        LOG(INFO) << " [";
         for (const auto &value : vector_with_distances.vector_with_id().vector().float_values()) {
-          std::cout << fmt::format("{}", value) << " ";
+          LOG(INFO) << fmt::format("{}", value) << " ";
         }
-        std::cout << "] ";
+        LOG(INFO) << "] ";
 
-        std::cout << '\n';
+        LOG(INFO);
       }
       EXPECT_EQ(result.vector_with_distances_size(), topk);
     }

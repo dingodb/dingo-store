@@ -172,19 +172,19 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
     std::vector<int64_t> result_vector_ids;
     {
       size_t i = 0;
-      std::cout << "[" << i << "]" << '\n';
+      LOG(INFO) << "[" << i << "]";
       for (const auto &result : results) {
         {
           size_t j = 0;
           for (const auto &vector_with_distances : result.vector_with_distances()) {
-            std::cout << "[" << j << "]" << '\n';
+            LOG(INFO) << "[" << j << "]";
             auto id = vector_with_distances.vector_with_id().id();
             auto distance = vector_with_distances.distance();
             auto metric_type = vector_with_distances.metric_type();
 
             result_vector_ids.push_back(id);
 
-            std::cout << vector_with_distances.DebugString() << '\n';
+            LOG(INFO) << vector_with_distances.DebugString();
             j++;
           }
         }
@@ -192,45 +192,45 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
       }
     }
 
-    std::cout << "vector_ids            : [";
+    LOG(INFO) << "vector_ids            : [";
     for (auto vector_id = vector_id_start; vector_id < vector_id_end; vector_id++) {
-      std::cout << vector_id << " ";
+      LOG(INFO) << vector_id << " ";
     }
-    std::cout << "]" << '\n';
+    LOG(INFO) << "]";
 
     std::sort(vector_ids_for_search.begin(), vector_ids_for_search.end());
-    std::cout << "vector_ids_for_search : [";
+    LOG(INFO) << "vector_ids_for_search : [";
     for (const auto vector_id : vector_ids_for_search) {
-      std::cout << vector_id << " ";
+      LOG(INFO) << vector_id << " ";
     }
-    std::cout << "]" << '\n';
+    LOG(INFO) << "]";
 
     std::sort(result_vector_ids.begin(), result_vector_ids.end());
-    std::cout << "result_vector_ids     : [";
+    LOG(INFO) << "result_vector_ids     : [";
     for (const auto result_vector_id : result_vector_ids) {
-      std::cout << result_vector_id << " ";
+      LOG(INFO) << result_vector_id << " ";
     }
-    std::cout << "]" << '\n';
+    LOG(INFO) << "]";
 
     bool is_return_true = !result_vector_ids.empty();
-    std::cout << "====================> : ";
+    LOG(INFO) << "====================> : ";
     for (auto result_vector_id : result_vector_ids) {
       auto iter = std::find(vector_ids_for_search.begin(), vector_ids_for_search.end(), result_vector_id);
       if (iter == vector_ids_for_search.end()) {
         is_return_true = false;
         EXPECT_TRUE(false);
       } else {
-        std::cout << *iter << " ";
+        LOG(INFO) << *iter << " ";
       }
     }
-    std::cout << '\n';
+    LOG(INFO);
 
     if (is_return_true) {
-      std::cout << name << " result_vector_ids all in vector_ids" << '\n';
+      LOG(INFO) << name << " result_vector_ids all in vector_ids";
     } else {
-      std::cout << name << " result_vector_ids not all in vector_ids" << '\n';
+      LOG(INFO) << name << " result_vector_ids not all in vector_ids";
     }
-    std::cout << "..........................................................................." << '\n';
+    LOG(INFO) << "...........................................................................";
   };
 
   // l2 ok crash
@@ -272,19 +272,19 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[";
-      std::cout << std::setiosflags(std::ios::right) << std::setw(3) << std::setfill('0') << i;
-      std::cout << "] [";
+      LOG(INFO) << "[";
+      LOG(INFO) << std::setiosflags(std::ios::right) << std::setw(3) << std::setfill('0') << i;
+      LOG(INFO) << "] [";
       for (faiss::idx_t j = 0; j < kDimension; j++) {
         if (0 != j) {
-          // std::cout << ",";
+          // LOG(INFO) << ",";
         }
-        // std::cout << std::setw(10) << data_base[i * dimension + j];
-        std::cout << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ')
+        // LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ')
                   << data_base[i * kDimension + j] << " ";
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]";
     }
   }
 

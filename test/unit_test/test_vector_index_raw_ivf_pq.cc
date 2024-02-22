@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/logging.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
@@ -36,14 +37,18 @@
 
 namespace dingodb {
 
+static const std::string kTempDataDirectory = "./unit_test/vector_index_raw_ivf_pq";
+
 class VectorIndexRawIvfPqTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
 
   static void TearDownTestSuite() {
     vector_index_raw_ivf_pq_l2.reset();
     vector_index_raw_ivf_pq_ip.reset();
     vector_index_raw_ivf_pq_cosine.reset();
+
+    Helper::RemoveAllFileOrDirectory(kTempDataDirectory);
   }
 
   static void ReCreate() {
@@ -109,9 +114,9 @@ class VectorIndexRawIvfPqTest : public testing::Test {
   inline static int32_t nbits_per_idx = 8;
   inline static std::vector<float> data_base;
   inline static int32_t start_id = 1000;
-  inline static std::string path_l2 = "./l2_raw_ivf_pq";
-  inline static std::string path_ip = "./ip_raw_ivf_pq";
-  inline static std::string path_cosine = "./cosine_raw_ivf_pq";
+  inline static std::string path_l2 = kTempDataDirectory + "/l2_raw_ivf_pq";
+  inline static std::string path_ip = kTempDataDirectory + "/ip_raw_ivf_pq";
+  inline static std::string path_cosine = kTempDataDirectory + "/cosine_raw_ivf_pq";
 };
 
 TEST_F(VectorIndexRawIvfPqTest, Create) {
@@ -358,20 +363,20 @@ TEST_F(VectorIndexRawIvfPqTest, SearchNotTrain) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      // std::cout << "[" << i << "]"
+      // LOG(INFO) << "[" << i << "]"
       //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          // std::cout << ",";
+          // LOG(INFO) << ",";
         }
-        // std::cout << std::setw(10) << data_base[i * dimension + j];
+        // LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      // std::cout << "]" << '\n';
+      // LOG(INFO) << "]";
     }
   }
 
-  std::cout << "create random data complete!!!" << '\n';
+  LOG(INFO) << "create random data complete!!!";
 
   // ok
   {
@@ -415,20 +420,20 @@ TEST_F(VectorIndexRawIvfPqTest, RangeSearchNotTrain) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      // std::cout << "[" << i << "]"
+      // LOG(INFO) << "[" << i << "]"
       //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          // std::cout << ",";
+          // LOG(INFO) << ",";
         }
-        // std::cout << std::setw(10) << data_base[i * dimension + j];
+        // LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      // std::cout << "]" << '\n';
+      // LOG(INFO) << "]";
     }
   }
 
-  std::cout << "create random data complete!!!" << '\n';
+  LOG(INFO) << "create random data complete!!!";
 
   // ok
   {
@@ -536,20 +541,20 @@ TEST_F(VectorIndexRawIvfPqTest, TrainVectorWithId) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      // std::cout << "[" << i << "]"
+      // LOG(INFO) << "[" << i << "]"
       //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          // std::cout << ",";
+          // LOG(INFO) << ",";
         }
-        // std::cout << std::setw(10) << data_base[i * dimension + j];
+        // LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      // std::cout << "]" << '\n';
+      // LOG(INFO) << "]";
     }
   }
 
-  std::cout << "create random data complete!!!" << '\n';
+  LOG(INFO) << "create random data complete!!!";
 
   // invalid.  no data
   {
@@ -634,20 +639,20 @@ TEST_F(VectorIndexRawIvfPqTest, Train) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      // std::cout << "[" << i << "]"
+      // LOG(INFO) << "[" << i << "]"
       //           << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          // std::cout << ",";
+          // LOG(INFO) << ",";
         }
-        // std::cout << std::setw(10) << data_base[i * dimension + j];
+        // LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      // std::cout << "]" << '\n';
+      // LOG(INFO) << "]";
     }
   }
 
-  std::cout << "create random data complete!!!" << '\n';
+  LOG(INFO) << "create random data complete!!!";
 
   // invalid.  no data
   {
@@ -1327,8 +1332,8 @@ TEST_F(VectorIndexRawIvfPqTest, Save) {
   ok = vector_index_raw_ivf_pq_l2->Save("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_raw_ivf_pq_l2->Save("/var/ivf_pq");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  ok = vector_index_raw_ivf_pq_l2->Save(kTempDataDirectory + "/ivf_pq");
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
   ok = vector_index_raw_ivf_pq_l2->Save(path_l2);
   EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1346,7 +1351,7 @@ TEST_F(VectorIndexRawIvfPqTest, Load) {
   ok = vector_index_raw_ivf_pq_l2->Load("");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = vector_index_raw_ivf_pq_l2->Load("/var/ivf_pq");
+  ok = vector_index_raw_ivf_pq_l2->Load(kTempDataDirectory + "/ivf_pq_not_exist");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
   ok = vector_index_raw_ivf_pq_l2->Load(path_l2);

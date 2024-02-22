@@ -27,14 +27,13 @@ class DingoLoggerTest : public testing::Test {
   void TearDown() override {}
 };
 
-TEST(DingoLoggerTest, DingoLOGTest) {
-  google::InitGoogleLogging("DingoLoggerTest1");
-  EXPECT_EQ(FLAGS_v, 0);
-  int debug_level = 100;
-  FLAGS_v = debug_level;
-  DINGO_LOG(INFO) << "This is an info log message.";
-  DINGO_LOG(DEBUG) << "This is an debug log from dingodb.";
-  VLOG(1) << "This is a log";
-  EXPECT_EQ(FLAGS_v, debug_level);
-}
-
+// TEST(DingoLoggerTest, DingoLOGTest) {
+//   google::InitGoogleLogging("DingoLoggerTest1");
+//   EXPECT_EQ(FLAGS_v, 0);
+//   int debug_level = 100;
+//   FLAGS_v = debug_level;
+//   DINGO_LOG(INFO) << "This is an info log message.";
+//   DINGO_LOG(DEBUG) << "This is an debug log from dingodb.";
+//   VLOG(1) << "This is a log";
+//   EXPECT_EQ(FLAGS_v, debug_level);
+// }

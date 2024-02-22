@@ -108,15 +108,11 @@ class SplitCheckerTest : public testing::Test {
     std::srand(std::time(nullptr));
 
     std::shared_ptr<Config> config = std::make_shared<YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
   }
 
   static void TearDownTestSuite() {

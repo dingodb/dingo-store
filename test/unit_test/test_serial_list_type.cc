@@ -25,6 +25,8 @@
 #include <optional>
 #include <string>
 
+#include "glog/logging.h"
+
 // #include "serial/keyvalue_codec.h"
 #include "serial/schema/base_schema.h"
 
@@ -315,7 +317,7 @@ TEST_F(DingoSerialListTypeTest, boolListSchema) {
     const auto& vector2 = *data2.value();
     EXPECT_EQ(data1->size(), vector2.size());
     for (size_t j = 0; j < data1->size(); ++j) {
-      std::cout << "(*data1)[j]:" << (*data1)[j] << ",vector2[j]:" << vector2[j] << '\n';
+      LOG(INFO) << "(*data1)[j]:" << (*data1)[j] << ",vector2[j]:" << vector2[j];
       EXPECT_EQ((*data1)[j], vector2[j]);
     }
   } else {
@@ -1010,7 +1012,7 @@ TEST_F(DingoSerialListTypeTest, doubleSchemaPosFakeLeBe) {
   b1.SetAllowNull(true);
   b1.SetIsKey(true);
   if (!this->le) {
-    cout << "LE" << '\n';
+    cout << "LE";
     b1.SetIsLe(true);
   } else {
     b1.SetIsLe(false);
@@ -1609,8 +1611,8 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   InitRecord();
 
   vector<any>* record1 = GetRecord();
-  std::cout << "record1 size:" << record1->size() << '\n';
-  std::cout << "schemas size:" << schemas->size() << '\n';
+  LOG(INFO) << "record1 size:" << record1->size();
+  LOG(INFO) << "schemas size:" << schemas->size();
   pb::common::KeyValue kv;
   (void)re->Encode(*record1, kv);
   delete re;
@@ -1618,7 +1620,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
   vector<any> record2;
   (void)rd->Decode(kv, record2);
-  std::cout << "record2 size:" << record2.size() << '\n';
+  LOG(INFO) << "record2 size:" << record2.size();
   int i = 0;
   for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
@@ -1687,7 +1689,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1707,7 +1709,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1727,7 +1729,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1746,7 +1748,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1766,7 +1768,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1786,7 +1788,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
           const auto& vector2 = *r2.value();
           EXPECT_EQ(vector1.size(), vector2.size());
           for (size_t j = 0; j < vector1.size(); ++j) {
-            // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+            // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
             EXPECT_EQ(vector1[j], vector2[j]);
           }
         } else if (r2.has_value()) {
@@ -1893,7 +1895,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1916,7 +1918,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1939,7 +1941,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1962,7 +1964,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -1985,7 +1987,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {
@@ -2008,7 +2010,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
             const auto& vector2 = *r2.value();
             EXPECT_EQ(vector1.size(), vector2.size());
             for (size_t j = 0; j < vector1.size(); ++j) {
-              // std::cout << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j] << '\n';
+              // LOG(INFO) << "vector1[j]:" << vector1[j] << ",vector2[j]:" << vector2[j];
               EXPECT_EQ(vector1[j], vector2[j]);
             }
           } else if (r2.has_value()) {

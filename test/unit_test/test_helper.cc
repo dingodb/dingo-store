@@ -34,28 +34,19 @@ class HelperTest : public testing::Test {
 //   std::map<std::string, int64_t> output;
 
 //   EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
-//   std::cout << output["TotalSpace"] << " " << output["FreeSpace"] << '\n';
+//   LOG(INFO) << output["TotalSpace"] << " " << output["FreeSpace"];
 // }
 
 TEST_F(HelperTest, FormatTime) {
   auto format_time = dingodb::Helper::FormatTime(1681970908, "%Y-%m-%d %H:%M:%S");
-  std::cout << format_time << '\n';
+  LOG(INFO) << format_time;
 
   EXPECT_EQ("2023-04-20 14:08:28", format_time);
 
-  // auto format_ms_time = dingodb::Helper::FormatMsTime(1681970908001, "%Y-%m-%d %H:%M:%S");
-  // std::cout << format_ms_time << '\n';
+  auto format_ms_time = dingodb::Helper::FormatMsTime(1681970908001, "%Y-%m-%d %H:%M:%S");
+  LOG(INFO) << format_ms_time;
 
-  // EXPECT_EQ("2023-04-20 14:08:28.001", format_ms_time);
-
-  std::cout << dingodb::Helper::GetNowFormatMsTime();
-}
-
-TEST_F(HelperTest, TimestampNs) {
-  std::shared_ptr<int> abc;
-  if (abc == nullptr) {
-    std::cout << dingodb::Helper::TimestampNs() << '\n';
-  }
+  EXPECT_EQ("2023-04-20 14:08:28.1", format_ms_time);
 }
 
 TEST_F(HelperTest, TransformRangeWithOptions) {
@@ -64,9 +55,6 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
   char end_key[] = {0x78, 0x65};
   region_range.set_start_key(start_key, 2);
   region_range.set_end_key(end_key, 2);
-
-  std::cout << "region_range: " << dingodb::Helper::StringToHex(region_range.start_key()) << " "
-            << dingodb::Helper::StringToHex(region_range.end_key()) << '\n';
 
   {
     // [0x61, 0x78]
@@ -78,8 +66,6 @@ TEST_F(HelperTest, TransformRangeWithOptions) {
     scan_range.mutable_range()->set_end_key(end_key, 1);
     scan_range.set_with_end(true);
     auto uniform_range = dingodb::Helper::TransformRangeWithOptions(scan_range);
-    std::cout << "uniform_range: " << dingodb::Helper::StringToHex(uniform_range.start_key()) << " "
-              << dingodb::Helper::StringToHex(uniform_range.end_key()) << '\n';
 
     EXPECT_EQ(true, dingodb::ServiceHelper::ValidateRangeInRange(region_range, uniform_range).ok());
   }
@@ -374,7 +360,7 @@ TEST_F(HelperTest, TraverseDirectory) {
 
   auto filenames = dingodb::Helper::TraverseDirectory(path);
   for (const auto& filename : filenames) {
-    std::cout << "filename: " << filename << '\n';
+    LOG(INFO) << "filename: " << filename;
   }
 
   std::filesystem::remove_all(path);
@@ -387,7 +373,7 @@ TEST_F(HelperTest, GetSystemMemoryInfo) {
   EXPECT_EQ(true, ret);
 
   for (auto& it : output) {
-    std::cout << it.first << ": " << it.second << '\n';
+    LOG(INFO) << it.first << ": " << it.second;
   }
 }
 
@@ -397,7 +383,7 @@ TEST_F(HelperTest, GetSystemCpuUsage) {
   EXPECT_EQ(true, ret);
 
   for (auto& it : output) {
-    std::cout << it.first << ": " << it.second << '\n';
+    LOG(INFO) << it.first << ": " << it.second;
   }
 }
 
@@ -410,7 +396,7 @@ TEST_F(HelperTest, GetSystemDiskIoUtil) {
   EXPECT_EQ(true, ret);
 
   for (auto& it : output) {
-    std::cout << it.first << ": " << it.second << '\n';
+    LOG(INFO) << it.first << ": " << it.second;
   }
 }
 
@@ -420,7 +406,7 @@ TEST_F(HelperTest, GetProcessMemoryInfo) {
   EXPECT_EQ(true, ret);
 
   for (auto& it : output) {
-    std::cout << it.first << ": " << it.second << '\n';
+    LOG(INFO) << it.first << ": " << it.second;
   }
 }
 

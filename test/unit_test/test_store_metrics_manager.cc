@@ -74,15 +74,11 @@ class StoreRegionMetricsTest : public testing::Test {
     std::srand(std::time(nullptr));
 
     std::shared_ptr<dingodb::Config> config = std::make_shared<dingodb::YamlConfig>();
-    if (config->Load(kYamlConfigContent) != 0) {
-      std::cout << "Load config failed" << '\n';
-      return;
-    }
+    ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
     engine = std::make_shared<dingodb::RocksRawEngine>();
-    if (!engine->Init(config, kAllCFs)) {
-      std::cout << "RocksRawEngine init failed" << '\n';
-    }
+    ASSERT_TRUE(engine != nullptr);
+    ASSERT_TRUE(engine->Init(config, kAllCFs));
   }
 
   static void TearDownTestSuite() {

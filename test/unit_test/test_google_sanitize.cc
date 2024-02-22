@@ -16,6 +16,8 @@
 
 #include <iostream>
 
+#include "glog/logging.h"
+
 class GoogleSanitizeTest : public testing::Test {
  protected:
   void SetUp() override {}
@@ -28,7 +30,7 @@ TEST(GoogleSanitizeTest, HeapUseAfterFree) {
   int* array = new int[100];
   delete[] array;
   // cppcheck-suppress deallocuse
-  std::cout << array[1] << std::endl;  // BOOM
+  LOG(INFO) << array[1] << std::endl;  // BOOM
 #endif
 }
 
@@ -38,7 +40,7 @@ TEST(GoogleSanitizeTest, HeapBufferOverflow) {
   int* array = new int[100];
   int res = array[100];
   delete[] array;
-  std::cout << "res : " << res << std::endl;
+  LOG(INFO) << "res : " << res << std::endl;
 
 #endif
 }
@@ -47,7 +49,7 @@ TEST(GoogleSanitizeTest, HeapBufferOverflow) {
 TEST(GoogleSanitizeTest, StackBufferOverflow) {
 #if 0  // NOLINT
   int array[100];
-  std::cout << "array[100] : " << array[100] << std::endl;
+  LOG(INFO) << "array[100] : " << array[100] << std::endl;
 #endif
 }
 
@@ -56,7 +58,7 @@ TEST(GoogleSanitizeTest, StackBufferOverflow) {
 int global_buffer_overflow_array[100];
 
 TEST(GoogleSanitizeTest, GlobalBufferOverflow) {
-  std::cout << "global_buffer_overflow_array : " << global_buffer_overflow_array[100] << std::endl;
+  LOG(INFO) << "global_buffer_overflow_array : " << global_buffer_overflow_array[100] << std::endl;
 }
 #endif
 
@@ -74,7 +76,7 @@ void FunctionThatEscapesLocalObject() {
 
 TEST(GoogleSanitizeTest, UseAfterReturn) {
   FunctionThatEscapesLocalObject();
-  std::cout << ptr[1000] << std::endl;
+  LOG(INFO) << ptr[1000] << std::endl;
 }
 
 #endif
@@ -111,11 +113,11 @@ int Foo() { return 42; }
 TEST(GoogleSanitizeTest, AddressSanitizerInitializationOrderFiasco) {
   int x = ReadExternGlobal() + 1;
 
-  std::cout << "x : " << x << std::endl;
+  LOG(INFO) << "x : " << x << std::endl;
 
   int extern_global = Foo();
 
-  std::cout << "extern_global : " << extern_global << std::endl;
+  LOG(INFO) << "extern_global : " << extern_global << std::endl;
 }
 
 #endif
@@ -124,6 +126,6 @@ TEST(GoogleSanitizeTest, AddressSanitizerInitializationOrderFiasco) {
 TEST(GoogleSanitizeTest, MemoryLeaks) {
 #if 10  // NOLINT
   int *array = new int[100];
-  std::cout << array[1] << '\n';  // BOOM
+  LOG(INFO) << array[1];  // BOOM
 #endif
 }
