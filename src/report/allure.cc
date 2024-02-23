@@ -21,19 +21,15 @@
 #include <utility>
 #include <vector>
 
+#include "common/helper.h"
 #include "common/uuid.h"
 #include "fmt/core.h"
-#include "helper.h"
 #include "rapidjson/document.h"
 #include "rapidjson/rapidjson.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
-namespace dingodb {
-
-namespace integration_test {
-
-namespace allure {
+namespace dingodb::report::allure {
 
 static std::string TransformStatus(const testing::TestResult* test_case_result) {
   if (test_case_result->Passed()) {
@@ -68,12 +64,35 @@ static std::string GetPropertyValue(const std::map<std::string, std::string>& pr
   return it == properties.end() ? "" : it->second;
 }
 
+static std::vector<std::pair<std::string, std::string>> TransformVersionInfo(
+    const pb::common::VersionInfo& version_info) {
+  std::vector<std::pair<std::string, std::string>> result = {
+      std::make_pair("git_commit_hash", version_info.git_commit_hash()),
+      std::make_pair("git_tag_name", version_info.git_tag_name()),
+      std::make_pair("git_commit_user", version_info.git_commit_user()),
+      std::make_pair("git_commit_mail", version_info.git_commit_mail()),
+      std::make_pair("git_commit_time", version_info.git_commit_time()),
+      std::make_pair("major_version", version_info.major_version()),
+      std::make_pair("minor_version", version_info.minor_version()),
+      std::make_pair("dingo_build_type", version_info.dingo_build_type()),
+      std::make_pair("dingo_contrib_build_type", version_info.dingo_contrib_build_type()),
+      std::make_pair("use_mkl", version_info.use_mkl() ? "true" : "false"),
+      std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
+      std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
+      std::make_pair("use_tcmalloc", version_info.use_tcmalloc() ? "true" : "false"),
+      std::make_pair("use_profiler", version_info.use_profiler() ? "true" : "false"),
+      std::make_pair("use_sanitizer", version_info.use_sanitizer() ? "true" : "false"),
+  };
+
+  return result;
+}
+
 void Allure::GenReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
                        const std::string& directory_path) {
-  std::vector<dingodb::integration_test::allure::TestSuite> allure_test_suites;
+  std::vector<dingodb::report::allure::TestSuite> allure_test_suites;
   int total_count = unit_test->total_test_suite_count();
   for (int i = 0; i < total_count; ++i) {
-    dingodb::integration_test::allure::TestSuite allure_test_suite;
+    dingodb::report::allure::TestSuite allure_test_suite;
     const auto* test_suite = unit_test->GetTestSuite(i);
     allure_test_suite.uuid = dingodb::UUIDGenerator::GenerateUUID();
     allure_test_suite.history_id = dingodb::UUIDGenerator::GenerateUUIDV3(test_suite->name());
@@ -83,7 +102,7 @@ void Allure::GenReport(const testing::UnitTest* unit_test, const pb::common::Ver
 
     int total_case_count = test_suite->total_test_count();
     for (int j = 0; j < total_case_count; ++j) {
-      dingodb::integration_test::allure::TestCase allure_test_case;
+      dingodb::report::allure::TestCase allure_test_case;
       const auto* test_case_info = test_suite->GetTestInfo(j);
       const auto* test_case_result = test_case_info->result();
 
@@ -114,7 +133,7 @@ void Allure::GenReport(const testing::UnitTest* unit_test, const pb::common::Ver
 
       int total_part_count = test_case_result->total_part_count();
       for (int k = 0; k < total_part_count; ++k) {
-        dingodb::integration_test::allure::Step allure_test_step;
+        dingodb::report::allure::Step allure_test_step;
         const auto& test_case_part_result = test_case_result->GetTestPartResult(k);
         allure_test_step.name = fmt::format("{}.{}", test_case_info->name(), test_case_part_result.line_number());
         allure_test_step.stage = "finished";
@@ -139,8 +158,7 @@ void Allure::GenReport(const testing::UnitTest* unit_test, const pb::common::Ver
   GenTestResultFile(allure_test_suites, directory_path);
   GenContainerFile(allure_test_suites, directory_path);
   GenCategoriesFile(allure_test_suites, directory_path);
-  GenEnvironmentFile(allure_test_suites, directory_path,
-                     dingodb::integration_test::Helper::TransformVersionInfo(version_info));
+  GenEnvironmentFile(allure_test_suites, directory_path, TransformVersionInfo(version_info));
   GenHistoryFile(allure_test_suites, directory_path);
 }
 
@@ -203,7 +221,7 @@ void Allure::GenTestResultFile(std::vector<TestSuite>& test_suites, const std::s
       doc.Accept(writer);
 
       std::string filepath = fmt::format("{}/{}-result.json", directory_path, dingodb::UUIDGenerator::GenerateUUID());
-      Helper::SaveFile(filepath, str_buf.GetString());
+      dingodb::Helper::SaveFile(filepath, str_buf.GetString());
     }
   }
 }
@@ -258,7 +276,7 @@ void Allure::GenContainerFile(std::vector<TestSuite>& test_suites, const std::st
     doc.Accept(writer);
 
     std::string filepath = fmt::format("{}/{}-container.json", directory_path, dingodb::UUIDGenerator::GenerateUUID());
-    Helper::SaveFile(filepath, str_buf.GetString());
+    dingodb::Helper::SaveFile(filepath, str_buf.GetString());
   }
 }
 
@@ -273,14 +291,10 @@ void Allure::GenEnvironmentFile(std::vector<TestSuite>&, const std::string& dire
 
   if (!data.empty()) {
     std::string filepath = fmt::format("{}/environment.properties", directory_path);
-    Helper::SaveFile(filepath, data);
+    dingodb::Helper::SaveFile(filepath, data);
   }
 }
 
 void Allure::GenHistoryFile(std::vector<TestSuite>& test_suites, const std::string& directory_path) {}
 
-}  // namespace allure
-
-}  // namespace integration_test
-
-}  // namespace dingodb
+}  // namespace dingodb::report::allure

@@ -17,10 +17,10 @@
 #include <fstream>
 #include <string>
 
+#include "common/helper.h"
 #include "fmt/core.h"
-#include "helper.h"
 
-namespace dingodb::integration_test::web {
+namespace dingodb::report::web {
 
 static std::string TransformStatus(const testing::TestResult* test_case_result) {
   if (test_case_result->Passed()) {
@@ -133,8 +133,8 @@ std::string Web::GenAllureLinkContent(const std::string& allure_url) {
   return content;
 }
 
-void Web::GenReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
-                    const std::string& allure_url, const std::string& directory_path) {
+void Web::GenIntegrationTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
+                                   const std::string& allure_url, const std::string& directory_path) {
   std::string html = R"(
     <!DOCTYPE html>
     <html lang="en">
@@ -161,7 +161,38 @@ void Web::GenReport(const testing::UnitTest* unit_test, const pb::common::Versio
   dingodb::Helper::CreateDirectory(directory_path);
 
   std::string filepath = fmt::format("{}/integration_test.html", directory_path);
-  Helper::SaveFile(filepath, html);
+  dingodb::Helper::SaveFile(filepath, html);
 }
 
-}  // namespace dingodb::integration_test::web
+void Web::GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
+                            const std::string& allure_url, const std::string& directory_path) {
+  std::string html = R"(
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>Dingo-Store Test Report</title>
+    </head>
+    <body>
+  )";
+
+  html += "<h1>Dingo-Store Integration Test Report</h1>";
+  html += "<div>" + GenVersionContent(version_info) + "</div>";
+  html += "<div>" + GenTestResultContent(unit_test) + "</div>";
+  html += "<div>" + GenAllureLinkContent(allure_url) + "</div>";
+
+  html += R"(
+    </body>
+    </html>
+  )";
+
+  if (dingodb::Helper::IsExistPath(directory_path)) {
+    dingodb::Helper::RemoveAllFileOrDirectory(directory_path);
+  }
+  dingodb::Helper::CreateDirectory(directory_path);
+
+  std::string filepath = fmt::format("{}/integration_test.html", directory_path);
+  dingodb::Helper::SaveFile(filepath, html);
+}
+
+}  // namespace dingodb::report::web

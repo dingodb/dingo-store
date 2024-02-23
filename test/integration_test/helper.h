@@ -87,29 +87,6 @@ class Helper {
     CHECK(status.IsOK()) << fmt::format("Drop region failed, {}", status.ToString());
   }
 
-  static std::vector<std::pair<std::string, std::string>> TransformVersionInfo(
-      const pb::common::VersionInfo& version_info) {
-    std::vector<std::pair<std::string, std::string>> result = {
-        std::make_pair("git_commit_hash", version_info.git_commit_hash()),
-        std::make_pair("git_tag_name", version_info.git_tag_name()),
-        std::make_pair("git_commit_user", version_info.git_commit_user()),
-        std::make_pair("git_commit_mail", version_info.git_commit_mail()),
-        std::make_pair("git_commit_time", version_info.git_commit_time()),
-        std::make_pair("major_version", version_info.major_version()),
-        std::make_pair("minor_version", version_info.minor_version()),
-        std::make_pair("dingo_build_type", version_info.dingo_build_type()),
-        std::make_pair("dingo_contrib_build_type", version_info.dingo_contrib_build_type()),
-        std::make_pair("use_mkl", version_info.use_mkl() ? "true" : "false"),
-        std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
-        std::make_pair("use_openblas", version_info.use_openblas() ? "true" : "false"),
-        std::make_pair("use_tcmalloc", version_info.use_tcmalloc() ? "true" : "false"),
-        std::make_pair("use_profiler", version_info.use_profiler() ? "true" : "false"),
-        std::make_pair("use_sanitizer", version_info.use_sanitizer() ? "true" : "false"),
-    };
-
-    return result;
-  }
-
   static bool IsContain(const std::vector<sdk::KVPair>& kvs, const std::string& key) {
     for (const auto& kv : kvs) {
       if (kv.key == key) {
@@ -118,18 +95,6 @@ class Helper {
     }
 
     return false;
-  }
-
-  static bool SaveFile(const std::string& filepath, const std::string& data) {
-    std::ofstream file(filepath);
-    if (!file.is_open()) {
-      return false;
-    }
-
-    file << data;
-    file.close();
-
-    return true;
   }
 };
 
