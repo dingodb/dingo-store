@@ -1449,6 +1449,7 @@ static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvSc
 
   status = ServiceHelper::ValidateRange(req_range);
   if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
@@ -1486,6 +1487,9 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
       ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("error : {} region_id : {} scan_id : {}", status.error_cstr(), region_id,
+                                      request->scan_id());
     }
     return;
   }

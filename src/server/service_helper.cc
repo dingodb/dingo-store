@@ -106,6 +106,8 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
   }
 
   if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
+    DINGO_LOG(ERROR) << fmt::format("pb::error::ERANGE_INVALID, Range is invalid start_key : {} end_key : {}",
+                                    Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
     return butil::Status(pb::error::ERANGE_INVALID, "Range is invalid");
   }
 
