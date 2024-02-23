@@ -36,6 +36,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class RawKVTest : public TestBase {
  public:
   RawKVTest() = default;

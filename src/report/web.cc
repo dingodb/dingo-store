@@ -191,7 +191,7 @@ void Web::GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common
   }
   dingodb::Helper::CreateDirectory(directory_path);
 
-  std::string filepath = fmt::format("{}/integration_test.html", directory_path);
+  std::string filepath = fmt::format("{}/unit_test.html", directory_path);
   dingodb::Helper::SaveFile(filepath, html);
 }
 

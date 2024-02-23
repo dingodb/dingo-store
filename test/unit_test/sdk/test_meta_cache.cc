@@ -22,6 +22,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class MetaCacheTest : public testing::Test {
  protected:
   void SetUp() override {

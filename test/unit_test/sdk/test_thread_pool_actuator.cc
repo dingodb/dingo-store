@@ -78,7 +78,6 @@ TEST_F(ThreadPoolActuatorTest, Execute) {
   {
     std::unique_lock<std::mutex> lg(mutex);
     while (count.load() != 0) {
-      std::cout << "wait 1 ms" << std::endl;
       cond.wait_for(lg, std::chrono::milliseconds(1));
     }
   }

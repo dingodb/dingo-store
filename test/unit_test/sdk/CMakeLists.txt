@@ -1,32 +1,22 @@
-include_directories(${CMAKE_SOURCE_DIR}/src)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
-# use for gmock
-include_directories(${GTEST_INCLUDE_DIR}/include)
 
-include(GoogleTest)
+file(GLOB SDK_UNIT_TEST_RAWKV_SRCS "rawkv/*.cc")
+file(GLOB SDK_UNIT_TEST_TRANSACTION_SRCS "transaction/*.cc")
+file(GLOB SDK_UNIT_TEST_VECTOR_SRCS "vector/*.cc")
 
-set(TEST_SRCS
+set(SDK_UNIT_TEST_SRCS
   test_meta_cache.cc
   test_region.cc
   test_store_rpc_controller.cc
   test_thread_pool_actuator.cc
-  rawkv/test_raw_kv.cc
-  rawkv/test_raw_kv_region_scanner.cc
-  transaction/test_txn_buffer.cc
-  transaction/test_txn_impl.cc
-  transaction/test_txn_lock_resolver.cc
-  vector/test_vector_common.cc
-  vector/test_vector_index_cache.cc
-  vector/test_vector_index.cc
+  ${SDK_UNIT_TEST_RAWKV_SRCS}
+  ${SDK_UNIT_TEST_TRANSACTION_SRCS}
+  ${SDK_UNIT_TEST_VECTOR_SRCS}
 )
 
-add_executable(sdk_unit_test
-  main.cc
-  ${TEST_SRCS}
+add_library(SDK_UNIT_TEST_OBJS
+            OBJECT
+            ${SDK_UNIT_TEST_SRCS}
 )
 
-target_link_libraries(sdk_unit_test
-  sdk
-  ${GTEST_LIBRARIES}
-  ${GMOCK_LIBRARIES}
-)
+add_dependencies(SDK_UNIT_TEST_OBJS sdk)
