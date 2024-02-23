@@ -25,6 +25,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class MockRpcInteraction final : public RpcInteraction {
  public:
   MockRpcInteraction(brpc::ChannelOptions options) : RpcInteraction(std::move(options)) {}
@@ -33,6 +34,7 @@ class MockRpcInteraction final : public RpcInteraction {
 
   MOCK_METHOD(void, SendRpc, (Rpc & rpc, RpcCallback cb), (override));
 };
+
 }  // namespace sdk
 
 }  // namespace dingodb

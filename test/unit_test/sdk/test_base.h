@@ -36,6 +36,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class TestBase : public ::testing::Test {
  public:
   TestBase() {

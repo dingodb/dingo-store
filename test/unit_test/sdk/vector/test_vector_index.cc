@@ -23,6 +23,7 @@
 
 namespace dingodb {
 namespace sdk {
+
 class VectorIndexTest : public testing::Test {
  protected:
   void SetUp() override { InitVectorIndex(); }

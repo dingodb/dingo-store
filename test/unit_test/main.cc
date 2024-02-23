@@ -98,6 +98,20 @@ int main(int argc, char* argv[]) {
     default_run_case += ":VectorIndexFlatSearchParamLimitTest.*";
     default_run_case += ":TxnGcTest.*";
 
+    // sdk
+    default_run_case += ":MetaCacheTest.*";
+    default_run_case += ":RegionTest.*";
+    default_run_case += ":StoreRpcControllerTest.*";
+    default_run_case += ":ThreadPoolActuatorTest.*";
+    default_run_case += ":VectorCommonTest.*";
+    default_run_case += ":VectorIndexCacheKeyTest.*";
+    default_run_case += ":VectorIndexTest.*";
+    default_run_case += ":TxnBufferTest.*";
+    default_run_case += ":TxnImplTest.*";
+    default_run_case += ":TxnLockResolverTest.*";
+    default_run_case += ":RawKvRegionScannerImplTest.*";
+    default_run_case += ":RawKVTest.*";
+
     testing::GTEST_FLAG(filter) = default_run_case;
   }
 
