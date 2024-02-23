@@ -44,44 +44,6 @@ class VectorIndexFlatTest : public testing::Test {
     vector_index_flat_cosine.reset();
   }
 
-  static void ReCreate() {
-    static const pb::common::Range kRange;
-    static pb::common::RegionEpoch kEpoch;  // NOLINT
-    kEpoch.set_conf_version(1);
-    kEpoch.set_version(10);
-
-    // valid param L2
-    {
-      int64_t id = 1;
-      pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-      vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    }
-
-    // valid param IP
-    {
-      int64_t id = 1;
-      pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-      index_parameter.mutable_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_flat_parameter()->set_metric_type(
-          ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-      vector_index_flat_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    }
-
-    // valid param cosine
-    {
-      int64_t id = 1;
-      pb::common::VectorIndexParameter index_parameter;
-      index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-      index_parameter.mutable_flat_parameter()->set_dimension(dimension);
-      index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-      vector_index_flat_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    }
-  }
-
   void SetUp() override {}
 
   void TearDown() override {}
