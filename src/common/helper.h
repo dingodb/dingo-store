@@ -376,6 +376,8 @@ class Helper {
   static std::string VectorToString(const std::vector<float>& vec);
 
   static std::vector<float> StringToVector(const std::string& str);
+
+  static bool SaveFile(const std::string& filepath, const std::string& data);
 };
 
 }  // namespace dingodb

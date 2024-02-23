@@ -419,6 +419,7 @@ endif()
 file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB LOG_SRCS ${PROJECT_SOURCE_DIR}/src/log/*.cc)
+file(GLOB REPORT_SRCS ${PROJECT_SOURCE_DIR}/src/report/*.cc)
 file(GLOB VECTOR_SRCS ${PROJECT_SOURCE_DIR}/src/vector/*.cc)
 file(GLOB SPLIT_SRCS ${PROJECT_SOURCE_DIR}/src/split/*.cc)
 file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
@@ -451,6 +452,7 @@ add_library(DINGODB_OBJS
             ${COMMON_SRCS}
             ${CONFIG_SRCS}
             ${LOG_SRCS}
+            ${REPORT_SRCS}
             ${VECTOR_SRCS}
             ${SPLIT_SRCS}
             ${RAFT_SRCS}

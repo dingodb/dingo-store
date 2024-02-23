@@ -43,16 +43,16 @@ int main(int argc, char* argv[]) {
 
   // Generate allure report.
   if (!FLAGS_allure_report.empty()) {
-    dingodb::integration_test::allure::Allure::GenReport(
-        testing::UnitTest::GetInstance(), dingodb::integration_test::Environment::GetInstance().VersionInfo(),
-        FLAGS_allure_report);
+    dingodb::report::allure::Allure::GenReport(testing::UnitTest::GetInstance(),
+                                               dingodb::integration_test::Environment::GetInstance().VersionInfo(),
+                                               FLAGS_allure_report);
   }
 
   // Generate web report.
   if (!FLAGS_web_report.empty()) {
-    dingodb::integration_test::web::Web::GenReport(testing::UnitTest::GetInstance(),
-                                                   dingodb::integration_test::Environment::GetInstance().VersionInfo(),
-                                                   FLAGS_allure_url, FLAGS_web_report);
+    dingodb::report::web::Web::GenIntegrationTestReport(
+        testing::UnitTest::GetInstance(), dingodb::integration_test::Environment::GetInstance().VersionInfo(),
+        FLAGS_allure_url, FLAGS_web_report);
   }
 
   return ret;

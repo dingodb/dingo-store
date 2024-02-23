@@ -23,15 +23,18 @@
 #include "gtest/gtest.h"
 #include "proto/common.pb.h"
 
-namespace dingodb::integration_test::web {
+namespace dingodb::report::web {
 
 class Web {
  public:
   Web() = default;
   ~Web() = default;
 
-  static void GenReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
-                        const std::string& allure_url, const std::string& directory_path);
+  static void GenIntegrationTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
+                                       const std::string& allure_url, const std::string& directory_path);
+
+  static void GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
+                                const std::string& allure_url, const std::string& directory_path);
 
  private:
   static std::string GenVersionContent(const pb::common::VersionInfo& version_info);
@@ -39,6 +42,6 @@ class Web {
   static std::string GenAllureLinkContent(const std::string& allure_url);
 };
 
-}  // namespace dingodb::integration_test::web
+}  // namespace dingodb::report::web
 
 #endif  // DINGODB_INTEGRATION_TEST_REPORT_WEB_

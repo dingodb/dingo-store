@@ -1923,4 +1923,16 @@ std::vector<float> Helper::StringToVector(const std::string& str) {
   return vec;
 }
 
+bool Helper::SaveFile(const std::string& filepath, const std::string& data) {
+  std::ofstream file(filepath);
+  if (!file.is_open()) {
+    return false;
+  }
+
+  file << data;
+  file.close();
+
+  return true;
+}
+
 }  // namespace dingodb

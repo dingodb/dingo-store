@@ -23,11 +23,7 @@
 #include "gtest/gtest.h"
 #include "proto/common.pb.h"
 
-namespace dingodb {
-
-namespace integration_test {
-
-namespace allure {
+namespace dingodb::report::allure {
 
 struct Parameter {
   std::string name;
@@ -103,6 +99,7 @@ class Allure {
   Allure() = default;
   ~Allure() = default;
 
+  // intetration test and unit test
   static void GenReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
                         const std::string& directory_path);
 
@@ -115,10 +112,6 @@ class Allure {
   static void GenHistoryFile(std::vector<TestSuite>& test_suites, const std::string& directory_path);
 };
 
-}  // namespace allure
-
-}  // namespace integration_test
-
-}  // namespace dingodb
+}  // namespace dingodb::report::allure
 
 #endif  // DINGODB_INTEGRATION_TEST_REPORT_ALLURE_

@@ -15,7 +15,14 @@
 #include <gtest/gtest.h>
 
 #include "common/helper.h"
+#include "common/version.h"
 #include "glog/logging.h"
+#include "report/allure.h"
+#include "report/web.h"
+
+DEFINE_string(allure_report, "", "allure report directory");
+DEFINE_string(allure_url, "", "jenkins allure url");
+DEFINE_string(web_report, "", "web report directory");
 
 void InitLog(const std::string& log_dir) {
   if (!dingodb::Helper::IsExistPath(log_dir)) {
@@ -94,5 +101,19 @@ int main(int argc, char* argv[]) {
     testing::GTEST_FLAG(filter) = default_run_case;
   }
 
-  return RUN_ALL_TESTS();
+  int ret = RUN_ALL_TESTS();
+
+  // Generate allure report.
+  if (!FLAGS_allure_report.empty()) {
+    dingodb::report::allure::Allure::GenReport(testing::UnitTest::GetInstance(), dingodb::GetVersionInfo(),
+                                               FLAGS_allure_report);
+  }
+
+  // Generate web report.
+  if (!FLAGS_web_report.empty()) {
+    dingodb::report::web::Web::GenUnitTestReport(testing::UnitTest::GetInstance(), dingodb::GetVersionInfo(),
+                                                 FLAGS_allure_url, FLAGS_web_report);
+  }
+
+  return ret;
 }
