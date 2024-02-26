@@ -218,7 +218,9 @@ endforeach()
 set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
-
+set_target_properties(PROTO_OBJS
+  PROPERTIES
+  POSITION_INDEPENDENT_CODE ON)
 add_custom_target(build_proto ALL
                 DEPENDS ${PROTO_SRCS} ${PROTO_HDRS}
                 COMMENT "generate message target"

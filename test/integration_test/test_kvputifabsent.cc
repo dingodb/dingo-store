@@ -60,11 +60,12 @@ TYPED_TEST_SUITE(KvPutIfAbsentTest, Implementations);
 TYPED_TEST(KvPutIfAbsentTest, Absent) {
   testing::Test::RecordProperty("description", "Test key absent case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     const std::string key = Helper::EncodeRawKey(kKeyPrefix + "absent");
@@ -85,11 +86,12 @@ TYPED_TEST(KvPutIfAbsentTest, Absent) {
 TYPED_TEST(KvPutIfAbsentTest, NotAbsent) {
   testing::Test::RecordProperty("description", "Test key not absent case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     const std::string key = Helper::EncodeRawKey(kKeyPrefix + "not_absent");
@@ -113,11 +115,12 @@ TYPED_TEST(KvPutIfAbsentTest, NotAbsent) {
 TYPED_TEST(KvPutIfAbsentTest, BatchAbsent) {
   testing::Test::RecordProperty("description", "Test batch absent case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -159,11 +162,12 @@ TYPED_TEST(KvPutIfAbsentTest, BatchAbsent) {
 TYPED_TEST(KvPutIfAbsentTest, BatchNotAbsent) {
   testing::Test::RecordProperty("description", "Test batch not absent case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -209,11 +213,12 @@ TYPED_TEST(KvPutIfAbsentTest, BatchNotAbsent) {
 TYPED_TEST(KvPutIfAbsentTest, BatchPartialNotAbsent) {
   testing::Test::RecordProperty("description", "Test batch partial not absent case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data

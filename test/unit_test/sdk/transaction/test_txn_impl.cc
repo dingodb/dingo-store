@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 
+#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -72,13 +73,15 @@ TEST_F(TxnImplTest, BeginFail) {
         return Status::NetworkError("mock error");
       });
 
-  std::shared_ptr<Transaction> txn;
-  EXPECT_FALSE(client->NewTransaction(options, txn).ok());
+  Transaction* txn;
+  EXPECT_FALSE(client->NewTransaction(options, &txn).ok());
+  delete txn;
 }
 
 TEST_F(TxnImplTest, BeginSuccess) {
-  std::shared_ptr<Transaction> txn;
-  EXPECT_TRUE(client->NewTransaction(options, txn).ok());
+  Transaction* txn;
+  EXPECT_TRUE(client->NewTransaction(options, &txn).ok());
+  delete txn;
 }
 
 TEST_F(TxnImplTest, Get) {

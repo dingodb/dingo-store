@@ -60,11 +60,12 @@ TYPED_TEST_SUITE(KvPutTest, Implementations);
 TYPED_TEST(KvPutTest, NormalPut) {
   testing::Test::RecordProperty("description", "Test normal case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     const std::string key = Helper::EncodeRawKey(kKeyPrefix + "hello");
@@ -83,11 +84,12 @@ TYPED_TEST(KvPutTest, NormalPut) {
 TYPED_TEST(KvPutTest, BatchPut) {
   testing::Test::RecordProperty("description", "Test batch case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data

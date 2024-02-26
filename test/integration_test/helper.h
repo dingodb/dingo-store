@@ -65,9 +65,10 @@ class Helper {
 
     auto client = Environment::GetInstance().GetClient();
 
-    std::shared_ptr<sdk::RegionCreator> creator;
-    auto status = client->NewRegionCreator(creator);
+    sdk::RegionCreator* tmp;
+    auto status = client->NewRegionCreator(&tmp);
     CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
+    std::shared_ptr<sdk::RegionCreator> creator(tmp);
     int64_t region_id;
     status = creator->SetRegionName(name)
                  .SetEngineType(engine_type)

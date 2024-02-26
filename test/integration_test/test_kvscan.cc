@@ -63,11 +63,12 @@ TYPED_TEST_SUITE(KvScanTest, Implementations);
 TYPED_TEST(KvScanTest, KvScanSingle) {
   testing::Test::RecordProperty("description", "Test kv scan single case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -94,11 +95,12 @@ TYPED_TEST(KvScanTest, KvScanSingle) {
 TYPED_TEST(KvScanTest, KvScanMulti) {
   testing::Test::RecordProperty("description", "Test kv scan multi case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -134,11 +136,12 @@ TYPED_TEST(KvScanTest, KvScanMulti) {
 TYPED_TEST(KvScanTest, KvScanMultiWithStartWithEnd) {
   testing::Test::RecordProperty("description", "Test kv scan multi case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -178,11 +181,12 @@ TYPED_TEST(KvScanTest, KvScanMultiWithStartWithEnd) {
 TYPED_TEST(KvScanTest, KvScanMultiThread) {
   testing::Test::RecordProperty("description", "Test kv scan multi case");
 
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // Test: Ready data
@@ -207,11 +211,12 @@ TYPED_TEST(KvScanTest, KvScanMultiThread) {
       threads.emplace_back([this, &keys, &expect_kvs, key_nums, i]() {
         LOG(INFO) << "Thread " << i << " start";
 
-        std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-        auto status = Environment::GetInstance().GetClient()->NewRawKV(raw_kv);
+        dingodb::sdk::RawKV* tmp;
+        auto status = Environment::GetInstance().GetClient()->NewRawKV(&tmp);
         if (!status.IsOK()) {
           LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
         }
+        std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
         LOG(INFO) << "Thread " << i << " new raw_kv";
 
