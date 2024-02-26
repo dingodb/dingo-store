@@ -126,7 +126,7 @@ std::string Web::GenAllureLinkContent(const std::string& allure_url) {
   std::string content;
   content += "<div>";
   content += "<p>";
-  content += "Report Details: " + fmt::format("<a href=\"{}\">dingo-store integration test report</a>", allure_url);
+  content += "Report Details: " + fmt::format("<a href=\"{}\">dingo-store test report</a>", allure_url);
   content += "</p>";
   content += "</div>";
 
@@ -176,7 +176,7 @@ void Web::GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common
     <body>
   )";
 
-  html += "<h1>Dingo-Store Integration Test Report</h1>";
+  html += "<h1>Dingo-Store Unit Test Report</h1>";
   html += "<div>" + GenVersionContent(version_info) + "</div>";
   html += "<div>" + GenTestResultContent(unit_test) + "</div>";
   html += "<div>" + GenAllureLinkContent(allure_url) + "</div>";
