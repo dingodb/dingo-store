@@ -36,7 +36,7 @@ ExternalProject_Add(
     PREFIX ${LIBUNWIND_BUILD_DIR}
 
     BUILD_IN_SOURCE 1
-    CONFIGURE_COMMAND autoreconf -i COMMAND ./configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo --disable-shared --enable-static --disable-msabi-support
+    CONFIGURE_COMMAND autoreconf -i COMMAND ./configure --prefix ${LIBUNWIND_INSTALL_DIR} --disable-minidebuginfo --enable-shared --enable-static --disable-msabi-support
     BUILD_COMMAND $(MAKE)
     INSTALL_COMMAND $(MAKE) install
 )
