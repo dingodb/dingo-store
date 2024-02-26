@@ -51,8 +51,10 @@ class Environment : public testing::Environment {
     auto status = coordinator_proxy_->Open(FLAGS_coordinator_url);
     CHECK(status.IsOK()) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
 
-    status = sdk::Client::Build(FLAGS_coordinator_url, client_);
+    sdk::Client* tmp;
+    status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
     CHECK(status.IsOK()) << fmt::format("Build sdk client failed, error: {}", status.ToString());
+    client_.reset(tmp);
 
     // Get dingo-store version info
     version_info_ = GetVersionInfo();

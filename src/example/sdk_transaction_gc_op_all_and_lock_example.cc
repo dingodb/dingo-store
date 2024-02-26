@@ -79,9 +79,10 @@ static void CreateRegion(std::string name, std::string start_key, std::string en
   CHECK(start_key < end_key) << "start_key must < end_key";
   CHECK(replicas > 0) << "replicas must > 0";
 
-  std::shared_ptr<dingodb::sdk::RegionCreator> creator;
-  Status built = g_client->NewRegionCreator(creator);
+  dingodb::sdk::RegionCreator* tmp_creator;
+  Status built = g_client->NewRegionCreator(&tmp_creator);
   CHECK(built.IsOK()) << "dingo creator build fail";
+  std::shared_ptr<dingodb::sdk::RegionCreator> creator(tmp_creator);
   CHECK_NOTNULL(creator.get());
 
   int64_t region_id = -1;
@@ -115,9 +116,10 @@ static std::shared_ptr<dingodb::sdk::Transaction> NewOptimisticTransaction(dingo
   options.kind = dingodb::sdk::kOptimistic;
   options.keep_alive_ms = keep_alive_ms;
 
-  std::shared_ptr<dingodb::sdk::Transaction> txn;
-  Status built = g_client->NewTransaction(options, txn);
+  dingodb::sdk::Transaction* tmp;
+  Status built = g_client->NewTransaction(options, &tmp);
   CHECK(built.ok()) << "dingo txn build fail";
+  std::shared_ptr<dingodb::sdk::Transaction> txn(tmp);
   CHECK_NOTNULL(txn.get());
   return txn;
 }
@@ -284,9 +286,10 @@ void OptimisticTxnSingleOp() {
     }
 
     {
-      std::shared_ptr<dingodb::sdk::Transaction> txn;
-      Status built = g_client->NewTransaction(options, txn);
+      dingodb::sdk::Transaction* tmp;
+      Status built = g_client->NewTransaction(options, &tmp);
       CHECK(built.ok()) << "dingo txn build fail";
+      std::shared_ptr<dingodb::sdk::Transaction> txn(tmp);
       CHECK_NOTNULL(txn.get());
 
       std::vector<dingodb::sdk::KVPair> kvs;
@@ -649,14 +652,14 @@ int main(int argc, char* argv[]) {
     FLAGS_coordinator_url = "file://./coor_list";
   }
 
-  std::shared_ptr<dingodb::sdk::Client> client;
-  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
+  dingodb::sdk::Client* tmp;
+  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   if (!built.ok()) {
     DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
-  CHECK_NOTNULL(client.get());
-  g_client = std::move(client);
+  CHECK_NOTNULL(tmp);
+  g_client.reset(tmp);
 
   CreateRegion("skd_example01", "xa00000000", "xc00000000", 1);
   CreateRegion("skd_example02", "xc00000000", "xe00000000", 1);

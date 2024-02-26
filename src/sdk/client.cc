@@ -53,34 +53,25 @@
 namespace dingodb {
 namespace sdk {
 
-Status Client::Build(std::string naming_service_url, std::shared_ptr<Client>& client) {
+Status Client::Build(std::string naming_service_url, Client** client) {
   if (naming_service_url.empty()) {
     return Status::InvalidArgument("naming_service_url is empty");
   };
 
-  std::shared_ptr<Client> tmp(new Client());
-
+  Client* tmp = new Client();
   Status s = tmp->Init(std::move(naming_service_url));
-  if (s.IsOK()) {
-    client = tmp;
+  if (!s.ok()) {
+    delete tmp;
+    return s;
   }
 
-  return s;
-}
-
-Status Client::Build(std::string naming_service_url, Client** client) {
-  std::shared_ptr<Client> tmp;
-  Status s = Build(naming_service_url, tmp);
-  if (s.ok()) {
-    *client = tmp.get();
-    tmp.reset();
-  }
+  *client = tmp;
   return s;
 }
 
 Client::Client() : data_(new Client::Data()) {}
 
-Client::~Client() { data_.reset(nullptr); }
+Client::~Client() { delete data_; }
 
 Status Client::Init(std::string naming_service_url) {
   CHECK(!naming_service_url.empty());
@@ -97,29 +88,13 @@ Status Client::Init(std::string naming_service_url) {
   return open;
 }
 
-Status Client::NewRawKV(std::shared_ptr<RawKV>& raw_kv) {
-  std::shared_ptr<RawKV> tmp(new RawKV(new RawKV::Data(*data_->stub)));
-  raw_kv = std::move(tmp);
-  return Status::OK();
-}
-
 Status Client::NewRawKV(RawKV** raw_kv) {
   *raw_kv = new RawKV(new RawKV::Data(*data_->stub));
   return Status::OK();
 }
 
-Status Client::NewTransaction(const TransactionOptions& options, std::shared_ptr<Transaction>& txn) {
-  std::shared_ptr<Transaction> tmp(new Transaction(new Transaction::TxnImpl(*data_->stub, options)));
-  Status s = tmp->Begin();
-  if (s.IsOK()) {
-    txn = std::move(tmp);
-  }
-  return s;
-}
-
 Status Client::NewTransaction(const TransactionOptions& options, Transaction** txn) {
   Transaction* tmp_txn = new Transaction(new Transaction::TxnImpl(*data_->stub, options));
-  tmp_txn->Begin();
   Status s = tmp_txn->Begin();
   if (!s.ok()) {
     delete tmp_txn;
@@ -131,20 +106,9 @@ Status Client::NewTransaction(const TransactionOptions& options, Transaction** t
   return s;
 }
 
-Status Client::NewRegionCreator(std::shared_ptr<RegionCreator>& creator) {
-  std::shared_ptr<RegionCreator> tmp(new RegionCreator(new RegionCreator::Data(*data_->stub)));
-  creator = std::move(tmp);
-  return Status::OK();
-}
-
 Status Client::NewRegionCreator(RegionCreator** creator) {
-  std::shared_ptr<RegionCreator> tmp;
-  Status s = NewRegionCreator(tmp);
-  if (s.ok()) {
-    *creator = tmp.get();
-    tmp.reset();
-  }
-  return s;
+  *creator = new RegionCreator(new RegionCreator::Data(*data_->stub));
+  return Status::OK();
 }
 
 Status Client::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
@@ -187,7 +151,7 @@ Status Client::DropIndexByName(int64_t schema_id, const std::string& index_name)
 
 RawKV::RawKV(Data* data) : data_(data) {}
 
-RawKV::~RawKV() { data_.reset(nullptr); }
+RawKV::~RawKV() { delete data_; }
 
 Status RawKV::Get(const std::string& key, std::string& out_value) {
   RawKvGetTask task(data_->stub, key, out_value);
@@ -288,7 +252,7 @@ Status RawKV::Scan(const std::string& start_key, const std::string& end_key, uin
 
 Transaction::Transaction(TxnImpl* impl) : impl_(impl) {}
 
-Transaction::~Transaction() { impl_.reset(nullptr); }
+Transaction::~Transaction() { delete impl_; }
 
 Status Transaction::Begin() { return impl_->Begin(); }
 
@@ -325,7 +289,7 @@ Status Transaction::Rollback() { return impl_->Rollback(); }
 
 RegionCreator::RegionCreator(Data* data) : data_(data) {}
 
-RegionCreator::~RegionCreator() = default;
+RegionCreator::~RegionCreator() { delete data_; }
 
 RegionCreator& RegionCreator::SetRegionName(const std::string& name) {
   data_->region_name = name;
@@ -405,8 +369,9 @@ Status RegionCreator::Create(int64_t& out_region_id) {
       }
     }
 
-    std::string msg = fmt::format("Fail query region:{} state retry:{} exceed limit:{}, delay ms:{}", out_region_id,
-                                  retry, FLAGS_coordinator_interaction_max_retry, FLAGS_coordinator_interaction_delay_ms);
+    std::string msg =
+        fmt::format("Fail query region:{} state retry:{} exceed limit:{}, delay ms:{}", out_region_id, retry,
+                    FLAGS_coordinator_interaction_max_retry, FLAGS_coordinator_interaction_delay_ms);
     DINGO_LOG(INFO) << msg;
     return Status::Incomplete(msg);
   }

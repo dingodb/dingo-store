@@ -45,8 +45,10 @@ class RawKVTest : public TestBase {
 
   void SetUp() override {
     TestBase::SetUp();
-    Status kv = client->NewRawKV(raw_kv);
+    RawKV* tmp;
+    Status kv = client->NewRawKV(&tmp);
     CHECK(kv.IsOK());
+    raw_kv.reset(tmp);
   }
 
   void TearDown() override { raw_kv.reset(); }

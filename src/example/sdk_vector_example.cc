@@ -226,14 +226,14 @@ int main(int argc, char* argv[]) {
     FLAGS_coordinator_url = "file://./coor_list";
   }
 
-  std::shared_ptr<dingodb::sdk::Client> client;
-  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
+  dingodb::sdk::Client* tmp;
+  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   if (!built.ok()) {
     DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
-  CHECK_NOTNULL(client.get());
-  g_client = std::move(client);
+  CHECK_NOTNULL(tmp);
+  g_client.reset(tmp);
 
   {
     PrepareVectorIndex();

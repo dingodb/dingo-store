@@ -36,26 +36,22 @@ class VectorIndexCreator;
 class VectorClient;
 
 /// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
-class Client : public std::enable_shared_from_this<Client> {
+class Client {
  public:
   Client(const Client&) = delete;
   const Client& operator=(const Client&) = delete;
 
   ~Client();
 
-  static Status Build(std::string naming_service_url, std::shared_ptr<Client>& client);
   // NOTE:: Caller must delete *client when it is no longer needed.
   static Status Build(std::string naming_service_url, Client** client);
 
-  Status NewRawKV(std::shared_ptr<RawKV>& raw_kv);
   // NOTE:: Caller must delete *raw_kv when it is no longer needed.
   Status NewRawKV(RawKV** raw_kv);
 
-  Status NewTransaction(const TransactionOptions& options, std::shared_ptr<Transaction>& txn);
   // NOTE:: Caller must delete *txn when it is no longer needed.
   Status NewTransaction(const TransactionOptions& options, Transaction** txn);
 
-  Status NewRegionCreator(std::shared_ptr<RegionCreator>& creator);
   // NOTE:: Caller must delete *raw_kv when it is no longer needed.
   Status NewRegionCreator(RegionCreator** creator);
 
@@ -89,7 +85,7 @@ class Client : public std::enable_shared_from_this<Client> {
 
   // own
   class Data;
-  std::unique_ptr<Data> data_;
+  Data* data_;
 };
 
 struct KVPair {
@@ -102,7 +98,7 @@ struct KeyOpState {
   bool state;
 };
 
-class RawKV : public std::enable_shared_from_this<RawKV> {
+class RawKV {
  public:
   RawKV(const RawKV&) = delete;
   const RawKV& operator=(const RawKV&) = delete;
@@ -149,7 +145,7 @@ class RawKV : public std::enable_shared_from_this<RawKV> {
 
   // own
   class Data;
-  std::unique_ptr<Data> data_;
+  Data* data_;
 
   explicit RawKV(Data* data);
 };
@@ -164,7 +160,7 @@ struct TransactionOptions {
   uint32_t keep_alive_ms;
 };
 
-class Transaction : public std::enable_shared_from_this<Transaction> {
+class Transaction {
  public:
   Transaction(const Transaction&) = delete;
   const Transaction& operator=(const Transaction&) = delete;
@@ -209,7 +205,7 @@ class Transaction : public std::enable_shared_from_this<Transaction> {
 
   // own
   class TxnImpl;
-  std::unique_ptr<TxnImpl> impl_;
+  TxnImpl* impl_;
 
   explicit Transaction(TxnImpl* impl);
 };
@@ -249,7 +245,7 @@ class RegionCreator {
 
   // own
   class Data;
-  std::unique_ptr<Data> data_;
+  Data* data_;
   explicit RegionCreator(Data* data);
 };
 

@@ -57,26 +57,31 @@ if(ENABLE_COVERAGE)
   set(GCOV_LIBRAR gcov)
 endif()
 
+set_target_properties(sdk
+  PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+)
+
 # CAUTION: the order of the libraries is important, because of the dependencies between them.
-target_link_libraries(
-  sdk
-  PRIVATE $<TARGET_OBJECTS:PROTO_OBJS>
+target_link_libraries(sdk
+PRIVATE
+    $<TARGET_OBJECTS:PROTO_OBJS>
     ${BRPC_LIBRARIES}
     ${PROTOBUF_LIBRARIES}
     ${GFLAGS_LIBRARIES}
     ${LEVELDB_LIBRARIES}
     ${SNAPPY_LIBRARIES}
-    ${LZ4_LIBRARIES}
-    ${ZSTD_LIBRARIES}
+    # ${LZ4_LIBRARIES}
+    # ${ZSTD_LIBRARIES}
     ${FMT_LIBRARIES}
     ${ZLIB_LIBRARIES}
     ${OPENSSL_LIBRARIES}
     ${CRYPTO_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${GTEST_LIBRARIES}
-    ${LIBUNWIND_LIBRARIES}
-    ${LIBUNWIND_GENERIC_LIBRARIES}
-    ${LIBUNWIND_ARCH_LIBRARIES}
+    # ${LIBUNWIND_LIBRARIES}
+    # ${LIBUNWIND_GENERIC_LIBRARIES}
+    # ${LIBUNWIND_ARCH_LIBRARIES}
     dl
     Threads::Threads
     ${GCOV_LIBRAR}

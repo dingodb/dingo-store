@@ -48,10 +48,11 @@ void CreateRegion(std::string name, std::string start_key, std::string end_key, 
   CHECK(start_key < end_key) << "start_key must < end_key";
   CHECK(replicas > 0) << "replicas must > 0";
 
-  std::shared_ptr<dingodb::sdk::RegionCreator> creator;
-  Status built = g_client->NewRegionCreator(creator);
+  dingodb::sdk::RegionCreator* tmp_creator;
+  Status built = g_client->NewRegionCreator(&tmp_creator);
   CHECK(built.IsOK()) << "dingo creator build fail";
-  CHECK_NOTNULL(creator.get());
+  CHECK_NOTNULL(tmp_creator);
+  std::shared_ptr<dingodb::sdk::RegionCreator> creator(tmp_creator);
 
   int64_t region_id = -1;
   Status tmp = creator->SetRegionName(name)
@@ -102,10 +103,11 @@ void MetaCacheExample() {
 }
 
 void RawKVExample() {
-  std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
-  Status built = g_client->NewRawKV(raw_kv);
+  dingodb::sdk::RawKV* tmp;
+  Status built = g_client->NewRawKV(&tmp);
   CHECK(built.IsOK()) << "dingo raw_kv build fail";
-  CHECK_NOTNULL(raw_kv.get());
+  CHECK_NOTNULL(tmp);
+  std::shared_ptr<dingodb::sdk::RawKV> raw_kv(tmp);
 
   {
     // put/get/delete
@@ -509,14 +511,14 @@ int main(int argc, char* argv[]) {
     return -1;
   }
 
-  std::shared_ptr<dingodb::sdk::Client> client;
-  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, client);
+  dingodb::sdk::Client* tmp;
+  Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   if (!built.ok()) {
     DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url;
     return -1;
   }
-  CHECK_NOTNULL(client.get());
-  g_client = std::move(client);
+  CHECK_NOTNULL(tmp);
+  g_client.reset(tmp);
 
   {
     CreateRegion("skd_example01", "wa00000000", "wc00000000", 3);

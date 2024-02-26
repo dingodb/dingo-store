@@ -149,8 +149,7 @@ struct Vector {
     return *this;
   }
 
-  // Vector(const Vector&) = delete;
-  const Vector& operator=(const Vector&) = delete;
+  Vector& operator=(const Vector&) = default;
 
   uint32_t Size() const { return float_values.size() * 4 + binary_values.size() + 4; }
 };
@@ -177,8 +176,7 @@ struct VectorWithId {
     return *this;
   }
 
-  // VectorWithId(const VectorWithId&) = delete;
-  const VectorWithId& operator=(const VectorWithId&) = delete;
+  VectorWithId& operator=(const VectorWithId&) = default;
 };
 
 std::string DumpToString(const VectorWithId& obj);
@@ -287,8 +285,8 @@ struct VectorWithDistance {
     return *this;
   }
 
-  VectorWithDistance(const VectorWithDistance&) = delete;
-  const VectorWithDistance& operator=(const VectorWithDistance&) = delete;
+  VectorWithDistance(const VectorWithDistance&) = default;
+  VectorWithDistance& operator=(const VectorWithDistance&) = default;
 };
 
 std::string DumpToString(const VectorWithDistance& obj);
@@ -297,6 +295,8 @@ struct SearchResult {
   // TODO : maybe remove VectorWithId
   VectorWithId id;
   std::vector<VectorWithDistance> vector_datas;
+
+  SearchResult()  = default;
 
   explicit SearchResult(VectorWithId p_id) : id(std::move(p_id)) {}
 
@@ -308,8 +308,8 @@ struct SearchResult {
     return *this;
   }
 
-  SearchResult(const SearchResult&) = delete;
-  const SearchResult& operator=(const SearchResult&) = delete;
+  SearchResult(const SearchResult&) = default;
+  SearchResult& operator=(const SearchResult&) = default;
 };
 
 std::string DumpToString(const SearchResult& obj);
