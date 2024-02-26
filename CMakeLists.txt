@@ -85,6 +85,8 @@ if(BRPC_ENABLE_CPU_PROFILER)
     set(LINK_TCMALLOC ON)
 endif()
 
+set (CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 if(BUILD_GOOGLE_SANITIZE)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address -fno-omit-frame-pointer)
