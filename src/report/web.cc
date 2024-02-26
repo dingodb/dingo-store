@@ -133,6 +133,17 @@ std::string Web::GenAllureLinkContent(const std::string& allure_url) {
   return content;
 }
 
+std::string Web::GenCoverageLinkContent(const std::string& url) {
+  std::string content;
+  content += "<div>";
+  content += "<p>";
+  content += "Code Coverage Details: " + fmt::format("<a href=\"{}\">dingo-store unit test coverage report</a>", url);
+  content += "</p>";
+  content += "</div>";
+
+  return content;
+}
+
 void Web::GenIntegrationTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
                                    const std::string& allure_url, const std::string& directory_path) {
   std::string html = R"(
@@ -165,7 +176,8 @@ void Web::GenIntegrationTestReport(const testing::UnitTest* unit_test, const pb:
 }
 
 void Web::GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
-                            const std::string& allure_url, const std::string& directory_path) {
+                            const std::string& allure_url, const std::string& coverage_url,
+                            const std::string& directory_path) {
   std::string html = R"(
     <!DOCTYPE html>
     <html lang="en">
@@ -180,6 +192,7 @@ void Web::GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common
   html += "<div>" + GenVersionContent(version_info) + "</div>";
   html += "<div>" + GenTestResultContent(unit_test) + "</div>";
   html += "<div>" + GenAllureLinkContent(allure_url) + "</div>";
+  html += "<div>" + GenCoverageLinkContent(coverage_url) + "</div>";
 
   html += R"(
     </body>

@@ -23,6 +23,7 @@
 DEFINE_string(allure_report, "", "allure report directory");
 DEFINE_string(allure_url, "", "jenkins allure url");
 DEFINE_string(web_report, "", "web report directory");
+DEFINE_string(coverage_url, "", "coverage url");
 
 void InitLog(const std::string& log_dir) {
   if (!dingodb::Helper::IsExistPath(log_dir)) {
@@ -126,7 +127,7 @@ int main(int argc, char* argv[]) {
   // Generate web report.
   if (!FLAGS_web_report.empty()) {
     dingodb::report::web::Web::GenUnitTestReport(testing::UnitTest::GetInstance(), dingodb::GetVersionInfo(),
-                                                 FLAGS_allure_url, FLAGS_web_report);
+                                                 FLAGS_allure_url, FLAGS_coverage_url, FLAGS_web_report);
   }
 
   return ret;

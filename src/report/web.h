@@ -34,12 +34,14 @@ class Web {
                                        const std::string& allure_url, const std::string& directory_path);
 
   static void GenUnitTestReport(const testing::UnitTest* unit_test, const pb::common::VersionInfo& version_info,
-                                const std::string& allure_url, const std::string& directory_path);
+                                const std::string& allure_url, const std::string& coverage_url,
+                                const std::string& directory_path);
 
  private:
   static std::string GenVersionContent(const pb::common::VersionInfo& version_info);
   static std::string GenTestResultContent(const testing::UnitTest* unit_test);
   static std::string GenAllureLinkContent(const std::string& allure_url);
+  static std::string GenCoverageLinkContent(const std::string& url);
 };
 
 }  // namespace dingodb::report::web
