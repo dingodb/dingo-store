@@ -27,14 +27,14 @@ namespace sdk {
 
 VectorClient::VectorClient(const ClientStub& stub) : stub_(stub) {}
 
-Status VectorClient::Add(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted,
-                         bool is_update) {
+Status VectorClient::AddByIndexId(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted,
+                                  bool is_update) {
   VectorAddTask task(stub_, index_id, vectors, replace_deleted, is_update);
   return task.Run();
 }
 
-Status VectorClient::Add(int64_t schema_id, const std::string& index_name, const std::vector<VectorWithId>& vectors,
-                         bool replace_deleted, bool is_update) {
+Status VectorClient::AddByIndexName(int64_t schema_id, const std::string& index_name,
+                                    const std::vector<VectorWithId>& vectors, bool replace_deleted, bool is_update) {
   int64_t index_id{0};
   DINGO_RETURN_NOT_OK(
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
@@ -43,14 +43,17 @@ Status VectorClient::Add(int64_t schema_id, const std::string& index_name, const
   return task.Run();
 }
 
-Status VectorClient::Search(int64_t index_id, const SearchParameter& search_param,
-                            const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result) {
+Status VectorClient::SearchByIndexId(int64_t index_id, const SearchParameter& search_param,
+                                     const std::vector<VectorWithId>& target_vectors,
+                                     std::vector<SearchResult>& out_result) {
   VectorSearchTask task(stub_, index_id, search_param, target_vectors, out_result);
   return task.Run();
 }
 
-Status VectorClient::Search(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
-                            const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result) {
+Status VectorClient::SearchByIndexName(int64_t schema_id, const std::string& index_name,
+                                       const SearchParameter& search_param,
+                                       const std::vector<VectorWithId>& target_vectors,
+                                       std::vector<SearchResult>& out_result) {
   int64_t index_id{0};
   DINGO_RETURN_NOT_OK(
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
@@ -59,14 +62,14 @@ Status VectorClient::Search(int64_t schema_id, const std::string& index_name, co
   return task.Run();
 }
 
-Status VectorClient::Delete(int64_t index_id, const std::vector<int64_t>& vector_ids,
-                            std::vector<DeleteResult>& out_result) {
+Status VectorClient::DeleteByIndexId(int64_t index_id, const std::vector<int64_t>& vector_ids,
+                                     std::vector<DeleteResult>& out_result) {
   VectorDeleteTask task(stub_, index_id, vector_ids, out_result);
   return task.Run();
 }
 
-Status VectorClient::Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
-                            std::vector<DeleteResult>& out_result) {
+Status VectorClient::DeleteByIndexName(int64_t schema_id, const std::string& index_name,
+                                       const std::vector<int64_t>& vector_ids, std::vector<DeleteResult>& out_result) {
   int64_t index_id{0};
   DINGO_RETURN_NOT_OK(
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));

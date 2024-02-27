@@ -423,9 +423,10 @@ void Benchmark::Clean() {
 
 int64_t Benchmark::CreateRawRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
                                    sdk::EngineType engine_type, int replicas) {
-  std::shared_ptr<sdk::RegionCreator> creator;
-  auto status = client_->NewRegionCreator(creator);
+  sdk::RegionCreator* tmp;
+  auto status = client_->NewRegionCreator(&tmp);
   CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
+  std::shared_ptr<sdk::RegionCreator> creator(tmp);
 
   int64_t region_id;
   status = creator->SetRegionName(name)
@@ -446,9 +447,10 @@ int64_t Benchmark::CreateRawRegion(const std::string& name, const std::string& s
 
 int64_t Benchmark::CreateTxnRegion(const std::string& name, const std::string& start_key, const std::string& end_key,
                                    sdk::EngineType engine_type, int replicas) {
-  std::shared_ptr<sdk::RegionCreator> creator;
-  auto status = client_->NewRegionCreator(creator);
+  sdk::RegionCreator* tmp;
+  auto status = client_->NewRegionCreator(&tmp);
   CHECK(status.ok()) << fmt::format("new region creator failed, {}", status.ToString());
+  std::shared_ptr<sdk::RegionCreator> creator(tmp);
 
   int64_t region_id;
   status = creator->SetRegionName(name)
@@ -746,8 +748,10 @@ bool Environment::Init() {
   auto status = coordinator_proxy_->Open(FLAGS_coordinator_url);
   CHECK(status.IsOK()) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
 
-  status = sdk::Client::Build(FLAGS_coordinator_url, client_);
+  sdk::Client* tmp;
+  status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   CHECK(status.IsOK()) << fmt::format("Build sdk client failed, error: {}", status.ToString());
+  client_.reset(tmp);
 
   PrintParam();
 

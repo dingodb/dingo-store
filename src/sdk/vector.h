@@ -296,7 +296,7 @@ struct SearchResult {
   VectorWithId id;
   std::vector<VectorWithDistance> vector_datas;
 
-  SearchResult()  = default;
+  SearchResult() = default;
 
   explicit SearchResult(VectorWithId p_id) : id(std::move(p_id)) {}
 
@@ -352,30 +352,31 @@ class VectorIndexCreator {
 
   // own
   class Data;
-  std::unique_ptr<Data> data_;
+  Data* data_;
   explicit VectorIndexCreator(Data* data);
 };
 
-class VectorClient : public std::enable_shared_from_this<VectorClient> {
+class VectorClient {
  public:
   VectorClient(const VectorClient&) = delete;
   const VectorClient& operator=(const VectorClient&) = delete;
 
   ~VectorClient() = default;
 
-  Status Add(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
-             bool is_update = false);
-  Status Add(int64_t schema_id, const std::string& index_name, const std::vector<VectorWithId>& vectors,
-             bool replace_deleted = false, bool is_update = false);
+  Status AddByIndexId(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
+                      bool is_update = false);
+  Status AddByIndexName(int64_t schema_id, const std::string& index_name, const std::vector<VectorWithId>& vectors,
+                        bool replace_deleted = false, bool is_update = false);
 
-  Status Search(int64_t index_id, const SearchParameter& search_param, const std::vector<VectorWithId>& target_vectors,
-                std::vector<SearchResult>& out_result);
-  Status Search(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
-                const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result);
+  Status SearchByIndexId(int64_t index_id, const SearchParameter& search_param,
+                         const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result);
+  Status SearchByIndexName(int64_t schema_id, const std::string& index_name, const SearchParameter& search_param,
+                           const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result);
 
-  Status Delete(int64_t index_id, const std::vector<int64_t>& vector_ids, std::vector<DeleteResult>& out_result);
-  Status Delete(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
-                std::vector<DeleteResult>& out_result);
+  Status DeleteByIndexId(int64_t index_id, const std::vector<int64_t>& vector_ids,
+                         std::vector<DeleteResult>& out_result);
+  Status DeleteByIndexName(int64_t schema_id, const std::string& index_name, const std::vector<int64_t>& vector_ids,
+                           std::vector<DeleteResult>& out_result);
 
  private:
   friend class Client;

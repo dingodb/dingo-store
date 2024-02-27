@@ -27,7 +27,7 @@ namespace sdk {
 
 VectorIndexCreator::VectorIndexCreator(Data* data) : data_(data) {}
 
-VectorIndexCreator::~VectorIndexCreator() = default;
+VectorIndexCreator::~VectorIndexCreator() { delete data_; }
 
 VectorIndexCreator& VectorIndexCreator::SetSchemaId(int64_t schema_id) {
   data_->schema_id = schema_id;
