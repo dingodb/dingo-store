@@ -143,9 +143,9 @@ static void VectorAdd(bool use_index_name = false) {
   }
   Status add;
   if (use_index_name) {
-    add = g_vector_client->Add(g_index_id, vectors, false, false);
+    add = g_vector_client->AddByIndexName(g_schema_id, g_index_name, vectors, false, false);
   } else {
-    add = g_vector_client->Add(g_schema_id, g_index_name, vectors, false, false);
+    add = g_vector_client->AddByIndexId(g_index_id, vectors, false, false);
   }
 
   DINGO_LOG(INFO) << "vector add:" << add.ToString();
@@ -175,9 +175,9 @@ static void VectorSearch(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::SearchResult> result;
   if (use_index_name) {
-    tmp = g_vector_client->Search(g_schema_id, g_index_name, param, target_vectors, result);
+    tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
   } else {
-    tmp = g_vector_client->Search(g_index_id, param, target_vectors, result);
+    tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
   }
 
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
@@ -201,9 +201,9 @@ static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
   if (use_index_name) {
-    tmp = g_vector_client->Delete(g_schema_id, g_index_name, g_vector_ids, result);
+    tmp = g_vector_client->DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids, result);
   } else {
-    tmp = g_vector_client->Delete(g_index_id, g_vector_ids, result);
+    tmp = g_vector_client->DeleteByIndexId(g_index_id, g_vector_ids, result);
   }
   DINGO_LOG(INFO) << "vector delete status: " << tmp.ToString();
   for (const auto& r : result) {

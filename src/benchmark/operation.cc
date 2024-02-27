@@ -159,10 +159,12 @@ static std::string EncodeRawKey(const std::string& str) { return kClientRaw + st
 static std::string EncodeTxnKey(const std::string& str) { return kClientTxn + str; }
 
 BaseOperation::BaseOperation(std::shared_ptr<sdk::Client> client) : client(client) {
-  auto status = client->NewRawKV(raw_kv);
+  sdk::RawKV* tmp;
+  auto status = client->NewRawKV(&tmp);
   if (!status.IsOK()) {
     LOG(FATAL) << fmt::format("New RawKv failed, error: {}", status.ToString());
   }
+  raw_kv.reset(tmp);
 }
 
 Operation::Result BaseOperation::KvPut(RegionEntryPtr region_entry, bool is_random) {
@@ -483,7 +485,7 @@ Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
   if (!result.status.IsOK()) {
     return result;
   }
-  result.status = vector_client->Add(entry->index_id, vector_with_ids);
+  result.status = vector_client->AddByIndexId(entry->index_id, vector_with_ids);
   if (!result.status.IsOK()) {
     LOG(ERROR) << fmt::format("put vector failed, error: {}", result.status.ToString());
   }
@@ -512,7 +514,7 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
     return result;
   }
 
-  result.status = vector_client->Search(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
+  result.status = vector_client->SearchByIndexId(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
   if (!result.status.IsOK()) {
     LOG(ERROR) << fmt::format("search vector failed, error: {}", result.status.ToString());
   }
