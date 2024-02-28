@@ -325,6 +325,7 @@ set(DEPEND_LIBS
     libunwind
     libbacktrace
     bdb
+    rapidjson
     )
 
 if(WITH_MKL)
