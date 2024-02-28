@@ -1562,7 +1562,7 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      std::string s = fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.");
+      std::string s = fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.", vector.id());
       DINGO_LOG(WARNING) << s;
       continue;
     }

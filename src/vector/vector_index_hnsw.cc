@@ -197,7 +197,7 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   uint32_t input_dimension = vector_with_ids[0].vector().float_values_size();
   if (input_dimension != static_cast<size_t>(dimension_)) {
     std::string s = fmt::format("dimension is invalid, expect({}) input({})", dimension_, input_dimension);
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", s);
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
     return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
   }
 

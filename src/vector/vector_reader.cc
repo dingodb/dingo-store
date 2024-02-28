@@ -453,7 +453,7 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
       auto status =
           QueryVectorScalarData(ctx->region_range, ctx->partition_id, ctx->selected_scalar_keys, vector_with_id);
       if (!status.ok()) {
-        DINGO_LOG(WARNING) << fmt::format("Query vector scalar data failed, vector_id {} error: {]",
+        DINGO_LOG(WARNING) << fmt::format("Query vector scalar data failed, vector_id {} error: {}",
                                           vector_with_id.id(), status.error_str());
       }
     }
@@ -467,7 +467,7 @@ butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader
 
       auto status = QueryVectorTableData(ctx->region_range, ctx->partition_id, vector_with_id);
       if (!status.ok()) {
-        DINGO_LOG(WARNING) << fmt::format("Query vector table data failed, vector_id {} error: {]", vector_with_id.id(),
+        DINGO_LOG(WARNING) << fmt::format("Query vector table data failed, vector_id {} error: {}", vector_with_id.id(),
                                           status.error_str());
       }
     }
