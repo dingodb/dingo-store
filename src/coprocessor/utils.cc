@@ -1276,7 +1276,7 @@ void Utils::DebugCoprocessor(const pb::store::Coprocessor& coprocessor) {
 
   Utils::DebugInt32Index(coprocessor.selection_columns(), "selection_columns");
 
-  COPROCESSOR_LOG << "expression : " << fmt::format(Helper::StringToHex(coprocessor.expression()));
+  COPROCESSOR_LOG << "expression : " << fmt::format("{}", Helper::StringToHex(coprocessor.expression()));
 
   Utils::DebugInt32Index(coprocessor.group_by_columns(), "group_by_columns");
 
@@ -1520,7 +1520,7 @@ void Utils::DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor) {
 
   Utils::DebugInt32Index(coprocessor.selection_columns(), "selection_columns");
 
-  COPROCESSOR_LOG << "expression : " << fmt::format(Helper::StringToHex(coprocessor.rel_expr()));
+  COPROCESSOR_LOG << "expression : " << fmt::format("{}", Helper::StringToHex(coprocessor.rel_expr()));
 
   COPROCESSOR_LOG
       << "***************************DebugCoprocessorV2 End*****************************************************";
