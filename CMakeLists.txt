@@ -54,6 +54,9 @@ option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
 
+SET(CMAKE_C_FLAGS_DEBUG "$ENV{CFLAGS} -O0  -g3 -ggdb")
+SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0  -g3 -ggdb")
+
 # xdprocks
 if(XDPROCKS_PATH)
     message(STATUS "Enable xdprocks, path: ${XDPROCKS_PATH}")
