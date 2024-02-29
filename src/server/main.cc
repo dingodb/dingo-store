@@ -121,21 +121,21 @@ DECLARE_int32(vector_operation_parallel_thread_num);
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
   const int port = config->GetInt("server.port");
-  return dingodb::Helper::GetEndPoint(host, port);
+  return dingodb::Helper::StringToEndPoint(host, port);
 }
 
 // Get raft endpoint from config
 butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("raft.host");
   const int port = config->GetInt("raft.port");
-  return dingodb::Helper::GetEndPoint(host, port);
+  return dingodb::Helper::StringToEndPoint(host, port);
 }
 
 std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config> &config,
                                           const std::string peer_nodes_name) {
   std::vector<butil::EndPoint> peer_nodes;
   std::string coordinator_list = config->GetString(peer_nodes_name);
-  return dingodb::Helper::StrToEndpoints(coordinator_list);
+  return dingodb::Helper::StringToEndpoints(coordinator_list);
 }
 
 struct DingoStackTraceInfo {

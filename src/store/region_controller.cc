@@ -441,18 +441,18 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format(
               "[control.region][region({})] check peer {} hold vector index failed, error: {}", parent_region_id,
-              Helper::EndPointToStr(peer.addr), status.error_str());
+              Helper::EndPointToString(peer.addr), status.error_str());
         }
 
         if (!response.is_exist()) {
           return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "Not found vector index %lu at peer %s",
-                               parent_region_id, Helper::EndPointToStr(peer.addr).c_str());
+                               parent_region_id, Helper::EndPointToString(peer.addr).c_str());
         }
         if (response.last_build_epoch_version() != region_epoch_version) {
           return butil::Status(pb::error::EVECTOR_INDEX_SNAPSHOT_VERSION_NOT_MATCH,
                                "Not match vector index(%lu) snapshot version(%lu/%lu) at peer %s", parent_region_id,
                                response.last_build_epoch_version(), region_epoch_version,
-                               Helper::EndPointToStr(peer.addr).c_str());
+                               Helper::EndPointToString(peer.addr).c_str());
         }
       }
     }
@@ -641,7 +641,7 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
     }
 
     auto region_metas =
-        ServiceAccess::GetRegionInfo({source_region->Id(), target_region->Id()}, Helper::GetEndPoint(peer_addr));
+        ServiceAccess::GetRegionInfo({source_region->Id(), target_region->Id()}, Helper::StringToEndPoint(peer_addr));
     if (region_metas.size() != 2) {
       return butil::Status(pb::error::EINTERNAL, "Get remote region info failed at node(%s)", peer_addr.c_str());
     }
@@ -669,7 +669,7 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   int64_t target_min_committed_log_id = target_raft_status->committed_index();
   for (const auto& [peer_addr, follower] : source_raft_status->stable_followers()) {
     auto raft_status_entries =
-        ServiceAccess::GetRaftStatus({source_region->Id(), target_region->Id()}, Helper::GetEndPoint(peer_addr));
+        ServiceAccess::GetRaftStatus({source_region->Id(), target_region->Id()}, Helper::StringToEndPoint(peer_addr));
     if (raft_status_entries.size() != 2) {
       return butil::Status(pb::error::EINTERNAL, "Get remote raft node info failed at node(%s)", peer_addr.c_str());
     }

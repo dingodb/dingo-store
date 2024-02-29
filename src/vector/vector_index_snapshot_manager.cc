@@ -187,7 +187,7 @@ butil::Status VectorIndexSnapshotManager::LaunchInstallSnapshot(const butil::End
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.snapshot][index({})] install vector index snapshot {} to {} finish elapsed time {}ms request: {}",
-      snapshot->VectorIndexId(), snapshot->SnapshotLogId(), Helper::EndPointToStr(endpoint),
+      snapshot->VectorIndexId(), snapshot->SnapshotLogId(), Helper::EndPointToString(endpoint),
       Helper::TimestampMs() - start_time, request.ShortDebugString());
 
   return status;
@@ -255,12 +255,12 @@ butil::Status VectorIndexSnapshotManager::InstallSnapshotToFollowers(vector_inde
         if (status.error_code() == pb::error::EVECTOR_NOT_NEED_SNAPSHOT ||
             status.error_code() == pb::error::EVECTOR_SNAPSHOT_EXIST) {
           DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index({})] vector index peer {} {}",
-                                         snapshot->VectorIndexId(), Helper::EndPointToStr(peer.addr),
+                                         snapshot->VectorIndexId(), Helper::EndPointToString(peer.addr),
                                          status.error_str());
         } else {
           DINGO_LOG(ERROR) << fmt::format(
               "[vector_index.snapshot][index({})] install vector index snapshot {} to {} failed, error: {}",
-              snapshot->VectorIndexId(), snapshot->SnapshotLogId(), Helper::EndPointToStr(peer.addr),
+              snapshot->VectorIndexId(), snapshot->SnapshotLogId(), Helper::EndPointToString(peer.addr),
               status.error_str());
         }
       }
@@ -344,7 +344,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     if (!status.ok()) {
       DINGO_LOG(WARNING) << fmt::format(
           "[vector_index.snapshot][index({})] get peer vector index snapshot meta failed, peer({}) error: {}.",
-          vector_index_id, Helper::EndPointToStr(peer.addr), Helper::PrintStatus(status));
+          vector_index_id, Helper::EndPointToString(peer.addr), Helper::PrintStatus(status));
       continue;
     }
 
@@ -387,7 +387,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
     if (status.error_code() != pb::error::EVECTOR_SNAPSHOT_EXIST) {
       DINGO_LOG(ERROR) << fmt::format(
           "[vector_index.snapshot][index({})] pull vector index snapshot {} from {} failed, error: {}", vector_index_id,
-          peer_max_snapshot_log_index, Helper::EndPointToStr(endpoint), status.error_str());
+          peer_max_snapshot_log_index, Helper::EndPointToString(endpoint), status.error_str());
     }
     return status;
   }

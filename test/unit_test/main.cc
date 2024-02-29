@@ -56,6 +56,8 @@ int main(int argc, char* argv[]) {
 
   if (testing::FLAGS_gtest_filter == "*") {
     std::string default_run_case;
+
+    // common
     default_run_case += "ConfigTest.*";
     default_run_case += ":HelperTest.*";
     default_run_case += ":DingoLatchTest.*";
@@ -63,6 +65,10 @@ int main(int argc, char* argv[]) {
     default_run_case += ":StorePbTest.*";
     default_run_case += ":WriteDataBuilderTest.*";
     default_run_case += ":FailPointTest.*";
+    default_run_case += ":UUIDGeneratorTest.*";
+    default_run_case += ":TrackerTest.*";
+    default_run_case += ":ThreadPoolTest.*";
+
     default_run_case += ":CoprocessorTest.*";
     default_run_case += ":CoprocessorUtilsTest.*";
     default_run_case += ":CoprocessorAggregationManagerTest.*";
@@ -82,6 +88,7 @@ int main(int argc, char* argv[]) {
     // default_run_case += ":StoreRegionMetaTest.*";
     // default_run_case += ":StoreRegionMetricsTest.*";
 
+    // vector index
     default_run_case += ":VectorIndexWrapperTest.*";
     default_run_case += ":VectorIndexUtilsTest.*";
     default_run_case += ":VectorIndexSnapshotTest.*";
@@ -97,6 +104,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":VectorIndexFlatTest.*";
     default_run_case += ":VectorIndexFlatSearchParamTest.*";
     default_run_case += ":VectorIndexFlatSearchParamLimitTest.*";
+
+    // transaction
     default_run_case += ":TxnGcTest.*";
 
     // sdk

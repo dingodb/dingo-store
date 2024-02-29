@@ -178,6 +178,7 @@ std::shared_ptr<RawEngine> RaftStoreEngine::GetRawEngine(pb::common::RawEngine t
   }
 
   DINGO_LOG(FATAL) << "[raft.engine] unknown raw engine type.";
+  return nullptr;
 }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
@@ -204,14 +205,14 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
                                          state_machine, log_storage);
 
-  if (node->Init(region, Helper::FormatPeers(Helper::ExtractLocations(region->Peers())), parameter.raft_path,
+  if (node->Init(region, Helper::LocationsToString(Helper::ExtractRaftLocations(region->Peers())), parameter.raft_path,
                  parameter.election_timeout_ms) != 0) {
     if (parameter.is_restart) {
       DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
                                       region->Id())
                        << ", raft_path: " << parameter.raft_path
                        << ", election_timeout_ms: " << parameter.election_timeout_ms
-                       << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->Peers()));
+                       << ", peers: " << Helper::LocationsToString(Helper::ExtractRaftLocations(region->Peers()));
     } else {
       node->Destroy();
     }
@@ -243,7 +244,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
       region->id(), meta_raft_name, braft::PeerId(Server::GetInstance().RaftEndpoint()), state_machine, log_storage);
 
   // Build RaftNode
-  if (node->Init(nullptr, Helper::FormatPeers(Helper::ExtractLocations(region->peers())),
+  if (node->Init(nullptr, Helper::LocationsToString(Helper::ExtractRaftLocations(region->peers())),
                  config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000) != 0) {
     // node->Destroy();
     // this function is only used by coordinator, and will only be called on starting.
@@ -252,7 +253,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
                                     region->id())
                      << ", raft_path: " << config->GetString("raft.path")
                      << ", election_timeout_ms: " << config->GetInt("raft.election_timeout_s") * 1000
-                     << ", peers: " << Helper::FormatPeers(Helper::ExtractLocations(region->peers()))
+                     << ", peers: " << Helper::LocationsToString(Helper::ExtractRaftLocations(region->peers()))
                      << ", region: " << region->ShortDebugString();
 
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
@@ -368,7 +369,7 @@ butil::Status RaftStoreEngine::TransferLeader(int64_t region_id, const pb::commo
     return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
   }
 
-  auto ret = node->TransferLeadershipTo(Helper::LocationToPeer(peer.raft_location()));
+  auto ret = node->TransferLeadershipTo(Helper::LocationToPeerId(peer.raft_location()));
   if (ret != 0) {
     return butil::Status(pb::error::ERAFT_TRANSFER_LEADER, fmt::format("Transfer leader failed, ret_code {}", ret));
   }

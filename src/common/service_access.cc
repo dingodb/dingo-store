@@ -53,7 +53,7 @@ std::shared_ptr<brpc::Channel> ChannelPool::GetChannel(const butil::EndPoint& en
   options.backup_request_ms = 5000;
   options.connection_type = brpc::ConnectionType::CONNECTION_TYPE_SINGLE;
   if (channel->Init(endpoint, nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Init channel failed, endpoint: " << Helper::EndPointToStr(endpoint);
+    DINGO_LOG(ERROR) << "Init channel failed, endpoint: " << Helper::EndPointToString(endpoint);
     return nullptr;
   }
 
@@ -164,7 +164,7 @@ butil::Status ServiceAccess::InstallVectorIndexSnapshot(const pb::node::InstallV
   auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
   if (channel == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
-                         Helper::EndPointToStr(endpoint).c_str());
+                         Helper::EndPointToString(endpoint).c_str());
   }
 
   brpc::Controller cntl;
@@ -195,7 +195,7 @@ butil::Status ServiceAccess::GetVectorIndexSnapshot(const pb::node::GetVectorInd
   auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
   if (channel == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
-                         Helper::EndPointToStr(endpoint).c_str());
+                         Helper::EndPointToString(endpoint).c_str());
   }
 
   brpc::Controller cntl;
@@ -227,7 +227,7 @@ butil::Status ServiceAccess::CheckVectorIndex(const pb::node::CheckVectorIndexRe
   auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
   if (channel == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
-                         Helper::EndPointToStr(endpoint).c_str());
+                         Helper::EndPointToString(endpoint).c_str());
   }
 
   brpc::Controller cntl;
@@ -284,7 +284,7 @@ std::shared_ptr<pb::fileservice::GetFileResponse> ServiceAccess::GetFile(const p
   stub.GetFile(&cntl, &request, response.get(), nullptr);
   if (cntl.Failed()) {
     DINGO_LOG(ERROR) << fmt::format("Send GetFileRequest failed, channel use count {} endpoint {} error {}",
-                                    channel.use_count(), Helper::EndPointToStr(endpoint), cntl.ErrorText());
+                                    channel.use_count(), Helper::EndPointToString(endpoint), cntl.ErrorText());
     return nullptr;
   }
 
@@ -297,7 +297,7 @@ butil::Status ServiceAccess::CommitMerge(const pb::node::CommitMergeRequest& req
   auto channel = ChannelPool::GetInstance().GetChannel(endpoint);
   if (channel == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Get channel failed, endpoint: %s",
-                         Helper::EndPointToStr(endpoint).c_str());
+                         Helper::EndPointToString(endpoint).c_str());
   }
 
   pb::node::NodeService_Stub stub(channel.get());

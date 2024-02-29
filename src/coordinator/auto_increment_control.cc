@@ -245,14 +245,11 @@ void AutoIncrementControl::GetLeaderLocation(pb::common::Location& leader_server
   }
 
   // parse leader raft location from string
-  auto leader_string = raft_node_->GetLeaderId().to_string();
-
-  pb::common::Location leader_raft_location;
-  int ret = Helper::PeerIdToLocation(raft_node_->GetLeaderId(), leader_raft_location);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "get raft leader failed, ret: " << ret << ".";
+  auto leader_peer_id = raft_node_->GetLeaderId();
+  if (leader_peer_id.is_empty()) {
     return;
   }
+  pb::common::Location leader_raft_location = Helper::PeerIdToLocation(leader_peer_id);
 
   // GetServerLocation
   GetServerLocation(leader_raft_location, leader_server_location);

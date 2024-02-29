@@ -110,7 +110,7 @@ class Helper {
     return dataset;
   }
 
-  static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str) {
+  static std::vector<butil::EndPoint> StringToEndpoints(const std::string& str) {
     std::vector<std::string> addrs;
     butil::SplitString(str, ',', &addrs);
 

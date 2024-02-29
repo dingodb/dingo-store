@@ -25,7 +25,7 @@ namespace dingodb {
 
 bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type) {
   service_type_ = service_type;
-  endpoints_ = Helper::StrToEndpoints(addr);
+  endpoints_ = Helper::StringToEndpoints(addr);
   if (endpoints_.empty()) {
     DINGO_LOG(ERROR) << "Parse addr failed " << addr;
     return false;

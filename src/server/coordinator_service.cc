@@ -1930,7 +1930,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
     }
     case pb::coordinator::RaftControlOp::AddPeer: {
       // get raft location from add_peer
-      // auto endpoint = Helper::StrToEndPoint(request->add_peer());
+      // auto endpoint = Helper::StringToEndPoint(request->add_peer());
       // auto location = Helper::EndPointToLocation(endpoint);
 
       // pb::common::Location raft_location;
@@ -1947,7 +1947,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
       // braft::PeerId add_peer(Helper::LocationToEndPoint(raft_location));
 
       DINGO_LOG(INFO) << "AddPeer:" << request->add_peer();
-      braft::PeerId add_peer(Helper::StrToEndPoint(request->add_peer()));
+      braft::PeerId add_peer(Helper::StringToEndPoint(request->add_peer()));
       RaftControlClosure *add_peer_done =
           new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
       raft_node->AddPeer(add_peer, add_peer_done);
@@ -1955,7 +1955,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
     }
     case pb::coordinator::RaftControlOp::RemovePeer: {
       // get raft location from remove_peer
-      // auto endpoint = Helper::StrToEndPoint(request->remove_peer());
+      // auto endpoint = Helper::StringToEndPoint(request->remove_peer());
       // auto location = Helper::EndPointToLocation(endpoint);
 
       // pb::common::Location raft_location;
@@ -1972,7 +1972,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
       // braft::PeerId remove_peer(Helper::LocationToEndPoint(raft_location));
 
       DINGO_LOG(INFO) << "RemovePeer:" << request->remove_peer();
-      braft::PeerId remove_peer(Helper::StrToEndPoint(request->remove_peer()));
+      braft::PeerId remove_peer(Helper::StringToEndPoint(request->remove_peer()));
       RaftControlClosure *remove_peer_done =
           new RaftControlClosure(cntl, request, response, done_guard.release(), raft_node);
       raft_node->RemovePeer(remove_peer, remove_peer_done);
@@ -1980,7 +1980,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
     }
     case pb::coordinator::RaftControlOp::TransferLeader: {
       DINGO_LOG(INFO) << "TransferLeader:" << request->new_leader();
-      braft::PeerId transfer_leader(Helper::StrToEndPoint(request->new_leader()));
+      braft::PeerId transfer_leader(Helper::StringToEndPoint(request->new_leader()));
       auto errcode = raft_node->TransferLeadershipTo(transfer_leader);
       if (errcode != 0) {
         response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(errcode));
@@ -2001,7 +2001,7 @@ void DoRaftControl(google::protobuf::RpcController *controller, const pb::coordi
       std::vector<braft::PeerId> new_peers;
       for (const auto &peer : request->new_peers()) {
         DINGO_LOG(INFO) << fmt::format("SetPeer: {}", peer);
-        new_peers.emplace_back(Helper::StrToEndPoint(peer));
+        new_peers.emplace_back(Helper::StringToEndPoint(peer));
       }
       braft::Configuration new_conf(new_peers);
       auto status = raft_node->ResetPeers(new_conf);

@@ -59,7 +59,7 @@ class ServiceHelper {
 
 template <typename T>
 pb::node::NodeInfo ServiceHelper::RedirectLeader(std::string addr) {
-  auto raft_endpoint = Helper::StrToEndPoint(addr);
+  auto raft_endpoint = Helper::StringToEndPoint(addr);
   if (raft_endpoint.port == 0) {
     DINGO_LOG(WARNING) << fmt::format("[redirect][addr({})] invalid addr.", addr);
     return {};

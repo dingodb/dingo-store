@@ -52,7 +52,7 @@ bool ServerInteraction::Init(std::vector<std::string> addrs) {
 }
 
 bool ServerInteraction::AddAddr(const std::string& addr) {
-  butil::EndPoint endpoint = dingodb::Helper::GetEndPoint(addr);
+  butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint(addr);
 
   std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
   if (channel->Init(endpoint, nullptr) != 0) {
@@ -81,7 +81,7 @@ void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location
   }
 
   for (int i = 0; i < endpoints_.size(); ++i) {
-    auto endpoints = Helper::StrToEndpoints(location.host() + ":" + std::to_string(location.port()));
+    auto endpoints = Helper::StringToEndpoints(location.host() + ":" + std::to_string(location.port()));
     if (endpoints.empty()) {
       bthread_usleep(500 * 1000L);
       return;

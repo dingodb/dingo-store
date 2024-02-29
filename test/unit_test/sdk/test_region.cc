@@ -62,13 +62,13 @@ TEST_F(RegionTest, TestInit) {
   auto end_points = region->ReplicaEndPoint();
 
   for (const auto& end : end_points) {
-    EXPECT_TRUE(kInitReplica.find(Helper::EndPointToStr(end)) != kInitReplica.end());
+    EXPECT_TRUE(kInitReplica.find(Helper::EndPointToString(end)) != kInitReplica.end());
   }
 
   butil::EndPoint leader;
   Status got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToStr(leader), kAddrOne);
+  EXPECT_EQ(Helper::EndPointToString(leader), kAddrOne);
   EXPECT_TRUE(region->IsStale());
 }
 
@@ -84,7 +84,7 @@ TEST_F(RegionTest, TestMark) {
   region->MarkLeader(end);
   got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToStr(leader), kAddrTwo);
+  EXPECT_EQ(Helper::EndPointToString(leader), kAddrTwo);
 
   {
     // test mark and unmark stale
