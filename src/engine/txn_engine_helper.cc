@@ -15,6 +15,7 @@
 #include "engine/txn_engine_helper.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -33,6 +34,7 @@
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
 #include "server/server.h"
@@ -52,6 +54,8 @@ DEFINE_int64(max_rollback_count, 1024, "max rollback count");
 DEFINE_int64(max_resolve_count, 1024, "max rollback count");
 DEFINE_int64(max_pessimistic_count, 1024, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
+
+DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 
 butil::Status TxnIterator::Init() {
   snapshot_ = raw_engine_->GetSnapshot();
@@ -110,7 +114,8 @@ butil::Status TxnIterator::Seek(const std::string &key) {
   while (value_.empty()) {
     ret = InnerNext();
     if (ret.error_code() == pb::error::Errno::ETXN_SCAN_FINISH) {
-      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return butil::Status::OK();
     } else if (!ret.ok()) {
       DINGO_LOG(ERROR) << "[txn]InnerNext failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
@@ -120,8 +125,9 @@ butil::Status TxnIterator::Seek(const std::string &key) {
     if (!value_.empty()) {
       return butil::Status::OK();
     } else {
-      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                      << ", key_: " << Helper::StringToHex(key_);
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+          << ", key_: " << Helper::StringToHex(key_);
       continue;
     }
   }
@@ -144,8 +150,9 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
                        << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     }
   } else {
-    DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                    << ", last_lock_key: " << Helper::StringToHex(last_lock_key_);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+        << ", last_lock_key: " << Helper::StringToHex(last_lock_key_);
   }
 
   write_iter_->Seek(Helper::EncodeTxnKey(key, seek_ts_));
@@ -157,21 +164,23 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
                        << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     }
   } else {
-    DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                    << ", last_write_key: " << Helper::StringToHex(last_write_key_);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+        << ", last_write_key: " << Helper::StringToHex(last_write_key_);
   }
 
   if (last_lock_key_.empty() && last_write_key_.empty()) {
-    DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
-                    << ", seek_ts: " << seek_ts_ << ", key: " << Helper::StringToHex(key);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
+        << ", seek_ts: " << seek_ts_ << ", key: " << Helper::StringToHex(key);
     return butil::Status::OK();
   }
 
   auto ret = GetCurrentValue();
   if (ret.ok()) {
-    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_)
-                    << ", value_: " << Helper::StringToHex(value_) << ", start_ts: " << start_ts_
-                    << ", seek_ts: " << seek_ts_;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << Helper::StringToHex(value_)
+        << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
@@ -185,18 +194,21 @@ butil::Status TxnIterator::Next() {
   while (ret.ok()) {
     ret = InnerNext();
     if (ret.error_code() == pb::error::Errno::ETXN_SCAN_FINISH) {
-      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return butil::Status::OK();
     } else if (!ret.ok()) {
-      DINGO_LOG(INFO) << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]InnerNext stopped, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
       return ret;
     }
 
     if (!value_.empty()) {
       return butil::Status::OK();
     } else {
-      DINGO_LOG(INFO) << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                      << ", key_: " << Helper::StringToHex(key_);
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]InnerNext value is empty, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+          << ", key_: " << Helper::StringToHex(key_);
       continue;
     }
   }
@@ -231,15 +243,15 @@ butil::Status TxnIterator::InnerNext() {
                            << ", seek_ts: " << seek_ts_;
         }
         if (last_lock_key_ > key_) {
-          DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ > key_, find next key, start_ts: " << start_ts_
-                          << ", seek_ts: " << seek_ts_ << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
-                          << ", key_: " << Helper::StringToHex(key_);
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]Scan last_lock_key_ > key_, find next key, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+              << ", last_lock_key: " << Helper::StringToHex(last_lock_key_) << ", key_: " << Helper::StringToHex(key_);
           break;
         }
       } else {
-        DINGO_LOG(INFO) << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
-                        << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
-                        << ", will set last_lock_key to empty";
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "[txn]Scan lock_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+            << ", last_lock_key: " << Helper::StringToHex(last_lock_key_) << ", will set last_lock_key to empty";
         last_lock_key_ = std::string();
       }
     }
@@ -260,17 +272,20 @@ butil::Status TxnIterator::InnerNext() {
   //   }
   //   CHECK(last_write_key_ > key_);
   // } else {
-  //   DINGO_LOG(INFO) << "[txn]Scan write_iter is invalid, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_
+  //   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Scan write_iter is invalid, start_ts: " <<
+  //   start_ts_ << ", seek_ts: " << seek_ts_
   //                   << ", last_write_key: " << Helper::StringToHex(last_write_key_);
   // }
 
   if (last_lock_key_.empty() && last_write_key_.empty()) {
-    DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
-                    << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan last_lock_key_ and last_write_key_ are empty, start_ts: " << start_ts_
+        << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
 
     if (!lock_iter_->Valid() && !write_iter_->Valid()) {
-      DINGO_LOG(INFO) << "[txn]Scan lock_iter_ and write_iter_ are invalid, the iterator is finished, start_ts: "
-                      << start_ts_ << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]Scan lock_iter_ and write_iter_ are invalid, the iterator is finished, start_ts: " << start_ts_
+          << ", seek_ts: " << seek_ts_ << ", key_: " << Helper::StringToHex(key_);
       key_.clear();
       return butil::Status::OK();
     }
@@ -279,20 +294,19 @@ butil::Status TxnIterator::InnerNext() {
   }
 
   if (last_lock_key_ <= key_ && last_write_key_ <= key_) {
-    DINGO_LOG(INFO) << "[txn]Scan last_lock_key_ <= key_ && last_write_key_ <= key_, no key found, start_ts: "
-                    << start_ts_ << ", seek_ts: " << seek_ts_
-                    << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
-                    << ", last_write_key: " << Helper::StringToHex(last_write_key_)
-                    << ", key_: " << Helper::StringToHex(key_);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan last_lock_key_ <= key_ && last_write_key_ <= key_, no key found, start_ts: " << start_ts_
+        << ", seek_ts: " << seek_ts_ << ", last_lock_key: " << Helper::StringToHex(last_lock_key_)
+        << ", last_write_key: " << Helper::StringToHex(last_write_key_) << ", key_: " << Helper::StringToHex(key_);
     key_.clear();
     return butil::Status::OK();
   }
 
   auto ret = GetCurrentValue();
   if (ret.ok()) {
-    DINGO_LOG(INFO) << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_)
-                    << ", value_: " << Helper::StringToHex(value_) << ", start_ts: " << start_ts_
-                    << ", seek_ts: " << seek_ts_;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << Helper::StringToHex(value_)
+        << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
@@ -349,16 +363,17 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
     }
 
     if (last_write_key > user_key) {
-      DINGO_LOG(INFO) << "[txn]Scan last_write_key > user_key, means no value, start_ts: " << start_ts
-                      << ", seek_ts: " << seek_ts << ", last_write_key: " << Helper::StringToHex(last_write_key)
-                      << ", user_key: " << Helper::StringToHex(user_key);
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]Scan last_write_key > user_key, means no value, start_ts: " << start_ts << ", seek_ts: " << seek_ts
+          << ", last_write_key: " << Helper::StringToHex(last_write_key)
+          << ", user_key: " << Helper::StringToHex(user_key);
       return butil::Status::OK();
     }
 
     // check isolation_level
     if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
       if (commit_ts > start_ts) {
-        DINGO_LOG(INFO)
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << "[txn]Scan commit_ts > start_ts, means this value is not accepted, will go to next, start_ts: "
             << start_ts << ", commit_ts: " << commit_ts << ", user_key: " << Helper::StringToHex(user_key);
         write_iter->Next();
@@ -371,8 +386,9 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
         continue;
       }
     } else if (isolation_level == pb::store::IsolationLevel::ReadCommitted) {
-      DINGO_LOG(INFO) << "[txn]Scan RC, commit_ts: " << commit_ts << ", start_ts: " << start_ts
-                      << ", seek_ts: " << seek_ts << ", user_key: " << Helper::StringToHex(user_key);
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]Scan RC, commit_ts: " << commit_ts << ", start_ts: " << start_ts << ", seek_ts: " << seek_ts
+          << ", user_key: " << Helper::StringToHex(user_key);
     } else {
       DINGO_LOG(ERROR) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
@@ -431,9 +447,10 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
         }
       }
     } else {
-      DINGO_LOG(INFO) << "[txn]Scan write_iter meet illegal op, start_ts: " << start_ts << ", seek_ts: " << seek_ts
-                      << ", last_write_key: " << Helper::StringToHex(last_write_key)
-                      << ", tmp_key: " << Helper::StringToHex(user_key) << ", write_info.op: " << write_info.op();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]Scan write_iter meet illegal op, start_ts: " << start_ts << ", seek_ts: " << seek_ts
+          << ", last_write_key: " << Helper::StringToHex(last_write_key)
+          << ", tmp_key: " << Helper::StringToHex(user_key) << ", write_info.op: " << write_info.op();
       write_iter->Next();
     }
   }
@@ -544,10 +561,11 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
   // if lock_info is resolved, return false, means the executor has used CheckTxnStatus to check the lock_info and
   // updated the min_commit_ts of the primary lock.
   if (!resolved_locks.empty() && resolved_locks.find(lock_info.lock_ts()) != resolved_locks.end()) {
-    DINGO_LOG(INFO) << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
-                    << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
-                    << ", resolved_locks size: " << resolved_locks.size() << ", lock_ts: " << lock_info.lock_ts()
-                    << " is resolved, return false";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
+        << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+        << ", resolved_locks size: " << resolved_locks.size() << ", lock_ts: " << lock_info.lock_ts()
+        << " is resolved, return false";
     return false;
   }
 
@@ -556,16 +574,18 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
       // for pessimistic, check for_update_ts
       if (lock_info.for_update_ts() > 0) {
         if (lock_info.for_update_ts() < start_ts) {
-          DINGO_LOG(INFO) << "[txn]CheckLockConflict SI lock_info.for_update_ts() > 0, it's conflict, lock_info: "
-                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]CheckLockConflict SI lock_info.for_update_ts() > 0, it's conflict, lock_info: "
+              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // for_update_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
         }
       } else {
         if (lock_info.lock_ts() < start_ts) {
-          DINGO_LOG(INFO) << "[txn]CheckLockConflict SI lock_info.for_update_ts() == 0, it's conflict, lock_info: "
-                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]CheckLockConflict SI lock_info.for_update_ts() == 0, it's conflict, lock_info: "
+              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // lock_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
@@ -579,16 +599,17 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
       // for optimistic lock, need to check the lock_ts
       if (lock_info.for_update_ts() > 0) {
         if (lock_info.lock_type() == pb::store::Lock) {
-          DINGO_LOG(INFO)
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, but only on LOCK stage, it's ok, lock_info: "
               << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           return false;
         }
 
         if (lock_info.for_update_ts() < start_ts) {
-          DINGO_LOG(INFO) << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, on PREWRITE stage, it's "
-                             "conflict, lock_info: "
-                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, on PREWRITE stage, it's "
+                 "conflict, lock_info: "
+              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // for_update_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
@@ -597,8 +618,9 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
 
       } else {
         if (lock_info.lock_ts() < start_ts) {
-          DINGO_LOG(INFO) << "[txn]CheckLockConflict RC lock_info.for_update_ts() == 0, it's conflict, lock_info: "
-                          << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]CheckLockConflict RC lock_info.for_update_ts() == 0, it's conflict, lock_info: "
+              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // lock_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
@@ -621,7 +643,8 @@ butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const st
   // else the key is locked, return WriteConflict
   if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
     // key is not exists, the key is not locked
-    DINGO_LOG(INFO) << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_key is not exist";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_key is not exist";
     return butil::Status::OK();
   }
 
@@ -634,7 +657,8 @@ butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const st
 
   if (lock_value.empty()) {
     // lock_value is empty, the key is not locked
-    DINGO_LOG(INFO) << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_value is null";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_value is null";
     return butil::Status::OK();
   }
 
@@ -655,9 +679,10 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
                                             std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_lock_latency);
 
-  DINGO_LOG(INFO) << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
-                  << ", start_key: " << Helper::StringToHex(range.start_key())
-                  << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
+      << ", start_key: " << Helper::StringToHex(range.start_key())
+      << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit;
 
   if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_lock_limit)) {
     DINGO_LOG(ERROR) << "[txn]ScanLockInfo limit: " << limit
@@ -698,10 +723,10 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
 
     end_scan_key = lock_info.key();
 
-    DINGO_LOG(INFO) << "get lock_info lock_ts: " << lock_info.lock_ts()
-                    << ", lock_info: " << lock_info.ShortDebugString()
-                    << ", iter->key: " << Helper::StringToHex(iter->Key())
-                    << ", lock_key: " << Helper::StringToHex(lock_info.key());
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "get lock_info lock_ts: " << lock_info.lock_ts() << ", lock_info: " << lock_info.ShortDebugString()
+        << ", iter->key: " << Helper::StringToHex(iter->Key())
+        << ", lock_key: " << Helper::StringToHex(lock_info.key());
 
     // if lock is not exist, nothing to do
     if (lock_info.lock_ts() == 0) {
@@ -722,7 +747,8 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
     }
 
     lock_infos.push_back(lock_info);
-    DINGO_LOG(INFO) << "[txn] ScanLock push_back lock_info: " << lock_info.ShortDebugString();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn] ScanLock push_back lock_info: " << lock_info.ShortDebugString();
 
     if (limit > 0 && lock_infos.size() >= limit) {
       has_more = true;
@@ -744,9 +770,10 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
                                         std::vector<pb::common::KeyValue> &kvs) {
   BvarLatencyGuard bvar_guard(&g_txn_batch_get_latency);
 
-  DINGO_LOG(INFO) << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
-                  << ", start_ts: " << start_ts << ", first_key: " << Helper::StringToHex(keys[0])
-                  << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]BatchGet keys_count: " << keys.size() << ", isolation_level: " << isolation_level
+      << ", start_ts: " << start_ts << ", first_key: " << Helper::StringToHex(keys[0])
+      << ", last_key: " << Helper::StringToHex(keys[keys.size() - 1]);
 
   if (keys.empty()) {
     return butil::Status::OK();
@@ -812,7 +839,8 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
     }
 
-    DINGO_LOG(INFO) << "key: " << Helper::StringToHex(key) << ", iter_start_ts: " << iter_start_ts;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "key: " << Helper::StringToHex(key) << ", iter_start_ts: " << iter_start_ts;
 
     IteratorOptions iter_options;
     iter_options.lower_bound = Helper::EncodeTxnKey(key, iter_start_ts);
@@ -822,8 +850,9 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       DINGO_LOG(FATAL) << "[txn]BatchGet NewIterator failed, start_ts: " << start_ts;
     }
 
-    DINGO_LOG(INFO) << "iter_options.lower_bound: " << Helper::StringToHex(iter_options.lower_bound)
-                    << ", iter_options.upper_bound: " << Helper::StringToHex(iter_options.upper_bound);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "iter_options.lower_bound: " << Helper::StringToHex(iter_options.lower_bound)
+        << ", iter_options.upper_bound: " << Helper::StringToHex(iter_options.upper_bound);
 
     // check isolation level and return value
     iter->Seek(iter_options.lower_bound);
@@ -862,17 +891,19 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 
         // check the op type of write_info
         if (write_info.op() == pb::store::Op::Rollback) {
-          DINGO_LOG(INFO) << "[txn]BatchGet write_info.op() == pb::store::Op::Rollback, go to next line, key: "
-                          << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
-                          << ", write_info: " << write_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]BatchGet write_info.op() == pb::store::Op::Rollback, go to next line, key: "
+              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+              << ", write_info: " << write_info.ShortDebugString();
           // goto next write line
           iter->Next();
           continue;
         } else if (write_info.op() == pb::store::Op::Delete) {
           // if op is delete, value is null
-          DINGO_LOG(INFO) << "[txn]BatchGet write_info.op() == pb::store::Op::Delete, so value is null, key: "
-                          << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
-                          << ", write_info: " << write_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << "[txn]BatchGet write_info.op() == pb::store::Op::Delete, so value is null, key: "
+              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+              << ", write_info: " << write_info.ShortDebugString();
           kv.set_value(std::string());
           break;
         } else if (write_info.op() != pb::store::Op::Put) {
@@ -899,9 +930,9 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
         }
         break;
       } else {
-        DINGO_LOG(INFO) << "[txn]BatchGet is_valid = false, go to next line, write_ts: " << write_ts
-                        << " >= start_ts: " << start_ts << ", key: " << Helper::StringToHex(key)
-                        << ", write_key: " << Helper::StringToHex(iter->Key());
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "[txn]BatchGet is_valid = false, go to next line, write_ts: " << write_ts << " >= start_ts: " << start_ts
+            << ", key: " << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key());
       }
 
       iter->Next();
@@ -911,9 +942,10 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     response_memory_size += kv.ByteSizeLong();
 
     if (response_memory_size >= FLAGS_max_batch_get_memory_size) {
-      DINGO_LOG(INFO) << "[txn]BatchGet kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
-                      << ", max_batch_get_count: " << FLAGS_max_batch_get_count
-                      << ", max_batch_get_memory_size: " << FLAGS_max_batch_get_memory_size;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]BatchGet kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
+          << ", max_batch_get_count: " << FLAGS_max_batch_get_count
+          << ", max_batch_get_memory_size: " << FLAGS_max_batch_get_memory_size;
       break;
     }
   }
@@ -931,15 +963,15 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
                                     bool &has_more, std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
 
-  DINGO_LOG(INFO) << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
-                  << ", start_key: " << Helper::StringToHex(range.start_key())
-                  << ", end_key: " << Helper::StringToHex(range.end_key())
-                  << ", isolation_level: " << pb::store::IsolationLevel_Name(isolation_level)
-                  << ", start_ts: " << start_ts << ", limit: " << limit << ", key_only: " << key_only
-                  << ", is_reverse: " << is_reverse << ", resolved_locks size: " << resolved_locks.size()
-                  << ", disable_coprocessor: " << disable_coprocessor
-                  << ", coprocessor: " << coprocessor.ShortDebugString()
-                  << ", txn_result_info: " << txn_result_info.ShortDebugString();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
+      << ", start_key: " << Helper::StringToHex(range.start_key())
+      << ", end_key: " << Helper::StringToHex(range.end_key())
+      << ", isolation_level: " << pb::store::IsolationLevel_Name(isolation_level) << ", start_ts: " << start_ts
+      << ", limit: " << limit << ", key_only: " << key_only << ", is_reverse: " << is_reverse
+      << ", resolved_locks size: " << resolved_locks.size() << ", disable_coprocessor: " << disable_coprocessor
+      << ", coprocessor: " << coprocessor.ShortDebugString()
+      << ", txn_result_info: " << txn_result_info.ShortDebugString();
 
   if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_line_limit)) {
     DINGO_LOG(ERROR) << "[txn]Scan limit: " << limit
@@ -1026,9 +1058,10 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_limit ||
         response_memory_size >= FLAGS_max_scan_memory_size) {
       has_more = true;
-      DINGO_LOG(INFO) << "[txn]Scan kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
-                      << ", max_scan_line_limit: " << FLAGS_max_scan_line_limit
-                      << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]Scan kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
+          << ", max_scan_line_limit: " << FLAGS_max_scan_line_limit
+          << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
       break;
     }
   }
@@ -1118,8 +1151,8 @@ butil::Status TxnEngineHelper::GetRollbackInfo(RawEngine::ReaderPtr reader, int6
   auto ret = reader->KvGet(Constant::kTxnWriteCF, Helper::EncodeTxnKey(key, start_ts), write_value);
   if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
     // no rollback
-    DINGO_LOG(INFO) << "not find a rollback write line, key: " << Helper::StringToHex(key)
-                    << ", start_ts: " << start_ts;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "not find a rollback write line, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts;
 
     return butil::Status::OK();
   }
@@ -1171,10 +1204,11 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
                                                int64_t for_update_ts) {
   BvarLatencyGuard bvar_guard(&g_txn_pessimistic_lock_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                  << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
-                  << ", lock_ttl: " << lock_ttl << ", for_update_ts: " << for_update_ts;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
+      << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+      << ", for_update_ts: " << for_update_ts;
 
   if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_pessimistic_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
@@ -1245,9 +1279,10 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       } else if (lock_info.lock_ts() == start_ts) {
         if (lock_info.for_update_ts() == for_update_ts) {
           // this is same pessimistic lock request, just do nothing.
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked by self, lock_info: " << lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked by self, lock_info: " << lock_info.ShortDebugString();
           continue;
         } else if (lock_info.for_update_ts() < for_update_ts) {
           // this is a same pessimistic lock with a new for_update_ts, we need to update the lock
@@ -1277,17 +1312,19 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         }
       } else {
         // this is a lock conflict, return lock_info
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                        << ", key: " << Helper::StringToHex(mutation.key())
-                        << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << ", key: " << Helper::StringToHex(mutation.key())
+            << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
 
         // add txn_result for response
         // setup lock_info
         *response->add_txn_result()->mutable_locked() = lock_info;
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                        << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-                        << ", lock_info: " << lock_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+            << ", lock_info: " << lock_info.ShortDebugString();
 
         // need response to client
         continue;
@@ -1308,9 +1345,10 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       }
 
       if (commit_ts >= for_update_ts) {
-        DINGO_LOG(INFO) << "find this transaction is committed,return  WriteConflict with for_update_ts: "
-                        << for_update_ts << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "find this transaction is committed,return  WriteConflict with for_update_ts: " << for_update_ts
+            << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
+            << ", write_info: " << write_info.ShortDebugString();
 
         // pessimistic lock meet write_conflict here
         // add txn_result for response
@@ -1323,9 +1361,10 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         write_conflict->set_key(mutation.key());
         write_conflict->set_primary_key(lock_info.primary_lock());
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                        << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
+            << ", write_info: " << write_info.ShortDebugString();
 
         continue;
       } else {
@@ -1349,18 +1388,18 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
   }
 
   if (response->txn_result_size() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock return txn_result,", region->Id())
-                    << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                    << ", mutations_size: " << mutations.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock return txn_result,", region->Id())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
   }
 
   if (kv_puts_lock.empty()) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", region->Id())
-                    << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                    << ", mutations_size: " << mutations.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", region->Id())
+        << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
   }
 
@@ -1374,12 +1413,20 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     kv->set_key(kv_put.key());
     kv->set_value(kv_put.value());
 
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
-                    << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
-                    << ", value: " << Helper::StringToHex(kv_put.value());
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+        << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
+        << ", value: " << Helper::StringToHex(kv_put.value());
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_do_update_lock_latency("dingo_txn_do_update_lock");
@@ -1388,14 +1435,14 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
                                             const pb::store::LockInfo &lock_info) {
   BvarLatencyGuard bvar_guard(&g_txn_do_update_lock_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                  << ", lock_info: " << lock_info.ShortDebugString();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] UpdateLock, start_ts: {}", ctx->RegionId(), lock_info.lock_ts())
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_info: " << lock_info.ShortDebugString();
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock", region->Id())
-                    << ", region is not found, region_id: " << ctx->RegionId();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn][region({})] UpdateLock", region->Id())
+                                                          << ", region is not found, region_id: " << ctx->RegionId();
 
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
@@ -1410,10 +1457,11 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
   kv_puts_lock.push_back(kv);
 
   if (kv_puts_lock.empty()) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock return empty kv_puts_lock,", region->Id())
-                    << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << lock_info.lock_ts()
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                    << ", lock_info: " << lock_info.ShortDebugString();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] UpdateLock return empty kv_puts_lock,", region->Id())
+        << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << lock_info.lock_ts()
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+        << ", lock_info: " << lock_info.ShortDebugString();
 
     return butil::Status::OK();
   }
@@ -1428,12 +1476,19 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
     kv->set_key(kv_put.key());
     kv->set_value(kv_put.value());
 
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
-                    << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
-                    << ", value: " << Helper::StringToHex(kv_put.value());
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
+                                                          << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
+                                                          << ", value: " << Helper::StringToHex(kv_put.value());
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] UpdateLock,", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_pessimistic_rollback_latency("dingo_txn_pessimistic_rollback");
@@ -1443,9 +1498,10 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
                                                    int64_t for_update_ts, const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_pessimistic_rollback_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
-                  << ", keys_size: " << keys.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", for_update_ts: " << for_update_ts
+      << ", keys_size: " << keys.size();
 
   if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_pessimistic_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", ctx->RegionId(), start_ts)
@@ -1508,9 +1564,10 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
       } else if (lock_info.lock_ts() == start_ts) {
         if (lock_info.for_update_ts() == for_update_ts) {
           // this is same pessimistic lock request, just do rollback.
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                          << ", key: " << Helper::StringToHex(key)
-                          << " is locked by self, can do rollback, lock_info: " << lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+              << ", key: " << Helper::StringToHex(key)
+              << " is locked by self, can do rollback, lock_info: " << lock_info.ShortDebugString();
           kv_dels_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
           continue;
         } else {
@@ -1525,9 +1582,10 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
         }
       } else {
         // this is a lock conflict, return lock_info
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                        << ", key: " << Helper::StringToHex(key)
-                        << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+            << ", key: " << Helper::StringToHex(key)
+            << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
 
         // add txn_result for response
         // setup lock_info
@@ -1536,24 +1594,27 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
       }
     } else {
       // there is not lock exists, rollback need to do nothing, just return ok.
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                      << ", key: " << Helper::StringToHex(key)
-                      << " is not locked, can do rollback, lock_info: " << lock_info.ShortDebugString();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+          << ", key: " << Helper::StringToHex(key)
+          << " is not locked, can do rollback, lock_info: " << lock_info.ShortDebugString();
       continue;
     }
   }
 
   if (response->txn_result_size() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback return txn_result,", region->Id())
-                    << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticRollback return txn_result,", region->Id())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
     return butil::Status::OK();
   }
 
   if (kv_dels_lock.empty()) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                    << ", kv_dels_lock is empty, start_ts: " << start_ts
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+        << ", kv_dels_lock is empty, start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
     return butil::Status::OK();
   }
 
@@ -1566,7 +1627,14 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
     lock_dels->add_keys(kv_del);
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
@@ -1580,13 +1648,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                                         const std::map<int64_t, std::string> &lock_extra_datas) {
   BvarLatencyGuard bvar_guard(&g_txn_prewrite_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                  << ", mutations_size: " << mutations.size() << ", primary_lock: " << Helper::StringToHex(primary_lock)
-                  << ", lock_ttl: " << lock_ttl << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc
-                  << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
-                  << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
-                  << ", lock_extra_datas_size: " << lock_extra_datas.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
+      << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
+      << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", max_commit_ts: " << max_commit_ts
+      << ", pessimistic_checks_size: " << pessimistic_checks.size()
+      << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
+      << ", lock_extra_datas_size: " << lock_extra_datas.size();
 
   if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_prewrite_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
@@ -1669,9 +1738,10 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // for optimistic prewrite
     if (!need_check_pessimistic_lock) {
       if (prev_lock_info.lock_type() == pb::store::Op::Lock) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
-                        << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
-                        << ", lock_info: " << prev_lock_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+            << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
+            << ", lock_info: " << prev_lock_info.ShortDebugString();
         *response->add_txn_result()->mutable_locked() = prev_lock_info;
         continue;
       }
@@ -1680,25 +1750,28 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip write
         // to raft state machine
         if (prev_lock_info.lock_ts() == start_ts) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                          << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+              << prev_lock_info.ShortDebugString();
 
           // this is a repeated prewrite, will skip write to raft state machine
           is_repeated_prewrite = true;
         } else {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
 
           // add txn_result for response
           // setup lock_info
           *response->add_txn_result()->mutable_locked() = prev_lock_info;
 
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-                          << ", lock_info: " << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+              << ", lock_info: " << prev_lock_info.ShortDebugString();
 
           // need response to client
           continue;
@@ -1709,13 +1782,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     else {
       if (!prev_lock_info.primary_lock().empty()) {
         if (prev_lock_info.lock_ts() == start_ts) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked by same start_ts, lock_info: " << prev_lock_info.ShortDebugString();
 
           // if this is not a PessimisticLock, it is a repeated prewrite, will skip write to raft state machine
           if (prev_lock_info.lock_type() != pb::store::Op::Lock) {
-            DINGO_LOG(INFO)
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
                 << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
                 << ", pessimistic prewrite meet optimistic lock, this is a repeated prewrite, skip it, key: "
                 << Helper::StringToHex(mutation.key()) << ", lock_info: " << prev_lock_info.ShortDebugString();
@@ -1726,10 +1800,11 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           // do pessimistic check
           else if (for_update_ts_checks.find(i) != for_update_ts_checks.end()) {
             if (prev_lock_info.for_update_ts() != for_update_ts_checks.at(i)) {
-              DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                              << ", key: " << Helper::StringToHex(mutation.key())
-                              << " is locked by same start_ts, but for_update_ts is not equal, lock_info: "
-                              << prev_lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts_checks.at(i);
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+                  << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                  << ", key: " << Helper::StringToHex(mutation.key())
+                  << " is locked by same start_ts, but for_update_ts is not equal, lock_info: "
+                  << prev_lock_info.ShortDebugString() << ", for_update_ts: " << for_update_ts_checks.at(i);
 
               // add txn_result for response
               // setup lock_info
@@ -1740,17 +1815,19 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
             }
           }
         } else {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked conflict, lock_info: " << prev_lock_info.ShortDebugString();
 
           // add txn_result for response
           // setup lock_info
           *response->add_txn_result()->mutable_locked() = prev_lock_info;
 
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
-                          << ", lock_info: " << prev_lock_info.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
+              << ", lock_info: " << prev_lock_info.ShortDebugString();
 
           // need response to client
           continue;
@@ -1771,8 +1848,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     }
 
     if (write_info.start_ts() == start_ts) {
-      DINGO_LOG(INFO) << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
-                      << ", write_info: " << write_info.ShortDebugString();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
+          << ", write_info: " << write_info.ShortDebugString();
 
       // prewrite meet write_conflict here
       // add txn_result for response
@@ -1785,9 +1863,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       write_conflict->set_key(mutation.key());
       // write_conflict->set_primary_key(lock_info.primary_lock());
 
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                      << ", write_conflict, start_ts: " << start_ts
-                      << ", write_info: " << write_info.ShortDebugString();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite,", region->Id()) << ", write_conflict, start_ts: " << start_ts
+          << ", write_info: " << write_info.ShortDebugString();
 
       break;
     }
@@ -1806,16 +1884,17 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                        << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
     }
 
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                    << ", key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
-                    << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
+        << ", start_ts: " << start_ts << ", commit_ts: " << commit_ts
+        << ", write_info: " << write_info.ShortDebugString();
 
     if (commit_ts >= start_ts) {
       if (!need_check_pessimistic_lock) {
-        DINGO_LOG(INFO) << "Optimistic Prewrite find this transaction is committed after start_ts,return "
-                           "WriteConflict start_ts: "
-                        << start_ts << ", commit_ts: " << commit_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "Optimistic Prewrite find this transaction is committed after start_ts,return "
+               "WriteConflict start_ts: "
+            << start_ts << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
 
         // prewrite meet write_conflict here
         // add txn_result for response
@@ -1828,31 +1907,33 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         write_conflict->set_key(mutation.key());
         // write_conflict->set_primary_key(lock_info.primary_lock());
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                        << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", write_conflict, start_ts: " << start_ts
+            << ", commit_ts: " << commit_ts << ", write_info: " << write_info.ShortDebugString();
         break;
       } else {
-        DINGO_LOG(INFO) << "Pessimistic Prewrite find this transaction is committed after start_ts, it's ok. start_ts: "
-                        << start_ts << ", commit_ts: " << commit_ts;
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "Pessimistic Prewrite find this transaction is committed after start_ts, it's ok. start_ts: " << start_ts
+            << ", commit_ts: " << commit_ts;
       }
     }
 
     if (response->txn_result_size() > 0) {
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
-                      << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-                      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                      << ", mutations_size: " << mutations.size();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
+          << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
       return butil::Status::OK();
     }
 
     // 3.do Put/Delete/PutIfAbsent
     if (mutation.op() == pb::store::Op::Put) {
       if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                        << ", key: " << Helper::StringToHex(mutation.key())
-                        << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                        << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite,", region->Id())
+            << ", key: " << Helper::StringToHex(mutation.key())
+            << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+            << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
         continue;
       }
 
@@ -1894,21 +1975,21 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         kv_puts_lock.push_back(kv);
       }
     } else if (mutation.op() == pb::store::Op::PutIfAbsent) {
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                      << ", key: " << Helper::StringToHex(mutation.key()) << " is PutIfAbsent, start_ts: " << start_ts
-                      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                      << ", mutations_size: " << mutations.size()
-                      << ", prev_write_info is: " << write_info.ShortDebugString();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
+          << " is PutIfAbsent, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+          << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
 
       // check if key is exist
       if (write_info.op() == pb::store::Op::Put) {
         response->add_keys_already_exist()->set_key(mutation.key());
 
         if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+              << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
           continue;
         }
 
@@ -1939,10 +2020,11 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
       } else {
         if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-          DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                          << ", key: " << Helper::StringToHex(mutation.key())
-                          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+              << fmt::format("[txn][region({})] Prewrite,", region->Id())
+              << ", key: " << Helper::StringToHex(mutation.key())
+              << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+              << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
           continue;
         }
 
@@ -1986,10 +2068,11 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
     } else if (mutation.op() == pb::store::Op::Delete) {
       if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                        << ", key: " << Helper::StringToHex(mutation.key())
-                        << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-                        << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite,", region->Id())
+            << ", key: " << Helper::StringToHex(mutation.key())
+            << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+            << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
         continue;
       }
 
@@ -2025,11 +2108,11 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   }
 
   if (kv_puts_data.empty() && kv_puts_lock.empty()) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,",
-                                   region->Id())
-                    << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
-                    << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                    << ", mutations_size: " << mutations.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,", region->Id())
+        << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
+        << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+        << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
   }
 
@@ -2057,12 +2140,19 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                  << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
-                  << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-                  << ", mutations_size: " << mutations.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", kv_puts_data_size: " << kv_puts_data.size()
+      << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
@@ -2072,15 +2162,17 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                                       const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_commit_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                  << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", keys_size: " << keys.size() << ", keys[0]: " << Helper::StringToHex(keys[0]);
 
   // print keys and index
   for (int i = 0; i < keys.size(); i++) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
-                    << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                    << ", keys[" << i << "]: " << Helper::StringToHex(keys[i]);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Commit, start_ts: {}", ctx->RegionId(), start_ts)
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts << ", keys[" << i
+        << "]: " << Helper::StringToHex(keys[i]);
   }
 
   if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_commit_count)) {
@@ -2218,10 +2310,9 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
       // if prev_commit_ts == commit_ts, means this key of start_ts is already committed, can skip it
       if (prev_commit_ts == commit_ts) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
-                                       commit_ts)
-                        << ", key: " << Helper::StringToHex(key)
-                        << " is already committed, prev_commit_ts: " << prev_commit_ts;
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts, commit_ts)
+            << ", key: " << Helper::StringToHex(key) << " is already committed, prev_commit_ts: " << prev_commit_ts;
         continue;
       }
 
@@ -2236,8 +2327,9 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       }
 
       if (write_info.start_ts() == start_ts) {
-        DINGO_LOG(INFO) << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << "find this transaction is rollbacked,return  SelfRolledBack , start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
 
         // prewrite meet write_conflict here
         // add txn_result for response
@@ -2249,9 +2341,10 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
         write_conflict->set_key(key);
         // write_conflict->set_primary_key(lock_info.primary_lock());
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] Commit,", region->Id())
-                        << ", meet key is rollbacked, return write_conflict, start_ts: " << start_ts
-                        << ", write_info: " << write_info.ShortDebugString();
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Commit,", region->Id())
+            << ", meet key is rollbacked, return write_conflict, start_ts: " << start_ts
+            << ", write_info: " << write_info.ShortDebugString();
 
         return butil::Status::OK();
       }
@@ -2294,9 +2387,10 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
                                            int64_t commit_ts) {
   BvarLatencyGuard bvar_guard(&g_txn_do_commit_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {}", region->Id(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                  << ", lock_infos_size: " << lock_infos.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {}", region->Id(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", lock_infos_size: " << lock_infos.size();
 
   // create reader and writer
   auto reader = raw_engine->Reader();
@@ -2316,9 +2410,9 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
     { kv_deletes_lock.push_back(Helper::EncodeTxnKey(lock_info.key(), Constant::kLockVer)); }
 
     if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
-                                     start_ts, commit_ts)
-                      << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts, commit_ts)
+          << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
       continue;
     }
 
@@ -2387,9 +2481,9 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
   }
 
   if (kv_puts_write.empty() && kv_deletes_lock.empty()) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
-                                   commit_ts)
-                    << ", kv_puts_write is empty and kv_deletes_lock is empty";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts, commit_ts)
+        << ", kv_puts_write is empty and kv_deletes_lock is empty";
     return butil::Status::OK();
   }
 
@@ -2412,7 +2506,15 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
     }
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
+                                    commit_ts)
+                     << ", write to raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status");
@@ -2422,10 +2524,11 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
                                               int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) {
   BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
-                                 Helper::StringToHex(primary_key))
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
-                  << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
+                     Helper::StringToHex(primary_key))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
+      << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
 
   // we need to do if primay_key is in this region'range in service before apply to raft state machine
   // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
@@ -2506,14 +2609,15 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
 
     int64_t current_ms = current_ts >> 18;
 
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                    << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString()
-                    << ", current_ms: " << current_ms;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+        << "lock is exists, check ttl, lock_info: " << lock_info.ShortDebugString() << ", current_ms: " << current_ms;
 
     if (lock_info.lock_ttl() >= current_ms) {
-      DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                      << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
-                      << ", current_ms: " << current_ms;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+          << "lock is not expired, return conflict, lock_info: " << lock_info.ShortDebugString()
+          << ", current_ms: " << current_ms;
 
       response->set_lock_ttl(lock_info.lock_ttl());
       response->set_commit_ts(0);
@@ -2535,23 +2639,26 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
 
         response->set_action(pb::store::Action::MinCommitTSPushed);
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                        << ", update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
-                        << ", Action: " << pb::store::Action_Name(pb::store::Action::MinCommitTSPushed);
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << ", update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+            << ", Action: " << pb::store::Action_Name(pb::store::Action::MinCommitTSPushed);
       } else {
         response->set_action(pb::store::Action::NoAction);
 
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                        << ", no need to update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
-                        << ", Action: " << pb::store::Action_Name(pb::store::Action::NoAction);
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << ", no need to update min_commit_ts, primary_key: " << Helper::StringToHex(primary_key)
+            << ", Action: " << pb::store::Action_Name(pb::store::Action::NoAction);
       }
 
       return butil::Status::OK();
     }
 
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-                    << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
-                    << ", current_ms: " << current_ms;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+        << "lock is expired, do rollback, lock_info: " << lock_info.ShortDebugString()
+        << ", current_ms: " << current_ms;
 
     // lock is expired, do rollback
     std::vector<std::string> keys_to_rollback_with_data;
@@ -2564,9 +2671,10 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     auto ret =
         DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, lock_ts);
     if (!ret.ok()) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                        << ", rollback failed, primary_key: " << Helper::StringToHex(primary_key)
                        << ", lock_ts: " << lock_ts << ", status: " << ret.error_str();
+      return ret;
     }
 
     response->set_lock_ttl(0);
@@ -2631,8 +2739,9 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
                                              const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_batch_rollback_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
 
   if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_rollback_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, start_ts: {}", ctx->RegionId(), start_ts)
@@ -2734,8 +2843,9 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   auto ret =
       DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
   if (!ret.ok()) {
-    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
                      << ", rollback failed, status: " << ret.error_str();
+    return ret;
   }
 
   return butil::Status::OK();
@@ -2750,12 +2860,12 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
                                           std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts) {
   BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
 
-  DINGO_LOG(INFO) << "[txn]Rollback start_ts: " << start_ts
-                  << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
-                  << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]Rollback start_ts: " << start_ts << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
+      << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
 
   if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty()) {
-    DINGO_LOG(INFO) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
     return butil::Status::OK();
   }
 
@@ -2797,7 +2907,7 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   }
 
   if (kv_puts_write.empty() && kv_deletes_lock.empty() && kv_deletes_data.empty()) {
-    DINGO_LOG(INFO) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
     return butil::Status::OK();
   }
 
@@ -2831,7 +2941,14 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
     }
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << "[txn]Rollback failed, start_ts: " << start_ts << ", error_code: " << ret.error_code()
+                     << ", error_msg: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");
@@ -2841,9 +2958,10 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
                                            const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_resolve_lock_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
-                  << ", keys_size: " << keys.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
+      << ", keys_size: " << keys.size();
 
   if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, start_ts: {}", ctx->RegionId(), start_ts)
@@ -3008,8 +3126,9 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   if (!lock_infos_to_commit.empty()) {
     auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
     if (!ret.ok()) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
                        << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+      return ret;
     }
   }
 
@@ -3033,10 +3152,11 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
                                          int64_t start_ts, int64_t advise_lock_ttl) {
   BvarLatencyGuard bvar_guard(&g_txn_hearbeat_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
-                                 Helper::StringToHex(primary_lock))
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
-                  << ", advise_lock_ttl: " << advise_lock_ttl;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", ctx->RegionId(),
+                     Helper::StringToHex(primary_lock))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", start_ts: " << start_ts
+      << ", advise_lock_ttl: " << advise_lock_ttl;
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -3103,7 +3223,15 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
     return butil::Status::OK();
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
+                                    Helper::StringToHex(primary_lock))
+                     << ", write failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_delete_range_latency("dingo_txn_delete_range");
@@ -3113,9 +3241,9 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
                                            const std::string &end_key) {
   BvarLatencyGuard bvar_guard(&g_txn_delete_range_latency);
 
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", ctx->RegionId(),
-                                 Helper::StringToHex(start_key))
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", end_key: " << end_key;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] DeleteRange, start_key: {}", ctx->RegionId(), Helper::StringToHex(start_key))
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", end_key: " << end_key;
 
   auto region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -3142,13 +3270,22 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
     return butil::Status::OK();
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DeleteRange, start_key: {}", region->Id(),
+                                    Helper::StringToHex(start_key))
+                     << ", write failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
-                  << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
 
   store::RegionPtr region = Server::GetInstance().GetRegion(ctx->RegionId());
   if (region == nullptr) {
@@ -3184,7 +3321,7 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
   int64_t total_delete_count = 0;
   int64_t region_id = ctx->RegionId();
 
-  DINGO_LOG(INFO) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
       "[txn_gc][statics][region({})] start region start_key: {} end_key: {} safe_point_ts : {}", region_id,
       Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts);
 
@@ -3303,7 +3440,7 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
                   "{} raw_key : {}  start_ts : {} status : {} write_info: {}",
                   region_id, Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
                   status.error_cstr(), write_info.ShortDebugString());
-              DINGO_LOG(INFO) << s;
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << s;
             } else {  // other error
               std::string s = fmt::format(
                   "[txn_gc][data][region({})] get key failed. key: {} raw_key : {}  start_ts : {}"
@@ -3358,15 +3495,15 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
     if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
-        DINGO_LOG(INFO) << fmt::format("[txn_gc][region({})] gc_stop set stop.  start_key : {} end_key : {}. return",
-                                       ctx->RegionId(), Helper::StringToHex(region_start_key),
-                                       Helper::StringToHex(region_end_key));
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn_gc][region({})] gc_stop set stop.  start_key : {} end_key : {}. return",
+                           ctx->RegionId(), Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
         gc_safe_point->SetForceGcStop(true);
         goto _interrupt1;
       }
 
       if (safe_point_ts < internal_safe_point_ts) {
-        DINGO_LOG(INFO) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
             "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with "
             "it next time. ignore.  start_key : {} end_key : {}",
             ctx->RegionId(), safe_point_ts, internal_safe_point_ts, Helper::StringToHex(region_start_key),
@@ -3385,13 +3522,14 @@ _interrupt1:
 
   auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
   if (internal_gc_stop || gc_safe_point->GetForceGcStop()) {
-    DINGO_LOG(INFO) << fmt::format("[txn_gc][region({})] set internal_gc_stop stop, return", ctx->RegionId());
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn_gc][region({})] set internal_gc_stop stop, return", ctx->RegionId());
     gc_safe_point->SetForceGcStop(true);
     goto _interrupt2;
   }
 
   if (safe_point_ts < internal_safe_point_ts) {
-    DINGO_LOG(INFO) << fmt::format(
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
         "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it "
         "next time. ignore.",
         ctx->RegionId(), safe_point_ts, internal_safe_point_ts);
@@ -3404,7 +3542,7 @@ _interrupt1:
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
-  DINGO_LOG(INFO) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
       "[txn_gc][statics][region({})] end region start_key: {} end_key: {} safe_point_ts : {} time consuming : {} ms "
       "total_delete_count : {}",
       region_id, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key), safe_point_ts,
@@ -3503,7 +3641,7 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
       "success : {} failed : {}",
       region_id, Helper::StringToHex(start_key), Helper::StringToHex(end_key), safe_point_ts, total_count,
       (total_count - failed_count), failed_count);
-  DINGO_LOG(INFO) << s;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << s;
 
   return butil::Status();
 }
@@ -3558,7 +3696,14 @@ butil::Status TxnEngineHelper::RaftEngineWriteForGc(std::shared_ptr<Engine> raft
     return butil::Status::OK();
   }
 
-  return raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] RaftEngineWriteForGc, write failed, status: {}", ctx->RegionId(),
+                                    ret.error_str());
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
 }
 
 bvar::LatencyRecorder g_txn_do_final_work_for_gc_latency("dingo_txn_do_final_work_for_gc");
@@ -3612,7 +3757,7 @@ void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
   static std::atomic<bool> g_regular_update_safe_point_ts_handler_running(false);
 
   if (g_regular_update_safe_point_ts_handler_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG(INFO)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << "RegularUpdateSafePointTsHandler... g_regular_update_safe_point_ts_handler_running is true, return";
     return;
   }
@@ -3637,9 +3782,9 @@ void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
     return;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}",
-                                 response.ByteSizeLong(), Helper::TimestampMs() - start_time,
-                                 response.ShortDebugString());
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}", response.ByteSizeLong(),
+                     Helper::TimestampMs() - start_time, response.ShortDebugString());
 
   std::shared_ptr<GCSafePoint> gc_safe_point = store_meta_manager->GetGCSafePoint();
 
@@ -3667,7 +3812,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   static std::atomic<bool> g_regular_do_gc_handler_running(false);
 
   if (g_regular_do_gc_handler_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG(INFO) << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
     return;
   }
 
@@ -3679,12 +3825,14 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   auto [gc_stop, safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
 
   if (gc_stop) {
-    DINGO_LOG(INFO) << fmt::format("[txn_gc] set gc_flag stop, return. safe_point_ts : {}", safe_point_ts);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn_gc] set gc_flag stop, return. safe_point_ts : {}", safe_point_ts);
     return;
   }
 
   if (safe_point_ts <= 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn_gc] safe_point_ts({}) <= 0, ignore. return.", safe_point_ts);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn_gc] safe_point_ts({}) <= 0, ignore. return.", safe_point_ts);
     return;
   }
 
@@ -3693,7 +3841,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
   int64_t last_accomplished_safe_point_ts = gc_safe_point->GetLastAccomplishedSafePointTs();
   if (last_accomplished_safe_point_ts <= safe_point_ts) {
-    DINGO_LOG(INFO) << fmt::format("safe_point_ts : {} already accomplished. ignore", safe_point_ts);
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("safe_point_ts : {} already accomplished. ignore", safe_point_ts);
     return;
   }
 #endif
@@ -3724,9 +3873,9 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
        });
 
   for (auto &region_ptr : leader_region_ptrs) {
-    DINGO_LOG(INFO) << fmt::format("region id : {} start_key : {} end_key : {}", region_ptr->Id(),
-                                   Helper::StringToHex(region_ptr->Range().start_key()),
-                                   Helper::StringToHex(region_ptr->Range().end_key()));
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        "region id : {} start_key : {} end_key : {}", region_ptr->Id(),
+        Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
   }
 
   std::shared_ptr<Engine> engine = storage->GetEngine();
@@ -3737,13 +3886,13 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     butil::Status status;
     status = storage->ValidateLeader(region_ptr->Id());
     if (!status.ok()) {
-      DINGO_LOG(INFO) << fmt::format("region_id : {} is not leader yet. start_key : {} end_key : {}. ignore.",
-                                     region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
-                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+          "region_id : {} is not leader yet. start_key : {} end_key : {}. ignore.", region_ptr->Id(),
+          Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
       continue;
     } else {
       if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
-        DINGO_LOG(INFO) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
             "region_id : {} is leader. but state is not normal : {}.  start_key : {} end_key : {}.  ignore.",
             region_ptr->Id(), static_cast<int>(region_ptr->State()),
             Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
@@ -3754,15 +3903,15 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
 
     if (internal_gc_stop) {
-      DINGO_LOG(INFO) << fmt::format("set internal_gc_stop stop, region_id : {} .  start_key : {} end_key : {}. return",
-                                     region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
-                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+          "set internal_gc_stop stop, region_id : {} .  start_key : {} end_key : {}. return", region_ptr->Id(),
+          Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
       gc_safe_point->SetForceGcStop(true);
       return;
     }
 
     if (safe_point_ts < internal_safe_point_ts) {
-      DINGO_LOG(INFO) << fmt::format(
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
           "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. "
           "ignore.",
           safe_point_ts, internal_safe_point_ts);
@@ -3789,9 +3938,9 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     status = writer->TxnGc(ctx, safe_point_ts);
 
     if (gc_safe_point->GetForceGcStop()) {
-      DINGO_LOG(INFO) << fmt::format("gc_stop stopped, region_id : {}.  start_key : {} end_key : {}.  return",
-                                     ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
-                                     Helper::StringToHex(region_ptr->Range().end_key()));
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+          "gc_stop stopped, region_id : {}.  start_key : {} end_key : {}.  return", ctx->RegionId(),
+          Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
       return;
     }
   }

@@ -37,6 +37,14 @@ static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 #define DINGO_LOG_ERROR LOG(ERROR) << CURRENT_FUNC_NAME
 #define DINGO_LOG_FATAL LOG(FATAL) << CURRENT_FUNC_NAME
 
+#define DINGO_LOG_IF(level, condition) DINGO_LOG_IF_##level(condition)
+
+#define DINGO_LOG_IF_DEBUG(condition) VLOG_IF(DINGO_DEBUG, condition) << CURRENT_FUNC_NAME
+#define DINGO_LOG_IF_INFO(condition) LOG_IF(INFO, condition) << CURRENT_FUNC_NAME
+#define DINGO_LOG_IF_WARNING(condition) LOG_IF(WARNING, condition) << CURRENT_FUNC_NAME
+#define DINGO_LOG_IF_ERROR(condition) LOG_IF(ERROR, condition) << CURRENT_FUNC_NAME
+#define DINGO_LOG_IF_FATAL(condition) LOG_IF(FATAL, condition) << CURRENT_FUNC_NAME
+
 class DingoLogger {
  public:
   static void InitLogger(const std::string& log_dir, const std::string& role, const pb::node::LogLevel& level);
