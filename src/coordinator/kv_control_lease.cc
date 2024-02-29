@@ -37,6 +37,8 @@ DEFINE_int64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version leas
 DEFINE_int64(version_lease_max_count, 50000, "max lease count");
 DEFINE_int64(version_lease_print_ttl_remaining_seconds, 10, "print ttl remaining seconds if value is less than this");
 
+DEFINE_bool(dingo_log_switch_coor_lease, false, "switch for dingo log of kv control lease");
+
 butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64_t &granted_id,
                                     int64_t &granted_ttl_seconds,
                                     pb::coordinator_internal::MetaIncrement &meta_increment) {
@@ -209,7 +211,7 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
 
   auto it = lease_to_key_map_temp_.find(lease_id);
   if (it == lease_to_key_map_temp_.end()) {
-    DINGO_LOG(INFO) << "lease id " << lease_id << " not found";
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_lease) << "lease id " << lease_id << " not found";
     return butil::Status(pb::error::Errno::ELEASE_NOT_EXISTS_OR_EXPIRED, "lease id %lu not found", lease_id);
   }
 
@@ -229,7 +231,7 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
 }
 
 void KvControl::LeaseTask() {
-  DINGO_LOG(INFO) << "lease task start";
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_lease) << "lease task start";
 
   std::vector<int64_t> lease_ids_to_revoke;
   pb::coordinator_internal::MetaIncrement meta_increment;

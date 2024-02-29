@@ -34,6 +34,8 @@ namespace dingodb {
 
 DEFINE_int64(version_watch_max_count, 50000, "max count of version watch");
 
+DEFINE_bool(dingo_log_switch_coor_watch, false, "switch for dingo log of kv control lease");
+
 void WatchCancelCallback(KvControl* kv_control, uint64_t closure_id) {
   kv_control->CancelOneTimeWatchClosure(closure_id);
   // kv_control->RemoveOneTimeWatch(closure_id);
@@ -64,8 +66,9 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
 
   if (start_revision == 0) {
     start_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
-    DINGO_LOG(INFO) << "OneTimeWatch, start_revision is 0, set to next revision, watch_key:" << watch_key
-                    << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+        << "OneTimeWatch, start_revision is 0, set to next revision, watch_key:" << watch_key
+        << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
   }
 
   // check if need to send back immediately
@@ -79,8 +82,9 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
     // not exist, no wait, send response
     auto* event = response->add_events();
     event->set_type(::dingodb::pb::version::Event_EventType::Event_EventType_NOT_EXISTS);
-    DINGO_LOG(INFO) << "OneTimeWatch, key not exists, no wait, send response, watch_key:" << watch_key
-                    << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+        << "OneTimeWatch, key not exists, no wait, send response, watch_key:" << watch_key
+        << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;
     return butil::Status::OK();
   }
 
@@ -132,9 +136,9 @@ butil::Status KvControl::AddOneTimeWatch(const std::string& watch_key, int64_t s
   } else {
     auto& exist_watch_node_map = it->second;
     exist_watch_node_map.insert_or_assign(closure_id, watch_node);
-    DINGO_LOG(INFO) << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key
-                    << ", hex_key: " << Helper::StringToHex(watch_key)
-                    << ", watch_node_map.size:" << exist_watch_node_map.size();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+        << "AddOneTimeWatch, watch_key found, insert, watch_key:" << watch_key
+        << ", hex_key: " << Helper::StringToHex(watch_key) << ", watch_node_map.size:" << exist_watch_node_map.size();
   }
 
   return butil::Status::OK();
@@ -239,7 +243,7 @@ butil::Status KvControl::RemoveOneTimeWatch() {
 }
 
 butil::Status KvControl::RemoveOneTimeWatch(uint64_t closure_id) {
-  DINGO_LOG(INFO) << "RemoveOneTimeWatch closure_id:" << closure_id;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch) << "RemoveOneTimeWatch closure_id:" << closure_id;
 
   int64_t start_ts = butil::gettimeofday_ms();
   auto ret1 = bthread_mutex_trylock(&one_time_watch_map_mutex_);
@@ -271,30 +275,32 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
 
   auto it = one_time_watch_map_.find(key);
   if (it == one_time_watch_map_.end()) {
-    DINGO_LOG(INFO) << "TriggerOneWatch not found, key:" << key;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch) << "TriggerOneWatch not found, key:" << key;
     return butil::Status::OK();
   }
 
   auto& watch_node_map = it->second;
 
-  DINGO_LOG(INFO) << "TriggerOneWatch, key:" << key << ", watch_node_map.size:" << watch_node_map.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+      << "TriggerOneWatch, key:" << key << ", watch_node_map.size:" << watch_node_map.size();
 
   std::vector<uint64_t> done_list;
   for (auto& watch_node : watch_node_map) {
     if (watch_node.second.no_put_event && event_type == pb::version::Event::EventType::Event_EventType_PUT) {
-      DINGO_LOG(INFO) << "TriggerOneWatch skip, no_put_event, key:" << key;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch) << "TriggerOneWatch skip, no_put_event, key:" << key;
       continue;
     }
 
     if (watch_node.second.no_delete_event && event_type == pb::version::Event::EventType::Event_EventType_DELETE) {
-      DINGO_LOG(INFO) << "TriggerOneWatch skip, no_delete_event, key:" << key;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch) << "TriggerOneWatch skip, no_delete_event, key:" << key;
       continue;
     }
 
     if (watch_node.second.start_revision > new_kv.mod_revision()) {
-      DINGO_LOG(INFO) << "TriggerOneWatch skip, start_revision > new_kv.mod_revision(), key:" << key
-                      << ", start_revision:" << watch_node.second.start_revision
-                      << ", new_kv.mod_revision:" << new_kv.mod_revision();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+          << "TriggerOneWatch skip, start_revision > new_kv.mod_revision(), key:" << key
+          << ", start_revision:" << watch_node.second.start_revision
+          << ", new_kv.mod_revision:" << new_kv.mod_revision();
       continue;
     }
 
@@ -315,7 +321,7 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
                          << ", closure_id:" << closure_id;
       }
 
-      DINGO_LOG(INFO) << "TriggerOneWatch will GetResponse ptr, key:" << key;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch) << "TriggerOneWatch will GetResponse ptr, key:" << key;
 
       response = it_closure->second.GetResponse();
       if (response == nullptr) {
@@ -332,12 +338,13 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
       }
     }
 
-    DINGO_LOG(INFO) << "TriggerOneWatch will RemoveOneTimeWatch, key:" << key << ", event_type:" << event_type
-                    << ", watch_node.first:" << watch_node.first
-                    << ", watch_detail: start_revision=" << watch_node.second.start_revision
-                    << ", no_put_event=" << watch_node.second.no_put_event
-                    << ", no_delete_event=" << watch_node.second.no_delete_event
-                    << ", need_prev_kv=" << watch_node.second.need_prev_kv;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+        << "TriggerOneWatch will RemoveOneTimeWatch, key:" << key << ", event_type:" << event_type
+        << ", watch_node.first:" << watch_node.first
+        << ", watch_detail: start_revision=" << watch_node.second.start_revision
+        << ", no_put_event=" << watch_node.second.no_put_event
+        << ", no_delete_event=" << watch_node.second.no_delete_event
+        << ", need_prev_kv=" << watch_node.second.need_prev_kv;
 
     done_list.push_back(closure_id);
 
@@ -348,7 +355,8 @@ butil::Status KvControl::TriggerOneWatch(const std::string& key, pb::version::Ev
   for (auto& closure_id : done_list) {
     auto ret = RemoveOneTimeWatchWithLock(closure_id);
     if (ret.ok()) {
-      DINGO_LOG(INFO) << "RemoveOneTimeWatchWithLock success, do done->Run(), closure_id:" << closure_id;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
+          << "RemoveOneTimeWatchWithLock success, do done->Run(), closure_id:" << closure_id;
     } else {
       DINGO_LOG(ERROR) << "RemoveOneTimeWatchWithLock failed, do done->Run(), closure_id:" << closure_id
                        << ", errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
