@@ -216,11 +216,7 @@ void KvControl::GetLeaderLocation(pb::common::Location& leader_server_location) 
   // parse leader raft location from string
   auto leader_string = raft_node_->GetLeaderId().to_string();
 
-  pb::common::Location leader_raft_location;
-  int ret = Helper::PeerIdToLocation(raft_node_->GetLeaderId(), leader_raft_location);
-  if (ret < 0) {
-    return;
-  }
+  pb::common::Location leader_raft_location = Helper::PeerIdToLocation(raft_node_->GetLeaderId());
 
   // GetServerLocation
   GetServerLocation(leader_raft_location, leader_server_location);

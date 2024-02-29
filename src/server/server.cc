@@ -811,7 +811,7 @@ butil::EndPoint Server::ServerEndpoint() { return server_endpoint_; }
 
 void Server::SetServerEndpoint(const butil::EndPoint& endpoint) {
   server_endpoint_ = endpoint;
-  server_addr_ = Helper::EndPointToStr(endpoint);
+  server_addr_ = Helper::EndPointToString(endpoint);
 }
 
 butil::EndPoint Server::RaftEndpoint() { return raft_endpoint_; }

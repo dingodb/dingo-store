@@ -14,13 +14,18 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "braft/configuration.h"
+#include "butil/endpoint.h"
 #include "common/helper.h"
 #include "fmt/core.h"
+#include "proto/error.pb.h"
 #include "server/service_helper.h"
 
 class HelperTest : public testing::Test {
@@ -29,13 +34,624 @@ class HelperTest : public testing::Test {
   void TearDown() override {}
 };
 
-// TEST_F(HelperTest, GetDiskCapacity) {
-//   std::string path = "/";
-//   std::map<std::string, int64_t> output;
+TEST_F(HelperTest, IsIp) {
+  EXPECT_EQ(false, dingodb::Helper::IsIp(""));
+  EXPECT_EQ(false, dingodb::Helper::IsIp("hello"));
+  EXPECT_EQ(false, dingodb::Helper::IsIp("   "));
+  EXPECT_EQ(false, dingodb::Helper::IsIp("10.10"));
+  EXPECT_EQ(false, dingodb::Helper::IsIp("10.10.a.10"));
+  EXPECT_EQ(true, dingodb::Helper::IsIp("10.10.10.10"));
+  EXPECT_EQ(true, dingodb::Helper::IsIp("127.0.0.1"));
+}
 
-//   EXPECT_EQ(true, dingodb::Helper::GetDiskCapacity(path, output));
-//   LOG(INFO) << output["TotalSpace"] << " " << output["FreeSpace"];
-// }
+TEST_F(HelperTest, IsExecutorRaw) {
+  EXPECT_EQ(false, dingodb::Helper::IsExecutorRaw(""));
+  EXPECT_EQ(true, dingodb::Helper::IsExecutorRaw("rhello"));
+  EXPECT_EQ(false, dingodb::Helper::IsExecutorRaw("hello"));
+}
+TEST_F(HelperTest, IsExecutorTxn) {
+  EXPECT_EQ(false, dingodb::Helper::IsExecutorTxn(""));
+  EXPECT_EQ(true, dingodb::Helper::IsExecutorTxn("thello"));
+  EXPECT_EQ(false, dingodb::Helper::IsExecutorTxn("hello"));
+}
+
+TEST_F(HelperTest, IsClientRaw) {
+  EXPECT_EQ(false, dingodb::Helper::IsClientRaw(""));
+  EXPECT_EQ(true, dingodb::Helper::IsClientRaw("whello"));
+  EXPECT_EQ(false, dingodb::Helper::IsClientRaw("hello"));
+}
+
+TEST_F(HelperTest, IsClientTxn) {
+  EXPECT_EQ(false, dingodb::Helper::IsClientTxn(""));
+  EXPECT_EQ(true, dingodb::Helper::IsClientTxn("xhello"));
+  EXPECT_EQ(false, dingodb::Helper::IsClientTxn("hello"));
+}
+
+TEST_F(HelperTest, Ip2HostName) {
+  EXPECT_EQ("", dingodb::Helper::Ip2HostName(""));
+
+  EXPECT_EQ("localhost", dingodb::Helper::Ip2HostName("127.0.0.1"));
+
+  EXPECT_EQ("localhost", dingodb::Helper::Ip2HostName("localhost"));
+}
+
+TEST_F(HelperTest, StringToLocation) {
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1");
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1:80");
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("localhost");
+    expect.set_port(80);
+    auto actual = dingodb::Helper::StringToLocation("localhost:80");
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    expect.set_index(11);
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1:80:11");
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    auto actual = dingodb::Helper::StringToLocation("");
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+}
+
+TEST_F(HelperTest, StringToLocation2) {
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1", 0);
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1", 80);
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("localhost");
+    expect.set_port(80);
+    auto actual = dingodb::Helper::StringToLocation("localhost", 80);
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    expect.set_index(11);
+    auto actual = dingodb::Helper::StringToLocation("127.0.0.1", 80, 11);
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_port(80);
+    auto actual = dingodb::Helper::StringToLocation("", 80);
+
+    EXPECT_EQ(expect.host(), actual.host());
+    EXPECT_EQ(expect.port(), actual.port());
+    EXPECT_EQ(expect.index(), actual.index());
+  }
+}
+
+TEST_F(HelperTest, LocationToString) {
+  {
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.1");
+    location.set_port(80);
+    location.set_index(11);
+    EXPECT_EQ("127.0.0.1:80:11", dingodb::Helper::LocationToString(location));
+  }
+  {
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.1");
+    location.set_port(80);
+    EXPECT_EQ("127.0.0.1:80:0", dingodb::Helper::LocationToString(location));
+  }
+  {
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.1");
+    location.set_port(0);
+    location.set_index(11);
+    EXPECT_EQ("127.0.0.1:0:11", dingodb::Helper::LocationToString(location));
+  }
+  {
+    dingodb::pb::common::Location location;
+    location.set_host("localhost");
+    location.set_port(80);
+    location.set_index(11);
+    EXPECT_EQ("localhost:80:11", dingodb::Helper::LocationToString(location));
+  }
+}
+
+TEST_F(HelperTest, LocationsToString) {
+  {
+    std::vector<dingodb::pb::common::Location> locations;
+    {
+      dingodb::pb::common::Location location;
+      location.set_host("127.0.0.1");
+      location.set_port(80);
+      location.set_index(11);
+      locations.push_back(location);
+    }
+
+    {
+      dingodb::pb::common::Location location;
+      location.set_host("127.0.0.2");
+      location.set_port(80);
+      location.set_index(11);
+      locations.push_back(location);
+    }
+
+    {
+      dingodb::pb::common::Location location;
+      location.set_host("127.0.0.3");
+      location.set_port(80);
+      location.set_index(11);
+      locations.push_back(location);
+    }
+
+    EXPECT_EQ("127.0.0.1:80:11,127.0.0.2:80:11,127.0.0.3:80:11", dingodb::Helper::LocationsToString(locations));
+  }
+}
+
+TEST_F(HelperTest, StringToEndPoint) {
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("", 0);
+    EXPECT_EQ(butil::IP_ANY, endpoint.ip);
+    EXPECT_EQ(0, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1", 80);
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(80, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("localhost", 80);
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(80, endpoint.port);
+  }
+}
+
+TEST_F(HelperTest, StringToEndPoint2) {
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("");
+    EXPECT_EQ(butil::IP_ANY, endpoint.ip);
+    EXPECT_EQ(0, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1");
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(0, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:80");
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(80, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("localhost:80");
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(80, endpoint.port);
+  }
+
+  {
+    auto endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:80:10");
+    EXPECT_EQ(0, strcmp("127.0.0.1", butil::ip2str(endpoint.ip).c_str()));
+    EXPECT_EQ(80, endpoint.port);
+  }
+}
+
+TEST_F(HelperTest, StringToEndpoints) {
+  std::vector<butil::EndPoint> expect = {
+      dingodb::Helper::StringToEndPoint("127.0.0.1:80"), dingodb::Helper::StringToEndPoint("127.0.0.1:81:11"),
+      dingodb::Helper::StringToEndPoint("192.168.0.1:80"), dingodb::Helper::StringToEndPoint("192.168.0.2:80:12")};
+
+  auto actual = dingodb::Helper::StringToEndpoints("127.0.0.1:80,127.0.0.1:81:11,192.168.0.1:80,192.168.0.2:80:12");
+  ASSERT_EQ(4, actual.size());
+  EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect[0], actual[0]));
+  EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect[1], actual[1]));
+  EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect[2], actual[2]));
+  EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect[3], actual[3]));
+}
+
+TEST_F(HelperTest, EndPointToString) {
+  EXPECT_EQ("127.0.0.1:80", dingodb::Helper::EndPointToString(dingodb::Helper::StringToEndPoint("127.0.0.1:80")));
+
+  EXPECT_EQ("127.0.0.1:0", dingodb::Helper::EndPointToString(dingodb::Helper::StringToEndPoint("127.0.0.1")));
+
+  EXPECT_EQ("127.0.0.1:80", dingodb::Helper::EndPointToString(dingodb::Helper::StringToEndPoint("127.0.0.1:80:11")));
+
+  EXPECT_EQ("0.0.0.0:0", dingodb::Helper::EndPointToString(dingodb::Helper::StringToEndPoint("")));
+}
+
+TEST_F(HelperTest, StringToPeerId) {}
+
+TEST_F(HelperTest, StringToPeerId2) {}
+
+TEST_F(HelperTest, PeerIdToLocation) {
+  {
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:80");
+    dingodb::pb::common::Location location = dingodb::Helper::PeerIdToLocation(braft::PeerId(endpoint));
+    EXPECT_EQ("127.0.0.1", location.host());
+    EXPECT_EQ(80, location.port());
+  }
+
+  {
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1");
+    std::cout << "endpoint: " << butil::ip2str(endpoint.ip) << std::endl;
+    dingodb::pb::common::Location location = dingodb::Helper::PeerIdToLocation(braft::PeerId(endpoint));
+    EXPECT_EQ("127.0.0.1", location.host());
+    EXPECT_EQ(0, location.port());
+  }
+
+  {
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("localhost:80");
+    dingodb::pb::common::Location location = dingodb::Helper::PeerIdToLocation(braft::PeerId(endpoint));
+    EXPECT_EQ("127.0.0.1", location.host());
+    EXPECT_EQ(80, location.port());
+  }
+}
+
+TEST_F(HelperTest, PeerIdsToString) {
+  {
+    std::vector<braft::PeerId> peer_ids = {dingodb::Helper::StringToPeerId("127.0.0.1:80")};
+    EXPECT_EQ("127.0.0.1:80:0:0", dingodb::Helper::PeerIdsToString(peer_ids));
+  }
+  {
+    std::vector<braft::PeerId> peer_ids = {dingodb::Helper::StringToPeerId("127.0.0.1:80:11")};
+    EXPECT_EQ("127.0.0.1:80:11:0", dingodb::Helper::PeerIdsToString(peer_ids));
+  }
+  {
+    std::vector<braft::PeerId> peer_ids = {dingodb::Helper::StringToPeerId("127.0.0.1:80"),
+                                           dingodb::Helper::StringToPeerId("127.0.0.2:81")};
+    EXPECT_EQ("127.0.0.1:80:0:0,127.0.0.2:81:0:0", dingodb::Helper::PeerIdsToString(peer_ids));
+  }
+  {
+    std::vector<braft::PeerId> peer_ids = {dingodb::Helper::StringToPeerId("127.0.0.1:80:10"),
+                                           dingodb::Helper::StringToPeerId("127.0.0.2:81:11")};
+    EXPECT_EQ("127.0.0.1:80:10:0,127.0.0.2:81:11:0", dingodb::Helper::PeerIdsToString(peer_ids));
+  }
+}
+
+TEST_F(HelperTest, LocationToEndPoint) {
+  {
+    butil::EndPoint expect = dingodb::Helper::StringToEndPoint("127.0.0.1:80");
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.3");
+    location.set_port(80);
+    location.set_index(11);
+
+    auto actual = dingodb::Helper::LocationToEndPoint(location);
+    EXPECT_EQ(true, dingodb::Helper::IsDifferenceEndPoint(expect, actual));
+  }
+
+  {
+    butil::EndPoint expect = dingodb::Helper::StringToEndPoint("127.0.0.1:80");
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.1");
+    location.set_port(80);
+
+    auto actual = dingodb::Helper::LocationToEndPoint(location);
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect, actual));
+  }
+
+  {
+    butil::EndPoint expect = dingodb::Helper::StringToEndPoint("127.0.0.1:80:11");
+    dingodb::pb::common::Location location;
+    location.set_host("127.0.0.1");
+    location.set_port(80);
+    location.set_index(11);
+
+    auto actual = dingodb::Helper::LocationToEndPoint(location);
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceEndPoint(expect, actual));
+  }
+}
+
+TEST_F(HelperTest, EndPointToLocation) {
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    expect.set_index(0);
+
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:80");
+    auto actual = dingodb::Helper::EndPointToLocation(endpoint);
+
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceLocation(expect, actual));
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+    expect.set_index(11);
+
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:80:11");
+    auto actual = dingodb::Helper::EndPointToLocation(endpoint);
+
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceLocation(expect, actual));
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1");
+    auto actual = dingodb::Helper::EndPointToLocation(endpoint);
+
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceLocation(expect, actual));
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.2");
+
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1");
+    auto actual = dingodb::Helper::EndPointToLocation(endpoint);
+
+    EXPECT_EQ(true, dingodb::Helper::IsDifferenceLocation(expect, actual));
+  }
+
+  {
+    dingodb::pb::common::Location expect;
+    expect.set_host("127.0.0.1");
+    expect.set_port(80);
+
+    butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1:81");
+    auto actual = dingodb::Helper::EndPointToLocation(endpoint);
+
+    EXPECT_EQ(true, dingodb::Helper::IsDifferenceLocation(expect, actual));
+  }
+}
+
+TEST_F(HelperTest, LocationToPeerId) {
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1:80:11");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.1:80:11") == dingodb::Helper::LocationToPeerId(location));
+  }
+
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1:80");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.1:80") == dingodb::Helper::LocationToPeerId(location));
+  }
+
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.1") == dingodb::Helper::LocationToPeerId(location));
+  }
+
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1:80:11");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.2:80:11") != dingodb::Helper::LocationToPeerId(location));
+  }
+
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1:80:11");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.1:81:11") != dingodb::Helper::LocationToPeerId(location));
+  }
+
+  {
+    auto location = dingodb::Helper::StringToLocation("127.0.0.1:80:11");
+    EXPECT_TRUE(dingodb::Helper::StringToPeerId("127.0.0.1:80:12") != dingodb::Helper::LocationToPeerId(location));
+  }
+}
+
+TEST_F(HelperTest, IsDifferenceLocation) {
+  {
+    dingodb::pb::common::Location location1;
+    location1.set_host("127.0.0.1");
+    location1.set_port(80);
+    dingodb::pb::common::Location location2;
+    location2.set_host("127.0.0.1");
+    location2.set_port(80);
+    EXPECT_EQ(false, dingodb::Helper::IsDifferenceLocation(location1, location2));
+  }
+
+  {
+    dingodb::pb::common::Location location1;
+    location1.set_host("127.0.0.1");
+    location1.set_port(90);
+    dingodb::pb::common::Location location2;
+    location2.set_host("127.0.0.1");
+    location2.set_port(80);
+    EXPECT_EQ(true, dingodb::Helper::IsDifferenceLocation(location1, location2));
+  }
+
+  {
+    dingodb::pb::common::Location location1;
+    location1.set_host("10.10.10.10");
+    location1.set_port(80);
+    dingodb::pb::common::Location location2;
+    location2.set_host("127.0.0.1");
+    location2.set_port(80);
+    EXPECT_EQ(true, dingodb::Helper::IsDifferenceLocation(location1, location2));
+  }
+}
+
+TEST_F(HelperTest, IsDifferencePeers) {
+  std::vector<dingodb::pb::common::Peer> peers;
+
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(3);
+    peer.mutable_raft_location()->set_host("127.0.0.1");
+    peer.mutable_raft_location()->set_port(80);
+    peers.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(2);
+    peer.mutable_raft_location()->set_host("192.168.0.1");
+    peer.mutable_raft_location()->set_port(80);
+    peers.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(1);
+    peer.mutable_raft_location()->set_host("127.0.0.1");
+    peer.mutable_raft_location()->set_port(81);
+    peers.push_back(peer);
+  }
+
+  EXPECT_EQ(false, dingodb::Helper::IsDifferencePeers(peers, peers));
+
+  std::vector<dingodb::pb::common::Peer> peers2;
+
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(3);
+    peer.mutable_raft_location()->set_host("128.0.0.1");
+    peer.mutable_raft_location()->set_port(80);
+    peers2.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(2);
+    peer.mutable_raft_location()->set_host("193.168.0.1");
+    peer.mutable_raft_location()->set_port(80);
+    peers2.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(1);
+    peer.mutable_raft_location()->set_host("127.0.0.1");
+    peer.mutable_raft_location()->set_port(81);
+    peers2.push_back(peer);
+  }
+
+  EXPECT_EQ(true, dingodb::Helper::IsDifferencePeers(peers, peers2));
+}
+
+TEST_F(HelperTest, IsDifferencePeers2) {
+  {
+    dingodb::pb::common::RegionDefinition definition1;
+    definition1.add_peers()->set_store_id(3);
+    definition1.add_peers()->set_store_id(6);
+    definition1.add_peers()->set_store_id(9);
+
+    dingodb::pb::common::RegionDefinition definition2;
+    definition2.add_peers()->set_store_id(3);
+    definition2.add_peers()->set_store_id(6);
+    definition2.add_peers()->set_store_id(9);
+
+    EXPECT_EQ(false, dingodb::Helper::IsDifferencePeers(definition1, definition2));
+  }
+
+  {
+    dingodb::pb::common::RegionDefinition definition1;
+    definition1.add_peers()->set_store_id(3);
+    definition1.add_peers()->set_store_id(6);
+    definition1.add_peers()->set_store_id(9);
+
+    dingodb::pb::common::RegionDefinition definition2;
+    definition2.add_peers()->set_store_id(3);
+    definition2.add_peers()->set_store_id(6);
+    definition2.add_peers()->set_store_id(8);
+
+    EXPECT_EQ(true, dingodb::Helper::IsDifferencePeers(definition1, definition2));
+  }
+
+  {
+    dingodb::pb::common::RegionDefinition definition1;
+    definition1.add_peers()->set_store_id(3);
+    definition1.add_peers()->set_store_id(6);
+    definition1.add_peers()->set_store_id(9);
+
+    dingodb::pb::common::RegionDefinition definition2;
+    definition2.add_peers()->set_store_id(3);
+    definition2.add_peers()->set_store_id(6);
+
+    EXPECT_EQ(true, dingodb::Helper::IsDifferencePeers(definition1, definition2));
+  }
+}
+
+TEST_F(HelperTest, SortPeers) {
+  std::vector<dingodb::pb::common::Peer> peers;
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(3);
+    peers.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(2);
+    peers.push_back(peer);
+  }
+  {
+    dingodb::pb::common::Peer peer;
+    peer.set_store_id(1);
+    peers.push_back(peer);
+  }
+
+  dingodb::Helper::SortPeers(peers);
+
+  ASSERT_EQ(3, peers.size());
+  ASSERT_EQ(1, peers[0].store_id());
+  ASSERT_EQ(2, peers[1].store_id());
+  ASSERT_EQ(3, peers[2].store_id());
+}
+
+TEST_F(HelperTest, ExtractLocations) {}
+
+TEST_F(HelperTest, ExtractLocations2) {}
 
 TEST_F(HelperTest, FormatTime) {
   auto format_time = dingodb::Helper::FormatTime(1681970908, "%Y-%m-%d %H:%M:%S");
@@ -348,6 +964,48 @@ TEST_F(HelperTest, ToLower) {
   EXPECT_EQ("hello world", dingodb::Helper::ToLower(value));
 }
 
+TEST_F(HelperTest, Ltrim) {
+  EXPECT_EQ("hello", dingodb::Helper::Ltrim("hello", ""));
+
+  EXPECT_EQ(" hello", dingodb::Helper::Ltrim(" hello", ""));
+
+  EXPECT_EQ("hello", dingodb::Helper::Ltrim(" hello", " "));
+
+  EXPECT_EQ("hello", dingodb::Helper::Ltrim("aaahello", "a"));
+
+  EXPECT_EQ("hello", dingodb::Helper::Ltrim("...hello", "."));
+
+  EXPECT_EQ("hello", dingodb::Helper::Ltrim("ababhello", "ab"));
+}
+
+TEST_F(HelperTest, Rtrim) {
+  EXPECT_EQ("hello", dingodb::Helper::Rtrim("hello", ""));
+
+  EXPECT_EQ("hello ", dingodb::Helper::Rtrim("hello ", ""));
+
+  EXPECT_EQ("hello", dingodb::Helper::Rtrim("hello ", " "));
+
+  EXPECT_EQ("hello", dingodb::Helper::Rtrim("helloaaa", "a"));
+
+  EXPECT_EQ("hello", dingodb::Helper::Rtrim("hello...", "."));
+
+  EXPECT_EQ("hello", dingodb::Helper::Rtrim("helloabab", "ab"));
+}
+
+TEST_F(HelperTest, Trim) {
+  EXPECT_EQ("hello", dingodb::Helper::Trim("hello", ""));
+
+  EXPECT_EQ(" hello ", dingodb::Helper::Trim(" hello ", ""));
+
+  EXPECT_EQ("hello", dingodb::Helper::Trim(" hello ", " "));
+
+  EXPECT_EQ("hello", dingodb::Helper::Trim("aaahelloaaa", "a"));
+
+  EXPECT_EQ("hello", dingodb::Helper::Trim("...hello...", "."));
+
+  EXPECT_EQ("hello", dingodb::Helper::Trim("ababhelloabab", "ab"));
+}
+
 TEST_F(HelperTest, TraverseDirectory) {
   std::string path = "/tmp/unit_test_traverse_directory";
 
@@ -429,11 +1087,11 @@ TEST_F(HelperTest, GetProcessMemoryInfo) {
   }
 }
 
-// TEST_F(HelperTest, CleanFirstSlash) {
-//   EXPECT_EQ("", dingodb::Helper::CleanFirstSlash(""));
-//   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("hello.txt"));
-//   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
-// }
+TEST_F(HelperTest, CleanFirstSlash) {
+  EXPECT_EQ("", dingodb::Helper::CleanFirstSlash(""));
+  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("hello.txt"));
+  EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
+}
 
 TEST_F(HelperTest, PaddingUserKey) {
   std::string a = "abc";
@@ -567,4 +1225,346 @@ TEST_F(HelperTest, GetMemComparableRange) {
 
   EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.start_key()), mem_comparable_range.start_key());
   EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.end_key()), mem_comparable_range.end_key());
+}
+
+TEST_F(HelperTest, CompareRegionEpoch) {
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(2);
+    ASSERT_EQ(0, dingodb::Helper::CompareRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(2);
+    epoch1.set_version(3);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(2);
+    ASSERT_EQ(1, dingodb::Helper::CompareRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(3);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(2);
+    ASSERT_EQ(1, dingodb::Helper::CompareRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(0);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(2);
+    ASSERT_EQ(-1, dingodb::Helper::CompareRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(2);
+    epoch2.set_version(3);
+    ASSERT_EQ(-1, dingodb::Helper::CompareRegionEpoch(epoch1, epoch2));
+  }
+}
+
+TEST_F(HelperTest, IsEqualRegionEpoch) {
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(2);
+    ASSERT_EQ(true, dingodb::Helper::IsEqualRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(1);
+    epoch2.set_version(3);
+    ASSERT_EQ(false, dingodb::Helper::IsEqualRegionEpoch(epoch1, epoch2));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch1, epoch2;
+    epoch1.set_conf_version(1);
+    epoch1.set_version(2);
+    epoch2.set_conf_version(2);
+    epoch2.set_version(2);
+    ASSERT_EQ(false, dingodb::Helper::IsEqualRegionEpoch(epoch1, epoch2));
+  }
+}
+
+TEST_F(HelperTest, RegionEpochToString) {
+  {
+    dingodb::pb::common::RegionEpoch epoch;
+    epoch.set_conf_version(1);
+    epoch.set_version(2);
+    ASSERT_EQ("1-2", dingodb::Helper::RegionEpochToString(epoch));
+  }
+
+  {
+    dingodb::pb::common::RegionEpoch epoch;
+    ASSERT_EQ("0-0", dingodb::Helper::RegionEpochToString(epoch));
+  }
+}
+
+TEST_F(HelperTest, PrintStatus) {
+  {
+    butil::Status status(dingodb::pb::error::EINDEX_NOT_FOUND, "Index not found");
+    ASSERT_EQ("EINDEX_NOT_FOUND Index not found", dingodb::Helper::PrintStatus(status));
+  }
+
+  {
+    butil::Status status(dingodb::pb::error::OK, "Successed");
+    ASSERT_EQ("OK OK", dingodb::Helper::PrintStatus(status));
+  }
+}
+
+TEST_F(HelperTest, SplitStringToString) {
+  {
+    std::vector<std::string> result;
+    dingodb::Helper::SplitString("", '.', result);
+    ASSERT_EQ(0, result.size());
+  }
+
+  {
+    std::vector<std::string> result;
+    dingodb::Helper::SplitString("hello", '.', result);
+    ASSERT_EQ(1, result.size());
+    ASSERT_EQ("hello", result[0]);
+  }
+
+  {
+    std::vector<std::string> result;
+    dingodb::Helper::SplitString("hello.world", ',', result);
+    ASSERT_EQ(1, result.size());
+    ASSERT_EQ("hello.world", result[0]);
+  }
+
+  {
+    std::vector<std::string> result;
+    dingodb::Helper::SplitString("how.are.you", '.', result);
+    ASSERT_EQ(3, result.size());
+    ASSERT_EQ("how", result[0]);
+    ASSERT_EQ("are", result[1]);
+    ASSERT_EQ("you", result[2]);
+  }
+}
+
+TEST_F(HelperTest, SplitStringToInt64) {
+  {
+    std::vector<int64_t> result;
+    dingodb::Helper::SplitString("", '.', result);
+    ASSERT_EQ(0, result.size());
+  }
+
+  {
+    std::vector<int64_t> result;
+    dingodb::Helper::SplitString("1111", '.', result);
+    ASSERT_EQ(1, result.size());
+    ASSERT_EQ(1111, result[0]);
+  }
+
+  {
+    std::vector<int64_t> result;
+    dingodb::Helper::SplitString("11111,", ',', result);
+    ASSERT_EQ(1, result.size());
+    ASSERT_EQ(11111, result[0]);
+  }
+
+  {
+    std::vector<int64_t> result;
+    dingodb::Helper::SplitString("101.102.103", '.', result);
+    ASSERT_EQ(3, result.size());
+    ASSERT_EQ(101, result[0]);
+    ASSERT_EQ(102, result[1]);
+    ASSERT_EQ(103, result[2]);
+  }
+
+  {
+    std::vector<int64_t> result;
+    dingodb::Helper::SplitString("101.-102", '.', result);
+    ASSERT_EQ(2, result.size());
+    ASSERT_EQ(101, result[0]);
+    ASSERT_EQ(-102, result[1]);
+  }
+}
+
+TEST_F(HelperTest, DingoFaissInnerProduct) {
+  {
+    std::vector<float> vector1 = {};
+    std::vector<float> vector2 = {};
+    EXPECT_FLOAT_EQ(0.0, dingodb::Helper::DingoFaissInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1};
+    std::vector<float> vector2 = {0.3};
+    EXPECT_FLOAT_EQ(0.33000001,
+                    dingodb::Helper::DingoFaissInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2};
+    std::vector<float> vector2 = {0.3, 1.4};
+    EXPECT_FLOAT_EQ(2.01, dingodb::Helper::DingoFaissInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2, 0.5, 0.7};
+    std::vector<float> vector2 = {0.3, 1.4, 0.7, 0.2};
+    EXPECT_FLOAT_EQ(2.5, dingodb::Helper::DingoFaissInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+}
+
+TEST_F(HelperTest, DingoFaissL2sqr) {
+  {
+    std::vector<float> vector1 = {};
+    std::vector<float> vector2 = {};
+    EXPECT_FLOAT_EQ(0.0, dingodb::Helper::DingoFaissL2sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1};
+    std::vector<float> vector2 = {0.3};
+    EXPECT_FLOAT_EQ(0.64000005, dingodb::Helper::DingoFaissL2sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2};
+    std::vector<float> vector2 = {0.3, 1.4};
+    EXPECT_FLOAT_EQ(0.68000001, dingodb::Helper::DingoFaissL2sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2, 0.5, 0.7};
+    std::vector<float> vector2 = {0.3, 1.4, 0.7, 0.2};
+    EXPECT_FLOAT_EQ(0.97000003, dingodb::Helper::DingoFaissL2sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+}
+TEST_F(HelperTest, DingoHnswInnerProduct) {
+  {
+    std::vector<float> vector1 = {};
+    std::vector<float> vector2 = {};
+    EXPECT_FLOAT_EQ(0.0, dingodb::Helper::DingoHnswInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1};
+    std::vector<float> vector2 = {0.3};
+    EXPECT_FLOAT_EQ(0.33000001, dingodb::Helper::DingoHnswInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2};
+    std::vector<float> vector2 = {0.3, 1.4};
+    EXPECT_FLOAT_EQ(2.01, dingodb::Helper::DingoHnswInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2, 0.5, 0.7};
+    std::vector<float> vector2 = {0.3, 1.4, 0.7, 0.2};
+    EXPECT_FLOAT_EQ(2.5, dingodb::Helper::DingoHnswInnerProduct(vector1.data(), vector2.data(), vector1.size()));
+  }
+}
+
+TEST_F(HelperTest, DingoHnswInnerProductDistance) {
+  {
+    std::vector<float> vector1 = {};
+    std::vector<float> vector2 = {};
+    EXPECT_FLOAT_EQ(1, dingodb::Helper::DingoHnswInnerProductDistance(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1};
+    std::vector<float> vector2 = {0.3};
+    EXPECT_FLOAT_EQ(0.66999996,
+                    dingodb::Helper::DingoHnswInnerProductDistance(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2};
+    std::vector<float> vector2 = {0.3, 1.4};
+    EXPECT_FLOAT_EQ(-1.01,
+                    dingodb::Helper::DingoHnswInnerProductDistance(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2, 0.5, 0.7};
+    std::vector<float> vector2 = {0.3, 1.4, 0.7, 0.2};
+    EXPECT_FLOAT_EQ(-1.5,
+                    dingodb::Helper::DingoHnswInnerProductDistance(vector1.data(), vector2.data(), vector1.size()));
+  }
+}
+
+TEST_F(HelperTest, DingoHnswL2Sqr) {
+  {
+    std::vector<float> vector1 = {};
+    std::vector<float> vector2 = {};
+    EXPECT_FLOAT_EQ(0.0, dingodb::Helper::DingoHnswL2Sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1};
+    std::vector<float> vector2 = {0.3};
+    EXPECT_FLOAT_EQ(0.64000005, dingodb::Helper::DingoHnswL2Sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2};
+    std::vector<float> vector2 = {0.3, 1.4};
+    EXPECT_FLOAT_EQ(0.68000001, dingodb::Helper::DingoHnswL2Sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+
+  {
+    std::vector<float> vector1 = {1.1, 1.2, 0.5, 0.7};
+    std::vector<float> vector2 = {0.3, 1.4, 0.7, 0.2};
+    EXPECT_FLOAT_EQ(0.97000003, dingodb::Helper::DingoHnswL2Sqr(vector1.data(), vector2.data(), vector1.size()));
+  }
+}
+
+TEST_F(HelperTest, VectorToString) {
+  {
+    std::vector<float> vec = {};
+    EXPECT_EQ("", dingodb::Helper::VectorToString(vec));
+  }
+
+  {
+    std::vector<float> vec = {0.1, 0.2};
+    EXPECT_EQ("0.1, 0.2", dingodb::Helper::VectorToString(vec));
+  }
+
+  {
+    std::vector<float> vec = {0.1, 0.2, 0.3, 0.4};
+    EXPECT_EQ("0.1, 0.2, 0.3, 0.4", dingodb::Helper::VectorToString(vec));
+  }
+}
+
+TEST_F(HelperTest, StringToVector) {
+  {
+    std::vector<float> vec = dingodb::Helper::StringToVector("");
+    EXPECT_EQ(0, vec.size());
+  }
+
+  {
+    std::vector<float> vec = dingodb::Helper::StringToVector("0.1");
+    EXPECT_EQ(1, vec.size());
+    EXPECT_FLOAT_EQ(0.1, vec[0]);
+  }
+
+  {
+    std::vector<float> vec = dingodb::Helper::StringToVector("0.1,0.2");
+    EXPECT_EQ(2, vec.size());
+    EXPECT_FLOAT_EQ(0.1, vec[0]);
+    EXPECT_FLOAT_EQ(0.2, vec[1]);
+  }
 }

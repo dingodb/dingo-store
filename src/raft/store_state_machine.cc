@@ -439,7 +439,7 @@ void StoreStateMachine::on_error(const braft::Error& e) {
 
 void StoreStateMachine::on_configuration_committed(const braft::Configuration& conf) {
   DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] on_configuration_committed, peers: {}", region_->Id(),
-                                 Helper::FormatPeers(conf));
+                                 Helper::PeerIdsToString(Helper::ExtractPeerIds(conf)));
 
   auto event = std::make_shared<SmConfigurationCommittedEvent>();
   event->node_id = region_->Id();

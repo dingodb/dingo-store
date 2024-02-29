@@ -16,6 +16,7 @@
 #include <pthread.h>
 #include <sched.h>
 
+#include <atomic>
 #include <chrono>
 #include <iostream>
 #include <string>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "common/threadpool.h"
+#include "fmt/core.h"
 
 class ThreadPoolTest : public testing::Test {
  protected:
@@ -30,29 +32,66 @@ class ThreadPoolTest : public testing::Test {
   void TearDown() override {}
 };
 
-TEST_F(ThreadPoolTest, Normal) {
-  GTEST_SKIP() << "skip test...";
+TEST_F(ThreadPoolTest, ExecuteTask) {
   dingodb::ThreadPool thread_pool("unit_test", 1);
 
+  int count = 0;
+
+  auto task = thread_pool.ExecuteTask([&count](void *) { ++count; }, nullptr);
+  ASSERT_NE(nullptr, task);
+
+  task->Join();
+
+  ASSERT_EQ(1, count);
+}
+
+TEST_F(ThreadPoolTest, ExecuteMultiTask) {
+  dingodb::ThreadPool thread_pool("unit_test", 3);
+
+  int task_count = 10;
+  std::atomic<int> count = 0;
+
   std::vector<dingodb::ThreadPool::TaskPtr> tasks;
-  tasks.push_back(
-      thread_pool.ExecuteTask([](void *) { std::this_thread::sleep_for(std::chrono::seconds(3)); }, nullptr));
-
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 1"; }, nullptr, 1));
-
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 1"; }, nullptr, 2));
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 3"; }, nullptr, 2));
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 2 2"; }, nullptr, 2));
-
-  tasks.push_back(thread_pool.ExecuteTask([](void *) { LOG(INFO) << "thread priority 3"; }, nullptr, 3));
+  for (int i = 0; i < task_count; ++i) {
+    auto task = thread_pool.ExecuteTask([&count](void *) { count.fetch_add(1); }, nullptr);
+    ASSERT_NE(nullptr, task);
+    tasks.push_back(task);
+  }
 
   for (auto &task : tasks) {
     task->Join();
   }
 
-  EXPECT_EQ(true, true);
+  ASSERT_EQ(10, count.load());
+}
+
+TEST_F(ThreadPoolTest, ExecuteTaskPriority) {
+  dingodb::ThreadPool thread_pool("unit_test", 1);
+
+  std::atomic<int> count = 1;
+  std::vector<int> run_orders(3, 0);
+  std::vector<dingodb::ThreadPool::TaskPtr> tasks;
+  tasks.push_back(
+      thread_pool.ExecuteTask([](void *) { std::this_thread::sleep_for(std::chrono::milliseconds(2)); }, nullptr));
+
+  std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+  tasks.push_back(thread_pool.ExecuteTask(
+      [&run_orders, pos = 0, &count](void *) { run_orders[pos] = count.fetch_add(1); }, nullptr, 1));
+
+  tasks.push_back(thread_pool.ExecuteTask(
+      [&run_orders, pos = 1, &count](void *) { run_orders[pos] = count.fetch_add(1); }, nullptr, 2));
+
+  tasks.push_back(thread_pool.ExecuteTask(
+      [&run_orders, pos = 2, &count](void *) { run_orders[pos] = count.fetch_add(1); }, nullptr, 3));
+
+  for (auto &task : tasks) {
+    task->Join();
+  }
+
+  ASSERT_EQ(3, run_orders[0]);
+  ASSERT_EQ(2, run_orders[1]);
+  ASSERT_EQ(1, run_orders[2]);
 }
 
 static int GetThreadPolicy(pthread_attr_t &attr) {
@@ -77,25 +116,21 @@ static int GetThreadPolicy(pthread_attr_t &attr) {
 }
 
 static void ShowThreadPriority(pthread_attr_t &, int policy) {
-  int priority = sched_get_priority_max(policy);
-  assert(priority != -1);
-  LOG(INFO) << "max_priority = " << priority;
-  priority = sched_get_priority_min(policy);
-  assert(priority != -1);
-  LOG(INFO) << "min_priority = " << priority;
+  int max_priority = sched_get_priority_max(policy);
+  int min_priority = sched_get_priority_min(policy);
+  LOG(INFO) << fmt::format("policy {} priority=[{}, {}]", policy, min_priority, max_priority);
 }
 
 static int GetThreadPriority(pthread_attr_t &attr) {
   struct sched_param param;
-  int rs = pthread_attr_getschedparam(&attr, &param);
-  assert(rs == 0);
+  int ret = pthread_attr_getschedparam(&attr, &param);
   LOG(INFO) << "priority = " << param.__sched_priority;
   return param.__sched_priority;
 }
 
 static void SetThreadPolicy(pthread_attr_t &attr, int policy) {
-  int rs = pthread_attr_setschedpolicy(&attr, policy);
-  assert(rs == 0);
+  int ret = pthread_attr_setschedpolicy(&attr, policy);
+  ASSERT_EQ(0, ret);
   GetThreadPolicy(attr);
 }
 
@@ -110,20 +145,13 @@ TEST_F(ThreadPoolTest, Priority) {
 
   assert(rs == 0);
   int policy = GetThreadPolicy(attr);
-  LOG(INFO) << "Show current configuration of priority";
   ShowThreadPriority(attr, policy);
-  LOG(INFO) << "Show SCHED_FIFO of priority";
   ShowThreadPriority(attr, SCHED_FIFO);
-  LOG(INFO) << "Show SCHED_RR of priority";
   ShowThreadPriority(attr, SCHED_RR);
-  LOG(INFO) << "Show priority of current thread";
+
   int priority = GetThreadPriority(attr);
-  LOG(INFO) << "Set thread policy";
-  LOG(INFO) << "Set SCHED_FIFO policy";
   SetThreadPolicy(attr, SCHED_FIFO);
-  LOG(INFO) << "Set SCHED_RR policy";
   SetThreadPolicy(attr, SCHED_RR);
-  LOG(INFO) << "Restore current policy";
   SetThreadPolicy(attr, policy);
 
   rs = pthread_attr_destroy(&attr);

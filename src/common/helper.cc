@@ -21,6 +21,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cassert>
 #include <cctype>
 #include <cerrno>
 #include <chrono>
@@ -43,6 +44,7 @@
 #include <utility>
 #include <vector>
 
+#include "braft/configuration.h"
 #include "brpc/builtin/common.h"
 #include "bthread/bthread.h"
 #include "butil/compiler_specific.h"
@@ -54,6 +56,7 @@
 #include "common/role.h"
 #include "common/service_access.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -70,18 +73,28 @@ int Helper::GetCoreNum() { return sysconf(_SC_NPROCESSORS_ONLN); }
 
 bool Helper::IsIp(const std::string& s) {
   std::regex const reg(
-      "(?=(\\b|\\D))(((\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))\\.){3}(("
-      "\\d{1,2})|(1\\d{1,2})|(2[0-4]\\d)|(25[0-5]))(?=(\\b|\\D))");
+      R"((25[0-5]|2[0-4]\d|[0-1]\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|[0-1]\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|[0-1]\d{2}|[1-9]?\d)\.(25[0-5]|2[0-4]\d|[0-1]\d{2}|[1-9]?\d))");
   return std::regex_match(s, reg);
 }
 
-bool Helper::IsExecutorRaw(const std::string& key) { return key[0] == Constant::kExecutorRaw; }
+// ip:port or hostname:port
+bool Helper::IsIpInAddr(const std::string& addr) {
+  std::vector<std::string> parts;
+  SplitString(addr, ':', parts);
+  if (parts.empty()) {
+    return false;
+  }
 
-bool Helper::IsExecutorTxn(const std::string& key) { return key[0] == Constant::kExecutorTxn; }
+  return IsIp(parts[0]);
+}
 
-bool Helper::IsClientRaw(const std::string& key) { return key[0] == Constant::kClientRaw; }
+bool Helper::IsExecutorRaw(const std::string& key) { return key.empty() ? false : key[0] == Constant::kExecutorRaw; }
 
-bool Helper::IsClientTxn(const std::string& key) { return key[0] == Constant::kClientTxn; }
+bool Helper::IsExecutorTxn(const std::string& key) { return key.empty() ? false : key[0] == Constant::kExecutorTxn; }
+
+bool Helper::IsClientRaw(const std::string& key) { return key.empty() ? false : key[0] == Constant::kClientRaw; }
+
+bool Helper::IsClientTxn(const std::string& key) { return key.empty() ? false : key[0] == Constant::kClientTxn; }
 
 std::string Helper::Ip2HostName(const std::string& ip) {
   std::string hostname;
@@ -99,55 +112,185 @@ std::string Helper::Ip2HostName(const std::string& ip) {
   return hostname;
 }
 
-int Helper::PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location) {
-  // parse leader raft location from string
-  auto peer_id_string = peer_id.to_string();
+// =======================================
 
-  std::vector<std::string> addrs;
-  butil::SplitString(peer_id_string, ':', &addrs);
+// addr format: 127.0.0.1:8201:0
+pb::common::Location Helper::StringToLocation(const std::string& addr) {
+  pb::common::Location location;
 
-  if (addrs.size() < 3) {
-    DINGO_LOG(ERROR) << "GetLeaderLocation peerid to string error " << peer_id_string;
-    return -1;
+  std::vector<std::string> parts;
+  SplitString(addr, ':', parts);
+  if (!parts.empty()) {
+    location.set_host(parts[0]);
+  }
+  if (parts.size() >= 2) {
+    location.set_port(std::stoi(parts[1]));
+  }
+  if (parts.size() >= 3) {
+    location.set_index(std::stoi(parts[2]));
   }
 
-  pb::common::Location temp_location;
-  temp_location.set_host(addrs[0]);
-
-  int32_t value;
-  try {
-    value = std::stoi(addrs[1]);
-    temp_location.set_port(value);
-  } catch (const std::invalid_argument& ia) {
-    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Irnvalid argument: " << ia.what() << '\n';
-    return -1;
-  } catch (const std::out_of_range& oor) {
-    DINGO_LOG(ERROR) << "PeerIdToLocation parse port error Out of Range error: " << oor.what() << '\n';
-    return -1;
-  }
-
-  location = temp_location;
-  return 0;
+  return location;
 }
 
-butil::EndPoint Helper::GetEndPoint(const std::string& host, int port) {
-  butil::ip_t ip;
-  if (host.empty()) {
-    ip = butil::IP_ANY;
-  } else {
-    if (Helper::IsIp(host)) {
-      butil::str2ip(host.c_str(), &ip);
-    } else {
-      butil::hostname2ip(host.c_str(), &ip);
+pb::common::Location Helper::StringToLocation(const std::string& ip_or_host, int port, int index) {
+  pb::common::Location location;
+  location.set_host(ip_or_host);
+  location.set_port(port);
+  location.set_index(index);
+
+  return location;
+}
+
+// format: 127.0.0.1:8201:0
+std::string Helper::LocationToString(const pb::common::Location& location) {
+  return fmt::format("{}:{}:{}", location.host(), location.port(), location.index());
+}
+
+// format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
+std::string Helper::LocationsToString(const std::vector<pb::common::Location>& locations) {
+  std::string addrs;
+  for (int i = 0; i < locations.size(); ++i) {
+    addrs += LocationToString(locations[i]);
+    if (i + 1 < locations.size()) {
+      addrs += ",";
     }
   }
-  return butil::EndPoint(ip, port);
+
+  return addrs;
 }
 
-butil::EndPoint Helper::GetEndPoint(const std::string& addr) {
+// ip or ip:port or ip:port:xxx
+butil::EndPoint Helper::StringToEndPoint(const std::string& addr) {
   butil::EndPoint endpoint;
-  str2endpoint(addr.c_str(), &endpoint);
+
+  std::vector<std::string> parts;
+  SplitString(addr, ':', parts);
+
+  std::string fix_addr;
+  if (addr.empty()) {
+    return endpoint;
+  } else if (parts.size() == 1) {
+    fix_addr = fmt::format("{}:0", parts[0]);
+  } else if (parts.size() == 2) {
+    fix_addr = addr;
+  } else {
+    fix_addr = fmt::format("{}:{}", parts[0], parts[1]);
+  }
+
+  if (IsIpInAddr(fix_addr)) {
+    int ret = butil::str2endpoint(fix_addr.c_str(), &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("str2endpoint failed, {}", addr);
+  } else {
+    int ret = butil::hostname2endpoint(fix_addr.c_str(), &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("hostname2endpoint failed, {}", addr);
+  }
+
   return endpoint;
+}
+
+butil::EndPoint Helper::StringToEndPoint(const std::string& ip_or_host, int port) {
+  butil::EndPoint endpoint;
+
+  if (IsIp(ip_or_host)) {
+    int ret = butil::str2endpoint(ip_or_host.c_str(), port, &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("str2endpoint failed, {}:{}", ip_or_host, port);
+  } else {
+    int ret = butil::hostname2endpoint(ip_or_host.c_str(), port, &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("hostname2endpoint failed, {}:{}", ip_or_host, port);
+  }
+
+  return endpoint;
+}
+
+// addrs: 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203
+std::vector<butil::EndPoint> Helper::StringToEndpoints(const std::string& addrs) {
+  std::vector<std::string> parts;
+  SplitString(addrs, ',', parts);
+
+  std::vector<butil::EndPoint> endpoints;
+  endpoints.reserve(parts.size());
+  for (auto& addr : parts) {
+    endpoints.push_back(StringToEndPoint(addr));
+  }
+
+  return endpoints;
+}
+
+std::string Helper::EndPointToString(const butil::EndPoint& endpoint) {
+  return std::string(butil::endpoint2str(endpoint).c_str());
+}
+
+braft::PeerId Helper::StringToPeerId(const std::string& addr) {
+  braft::PeerId peer_id;
+
+  std::vector<std::string> parts;
+  SplitString(addr, ':', parts);
+  if (parts.empty()) {
+  } else if (parts.size() == 1) {
+    peer_id.parse(fmt::format("{}:0", addr));
+  } else {
+    peer_id.parse(addr);
+  }
+
+  return peer_id;
+}
+
+braft::PeerId Helper::StringToPeerId(const std::string& ip_or_host, int port) {
+  return braft::PeerId(StringToEndPoint(ip_or_host, port));
+}
+
+pb::common::Location Helper::PeerIdToLocation(const braft::PeerId& peer_id) {
+  pb::common::Location location;
+  location.set_port(peer_id.addr.port);
+  location.set_host(butil::ip2str(peer_id.addr.ip).c_str());
+
+  return location;
+}
+
+// 127.0.0.1:8201:0:0,127.0.0.1:8202:0:0,127.0.0.1:8203:0:0
+std::string Helper::PeerIdsToString(const std::vector<braft::PeerId>& peer_ids) {
+  std::string addrs;
+  for (int i = 0; i < peer_ids.size(); ++i) {
+    addrs += peer_ids[i].to_string();
+    if (i + 1 < peer_ids.size()) {
+      addrs += ",";
+    }
+  }
+
+  return addrs;
+}
+
+butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {
+  butil::EndPoint endpoint;
+  if (IsIp(location.host())) {
+    int ret = butil::str2endpoint(location.host().c_str(), location.port(), &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("str2endpoint failed, {}:{}", location.host(), location.port());
+  } else {
+    int ret = butil::hostname2endpoint(location.host().c_str(), location.port(), &endpoint);
+    DINGO_LOG_IF(ERROR, ret != 0) << fmt::format("hostname2endpoint failed, {}:{}", location.host(), location.port());
+  }
+
+  return endpoint;
+}
+
+pb::common::Location Helper::EndPointToLocation(const butil::EndPoint& endpoint) {
+  pb::common::Location location;
+  location.set_host(butil::ip2str(endpoint.ip).c_str());
+  location.set_port(endpoint.port);
+
+  return location;
+}
+
+braft::PeerId Helper::LocationToPeerId(const pb::common::Location& location) {
+  return braft::PeerId(LocationToEndPoint(location), location.index());
+}
+
+// =======================================
+
+bool Helper::IsDifferenceEndPoint(const butil::EndPoint& location, const butil::EndPoint& other_location) {
+  return 0 != strcmp(butil::ip2str(location.ip).c_str(), butil::ip2str(other_location.ip).c_str()) ||
+         location.port != other_location.port;
 }
 
 bool Helper::IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location) {
@@ -196,7 +339,7 @@ bool Helper::IsDifferencePeers(const pb::common::RegionDefinition& src_definitio
   return false;
 }
 
-std::vector<pb::common::Location> Helper::ExtractLocations(
+std::vector<pb::common::Location> Helper::ExtractRaftLocations(
     const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
   locations.reserve(peers.size());
@@ -206,7 +349,7 @@ std::vector<pb::common::Location> Helper::ExtractLocations(
   return locations;
 }
 
-std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb::common::Peer>& peers) {
+std::vector<pb::common::Location> Helper::ExtractRaftLocations(const std::vector<pb::common::Peer>& peers) {
   std::vector<pb::common::Location> locations;
   locations.reserve(peers.size());
   for (const auto& peer : peers) {
@@ -215,113 +358,11 @@ std::vector<pb::common::Location> Helper::ExtractLocations(const std::vector<pb:
   return locations;
 }
 
-std::string Helper::PeersToString(const std::vector<pb::common::Peer>& peers) {
-  std::string result;
-
-  for (int i = 0; i < peers.size(); ++i) {
-    result += LocationToString(peers[i].raft_location());
-    if (i + 1 < peers.size()) {
-      result += ",";
-    }
-  }
-
-  return result;
-}
-
-// format: 127.0.0.1:8201:0
-std::string Helper::LocationToString(const pb::common::Location& location) {
-  return fmt::format("{}:{}:{}", location.host(), location.port(), location.index());
-}
-
-butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {
-  butil::EndPoint endpoint;
-  if (butil::hostname2endpoint(location.host().c_str(), location.port(), &endpoint) != 0 &&
-      str2endpoint(location.host().c_str(), location.port(), &endpoint) != 0) {
-  }
-
-  return endpoint;
-}
-
-pb::common::Location Helper::EndPointToLocation(const butil::EndPoint& endpoint) {
-  pb::common::Location location;
-  location.set_host(butil::ip2str(endpoint.ip).c_str());
-  location.set_port(endpoint.port);
-
-  return location;
-}
-
-braft::PeerId Helper::LocationToPeer(const pb::common::Location& location) {
-  return braft::PeerId(LocationToEndPoint(location), location.index());
-}
-
-// format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-std::string Helper::FormatPeers(const std::vector<pb::common::Location>& locations) {
-  std::string s;
-  for (int i = 0; i < locations.size(); ++i) {
-    s += LocationToString(locations[i]);
-    if (i + 1 < locations.size()) {
-      s += ",";
-    }
-  }
-  return s;
-}
-
-// format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-std::string Helper::FormatPeers(const braft::Configuration& conf) {
+std::vector<braft::PeerId> Helper::ExtractPeerIds(const braft::Configuration& conf) {
   std::vector<braft::PeerId> peers;
   conf.list_peers(&peers);
 
-  std::string s;
-  for (int i = 0; i < peers.size(); ++i) {
-    s += peers[i].to_string();
-    if (i + 1 < peers.size()) {
-      s += ",";
-    }
-  }
-
-  return s;
-}
-
-// 127.0.0.1:8201:0 to endpoint
-butil::EndPoint Helper::StrToEndPoint(const std::string str) {
-  std::vector<std::string> strs;
-  butil::SplitString(str, ':', &strs);
-
-  butil::EndPoint endpoint;
-  if (strs.size() >= 2) {
-    try {
-      butil::str2endpoint(strs[0].c_str(), std::stoi(strs[1]), &endpoint);
-    } catch (const std::invalid_argument& ia) {
-      DINGO_LOG(ERROR) << "StrToEndPoint error Irnvalid argument: " << ia.what() << '\n';
-      return endpoint;
-    } catch (const std::out_of_range& oor) {
-      DINGO_LOG(ERROR) << "StrToEndPoint error Out of Range error: " << oor.what() << '\n';
-      return endpoint;
-    }
-  }
-
-  return endpoint;
-}
-
-std::vector<butil::EndPoint> Helper::StrToEndpoints(const std::string& str) {
-  std::vector<std::string> addrs;
-  butil::SplitString(str, ',', &addrs);
-
-  std::vector<butil::EndPoint> endpoints;
-  for (const auto& addr : addrs) {
-    butil::EndPoint endpoint;
-    if (butil::hostname2endpoint(addr.c_str(), &endpoint) != 0 && str2endpoint(addr.c_str(), &endpoint) != 0) {
-      continue;
-    }
-
-    endpoints.push_back(endpoint);
-  }
-
-  return endpoints;
-}
-
-std::string Helper::EndPointToStr(const butil::EndPoint& end_point) {
-  return std::string(butil::endpoint2str(end_point).c_str());
+  return peers;
 }
 
 std::shared_ptr<PbError> Helper::Error(Errno errcode, const std::string& errmsg) {

@@ -88,13 +88,11 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   template <typename T>
   void RedirectResponse(std::shared_ptr<RaftNode> raft_node, T response) {
     // parse leader raft location from string
-    auto leader_string = raft_node->GetLeaderId().to_string();
-
-    pb::common::Location leader_raft_location;
-    int ret = Helper::PeerIdToLocation(raft_node->GetLeaderId(), leader_raft_location);
-    if (ret < 0) {
+    auto leader_peer_id = raft_node->GetLeaderId();
+    if (leader_peer_id.is_empty()) {
       return;
     }
+    pb::common::Location leader_raft_location = Helper::PeerIdToLocation(leader_peer_id);
 
     // GetServerLocation
     pb::common::Location leader_server_location;

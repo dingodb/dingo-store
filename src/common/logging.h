@@ -31,6 +31,8 @@ static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 
 #define DINGO_LOG(level) DINGO_LOG_##level
 
+#define DINGO_LOG_IF(level, condition) DINGO_LOG_IF_##level(condition)
+
 #define DINGO_LOG_DEBUG VLOG(DINGO_DEBUG) << CURRENT_FUNC_NAME
 #define DINGO_LOG_INFO LOG(INFO) << CURRENT_FUNC_NAME
 #define DINGO_LOG_WARNING LOG(WARNING) << CURRENT_FUNC_NAME

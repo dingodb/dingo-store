@@ -38,17 +38,40 @@ class Helper {
  public:
   static int GetCoreNum();
   static bool IsIp(const std::string& s);
+  static bool IsIpInAddr(const std::string& addr);
 
   static bool IsExecutorRaw(const std::string& key);
   static bool IsExecutorTxn(const std::string& key);
   static bool IsClientRaw(const std::string& key);
   static bool IsClientTxn(const std::string& key);
 
-  static butil::EndPoint GetEndPoint(const std::string& host, int port);
-  static butil::EndPoint GetEndPoint(const std::string& addr);
+  // static butil::EndPoint GetEndPoint(const std::string& host, int port);
+  // static butil::EndPoint GetEndPoint(const std::string& addr);
 
   static std::string Ip2HostName(const std::string& ip);
 
+  // string(ip:port/ip+port)/braft::PeerId/butil::EndPoint/pb::common::Location/pb::common::Peer transform function
+  static pb::common::Location StringToLocation(const std::string& addr);
+  static pb::common::Location StringToLocation(const std::string& ip_or_host, int port, int index = 0);
+  static std::string LocationToString(const pb::common::Location& location);
+  static std::string LocationsToString(const std::vector<pb::common::Location>& locations);
+
+  static butil::EndPoint StringToEndPoint(const std::string& addr);
+  static butil::EndPoint StringToEndPoint(const std::string& ip_or_host, int port);
+  static std::vector<butil::EndPoint> StringToEndpoints(const std::string& addrs);
+  static std::string EndPointToString(const butil::EndPoint& endpoint);
+
+  static braft::PeerId StringToPeerId(const std::string& addr);
+  static braft::PeerId StringToPeerId(const std::string& ip_or_host, int port);
+  static pb::common::Location PeerIdToLocation(const braft::PeerId& peer_id);
+  static std::string PeerIdsToString(const std::vector<braft::PeerId>& peer_ids);
+
+  static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
+  static pb::common::Location EndPointToLocation(const butil::EndPoint& endpoint);
+
+  static braft::PeerId LocationToPeerId(const pb::common::Location& location);
+
+  static bool IsDifferenceEndPoint(const butil::EndPoint& location, const butil::EndPoint& other_location);
   static bool IsDifferenceLocation(const pb::common::Location& location, const pb::common::Location& other_location);
   static bool IsDifferencePeers(const std::vector<pb::common::Peer>& peers,
                                 const std::vector<pb::common::Peer>& other_peers);
@@ -56,34 +79,11 @@ class Helper {
                                 const pb::common::RegionDefinition& dst_definition);
 
   static void SortPeers(std::vector<pb::common::Peer>& peers);
-  static std::vector<pb::common::Location> ExtractLocations(
+
+  static std::vector<pb::common::Location> ExtractRaftLocations(
       const google::protobuf::RepeatedPtrField<pb::common::Peer>& peers);
-  static std::vector<pb::common::Location> ExtractLocations(const std::vector<pb::common::Peer>& peers);
-
-  static std::string PeersToString(const std::vector<pb::common::Peer>& peers);
-
-  // format: 127.0.0.1:8201:0
-  static std::string LocationToString(const pb::common::Location& location);
-
-  // transform braft::PeerId to Location
-  // return 0 or -1
-  static int PeerIdToLocation(braft::PeerId peer_id, pb::common::Location& location);
-
-  static butil::EndPoint LocationToEndPoint(const pb::common::Location& location);
-  static pb::common::Location EndPointToLocation(const butil::EndPoint& endpoint);
-
-  static braft::PeerId LocationToPeer(const pb::common::Location& location);
-
-  // format: 127.0.0.1:8201:0,127.0.0.1:8202:0,127.0.0.1:8203:0
-  static std::string FormatPeers(const std::vector<pb::common::Location>& locations);
-
-  static std::string FormatPeers(const braft::Configuration& conf);
-
-  // 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203 to EndPoint
-  static butil::EndPoint StrToEndPoint(std::string str);
-  static std::vector<butil::EndPoint> StrToEndpoints(const std::string& str);
-
-  static std::string EndPointToStr(const butil::EndPoint& end_point);
+  static std::vector<pb::common::Location> ExtractRaftLocations(const std::vector<pb::common::Peer>& peers);
+  static std::vector<braft::PeerId> ExtractPeerIds(const braft::Configuration& conf);
 
   static std::shared_ptr<PbError> Error(Errno errcode, const std::string& errmsg);
   static bool Error(Errno errcode, const std::string& errmsg, PbError& err);

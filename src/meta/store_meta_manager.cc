@@ -426,8 +426,8 @@ void RegionChangeRecorder::AddChangeRecord(const pb::coordinator::RegionCmd& cmd
     }
     case pb::coordinator::CMD_CHANGE_PEER: {
       const auto& request = cmd.change_peer_request();
-      event = fmt::format("Change peer, {}",
-                          Helper::PeersToString(Helper::PbRepeatedToVector(request.region_definition().peers())));
+      event = fmt::format("Change peer, {}", Helper::LocationsToString(Helper::ExtractRaftLocations(
+                                                 Helper::PbRepeatedToVector(request.region_definition().peers()))));
       record.set_job_content(event);
       break;
     }

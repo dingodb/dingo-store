@@ -164,7 +164,7 @@ int SmConfigurationCommittedEventListener::OnEvent(std::shared_ptr<Event> event)
   std::vector<pb::common::Peer> changed_peers;
   if (get_changed_peers(changed_peers)) {
     DINGO_LOG(INFO) << fmt::format("[raft.sm][region({})] peers have changed, peers({})", region->Id(),
-                                   Helper::PeersToString(changed_peers));
+                                   Helper::LocationsToString(Helper::ExtractRaftLocations(changed_peers)));
     region->SetPeers(changed_peers);
     store_region_meta->UpdateEpochConfVersion(region, region->Epoch().conf_version());
     // Notify coordinator
