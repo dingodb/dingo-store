@@ -14,30 +14,27 @@
 
 #include <sys/types.h>
 
-#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
-#include <string_view>
 #include <vector>
 
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "engine/iterator.h"
-#include "engine/txn_engine_helper.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "handler/raft_apply_handler.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
-#include "proto/error.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
+DECLARE_bool(dingo_log_switch_txn_detail);
 
 void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                   std::shared_ptr<RawEngine> engine,
@@ -51,10 +48,11 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   if (request.puts_with_cf_size() > 0) {
     for (const auto &puts : request.puts_with_cf()) {
       for (const auto &kv : puts.kvs()) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
-                                       region->Id(), term_id, log_id)
-                        << ", put cf: " << puts.cf_name() << ", put key: " << Helper::StringToHex(kv.key())
-                        << ", value: " << Helper::StringToHex(kv.value());
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}", region->Id(),
+                           term_id, log_id)
+            << ", put cf: " << puts.cf_name() << ", put key: " << Helper::StringToHex(kv.key())
+            << ", value: " << Helper::StringToHex(kv.value());
       }
     }
   }
@@ -62,9 +60,10 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   if (request.deletes_with_cf_size() > 0) {
     for (const auto &dels : request.deletes_with_cf()) {
       for (const auto &key : dels.keys()) {
-        DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
-                                       region->Id(), term_id, log_id)
-                        << ", delete cf: " << dels.cf_name() << ", delete key: " << Helper::StringToHex(key);
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}", region->Id(),
+                           term_id, log_id)
+            << ", delete cf: " << dels.cf_name() << ", delete key: " << Helper::StringToHex(key);
       }
     }
   }
@@ -102,10 +101,10 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   // check if need to commit to vector index
   const auto &vector_add = request.vector_add();
   if (vector_add.vectors_size() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
-                                   log_id)
-                    << ", commit to vector index count: " << vector_add.vectors_size()
-                    << ", vector_add: " << vector_add.ShortDebugString();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+        << ", commit to vector index count: " << vector_add.vectors_size()
+        << ", vector_add: " << vector_add.ShortDebugString();
 
     auto handler = std::make_shared<VectorAddHandler>();
     if (handler == nullptr) {
@@ -134,10 +133,10 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
   const auto &vector_del = request.vector_del();
   if (vector_del.ids_size() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
-                                   log_id)
-                    << ", commit to vector index count: " << vector_del.ids_size()
-                    << ", vector_del: " << vector_del.ShortDebugString();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+        << ", commit to vector index count: " << vector_del.ids_size()
+        << ", vector_del: " << vector_del.ShortDebugString();
     auto handler = std::make_shared<VectorDeleteHandler>();
     if (handler == nullptr) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
@@ -177,9 +176,9 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
                                              const pb::raft::TxnDeleteRangeRequest &request,
                                              store::RegionMetricsPtr /*region_metrics*/, int64_t term_id,
                                              int64_t log_id) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(),
-                                 term_id, log_id)
-                  << ", request: " << request.ShortDebugString();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] HandleTxnDeleteRange, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+      << ", request: " << request.ShortDebugString();
 
   auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
   auto *error = response->mutable_error();
@@ -215,7 +214,8 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
 int TxnHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term,
                        int64_t log_id) {
-  DINGO_LOG(INFO) << fmt::format("[txn][region({})] Handle txn, term: {} apply_log_id: {}", region->Id(), term, log_id);
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Handle txn, term: {} apply_log_id: {}", region->Id(), term, log_id);
 
   const auto &txn_raft_req = req.txn_raft_req();
 
