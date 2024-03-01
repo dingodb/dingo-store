@@ -34,15 +34,20 @@ using namespace dingodb::sdk;
 %apply int64_t& INOUT { int64_t& out_index_id };
 %apply bool& INOUT { bool& out_create_in_progress };
 %apply std::string& OUTPUT { std::string& out_value };
-
 namespace dingodb {
     namespace sdk {
     
+        %feature("docstring") Client::Build "return Status, Client"
+        %feature("docstring") Client::NewRawKV "return Status, RawKV"
+        %feature("docstring") Client::NewTransaction "return Status, Transaction"
+        %feature("docstring") Client::NewRegionCreator "return Status, RegionCreator"
+        %feature("docstring") Client::NewVectorClient "return Status, VectorClient"
+        %feature("docstring") Client::NewVectorIndexCreator "return Status, VectorIndexCreator"
+
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) Client** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
@@ -51,7 +56,6 @@ namespace dingodb {
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) RawKV** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
@@ -61,7 +65,6 @@ namespace dingodb {
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) Transaction** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
@@ -70,7 +73,6 @@ namespace dingodb {
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) RegionCreator** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
@@ -79,7 +81,6 @@ namespace dingodb {
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) VectorClient** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
@@ -88,7 +89,6 @@ namespace dingodb {
           temp = NULL;
           $1 = &temp;
         }
-
         %typemap(argout) VectorIndexCreator** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
