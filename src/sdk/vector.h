@@ -157,10 +157,39 @@ struct Vector {
   std::string ToString() const;
 };
 
+enum class ScalarFieldType : uint8_t {
+  kNone,
+  kBool,
+  kInt8,
+  kInt16,
+  kInt32,
+  kInt64,
+  kFloat32,
+  kDouble,
+  kString,
+  kBytes
+};
+
+struct ScalarField {
+  bool bool_data;
+  int32_t int_data;
+  int64_t long_data;
+  float float_data;
+  double double_data;
+  std::string string_data;
+  std::string bytes_data;
+};
+
+struct ScalarValue {
+  ScalarFieldType type;
+  std::vector<ScalarField> fields;
+};
+
 struct VectorWithId {
   int64_t id;
   Vector vector;
   //  TODO: scalar data and table data
+  std::map<std::string, ScalarValue> scalar_data;
 
   explicit VectorWithId() : id(0) {}
 

@@ -27,6 +27,7 @@
 
 #include "H5Cpp.h"
 #include "google/protobuf/stubs/port.h"
+#include "rapidjson/document.h"
 #include "sdk/vector.h"
 
 namespace dingodb {
@@ -134,6 +135,46 @@ class Movielens10mDataset : public BaseDataset {
  public:
   Movielens10mDataset(std::string filepath) : BaseDataset(filepath) {}
   ~Movielens10mDataset() override = default;
+};
+
+class Wikipedia2212Dataset : public Dataset {
+ public:
+  Wikipedia2212Dataset(const std::string& train_dir) : train_dataset_dir_(train_dir) {}
+  ~Wikipedia2212Dataset() override = default;
+
+  bool Init() override;
+
+  static void Test();
+
+  uint32_t GetDimension() const override;
+  uint32_t GetTrainDataCount() const override;
+  uint32_t GetTestDataCount() const override;
+
+  // Get train data by batch
+  void GetBatchTrainData(uint32_t batch_num, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) override;
+
+  // Get all test data
+  std::vector<TestEntryPtr> GetTestData() override;
+
+ private:
+  void MakeDocument(const std::string& filepath);
+  bool InitDimension();
+  uint32_t LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
+                         std::vector<sdk::VectorWithId>& vector_with_ids);
+
+  std::string train_dataset_dir_;
+  std::vector<std::string> train_filepaths_;
+  // current using train file pos
+  int train_curr_file_pos_{0};
+  // current offset in file
+  int train_curr_offset_{0};
+
+  std::shared_ptr<rapidjson::Document> doc_;
+
+  std::vector<std::string> test_filepaths_;
+
+  uint32_t dimension_{0};
+  std::mutex mutex_;
 };
 
 }  // namespace benchmark

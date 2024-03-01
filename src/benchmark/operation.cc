@@ -514,7 +514,8 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
     return result;
   }
 
-  result.status = vector_client->SearchByIndexId(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
+  result.status =
+      vector_client->SearchByIndexId(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
   if (!result.status.IsOK()) {
     LOG(ERROR) << fmt::format("search vector failed, error: {}", result.status.ToString());
   }
@@ -1003,10 +1004,17 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
     }
 
     uint32_t cur_count = count.load();
-    std::cout << '\r'
-              << fmt::format("Vector index({}) put data progress [{} / {} / {} {}%]", entry->index_id, cur_count,
-                             fail_count.load(), total_vector_count, cur_count * 100 / total_vector_count)
-              << std::flush;
+    if (total_vector_count > 0) {
+      std::cout << '\r'
+                << fmt::format("Vector index({}) put data progress [{} / {} / {} {}%]", entry->index_id, cur_count,
+                               fail_count.load(), total_vector_count, cur_count * 100 / total_vector_count)
+                << std::flush;
+    } else {
+      std::cout << '\r'
+                << fmt::format("Vector index({}) put data progress [{} / {}]", entry->index_id, cur_count,
+                               fail_count.load())
+                << std::flush;
+    }
   }
 
   for (auto& thread : threads) {

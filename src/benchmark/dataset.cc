@@ -19,15 +19,26 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "H5Cpp.h"
 #include "H5PredType.h"
+#include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags_declare.h"
+#include "glog/logging.h"
+#include "rapidjson/document.h"
+#include "rapidjson/istreamwrapper.h"
+#include "rapidjson/rapidjson.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+#include "sdk/vector.h"
 
 DECLARE_uint32(vector_put_batch_size);
 DECLARE_uint32(vector_search_topk);
@@ -36,21 +47,23 @@ namespace dingodb {
 namespace benchmark {
 
 std::shared_ptr<Dataset> Dataset::New(std::string filepath) {
-  if (filepath.find("sift") == std::string::npos) {
+  if (filepath.find("sift") != std::string::npos) {
     return std::make_shared<SiftDataset>(filepath);
 
-  } else if (filepath.find("glove") == std::string::npos) {
+  } else if (filepath.find("glove") != std::string::npos) {
     return std::make_shared<GloveDataset>(filepath);
 
-  } else if (filepath.find("gist") == std::string::npos) {
+  } else if (filepath.find("gist") != std::string::npos) {
     return std::make_shared<GistDataset>(filepath);
 
-  } else if (filepath.find("kosarak") == std::string::npos) {
-  } else if (filepath.find("lastfm") == std::string::npos) {
-  } else if (filepath.find("mnist") == std::string::npos) {
+  } else if (filepath.find("kosarak") != std::string::npos) {
+  } else if (filepath.find("lastfm") != std::string::npos) {
+  } else if (filepath.find("mnist") != std::string::npos) {
     return std::make_shared<MnistDataset>(filepath);
 
-  } else if (filepath.find("movielens10m") == std::string::npos) {
+  } else if (filepath.find("movielens10m") != std::string::npos) {
+  } else if (filepath.find("wikipedia") != std::string::npos) {
+    return std::make_shared<Wikipedia2212Dataset>(filepath);
   }
 
   std::cout << "Not support dataset, path: " << filepath << std::endl;
@@ -326,6 +339,206 @@ std::vector<float> BaseDataset::GetDistances(uint32_t index) {
   dataset.close();
 
   return buf;
+}
+
+void Wikipedia2212Dataset::Test() {
+  Wikipedia2212Dataset dataset("/root/work/dingodb/dataset/wikipedia-22-12-zh");
+  if (!dataset.Init()) {
+    return;
+  }
+
+  std::vector<sdk::VectorWithId> vector_with_ids;
+  vector_with_ids.reserve(1000);
+  for (int i = 0; i < 10000; ++i) {
+    vector_with_ids.clear();
+    bool is_eof = false;
+    dataset.GetBatchTrainData(i, vector_with_ids, is_eof);
+    if (is_eof) {
+      break;
+    }
+  }
+}
+
+bool Wikipedia2212Dataset::Init() {
+  std::lock_guard lock(mutex_);
+  auto train_filenames = dingodb::Helper::TraverseDirectory(train_dataset_dir_, "train");
+  for (auto& filelname : train_filenames) {
+    train_filepaths_.push_back(fmt::format("{}/{}", train_dataset_dir_, filelname));
+  }
+
+  if (train_filepaths_.empty()) {
+    return false;
+  }
+
+  MakeDocument(train_filepaths_[train_curr_file_pos_]);
+
+  return InitDimension();
+}
+
+uint32_t Wikipedia2212Dataset::GetDimension() const { return dimension_; }
+
+uint32_t Wikipedia2212Dataset::GetTrainDataCount() const { return 0; }
+
+uint32_t Wikipedia2212Dataset::GetTestDataCount() const { return 100000; }
+
+void Wikipedia2212Dataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) {
+  std::lock_guard lock(mutex_);
+  if (train_filepaths_.empty()) {
+    return;
+  }
+
+  train_curr_offset_ = LoadTrainData(doc_, train_curr_offset_, FLAGS_vector_put_batch_size, vector_with_ids);
+  // std::cout << fmt::format("{} {} {}", train_curr_file_pos_, train_curr_offset_, vector_with_ids.size()) <<
+  // std::endl;
+  if (vector_with_ids.size() == FLAGS_vector_put_batch_size) {
+    return;
+  }
+
+  if (train_curr_file_pos_ + 1 >= train_filepaths_.size()) {
+    // all file finish
+    is_eof = true;
+    return;
+  }
+
+  // next file
+  MakeDocument(train_filepaths_[++train_curr_file_pos_]);
+}
+
+std::vector<Dataset::TestEntryPtr> Wikipedia2212Dataset::GetTestData() {
+  std::lock_guard lock(mutex_);
+  return {};
+}
+
+void Wikipedia2212Dataset::MakeDocument(const std::string& filepath) {
+  std::ifstream ifs(filepath);
+  rapidjson::IStreamWrapper isw(ifs);
+
+  if (doc_ == nullptr) {
+    doc_ = std::make_shared<rapidjson::Document>();
+  } else {
+    doc_.reset();
+    doc_ = std::make_shared<rapidjson::Document>();
+  }
+
+  doc_->ParseStream(isw);
+  if (doc_->HasParseError()) {
+    DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", filepath,
+                                    static_cast<int>(doc_->GetParseError()));
+  }
+  train_curr_offset_ = 0;
+}
+
+bool Wikipedia2212Dataset::InitDimension() {
+  CHECK(doc_ != nullptr);
+
+  const auto& array = doc_->GetArray();
+  if (array.Empty()) {
+    return false;
+  }
+
+  const auto& item = array[0].GetObject();
+  dimension_ = item["emb"].GetArray().Size();
+  return true;
+}
+
+uint32_t Wikipedia2212Dataset::LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
+                                             std::vector<sdk::VectorWithId>& vector_with_ids) {
+  CHECK(doc != nullptr);
+  CHECK(doc->IsArray());
+
+  const auto& array = doc->GetArray();
+  while (offset < array.Size()) {
+    const auto& item = array[offset++].GetObject();
+    if (!item.HasMember("id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("url") ||
+        !item.HasMember("wiki_id") || !item.HasMember("views") || !item.HasMember("paragraph_id") ||
+        !item.HasMember("langs") || !item.HasMember("emb")) {
+      continue;
+    }
+
+    std::vector<float> embedding;
+    if (item["emb"].IsArray()) {
+      uint32_t dimension = item["emb"].GetArray().Size();
+      CHECK(dimension == dimension_) << "dataset dimension is not uniformity.";
+      embedding.reserve(dimension);
+      for (auto& f : item["emb"].GetArray()) {
+        embedding.push_back(f.GetFloat());
+      }
+    }
+
+    sdk::VectorWithId vector_with_id;
+    vector_with_id.id = item["id"].GetInt64() + 1;
+
+    vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+    vector_with_id.vector.float_values.swap(embedding);
+
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kInt64;
+      sdk::ScalarField field;
+      field.long_data = item["id"].GetInt64() + 1;
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["id"] = scalar_value;
+    }
+
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kInt64;
+      sdk::ScalarField field;
+      field.long_data = item["wiki_id"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["wiki_id"] = scalar_value;
+    }
+
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kInt64;
+      sdk::ScalarField field;
+      field.long_data = item["paragraph_id"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["paragraph_id"] = scalar_value;
+    }
+
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kInt64;
+      sdk::ScalarField field;
+      field.long_data = item["langs"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["langs"] = scalar_value;
+    }
+
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kString;
+      sdk::ScalarField field;
+      field.string_data = item["title"].GetString();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["title"] = scalar_value;
+    }
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kString;
+      sdk::ScalarField field;
+      field.string_data = item["url"].GetString();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["url"] = scalar_value;
+    }
+    {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::ScalarFieldType::kString;
+      sdk::ScalarField field;
+      field.string_data = item["text"].GetString();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["text"] = scalar_value;
+    }
+
+    vector_with_ids.push_back(vector_with_id);
+    if (vector_with_ids.size() >= size) {
+      break;
+    }
+  }
+
+  return offset;
 }
 
 }  // namespace benchmark

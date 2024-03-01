@@ -179,6 +179,58 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
   }
 }
 
+static pb::common::ScalarValue TransformScalarValue(const sdk::ScalarValue& scalar_value) {
+  pb::common::ScalarValue result;
+  if (scalar_value.type == sdk::ScalarFieldType::kBool) {
+    result.set_field_type(pb::common::ScalarFieldType::BOOL);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_bool_data(field.bool_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kInt8) {
+    result.set_field_type(pb::common::ScalarFieldType::INT8);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_int_data(field.int_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kInt16) {
+    result.set_field_type(pb::common::ScalarFieldType::INT16);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_int_data(field.int_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kInt32) {
+    result.set_field_type(pb::common::ScalarFieldType::INT32);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_int_data(field.int_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kInt64) {
+    result.set_field_type(pb::common::ScalarFieldType::INT64);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_long_data(field.long_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kFloat32) {
+    result.set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_float_data(field.float_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kDouble) {
+    result.set_field_type(pb::common::ScalarFieldType::DOUBLE);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_double_data(field.double_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kString) {
+    result.set_field_type(pb::common::ScalarFieldType::STRING);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_string_data(field.string_data);
+    }
+  } else if (scalar_value.type == sdk::ScalarFieldType::kBytes) {
+    result.set_field_type(pb::common::ScalarFieldType::BYTES);
+    for (const auto& field : scalar_value.fields) {
+      result.add_fields()->set_bytes_data(field.bytes_data);
+    }
+  }
+
+  return result;
+}
+
 static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId& vector_with_id, bool with_id = true) {
   if (with_id) {
     pb->set_id(vector_with_id.id);
@@ -190,6 +242,11 @@ static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId&
   // TODO: support uint
   for (const auto& float_value : vector.float_values) {
     vector_pb->add_float_values(float_value);
+  }
+
+  auto* scalar_data = pb->mutable_scalar_data();
+  for (const auto& [key, value] : vector_with_id.scalar_data) {
+    scalar_data->mutable_scalar_data()->insert({key, TransformScalarValue(value)});
   }
 }
 
