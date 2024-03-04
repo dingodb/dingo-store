@@ -1557,7 +1557,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
               "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
         }
       }
-    } else if (mutation.op() == pb::store::Op::Delete) {
+    } else if (mutation.op() == pb::store::Op::Delete || mutation.op() == pb::store::Op::CheckNotExists) {
       if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
                              "Param vector id is not allowed to be zero, INT64_MAX or negative, please check the "

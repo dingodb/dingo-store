@@ -58,7 +58,7 @@ DEFINE_int64(max_commit_ts, 0, "max_commit_ts");
 DEFINE_bool(key_only, false, "key_only");
 DEFINE_bool(with_start, true, "with_start");
 DEFINE_bool(with_end, false, "with_end");
-DEFINE_string(mutation_op, "", "mutation_op, [put, delete, putifabsent, lock]");
+DEFINE_string(mutation_op, "", "mutation_op, [put, delete, putifabsent, lock, check_not_exists]");
 DEFINE_string(key2, "", "key2");
 DEFINE_string(value2, "value2", "value2");
 DEFINE_bool(rc, false, "read commited");
@@ -281,6 +281,18 @@ void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
       mutation->set_key(key2);
       DINGO_LOG(INFO) << "key2: " << FLAGS_key2;
     }
+  } else if (FLAGS_mutation_op == "check_not_exists") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
+    mutation->set_key(key);
+    DINGO_LOG(INFO) << "key: " << FLAGS_key;
+
+    if (!FLAGS_key2.empty()) {
+      auto* mutation = request.add_mutations();
+      mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
+      mutation->set_key(key2);
+      DINGO_LOG(INFO) << "key2: " << FLAGS_key2;
+    }
   } else if (FLAGS_mutation_op == "insert") {
     if (FLAGS_value.empty()) {
       DINGO_LOG(ERROR) << "value is empty";
@@ -432,6 +444,11 @@ void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+  } else if (FLAGS_mutation_op == "check_not_exists") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
     mutation->set_key(
         dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
   } else if (FLAGS_mutation_op == "insert") {

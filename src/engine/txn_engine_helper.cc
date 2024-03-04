@@ -2066,6 +2066,24 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           kv_puts_lock.push_back(kv);
         }
       }
+
+    } else if (mutation.op() == pb::store::Op::CheckNotExists) {
+      // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
+      // exist. So it is more likely to be a get op in prewrite.
+
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
+          << " is CheckNotExists, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+          << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
+
+      // check if key is exist
+      if (write_info.op() == pb::store::Op::Put) {
+        response->add_keys_already_exist()->set_key(mutation.key());
+      }
+
+      // CheckNotExists only do check and return keys_already_exists, nothing to write.
+      continue;
+
     } else if (mutation.op() == pb::store::Op::Delete) {
       if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
