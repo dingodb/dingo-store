@@ -31,3 +31,5 @@ target_link_libraries(dingosdk
   PRIVATE
   sdk
 )
+
+configure_file(pysdk_rawkv_example.py pysdk_rawkv_example.py COPYONLY)

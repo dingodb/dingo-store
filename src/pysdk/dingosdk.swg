@@ -18,22 +18,38 @@ using namespace dingodb::sdk;
 %include <std_shared_ptr.i>
 %include <typemaps.i>
 
+%naturalvar;
+%feature("autodoc", "3");
 
 %ignore operator[];
 %ignore operator=;
 
+%template(KVPairVector) std::vector<dingodb::sdk::KVPair>;
+%template(KeyOpStateVector) std::vector<dingodb::sdk::KeyOpState>;
+
 %template(VectorWithIdVector)  std::vector<dingodb::sdk::VectorWithId>;
 %template(SearchResultVector)  std::vector<dingodb::sdk::SearchResult>;
 %template(DeleteResultVector)  std::vector<dingodb::sdk::DeleteResult>;
+
 %template(Int64Vector)  std::vector<int64_t>; 
 %template(FloatValueVector) std::vector<float>;
-%template(BinaryValueVector) std::vector<std::string>;
+%template(StringVector) std::vector<std::string>;
 
-%apply uint8_t { dingodb::sdk::SearchExtraParamType };
+// %apply uint8_t { dingodb::sdk::SearchExtraParamType };
 
-%apply int64_t& INOUT { int64_t& out_index_id };
-%apply bool& INOUT { bool& out_create_in_progress };
+// client
+%apply int64_t& OUTPUT  { int64_t& out_index_id };
+%apply bool& OUTPUT { bool& out_create_in_progress };
+
+// rawkv
 %apply std::string& OUTPUT { std::string& out_value };
+%apply bool& OUTPUT { bool& out_state };
+%apply int64_t& OUTPUT { int64_t& out_delete_count };
+
+
+// region creator
+%apply int64_t& OUTPUT  { int64_t& out_region_id };
+
 namespace dingodb {
     namespace sdk {
     
@@ -43,6 +59,15 @@ namespace dingodb {
         %feature("docstring") Client::NewRegionCreator "return Status, RegionCreator"
         %feature("docstring") Client::NewVectorClient "return Status, VectorClient"
         %feature("docstring") Client::NewVectorIndexCreator "return Status, VectorIndexCreator"
+        %feature("docstring") Client::IsCreateRegionInProgress "return Status, bool out_create_in_progress"
+
+        %feature("docstring") RawKV::Get "return Status, std::string out_value"
+        %feature("docstring") RawKV::PutIfAbsent "return Status, bool out_state"
+        %feature("docstring") RawKV::DeleteRangeNonContinuous "return Status, int64_t& out_delete_count"
+        %feature("docstring") RawKV::DeleteRange "return Status, int64_t out_delete_count"
+        %feature("docstring") RawKV::CompareAndSet "return Status, bool out_state"
+
+        %feature("docstring") RegionCreator::Create "return Status, int64_t out_region_id"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -96,8 +121,6 @@ namespace dingodb {
 
 }
 
-%naturalvar;
-%feature("autodoc", "3");
 
 %include "sdk/status.h"
 %include "sdk/vector.h"
