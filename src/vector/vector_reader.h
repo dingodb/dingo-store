@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "coprocessor/raw_coprocessor.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "proto/common.pb.h"
@@ -81,6 +82,11 @@ class VectorReader {
 
   butil::Status CompareVectorScalarData(const pb::common::Range& region_range, int64_t partition_id, int64_t vector_id,
                                         const pb::common::VectorScalardata& source_scalar_data, bool& compare_result);
+
+  butil::Status CompareVectorScalarDataWithCoprocessor(const pb::common::Range& region_range, int64_t partition_id,
+                                                       int64_t vector_id,
+                                                       const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+                                                       bool& compare_result);
 
   butil::Status QueryVectorTableData(const pb::common::Range& region_range, int64_t partition_id,
                                      pb::common::VectorWithId& vector_with_id);
