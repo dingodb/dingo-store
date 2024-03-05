@@ -628,7 +628,7 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
         return false;
       }
     } else {
-      DINGO_LOG(FATAL) << "[txn]BatchGet invalid isolation_level: " << isolation_level;
+      DINGO_LOG(FATAL) << "[txn]CheckLockConflict invalid isolation_level: " << isolation_level;
     }
   }
 
@@ -2075,6 +2075,19 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
           << " is CheckNotExists, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
           << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
+
+      // CheckNotExists should not appear in a pessimistic prewrite, so check this here
+      if (need_check_pessimistic_lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
+                         << ", CheckNotExists should not appear in a pessimistic prewrite, key: "
+                         << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
+                         << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+                         << ", mutations_size: " << mutations.size()
+                         << ", prev_write_info is: " << write_info.ShortDebugString();
+
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                             "CheckNotExists should not appear in a pessimistic prewrite");
+      }
 
       // check if key is exist
       if (write_info.op() == pb::store::Op::Put) {
