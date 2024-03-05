@@ -70,6 +70,8 @@ DEFINE_uint32(vector_put_batch_size, 512, "Vector put batch size");
 
 DEFINE_uint32(vector_arrange_concurrency, 10, "Vector arrange put concurrency");
 
+DEFINE_bool(vector_search_not_insert, false, "Just search, not insert data");
+
 namespace dingodb {
 namespace benchmark {
 
@@ -886,7 +888,25 @@ Operation::Result VectorFillRandomOperation::Execute(VectorIndexEntryPtr entry) 
 }
 
 bool VectorSearchOperation::Arrange(VectorIndexEntryPtr entry, DatasetPtr dataset) {
-  return FLAGS_vector_dataset.empty() ? ArrangeAutoData(entry) : ArrangeManualData(entry, dataset);
+  if (FLAGS_vector_search_not_insert) {
+    if (!FLAGS_vector_dataset.empty()) {
+      entry->test_entries = dataset->GetTestData();
+      return !entry->test_entries.empty();
+    }
+  } else {
+    if (FLAGS_vector_dataset.empty()) {
+      return ArrangeAutoData(entry);
+    } else {
+      bool ret = ArrangeManualData(entry, dataset);
+      if (!ret) {
+        return false;
+      }
+      entry->test_entries = dataset->GetTestData();
+      return !entry->test_entries.empty();
+    }
+  }
+
+  return true;
 }
 
 bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
@@ -1020,8 +1040,6 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
   for (auto& thread : threads) {
     thread.join();
   }
-
-  entry->test_entries = dataset->GetTestData();
 
   std::cout << "\r"
             << fmt::format("Vector index({}) put data success({}) fail({}) .................. done", entry->index_id,

@@ -16,6 +16,7 @@
 #include <string>
 
 #include "benchmark/benchmark.h"
+#include "benchmark/dataset.h"
 #include "common/helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -33,6 +34,7 @@ static std::string GetUsageMessage() {
   message += "\n  --raw_engine raw engine type, support LSM/BTREE/XDP default(LSM)";
   message += "\n  --region_num region number, default(1)";
   message += "\n  --vector_index_num vector index number, default(1)";
+  message += "\n  --is_clean_region is clean region, default(true)";
   message += "\n  --concurrency concurrency as thread number, default(1)";
   message += "\n  --req_num invoke RPC request number, default(10000)";
   message += "\n  --delay print benchmark metrics interval time, unit(second), default(2)";
@@ -58,6 +60,9 @@ static std::string GetUsageMessage() {
   message += "\n  --ivf_bucket_init_size IVF bucket init size, default(1000)";
   message += "\n  --ivf_bucket_max_size IVF bucket max size, default(1280000)";
   message += "\n  --ivf_nbits_per_idx IVF nbits per index, default(8)";
+  message += "\n  --vector_index_id vector index id, default(0)";
+  message += "\n  --vector_index_name vector index name, default()";
+  message += "\n  --vector_search_not_insert just search, not insert data, default(false)";
   message += "\n  --vector_search_topk vector search flag topk, default(10)";
   message += "\n  --vector_search_with_vector_data vector search flag with_vector_data, default(true)";
   message += "\n  --vector_search_with_scalar_data vector search flag with_scalar_data, default(false)";
@@ -112,6 +117,9 @@ int main(int argc, char* argv[]) {
   google::SetVersionString(kVersion);
   google::SetUsageMessage(GetUsageMessage());
   google::ParseCommandLineFlags(&argc, &argv, true);
+
+  // dingodb::benchmark::Wikipedia2212Dataset::Test();
+  // return 0;
 
   SetupSignalHandler();
 

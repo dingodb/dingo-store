@@ -127,7 +127,7 @@ static int64_t ParseMetaLogId(const std::string& path) {
 std::vector<std::string> VectorIndexSnapshotManager::GetSnapshotList(int64_t vector_index_id) {
   std::string snapshot_parent_path = GetSnapshotParentPath(vector_index_id);
 
-  auto dir_names = Helper::TraverseDirectory(snapshot_parent_path, "snapshot", false, true);
+  auto dir_names = Helper::TraverseDirectory(snapshot_parent_path, std::string("snapshot"), false, true);
 
   std::sort(dir_names.begin(), dir_names.end());
 

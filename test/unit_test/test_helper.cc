@@ -367,6 +367,25 @@ TEST_F(HelperTest, TraverseDirectory) {
   EXPECT_EQ(2, filenames.size());
 }
 
+TEST_F(HelperTest, TraverseDirectoryByPrefix) {
+  std::string path = "/tmp/unit_test_traverse_directory_prefix";
+
+  std::filesystem::create_directories(path);
+  std::filesystem::create_directories(fmt::format("{}/a1", path));
+  std::filesystem::create_directories(fmt::format("{}/a1/b1", path));
+  std::filesystem::create_directories(fmt::format("{}/a1/b2", path));
+  std::filesystem::create_directories(fmt::format("{}/a2", path));
+  std::filesystem::create_directories(fmt::format("{}/a2/b3", path));
+
+  auto filenames = dingodb::Helper::TraverseDirectory(path, std::string("a1"));
+  for (const auto& filename : filenames) {
+    LOG(INFO) << "filename: " << filename;
+  }
+
+  std::filesystem::remove_all(path);
+  EXPECT_EQ(1, filenames.size());
+}
+
 TEST_F(HelperTest, GetSystemMemoryInfo) {
   std::map<std::string, int64_t> output;
   auto ret = dingodb::Helper::GetSystemMemoryInfo(output);
