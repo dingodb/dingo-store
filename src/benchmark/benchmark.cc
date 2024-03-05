@@ -55,6 +55,8 @@ DEFINE_uint32(delay, 2, "Interval in seconds between intermediate reports");
 DEFINE_bool(is_single_region_txn, true, "Is single region txn");
 DEFINE_uint32(replica, 3, "Replica number");
 
+DEFINE_bool(is_clean_region, true, "Is clean region");
+
 DEFINE_string(vector_index_type, "HNSW", "Vector index type");
 DEFINE_validator(vector_index_type, [](const char*, const std::string& value) -> bool {
   auto vector_index_type = dingodb::Helper::ToUpper(value);
@@ -92,6 +94,9 @@ DEFINE_validator(vector_dataset, [](const char*, const std::string& value) -> bo
   return value.empty() || dingodb::Helper::IsExistPath(value);
 });
 
+DEFINE_uint32(vector_index_id, 0, "Vector index id");
+DEFINE_string(vector_index_name, "", "Vector index name");
+
 DEFINE_uint32(vector_search_topk, 10, "Vector search flag topk");
 DEFINE_bool(vector_search_with_vector_data, true, "Vector search flag with_vector_data");
 DEFINE_bool(vector_search_with_scalar_data, false, "Vector search flag with_scalar_data");
@@ -102,6 +107,7 @@ DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
 
 DECLARE_uint32(vector_put_batch_size);
 DECLARE_uint32(vector_arrange_concurrency);
+DECLARE_bool(vector_search_not_insert);
 
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
@@ -270,9 +276,14 @@ bool Benchmark::Arrange() {
       }
       FLAGS_vector_dimension = dataset_->GetDimension();
     }
-    vector_index_entries_ = ArrangeVectorIndex(FLAGS_vector_index_num);
-    if (vector_index_entries_.size() != FLAGS_vector_index_num) {
-      return false;
+
+    if (FLAGS_vector_index_id > 0 || !FLAGS_vector_index_name.empty()) {
+      vector_index_entries_ = ArrangeExistVectorIndex(FLAGS_vector_index_id, FLAGS_vector_index_name);
+    } else {
+      vector_index_entries_ = ArrangeVectorIndex(FLAGS_vector_index_num);
+      if (vector_index_entries_.size() != FLAGS_vector_index_num) {
+        return false;
+      }
     }
   } else {
     region_entries_ = ArrangeRegion(FLAGS_region_num);
@@ -337,11 +348,11 @@ std::vector<RegionEntryPtr> Benchmark::ArrangeRegion(int num) {
 }
 
 std::vector<VectorIndexEntryPtr> Benchmark::ArrangeVectorIndex(int num) {
-  std::mutex mutex;
   std::vector<VectorIndexEntryPtr> vector_index_entries;
 
   std::vector<std::thread> threads;
   threads.reserve(num);
+  std::mutex mutex;
   for (int thread_no = 0; thread_no < num; ++thread_no) {
     threads.emplace_back([this, thread_no, &vector_index_entries, &mutex]() {
       std::string name = fmt::format("{}_{}_{}", kNamePrefix, Helper::TimestampMs(), thread_no + 1);
@@ -365,6 +376,23 @@ std::vector<VectorIndexEntryPtr> Benchmark::ArrangeVectorIndex(int num) {
 
   for (auto& thread : threads) {
     thread.join();
+  }
+
+  return vector_index_entries;
+}
+
+std::vector<VectorIndexEntryPtr> Benchmark::ArrangeExistVectorIndex(int64_t vector_index_id,
+                                                                    const std::string& vector_index_name) {
+  std::vector<VectorIndexEntryPtr> vector_index_entries;
+  auto entry = std::make_shared<VectorIndexEntry>();
+  if (vector_index_id > 0) {
+    entry->index_id = vector_index_id;
+    vector_index_entries.push_back(entry);
+  } else if (!vector_index_name.empty()) {
+    entry->index_id = GetVectorIndex(vector_index_name);
+    if (entry->index_id > 0) {
+      vector_index_entries.push_back(entry);
+    }
   }
 
   return vector_index_entries;
@@ -410,14 +438,16 @@ void Benchmark::Wait() {
 }
 
 void Benchmark::Clean() {
-  // Drop region
-  for (auto& region_entry : region_entries_) {
-    DropRegion(region_entry->region_id);
-  }
+  if (FLAGS_is_clean_region) {
+    // Drop region
+    for (auto& region_entry : region_entries_) {
+      DropRegion(region_entry->region_id);
+    }
 
-  // Drop vector index
-  for (auto& vector_index_entry : vector_index_entries_) {
-    DropVectorIndex(vector_index_entry->index_id);
+    // Drop vector index
+    for (auto& vector_index_entry : vector_index_entries_) {
+      DropVectorIndex(vector_index_entry->index_id);
+    }
   }
 }
 
@@ -583,6 +613,14 @@ void Benchmark::DropVectorIndex(int64_t vector_index_id) {
   CHECK(vector_index_id != 0) << "vector_index_id is invalid";
   auto status = client_->DropIndex(vector_index_id);
   CHECK(status.IsOK()) << fmt::format("drop vector index failed, {}", status.ToString());
+}
+
+int64_t Benchmark::GetVectorIndex(const std::string& name) {
+  int64_t vector_index_id = 0;
+  auto status = client_->GetIndexId(pb::meta::ReservedSchemaIds::DINGO_SCHEMA, name, vector_index_id);
+  CHECK(status.ok()) << fmt::format("get vector index failed, {}", status.ToString());
+
+  return vector_index_id;
 }
 
 static std::vector<std::string> ExtractPrefixs(const std::vector<RegionEntryPtr>& region_entries) {
@@ -810,6 +848,9 @@ void Environment::PrintParam() {
   std::cout << fmt::format("{:<34}: {:>32}", "region_num", FLAGS_region_num) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "prefix", FLAGS_prefix) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "raw_engine", FLAGS_raw_engine) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "region_num", FLAGS_region_num) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_index_num", FLAGS_vector_index_num) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "is_clean_region", FLAGS_is_clean_region ? "true" : "false") << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "concurrency", FLAGS_concurrency) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "req_num", FLAGS_req_num) << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "delay(s)", FLAGS_delay) << '\n';

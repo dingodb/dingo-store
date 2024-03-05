@@ -117,6 +117,8 @@ class Benchmark {
 
   std::vector<RegionEntryPtr> ArrangeRegion(int num);
   std::vector<VectorIndexEntryPtr> ArrangeVectorIndex(int num);
+  std::vector<VectorIndexEntryPtr> ArrangeExistVectorIndex(int64_t vector_index_id,
+                                                           const std::string& vector_index_name);
   bool ArrangeOperation();
   bool ArrangeData();
 
@@ -133,6 +135,7 @@ class Benchmark {
 
   int64_t CreateVectorIndex(const std::string& name, const std::string& vector_index_type);
   void DropVectorIndex(int64_t vector_index_id);
+  int64_t GetVectorIndex(const std::string& name);
 
   void ThreadRoutine(ThreadEntryPtr thread_entry);
 

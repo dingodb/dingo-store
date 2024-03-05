@@ -14,7 +14,9 @@
 
 #include "benchmark/dataset.h"
 
+#include <algorithm>
 #include <cassert>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -22,6 +24,8 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <mutex>
+#include <queue>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,6 +34,7 @@
 #include "H5PredType.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/threadpool.h"
 #include "fmt/core.h"
 #include "gflags/gflags_declare.h"
 #include "glog/logging.h"
@@ -342,31 +347,45 @@ std::vector<float> BaseDataset::GetDistances(uint32_t index) {
 }
 
 void Wikipedia2212Dataset::Test() {
-  Wikipedia2212Dataset dataset("/root/work/dingodb/dataset/wikipedia-22-12-zh");
-  if (!dataset.Init()) {
-    return;
-  }
+  // Wikipedia2212Dataset dataset("/root/work/dingodb/dataset/wikipedia-22-12-zh");
+  // if (!dataset.Init()) {
+  //   return;
+  // }
 
-  std::vector<sdk::VectorWithId> vector_with_ids;
-  vector_with_ids.reserve(1000);
-  for (int i = 0; i < 10000; ++i) {
-    vector_with_ids.clear();
-    bool is_eof = false;
-    dataset.GetBatchTrainData(i, vector_with_ids, is_eof);
-    if (is_eof) {
-      break;
-    }
-  }
+  // std::vector<sdk::VectorWithId> vector_with_ids;
+  // vector_with_ids.reserve(1000);
+  // for (int i = 0; i < 10000; ++i) {
+  //   vector_with_ids.clear();
+  //   bool is_eof = false;
+  //   dataset.GetBatchTrainData(i, vector_with_ids, is_eof);
+  //   if (is_eof) {
+  //     break;
+  //   }
+  // }
+
+  // SplitDataset("/root/work/dingodb/dataset/wikipedia-22-12-zh/train-00000-of-00017-20a9866562d051fb.json", 1000);
+
+  GenTestDataset("/root/work/dingodb/dataset/wikipedia-22-12-zh/test-00000-of-00017-20a9866562d051fb.json",
+                 "/root/work/dingodb/dataset/wikipedia-22-12-zh/");
 }
 
 bool Wikipedia2212Dataset::Init() {
   std::lock_guard lock(mutex_);
-  auto train_filenames = dingodb::Helper::TraverseDirectory(train_dataset_dir_, "train");
+
+  auto train_filenames = dingodb::Helper::TraverseDirectory(dirpath_, std::string("train-00003"));
   for (auto& filelname : train_filenames) {
-    train_filepaths_.push_back(fmt::format("{}/{}", train_dataset_dir_, filelname));
+    train_filepaths_.push_back(fmt::format("{}/{}", dirpath_, filelname));
   }
 
   if (train_filepaths_.empty()) {
+    return false;
+  }
+
+  auto test_filenames = dingodb::Helper::TraverseDirectory(dirpath_, std::string("test"));
+  for (auto& filelname : test_filenames) {
+    test_filepaths_.push_back(fmt::format("{}/{}", dirpath_, filelname));
+  }
+  if (test_filepaths_.empty()) {
     return false;
   }
 
@@ -387,9 +406,7 @@ void Wikipedia2212Dataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWi
     return;
   }
 
-  train_curr_offset_ = LoadTrainData(doc_, train_curr_offset_, FLAGS_vector_put_batch_size, vector_with_ids);
-  // std::cout << fmt::format("{} {} {}", train_curr_file_pos_, train_curr_offset_, vector_with_ids.size()) <<
-  // std::endl;
+  train_curr_offset_ = LoadTrainData(train_doc_, train_curr_offset_, FLAGS_vector_put_batch_size, vector_with_ids);
   if (vector_with_ids.size() == FLAGS_vector_put_batch_size) {
     return;
   }
@@ -406,32 +423,140 @@ void Wikipedia2212Dataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWi
 
 std::vector<Dataset::TestEntryPtr> Wikipedia2212Dataset::GetTestData() {
   std::lock_guard lock(mutex_);
-  return {};
+
+  std::vector<Dataset::TestEntryPtr> test_entries;
+  for (auto& test_filepath : test_filepaths_) {
+    std::ifstream ifs(test_filepath);
+    rapidjson::IStreamWrapper isw(ifs);
+    rapidjson::Document doc;
+    doc.ParseStream(isw);
+    if (doc.HasParseError()) {
+      DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", test_filepath,
+                                      static_cast<int>(doc.GetParseError()));
+      continue;
+    }
+
+    const auto& array = doc.GetArray();
+    for (int i = 0; i < array.Size(); ++i) {
+      const auto& item = array[i].GetObject();
+
+      sdk::VectorWithId vector_with_id;
+      vector_with_id.id = item["id"].GetInt64() + 1;
+
+      std::vector<float> embedding;
+      if (item["emb"].IsArray()) {
+        uint32_t dimension = item["emb"].GetArray().Size();
+        CHECK(dimension == dimension_) << "dataset dimension is not uniformity.";
+        embedding.reserve(dimension);
+        for (auto& f : item["emb"].GetArray()) {
+          embedding.push_back(f.GetFloat());
+        }
+      }
+
+      vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+      vector_with_id.vector.float_values.swap(embedding);
+
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = item["id"].GetInt64() + 1;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["id"] = scalar_value;
+      }
+
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = item["wiki_id"].GetInt64();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["wiki_id"] = scalar_value;
+      }
+
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = item["paragraph_id"].GetInt64();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["paragraph_id"] = scalar_value;
+      }
+
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = item["langs"].GetInt64();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["langs"] = scalar_value;
+      }
+
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = item["title"].GetString();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["title"] = scalar_value;
+      }
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = item["url"].GetString();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["url"] = scalar_value;
+      }
+      {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = item["text"].GetString();
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["text"] = scalar_value;
+      }
+
+      Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
+      entry->vector_with_id = vector_with_id;
+
+      const auto& neighbors = item["neighbors"].GetArray();
+      for (auto& neighbor : neighbors) {
+        const auto& neighbor_obj = neighbor.GetObject();
+
+        CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+        CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
+        entry->neighbors[neighbor_obj["id"].GetInt64()] = neighbor_obj["distance"].GetFloat();
+      }
+
+      test_entries.push_back(entry);
+    }
+  }
+
+  return test_entries;
 }
 
 void Wikipedia2212Dataset::MakeDocument(const std::string& filepath) {
   std::ifstream ifs(filepath);
   rapidjson::IStreamWrapper isw(ifs);
 
-  if (doc_ == nullptr) {
-    doc_ = std::make_shared<rapidjson::Document>();
-  } else {
-    doc_.reset();
-    doc_ = std::make_shared<rapidjson::Document>();
+  if (train_doc_ != nullptr) {
+    train_doc_.reset();
   }
+  train_doc_ = std::make_shared<rapidjson::Document>();
 
-  doc_->ParseStream(isw);
-  if (doc_->HasParseError()) {
+  train_doc_->ParseStream(isw);
+  if (train_doc_->HasParseError()) {
     DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", filepath,
-                                    static_cast<int>(doc_->GetParseError()));
+                                    static_cast<int>(train_doc_->GetParseError()));
   }
   train_curr_offset_ = 0;
 }
 
 bool Wikipedia2212Dataset::InitDimension() {
-  CHECK(doc_ != nullptr);
+  CHECK(train_doc_ != nullptr);
 
-  const auto& array = doc_->GetArray();
+  const auto& array = train_doc_->GetArray();
   if (array.Empty()) {
     return false;
   }
@@ -442,7 +567,7 @@ bool Wikipedia2212Dataset::InitDimension() {
 }
 
 uint32_t Wikipedia2212Dataset::LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
-                                             std::vector<sdk::VectorWithId>& vector_with_ids) {
+                                             std::vector<sdk::VectorWithId>& vector_with_ids) const {
   CHECK(doc != nullptr);
   CHECK(doc->IsArray());
 
@@ -539,6 +664,259 @@ uint32_t Wikipedia2212Dataset::LoadTrainData(std::shared_ptr<rapidjson::Document
   }
 
   return offset;
+}
+
+void Wikipedia2212Dataset::SplitDataset(const std::string& filepath, uint32_t data_num) {
+  std::ifstream ifs(filepath);
+  rapidjson::IStreamWrapper isw(ifs);
+  rapidjson::Document doc;
+  doc.ParseStream(isw);
+  if (doc.HasParseError()) {
+    DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", filepath,
+                                    static_cast<int>(doc.GetParseError()));
+    return;
+  }
+
+  rapidjson::Document left_doc, right_doc;
+  left_doc.SetArray();
+  right_doc.SetArray();
+  rapidjson::Document::AllocatorType& left_allocator = left_doc.GetAllocator();
+  rapidjson::Document::AllocatorType& right_allocator = right_doc.GetAllocator();
+
+  const auto& array = doc.GetArray();
+  std::cout << fmt::format("filepath: {} count: {}", filepath, array.Size());
+  for (int i = 0; i < array.Size(); ++i) {
+    const auto& item = array[i].GetObject();
+
+    if (i < data_num) {
+      left_doc.PushBack(item, left_allocator);
+    } else {
+      right_doc.PushBack(item, right_allocator);
+    }
+  }
+
+  {
+    rapidjson::StringBuffer str_buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(str_buf);
+    left_doc.Accept(writer);
+    dingodb::Helper::SaveFile(filepath + ".left", str_buf.GetString());
+    left_doc.Clear();
+  }
+
+  {
+    rapidjson::StringBuffer str_buf;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(str_buf);
+    right_doc.Accept(writer);
+    dingodb::Helper::SaveFile(filepath + ".right", str_buf.GetString());
+    right_doc.Clear();
+  }
+}
+
+struct VectorEntry {
+  VectorEntry() = default;
+  VectorEntry(VectorEntry& entry) noexcept {
+    this->id = entry.id;
+    this->emb = entry.emb;
+  }
+  VectorEntry(VectorEntry&& entry) noexcept {
+    this->id = entry.id;
+    this->emb.swap(entry.emb);
+  }
+
+  struct Neighbor {
+    int64_t id;
+    float distance;
+
+    bool operator()(const Neighbor& lhs, const Neighbor& rhs) { return lhs.distance < rhs.distance; }
+  };
+  int64_t id;
+  std::vector<float> emb;
+
+  // max heap, remain top k min distance
+  std::priority_queue<Neighbor, std::vector<Neighbor>, Neighbor> max_heap;
+  std::mutex mutex;
+
+  std::vector<Neighbor> neighbors;
+
+  void MakeNeighbors(const VectorEntry& vector_entry) {
+    CHECK(emb.size() == vector_entry.emb.size());
+
+    float distance = dingodb::Helper::DingoHnswL2Sqr(emb.data(), vector_entry.emb.data(), emb.size());
+
+    Neighbor neighbor;
+    neighbor.id = vector_entry.id;
+    neighbor.distance = distance;
+    InsertHeap(neighbor);
+  }
+
+  void InsertHeap(const Neighbor& neighbor) {
+    std::lock_guard lock(mutex);
+
+    const int nearest_neighbor_num = 100;
+    if (max_heap.size() < nearest_neighbor_num) {
+      max_heap.push(neighbor);
+    } else {
+      const auto& max_neighbor = max_heap.top();
+      if (neighbor.distance < max_neighbor.distance) {
+        max_heap.pop();
+        max_heap.push(neighbor);
+      }
+    }
+  }
+
+  void SaveNeighbors() {
+    std::lock_guard lock(mutex);
+
+    while (!max_heap.empty()) {
+      const auto& max_neighbor = max_heap.top();
+      neighbors.push_back(max_neighbor);
+      max_heap.pop();
+    }
+
+    std::sort(neighbors.begin(), neighbors.end(), Neighbor());
+  }
+
+  void PrintNeighbors() {
+    for (auto& neighbor : neighbors) {
+      std::cout << fmt::format("{} {}", neighbor.id, neighbor.distance) << std::endl;
+    }
+  }
+};
+
+void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, std::vector<VectorEntry>& test_entries,
+                             const std::string& out_filepath) {
+  rapidjson::Document out_doc;
+  out_doc.SetArray();
+  rapidjson::Document::AllocatorType& allocator = out_doc.GetAllocator();
+
+  const auto& array = doc->GetArray();
+  for (int i = 0; i < array.Size(); ++i) {
+    auto out_obj = array[i].GetObject();
+    auto& test_entry = test_entries[i];
+    test_entry.SaveNeighbors();
+
+    rapidjson::Value neighbors(rapidjson::kArrayType);
+    for (const auto& neighbor : test_entry.neighbors) {
+      rapidjson::Value obj(rapidjson::kObjectType);
+      obj.AddMember("id", neighbor.id, allocator);
+      obj.AddMember("distance", neighbor.distance, allocator);
+
+      neighbors.PushBack(obj, allocator);
+    }
+
+    out_obj.AddMember("neighbors", neighbors, allocator);
+    out_doc.PushBack(out_obj, allocator);
+  }
+
+  rapidjson::StringBuffer str_buf;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(str_buf);
+  out_doc.Accept(writer);
+  dingodb::Helper::SaveFile(out_filepath, str_buf.GetString());
+}
+
+void Wikipedia2212Dataset::GenTestDataset(const std::string& test_dataset_filepath,
+                                          const std::string& train_dataset_dirpath) {
+  std::vector<VectorEntry> test_entries;
+
+  // bootstrap thread pool
+  dingodb::ThreadPool thread_pool("distance", 8);
+
+  // load test data
+  auto test_doc = std::make_shared<rapidjson::Document>();
+  {
+    std::ifstream ifs(test_dataset_filepath);
+    rapidjson::IStreamWrapper isw(ifs);
+    test_doc->ParseStream(isw);
+
+    const auto& array = test_doc->GetArray();
+    for (int i = 0; i < array.Size(); ++i) {
+      const auto& item = array[i].GetObject();
+
+      VectorEntry entry;
+      entry.id = item["id"].GetInt64();
+
+      if (item["emb"].IsArray()) {
+        entry.emb.reserve(item["emb"].GetArray().Size());
+        for (auto& f : item["emb"].GetArray()) {
+          entry.emb.push_back(f.GetFloat());
+        }
+      }
+
+      CHECK(entry.emb.size() == 768) << "dimension is wrong.";
+      test_entries.push_back(std::move(entry));
+    }
+
+    std::cout << fmt::format("test data count: {}", test_entries.size()) << std::endl;
+  }
+
+  // load train data
+  {
+    std::vector<std::string> train_filepaths;
+    auto train_filenames = dingodb::Helper::TraverseDirectory(train_dataset_dirpath, std::string("train"));
+    train_filepaths.reserve(train_filenames.size());
+    for (auto& filelname : train_filenames) {
+      train_filepaths.push_back(fmt::format("{}/{}", train_dataset_dirpath, filelname));
+    }
+    std::cout << fmt::format("file count: {}", train_filepaths.size()) << std::endl;
+
+    for (auto& train_filepath : train_filepaths) {
+      std::ifstream ifs(train_filepath);
+      rapidjson::IStreamWrapper isw(ifs);
+      rapidjson::Document doc;
+      doc.ParseStream(isw);
+      if (doc.HasParseError()) {
+        DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", train_filepath,
+                                        static_cast<int>(doc.GetParseError()));
+      }
+
+      CHECK(doc.IsArray());
+      const auto& array = doc.GetArray();
+      std::cout << fmt::format("train file: {} count: {}", train_filepath, array.Size()) << std::endl;
+      for (int i = 0; i < array.Size(); ++i) {
+        const auto& item = array[i].GetObject();
+        if (!item.HasMember("id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("url") ||
+            !item.HasMember("wiki_id") || !item.HasMember("views") || !item.HasMember("paragraph_id") ||
+            !item.HasMember("langs") || !item.HasMember("emb")) {
+          continue;
+        }
+
+        auto* entry = new VectorEntry();
+        entry->id = item["id"].GetInt64();
+
+        if (!item["emb"].IsArray()) {
+          continue;
+        }
+
+        entry->emb.reserve(item["emb"].GetArray().Size());
+        for (auto& f : item["emb"].GetArray()) {
+          entry->emb.push_back(f.GetFloat());
+        }
+        CHECK(entry->emb.size() == 768) << "dimension is wrong.";
+
+        thread_pool.ExecuteTask(
+            [&test_entries](void* arg) {
+              VectorEntry* train_entry = static_cast<VectorEntry*>(arg);
+
+              for (auto& entry : test_entries) {
+                entry.MakeNeighbors(*train_entry);
+              }
+            },
+            entry);
+
+        while (thread_pool.PendingTaskCount() > 1000) {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+      }
+    }
+  }
+
+  // waiting finish
+  while (thread_pool.PendingTaskCount() > 1) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  // handle result
+  SaveTestDatasetNeighbor(test_doc, test_entries, test_dataset_filepath + ".neighbor");
 }
 
 }  // namespace benchmark

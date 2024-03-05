@@ -197,7 +197,8 @@ struct VectorWithId {
 
   explicit VectorWithId(Vector p_vector) : id(0), vector(std::move(p_vector)) {}
 
-  VectorWithId(VectorWithId&& other) noexcept : id(other.id), vector(std::move(other.vector)) {}
+  VectorWithId(VectorWithId&& other) noexcept
+      : id(other.id), vector(std::move(other.vector)), scalar_data(std::move(other.scalar_data)) {}
   VectorWithId(const VectorWithId& other) = default;
 
   VectorWithId& operator=(VectorWithId&& other) noexcept {
