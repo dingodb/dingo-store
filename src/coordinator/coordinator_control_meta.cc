@@ -46,6 +46,7 @@ namespace dingodb {
 DEFINE_int64(max_partition_num_of_table, 1024, "max partition num of table");
 DEFINE_int64(max_table_count, 10000, "max table num of dingo");
 DEFINE_int64(max_index_count, 10000, "max index num of dingo");
+DEFINE_uint32(default_replica_num, 3, "default replica number");
 
 butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                             pb::meta::EntityType entity_type,
@@ -655,7 +656,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   std::vector<int64_t> new_region_ids;
   int32_t replica = table_definition.replica();
   if (replica < 1) {
-    replica = 3;
+    replica = FLAGS_default_replica_num;
   }
 
   pb::common::RawEngine region_raw_engine_type;
@@ -1110,7 +1111,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   std::vector<int64_t> new_region_ids;
   int32_t replica = table_definition.replica();
   if (replica < 1) {
-    replica = 3;
+    replica = FLAGS_default_replica_num;
   }
 
   pb::common::RawEngine region_raw_engine_type;
