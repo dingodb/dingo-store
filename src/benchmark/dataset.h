@@ -17,11 +17,13 @@
 
 #include <sys/types.h>
 
+#include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -137,14 +139,29 @@ class Movielens10mDataset : public BaseDataset {
   ~Movielens10mDataset() override = default;
 };
 
+// dataset utils
+class DatasetUtils {
+ public:
+  static void Test();
+
+  // split dataset for generate test dataset
+  static void SplitDataset(const std::string& filepath, uint32_t data_num);
+  // generate test dataset neighbors
+  static void GenTestDataset(const std::string& dataset_name, const std::string& test_dataset_filepath,
+                             const std::string& train_dataset_dirpath);
+};
+
+struct BatchVectorEntry {
+  std::vector<sdk::VectorWithId> vector_with_ids;
+};
+using BatchVectorEntryPtr = std::shared_ptr<BatchVectorEntry>;
+
 class Wikipedia2212Dataset : public Dataset {
  public:
   Wikipedia2212Dataset(const std::string& dirpath) : dirpath_(dirpath) {}
   ~Wikipedia2212Dataset() override = default;
 
   bool Init() override;
-
-  static void Test();
 
   uint32_t GetDimension() const override;
   uint32_t GetTrainDataCount() const override;
@@ -156,30 +173,63 @@ class Wikipedia2212Dataset : public Dataset {
   // Get all test data
   std::vector<TestEntryPtr> GetTestData() override;
 
-  static void SplitDataset(const std::string& filepath, uint32_t data_num);
-  static void GenTestDataset(const std::string& test_dataset_filepath, const std::string& train_dataset_dirpath);
-
  private:
-  void MakeDocument(const std::string& filepath);
-  bool InitDimension();
+  void ParallelLoadTrainData(const std::vector<std::string>& filepaths);
   uint32_t LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
                          std::vector<sdk::VectorWithId>& vector_with_ids) const;
+
   std::string dirpath_;
 
   // train dataset
   std::vector<std::string> train_filepaths_;
-  // current using train file pos
-  int train_curr_file_pos_{0};
-  // current offset in file
-  int train_curr_offset_{0};
-
-  std::shared_ptr<rapidjson::Document> train_doc_;
+  std::atomic<bool> train_load_finish_{false};
+  std::vector<BatchVectorEntryPtr> batch_vector_entry_cache_;
+  int head_pos_{0};
+  int tail_pos_{0};
+  std::mutex mutex_;
 
   // test dataset
   std::vector<std::string> test_filepaths_;
 
-  uint32_t dimension_{0};
+  uint32_t test_row_count_{0};
+};
+
+class BeirBioasqDataset : public Dataset {
+ public:
+  BeirBioasqDataset(const std::string& dirpath) : dirpath_(dirpath) {}
+  ~BeirBioasqDataset() override = default;
+
+  bool Init() override;
+
+  uint32_t GetDimension() const override;
+  uint32_t GetTrainDataCount() const override;
+  uint32_t GetTestDataCount() const override;
+
+  // Get train data by batch
+  void GetBatchTrainData(uint32_t batch_num, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) override;
+
+  // Get all test data
+  std::vector<TestEntryPtr> GetTestData() override;
+
+ private:
+  void ParallelLoadTrainData(const std::vector<std::string>& filepaths);
+  uint32_t LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
+                         std::vector<sdk::VectorWithId>& vector_with_ids) const;
+
+  std::string dirpath_;
+
+  // train dataset
+  std::vector<std::string> train_filepaths_;
+  std::atomic<bool> train_load_finish_{false};
+  std::vector<BatchVectorEntryPtr> batch_vector_entry_cache_;
+  int head_pos_{0};
+  int tail_pos_{0};
   std::mutex mutex_;
+
+  // test dataset
+  std::vector<std::string> test_filepaths_;
+
+  uint32_t test_row_count_{0};
 };
 
 }  // namespace benchmark

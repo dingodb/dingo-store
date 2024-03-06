@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include <csignal>
+#include <memory>
 #include <string>
 
 #include "benchmark/benchmark.h"
@@ -101,6 +102,9 @@ void InitLog(const std::string& log_dir) {
   FLAGS_stop_logging_if_full_disk = true;
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logbuflevel = google::GLOG_INFO;
+  FLAGS_logtostdout = false;
+  FLAGS_logtostderr = false;
+  FLAGS_alsologtostderr = false;
 
   std::string program_name = "dingodb_bench";
 
@@ -109,6 +113,7 @@ void InitLog(const std::string& log_dir) {
   google::SetLogDestination(google::GLOG_WARNING, fmt::format("{}/{}.warn.log.", log_dir, program_name).c_str());
   google::SetLogDestination(google::GLOG_ERROR, fmt::format("{}/{}.error.log.", log_dir, program_name).c_str());
   google::SetLogDestination(google::GLOG_FATAL, fmt::format("{}/{}.fatal.log.", log_dir, program_name).c_str());
+  google::SetStderrLogging(google::GLOG_FATAL);
 }
 
 int main(int argc, char* argv[]) {
@@ -118,7 +123,7 @@ int main(int argc, char* argv[]) {
   google::SetUsageMessage(GetUsageMessage());
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  // dingodb::benchmark::Wikipedia2212Dataset::Test();
+  // dingodb::benchmark::DatasetUtils::Test();
   // return 0;
 
   SetupSignalHandler();
