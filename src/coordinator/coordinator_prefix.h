@@ -48,7 +48,7 @@ inline static const std::string kPrefixTableIndex = "TBLINDE";
 inline static const std::string kPrefixCommonDisk = "COMDISK";
 inline static const std::string kPrefixCommonMem = "COMMEM_";
 
-inline static const std::string kPrefixTenantMem = "TENANT_";
+inline static const std::string kPrefixTenant = "TENANT_";
 
 }  // namespace dingodb
 

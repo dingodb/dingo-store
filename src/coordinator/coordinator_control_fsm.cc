@@ -1225,6 +1225,105 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
+  // 52 tenant_map
+  {
+    if (meta_increment.tenants_size() > 0) {
+      DINGO_LOG(INFO) << "3.tenants_size=" << meta_increment.tenants_size();
+    }
+
+    for (int i = 0; i < meta_increment.tenants_size(); i++) {
+      auto* tenant_increment = meta_increment.mutable_tenants(i);
+      auto* tenant_internal = tenant_increment->mutable_tenant();
+      tenant_internal->set_revision(meta_revision);
+
+      if (tenant_increment->op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = tenant_meta_->Put(tenant_increment->id(), *tenant_internal);
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem CREATE, but Put failed, [id=" << tenant_increment->id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem CREATE, success [id=" << tenant_increment->id() << "]";
+        }
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_TENANT_CREATE);
+        event.mutable_tenant()->set_id(tenant_increment->tenant().id());
+        event.mutable_tenant()->set_name(tenant_increment->tenant().name());
+        event.mutable_tenant()->set_comment(tenant_increment->tenant().comment());
+        event.mutable_tenant()->set_revision(meta_revision);
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_TENANT_CREATE);
+
+      } else if (tenant_increment->op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        pb::coordinator_internal::TenantInternal tenant_internal;
+        auto ret1 = tenant_map_.Get(tenant_increment->id(), tenant_internal);
+        if (ret1 < 0) {
+          DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant_increment->id() << ", cannot do update, "
+                           << tenant_increment->ShortDebugString();
+          continue;
+        }
+
+        // if safe_point_ts > 0, update safe_point_ts only
+        // else do not update safe_point_ts
+        if (tenant_increment->tenant().safe_point_ts() > 0) {
+          if (tenant_increment->tenant().safe_point_ts() <= tenant_internal.safe_point_ts()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but safe_point_ts <= old, [id="
+                            << tenant_increment->id() << "], old_safe_point_ts=" << tenant_internal.safe_point_ts()
+                            << ", new_safe_point_ts=" << tenant_increment->tenant().safe_point_ts();
+            continue;
+          }
+
+          tenant_internal.set_safe_point_ts(tenant_increment->tenant().safe_point_ts());
+          tenant_internal.set_update_timestamp(tenant_increment->tenant().update_timestamp());
+        } else {
+          tenant_internal.set_name(tenant_increment->tenant().name());
+          tenant_internal.set_comment(tenant_increment->tenant().comment());
+          tenant_internal.set_update_timestamp(tenant_increment->tenant().update_timestamp());
+        }
+
+        tenant_internal.set_revision(meta_revision);
+
+        auto ret = tenant_meta_->Put(tenant_increment->id(), tenant_internal);
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem UPDATE, but Put failed, [id=" << tenant_increment->id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, success [id=" << tenant_increment->id() << "]";
+        }
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_TENANT_UPDATE);
+        event.mutable_tenant()->set_id(tenant_increment->tenant().id());
+        event.mutable_tenant()->set_name(tenant_increment->tenant().name());
+        event.mutable_tenant()->set_comment(tenant_increment->tenant().comment());
+        event.mutable_tenant()->set_revision(meta_revision);
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_TENANT_UPDATE);
+
+      } else if (tenant_increment->op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        auto ret = tenant_meta_->Erase(tenant_increment->id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem DELETE, but Delete failed, [id=" << tenant_increment->id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem DELETE, success [id=" << tenant_increment->id() << "]";
+        }
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_TENANT_DELETE);
+        event.mutable_tenant()->set_id(tenant_increment->tenant().id());
+        event.mutable_tenant()->set_name(tenant_increment->tenant().name());
+        event.mutable_tenant()->set_comment(tenant_increment->tenant().comment());
+        event.mutable_tenant()->set_revision(meta_revision);
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_TENANT_DELETE);
+      }
+    }
+  }
+
   // 4.schema map
   {
     if (meta_increment.schemas_size() > 0) {
@@ -2414,70 +2513,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement common_mem DELETE, success [id=" << common_mem.id() << "]";
-        }
-      }
-    }
-  }
-
-  // 52 tenant_map
-  {
-    if (meta_increment.tenants_size() > 0) {
-      DINGO_LOG(INFO) << "3.tenants_size=" << meta_increment.tenants_size();
-    }
-
-    for (int i = 0; i < meta_increment.tenants_size(); i++) {
-      const auto& tenant_increment = meta_increment.tenants(i);
-      if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        auto ret = tenant_meta_->Put(tenant_increment.id(), tenant_increment.tenant());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem CREATE, but Put failed, [id=" << tenant_increment.id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem CREATE, success [id=" << tenant_increment.id() << "]";
-        }
-
-      } else if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        pb::coordinator_internal::TenantInternal tenant_internal;
-        auto ret1 = tenant_map_.Get(tenant_increment.id(), tenant_internal);
-        if (ret1 < 0) {
-          DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant_increment.id() << ", cannot do update, "
-                           << tenant_increment.ShortDebugString();
-          continue;
-        }
-
-        // if safe_point_ts > 0, update safe_point_ts only
-        // else do not update safe_point_ts
-        if (tenant_increment.tenant().safe_point_ts() > 0) {
-          if (tenant_increment.tenant().safe_point_ts() <= tenant_internal.safe_point_ts()) {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but safe_point_ts <= old, [id="
-                            << tenant_increment.id() << "], old_safe_point_ts=" << tenant_internal.safe_point_ts()
-                            << ", new_safe_point_ts=" << tenant_increment.tenant().safe_point_ts();
-            continue;
-          }
-
-          tenant_internal.set_safe_point_ts(tenant_increment.tenant().safe_point_ts());
-          tenant_internal.set_update_timestamp(tenant_increment.tenant().update_timestamp());
-        } else {
-          tenant_internal.set_name(tenant_increment.tenant().name());
-          tenant_internal.set_comment(tenant_increment.tenant().comment());
-          tenant_internal.set_update_timestamp(tenant_increment.tenant().update_timestamp());
-        }
-
-        auto ret = tenant_meta_->Put(tenant_increment.id(), tenant_internal);
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem UPDATE, but Put failed, [id=" << tenant_increment.id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, success [id=" << tenant_increment.id() << "]";
-        }
-
-      } else if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        auto ret = tenant_meta_->Erase(tenant_increment.id());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem DELETE, but Delete failed, [id=" << tenant_increment.id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem DELETE, success [id=" << tenant_increment.id() << "]";
         }
       }
     }

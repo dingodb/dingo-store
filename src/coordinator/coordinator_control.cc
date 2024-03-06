@@ -85,7 +85,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   common_mem_meta_ = new MetaMemMapStd<pb::coordinator_internal::CommonInternal>(&common_mem_map_, kPrefixCommonMem,
                                                                                  raw_engine_of_meta);
   tenant_meta_ =
-      new MetaMemMapFlat<pb::coordinator_internal::TenantInternal>(&tenant_map_, kPrefixTenantMem, raw_engine_of_meta);
+      new MetaMemMapFlat<pb::coordinator_internal::TenantInternal>(&tenant_map_, kPrefixTenant, raw_engine_of_meta);
 
   // table index
   table_index_meta_ = new MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal>(

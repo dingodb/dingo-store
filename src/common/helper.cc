@@ -52,7 +52,6 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "common/service_access.h"
-#include "common/tracker.h"
 #include "fmt/core.h"
 #include "google/protobuf/util/json_util.h"
 #include "proto/common.pb.h"
