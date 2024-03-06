@@ -339,7 +339,7 @@ message CoordinatorMemoryInfo {
   int64 common_mem_map_count = 81;
   int64 common_mem_map_size = 82;
 
-  // tenant mem map
+  // tenant map
   int64 tenant_map_count = 83;
   int64 tenant_map_size = 84;
 

@@ -125,6 +125,7 @@ message Tenant {
   int64 delete_timestamp = 12;  // this field is updated by coordinator
 
   int64 safe_point_ts = 20;
+  int64 revision = 21;
 }
 
 // Schema
@@ -881,6 +882,20 @@ enum MetaEventType {
   META_EVENT_REGION_CREATE = 13;
   META_EVENT_REGION_UPDATE = 14;
   META_EVENT_REGION_DELETE = 15;
+
+  // for tenant
+  META_EVENT_TENANT_CREATE = 16;
+  META_EVENT_TENANT_UPDATE = 17;
+  META_EVENT_TENANT_DELETE = 18;
+}
+
+message MetaEventTenant {
+  int64 id = 1;
+  string name = 2;
+  string comment = 3;
+
+  // the revision is the version of the schema
+  int64 revision = 4;
 }
 
 message MetaEventSchema {
@@ -889,6 +904,7 @@ message MetaEventSchema {
 
   // the revision is the version of the schema
   int64 revision = 3;
+  int64 tenant_id = 4;
 }
 
 // the revision of table is inside the definition
@@ -954,6 +970,7 @@ message MetaEvent {
     MetaEventIndex index = 4;
     MetaEventTableIndex table_index = 5;
     MetaEventRegion region = 6;
+    MetaEventTenant tenant = 7;
   }
 }
 

@@ -3397,6 +3397,7 @@ butil::Status CoordinatorControl::GetTenants(std::vector<int64_t> tenant_ids, st
     tenant.set_create_timestamp(tenant_internal.create_timestamp());
     tenant.set_update_timestamp(tenant_internal.update_timestamp());
     tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
+    tenant.set_revision(tenant_internal.revision());
 
     tenants.push_back(std::move(tenant));
   }
@@ -3423,6 +3424,8 @@ butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& t
   tenant.set_update_timestamp(tenant_internal.update_timestamp());
   tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
   tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
+  tenant.set_revision(tenant_internal.revision());
+
   tenants.push_back(std::move(tenant));
 
   for (const auto& [tenant_id, tenant_internal] : temp_tenant_map) {
@@ -3434,6 +3437,7 @@ butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& t
     tenant.set_update_timestamp(tenant_internal.update_timestamp());
     tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
     tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
+    tenant.set_revision(tenant_internal.revision());
 
     tenants.push_back(std::move(tenant));
   }

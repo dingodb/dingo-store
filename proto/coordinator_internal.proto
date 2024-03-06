@@ -82,6 +82,7 @@ message TenantInternal {
   int64 delete_timestamp = 12;
 
   int64 safe_point_ts = 20;
+  int64 revision = 21;
 }
 
 // SchemaInternal is storage structure for schema
