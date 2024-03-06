@@ -23,7 +23,6 @@
 
 #include "braft/configuration.h"
 #include "bthread/mutex.h"
-#include "bthread/types.h"
 #include "butil/compiler_specific.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -85,6 +84,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   common_disk_meta_ = new MetaDiskMap<pb::coordinator_internal::CommonInternal>(kPrefixCommonDisk, raw_engine_of_meta);
   common_mem_meta_ = new MetaMemMapStd<pb::coordinator_internal::CommonInternal>(&common_mem_map_, kPrefixCommonMem,
                                                                                  raw_engine_of_meta);
+  tenant_meta_ =
+      new MetaMemMapFlat<pb::coordinator_internal::TenantInternal>(&tenant_map_, kPrefixTenantMem, raw_engine_of_meta);
 
   // table index
   table_index_meta_ = new MetaMemMapFlat<pb::coordinator_internal::TableIndexInternal>(
@@ -112,6 +113,9 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // table index
   table_index_map_.Init(10000);
 
+  // tenant
+  tenant_map_.Init(1000);  // tenant_map_ is a small map
+
   meta_watch_worker_set_ = WorkerSet::New("CoordinatorMetaWatchWorkerSet", 1, 0);
   if (!meta_watch_worker_set_->Init()) {
     DINGO_LOG(FATAL) << "Init CoordinatorMetaWatchWorkerSet failed!";
@@ -134,6 +138,7 @@ CoordinatorControl::~CoordinatorControl() {
   delete table_index_meta_;
   delete common_disk_meta_;
   delete common_mem_meta_;
+  delete tenant_meta_;
   meta_watch_worker_set_->Destroy();
 }
 
@@ -166,6 +171,9 @@ void CoordinatorControl::InitIds() {
   // }
   if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD) == 0) {
     id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, 1000000);
+  }
+  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT, 1000);
   }
 }
 
@@ -417,6 +425,19 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover common_mem_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 52.tenant_mem_map
+  if (!meta_reader_->Scan(tenant_meta_->Prefix(), kvs)) {
+    return false;
+  }
+  {
+    // BAIDU_SCOPED_LOCK(executor_map_mutex_);
+    if (!tenant_meta_->Recover(kvs)) {
+      return false;
+    }
+  }
+  DINGO_LOG(INFO) << "Recover tenant_mem_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps

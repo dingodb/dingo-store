@@ -222,6 +222,7 @@ class Helper {
 
   // Gen coordinator new_table_check_name
   static std::string GenNewTableCheckName(int64_t schema_id, const std::string& table_name);
+  static std::string GenNewTenantCheckName(int64_t tenant_id, const std::string& name);
 
   static std::vector<std::string> GetColumnFamilyNamesByRole();
   static std::vector<std::string> GetColumnFamilyNamesExecptMetaByRole();

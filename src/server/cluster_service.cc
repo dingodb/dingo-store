@@ -607,7 +607,7 @@ void ClusterStatImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
 
   // 1. Get All Schema
   std::vector<pb::meta::Schema> schemas;
-  coordinator_controller_->GetSchemas(0, schemas);
+  coordinator_controller_->GetSchemas(-1, schemas);
 
   if (schemas.empty()) {
     DINGO_LOG(ERROR) << "Get Schemas Failed";

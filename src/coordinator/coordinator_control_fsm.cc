@@ -397,6 +397,18 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot common_mem_meta, count=" << kvs.size();
   kvs.clear();
 
+  // 52 tenant_mem_map
+  if (!meta_reader_->Scan(snapshot, tenant_meta_->Prefix(), kvs)) {
+    return false;
+  }
+
+  for (const auto& kv : kvs) {
+    auto* snapshot_file_kv = meta_snapshot_file.add_tenant_map_kvs();
+    *snapshot_file_kv = kv;
+  }
+  DINGO_LOG(INFO) << "Snapshot tenant_mem_meta, count=" << kvs.size();
+  kvs.clear();
+
   return true;
 }
 
@@ -904,6 +916,34 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
     DINGO_LOG(INFO) << "Coordinator put common_mem_meta_ success in LoadMetaFromSnapshotFile";
   }
   DINGO_LOG(INFO) << "LoadSnapshot common_mem_meta, count=" << kvs.size();
+  kvs.clear();
+
+  // 52 tenant_mem_map
+  kvs.reserve(meta_snapshot_file.tenant_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.tenant_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.tenant_map_kvs(i));
+  }
+  {
+    // BAIDU_SCOPED_LOCK(tenant_mem_map_mutex_);
+    if (!tenant_meta_->Recover(kvs)) {
+      return false;
+    }
+
+    // remove data in rocksdb
+    if (!meta_writer_->DeletePrefix(tenant_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete tenant_mem_meta_ range failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator delete range tenant_mem_meta_ success in LoadMetaFromSnapshotFile";
+
+    // write data to rocksdb
+    if (!meta_writer_->Put(kvs)) {
+      DINGO_LOG(ERROR) << "Coordinator write tenant_mem_meta_ failed in LoadMetaFromSnapshotFile";
+      return false;
+    }
+    DINGO_LOG(INFO) << "Coordinator put tenant_mem_meta_ success in LoadMetaFromSnapshotFile";
+  }
+  DINGO_LOG(INFO) << "LoadSnapshot tenant_mem_meta, count=" << kvs.size();
   kvs.clear();
 
   // build id_epoch, schema_name, table_name, index_name maps
@@ -2374,6 +2414,70 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement common_mem DELETE, success [id=" << common_mem.id() << "]";
+        }
+      }
+    }
+  }
+
+  // 52 tenant_map
+  {
+    if (meta_increment.tenants_size() > 0) {
+      DINGO_LOG(INFO) << "3.tenants_size=" << meta_increment.tenants_size();
+    }
+
+    for (int i = 0; i < meta_increment.tenants_size(); i++) {
+      const auto& tenant_increment = meta_increment.tenants(i);
+      if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = tenant_meta_->Put(tenant_increment.id(), tenant_increment.tenant());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem CREATE, but Put failed, [id=" << tenant_increment.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem CREATE, success [id=" << tenant_increment.id() << "]";
+        }
+
+      } else if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        pb::coordinator_internal::TenantInternal tenant_internal;
+        auto ret1 = tenant_map_.Get(tenant_increment.id(), tenant_internal);
+        if (ret1 < 0) {
+          DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant_increment.id() << ", cannot do update, "
+                           << tenant_increment.ShortDebugString();
+          continue;
+        }
+
+        // if safe_point_ts > 0, update safe_point_ts only
+        // else do not update safe_point_ts
+        if (tenant_increment.tenant().safe_point_ts() > 0) {
+          if (tenant_increment.tenant().safe_point_ts() <= tenant_internal.safe_point_ts()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but safe_point_ts <= old, [id="
+                            << tenant_increment.id() << "], old_safe_point_ts=" << tenant_internal.safe_point_ts()
+                            << ", new_safe_point_ts=" << tenant_increment.tenant().safe_point_ts();
+            continue;
+          }
+
+          tenant_internal.set_safe_point_ts(tenant_increment.tenant().safe_point_ts());
+          tenant_internal.set_update_timestamp(tenant_increment.tenant().update_timestamp());
+        } else {
+          tenant_internal.set_name(tenant_increment.tenant().name());
+          tenant_internal.set_comment(tenant_increment.tenant().comment());
+          tenant_internal.set_update_timestamp(tenant_increment.tenant().update_timestamp());
+        }
+
+        auto ret = tenant_meta_->Put(tenant_increment.id(), tenant_internal);
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem UPDATE, but Put failed, [id=" << tenant_increment.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, success [id=" << tenant_increment.id() << "]";
+        }
+
+      } else if (tenant_increment.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        auto ret = tenant_meta_->Erase(tenant_increment.id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement tenant_mem DELETE, but Delete failed, [id=" << tenant_increment.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem DELETE, success [id=" << tenant_increment.id() << "]";
         }
       }
     }

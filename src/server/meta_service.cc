@@ -79,15 +79,10 @@ void DoGetSchemas(google::protobuf::RpcController * /*controller*/, const pb::me
     return coordinator_control->RedirectResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
-
-  if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
+  DINGO_LOG(DEBUG) << "GetSchemas request: " << request->ShortDebugString();
 
   std::vector<pb::meta::Schema> schemas;
-  auto ret = coordinator_control->GetSchemas(request->schema_id().entity_id(), schemas);
+  auto ret = coordinator_control->GetSchemas(request->tenant_id(), schemas);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -109,12 +104,7 @@ void DoGetSchema(google::protobuf::RpcController * /*controller*/, const pb::met
     return coordinator_control->RedirectResponse(response);
   }
 
-  DINGO_LOG(DEBUG) << "GetSchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
-
-  if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
+  DINGO_LOG(DEBUG) << "GetSchema request: " << request->ShortDebugString();
 
   if (!request->has_schema_id()) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
@@ -148,7 +138,7 @@ void DoGetSchemaByName(google::protobuf::RpcController * /*controller*/,
   }
 
   auto *schema = response->mutable_schema();
-  auto ret = coordinator_control->GetSchemaByName(request->schema_name(), *schema);
+  auto ret = coordinator_control->GetSchemaByName(request->tenant_id(), request->schema_name(), *schema);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -565,7 +555,8 @@ void DoDropSchema(google::protobuf::RpcController * /*controller*/, const pb::me
     return coordinator_control->RedirectResponse(response);
   }
 
-  DINGO_LOG(WARNING) << "DropSchema request:  parent_schema_id = [" << request->schema_id().entity_id() << "]";
+  DINGO_LOG(WARNING) << "DropSchema request:  schema_id = [" << request->schema_id().entity_id()
+                     << "], tenant_id: " << request->tenant_id();
   DINGO_LOG(INFO) << request->ShortDebugString();
 
   if (!request->has_schema_id()) {
@@ -576,8 +567,8 @@ void DoDropSchema(google::protobuf::RpcController * /*controller*/, const pb::me
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   int64_t schema_id = request->schema_id().entity_id();
-  int64_t parent_schema_id = request->schema_id().parent_entity_id();
-  auto ret = coordinator_control->DropSchema(parent_schema_id, schema_id, meta_increment);
+  int64_t tenant_id = request->tenant_id();
+  auto ret = coordinator_control->DropSchema(tenant_id, schema_id, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "DropSchema failed, schema_id=" << schema_id << " ret = " << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -608,22 +599,16 @@ void DoCreateSchema(google::protobuf::RpcController * /*controller*/, const pb::
     return coordinator_control->RedirectResponse(response);
   }
 
-  DINGO_LOG(INFO) << "CreatSchema request:  parent_schema_id = [" << request->parent_schema_id().entity_id() << "]";
-  DINGO_LOG(DEBUG) << request->ShortDebugString();
-
-  if (!request->has_parent_schema_id()) {
-    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
+  DINGO_LOG(INFO) << "CreatSchema request: " << request->ShortDebugString();
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   int64_t new_schema_id;
-  auto ret = coordinator_control->CreateSchema(request->parent_schema_id().entity_id(), request->schema_name(),
-                                               new_schema_id, meta_increment);
+  auto ret =
+      coordinator_control->CreateSchema(request->tenant_id(), request->schema_name(), new_schema_id, meta_increment);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id
-                     << " parent_schema_id=" << request->parent_schema_id().entity_id() << " failed ret = " << ret;
+    DINGO_LOG(ERROR) << "CreateSchema schema_id = " << new_schema_id << " tenant_id=" << request->tenant_id()
+                     << " failed ret = " << ret;
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
     return;
@@ -634,6 +619,7 @@ void DoCreateSchema(google::protobuf::RpcController * /*controller*/, const pb::
   schema->mutable_id()->set_entity_id(new_schema_id);
   schema->mutable_id()->set_parent_entity_id(request->parent_schema_id().entity_id());
   schema->set_name(request->schema_name());
+  schema->set_tenant_id(request->tenant_id());
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(Constant::kMetaRegionId);
@@ -1461,6 +1447,18 @@ void DoCreateTables(google::protobuf::RpcController * /*controller*/, const pb::
     return;
   }
 
+  // check schema is exists
+  pb::meta::Schema schema;
+  auto ret1 = coordinator_control->GetSchema(request->schema_id().entity_id(), schema);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "schema not found, schema_id=" << request->schema_id().entity_id();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  int64_t tenant_id = schema.tenant_id();
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   bool find_table_type = false;
@@ -1572,6 +1570,7 @@ void DoCreateTables(google::protobuf::RpcController * /*controller*/, const pb::
 
   if (find_table_type) {
     table_index_internal.set_id(new_table_id);
+    table_index_internal.set_tenant_id(tenant_id);
     coordinator_control->CreateTableIndexesMap(table_index_internal, meta_increment);
     DINGO_LOG(INFO) << "CreateTableIndexesMap new_table_id=" << new_table_id;
   }
@@ -2106,11 +2105,6 @@ void MetaServiceImpl::GetSchemas(google::protobuf::RpcController *controller,
 
   DINGO_LOG(DEBUG) << "GetSchemas request:  schema_id = [" << request->schema_id().entity_id() << "]";
 
-  if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
-
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
@@ -2132,16 +2126,6 @@ void MetaServiceImpl::GetSchema(google::protobuf::RpcController *controller, con
   }
 
   DINGO_LOG(DEBUG) << "GetSchema request:  schema_id = [" << request->schema_id().entity_id() << "]";
-
-  if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
-
-  if (!request->has_schema_id()) {
-    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    return;
-  }
 
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
@@ -3467,6 +3451,252 @@ void MetaServiceImpl::ListWatch(google::protobuf::RpcController *controller, con
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoListWatch(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoCreateTenant(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTenantRequest *request,
+                    pb::meta::CreateTenantResponse *response, TrackClosure *done,
+                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::meta::Tenant tenant = request->tenant();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control->CreateTenant(tenant, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CreateTenant failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  auto ret1 = coordinator_control->SubmitMetaIncrementSync(meta_increment);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "CreateTenant failed in meta_service, error code=" << ret1.error_code()
+                     << ", error str=" << ret1.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  *response->mutable_tenant() = tenant;
+
+  DINGO_LOG(INFO) << "CreateTenant Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::CreateTenant(google::protobuf::RpcController *controller,
+                                   const pb::meta::CreateTenantRequest *request,
+                                   pb::meta::CreateTenantResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateTenant(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoUpdateTenant(google::protobuf::RpcController * /*controller*/, const pb::meta::UpdateTenantRequest *request,
+                    pb::meta::UpdateTenantResponse *response, TrackClosure *done,
+                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::meta::Tenant tenant = request->tenant();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control->UpdateTenant(tenant, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UpdateTenant failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  auto ret1 = coordinator_control->SubmitMetaIncrementSync(meta_increment);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "UpdateTenant failed in meta_service, error code=" << ret1.error_code()
+                     << ", error str=" << ret1.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  *response->mutable_tenant() = tenant;
+
+  DINGO_LOG(INFO) << "UpdateTenant Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::UpdateTenant(google::protobuf::RpcController *controller,
+                                   const pb::meta::UpdateTenantRequest *request,
+                                   pb::meta::UpdateTenantResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoUpdateTenant(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoDropTenant(google::protobuf::RpcController * /*controller*/, const pb::meta::DropTenantRequest *request,
+                  pb::meta::DropTenantResponse *response, TrackClosure *done,
+                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  auto ret = coordinator_control->DropTenant(request->tenant_id(), meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "DropTenant failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  auto ret1 = coordinator_control->SubmitMetaIncrementSync(meta_increment);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "DropTenant failed in meta_service, error code=" << ret1.error_code()
+                     << ", error str=" << ret1.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "DropTenant Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::DropTenant(google::protobuf::RpcController *controller,
+                                 const pb::meta::DropTenantRequest *request, pb::meta::DropTenantResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoDropTenant(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoGetTenants(google::protobuf::RpcController * /*controller*/, const pb::meta::GetTenantsRequest *request,
+                  pb::meta::GetTenantsResponse *response, TrackClosure *done,
+                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  if (request->tenant_ids_size() == 0) {
+    std::vector<pb::meta::Tenant> tenants;
+
+    auto ret = coordinator_control->GetAllTenants(tenants);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "GetTenants failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+
+    for (auto &tenant : tenants) {
+      auto *tenant_ptr = response->add_tenants();
+      tenant_ptr->Swap(&tenant);
+    }
+  } else {
+    std::vector<int64_t> tenant_ids;
+    for (const auto &tenant_id : request->tenant_ids()) {
+      tenant_ids.push_back(tenant_id);
+    }
+    std::vector<pb::meta::Tenant> tenants;
+
+    auto ret = coordinator_control->GetTenants(tenant_ids, tenants);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "GetTenants failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+
+    for (auto &tenant : tenants) {
+      auto *tenant_ptr = response->add_tenants();
+      tenant_ptr->Swap(&tenant);
+    }
+  }
+
+  DINGO_LOG(INFO) << "GetTenants Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::GetTenants(google::protobuf::RpcController *controller,
+                                 const pb::meta::GetTenantsRequest *request, pb::meta::GetTenantsResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoGetTenants(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

@@ -1166,6 +1166,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   int64_t table_id = request->table_id();
   int64_t index_id = request->index_id();
   int64_t part_id = request->part_id();
+  int64_t tenant_id = request->tenant_id();
   int64_t split_from_region_id = request->split_from_region_id();
   int64_t new_region_id = 0;
   pb::common::RegionType region_type = request->region_type();
@@ -1186,8 +1187,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
 
   butil::Status ret = butil::Status::OK();
   if (split_from_region_id > 0) {
-    ret = coordinator_control->CreateRegionForSplit(region_name, region_type, resource_tag, range, schema_id, table_id,
-                                                    index_id, part_id, index_parameter, split_from_region_id,
+    ret = coordinator_control->CreateRegionForSplit(region_name, region_type, resource_tag, range, split_from_region_id,
                                                     new_region_id, meta_increment);
   } else if (request->store_ids_size() > 0) {
     std::vector<int64_t> store_ids;
@@ -1196,12 +1196,16 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
     ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, range,
-                                                 schema_id, table_id, index_id, part_id, index_parameter, store_ids, 0,
-                                                 new_region_id, store_operations, meta_increment);
+                                                 schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
+                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
   } else {
-    ret = coordinator_control->CreateRegionAutoSelectStore(region_name, region_type, raw_engine, resource_tag,
-                                                           replica_num, range, schema_id, table_id, index_id, part_id,
-                                                           index_parameter, new_region_id, meta_increment);
+    // store_ids is empty, will auto select store
+    std::vector<int64_t> store_ids;
+    std::vector<pb::coordinator::StoreOperation> store_operations;
+
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, range,
+                                                 schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
+                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
   }
 
   if (!ret.ok()) {
@@ -2135,8 +2139,14 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   int64_t new_gc_safe_point = 0;
   bool gc_stop = false;
+  std::map<int64_t, int64_t> tenant_safe_points;
+
+  for (const auto &[tenant_id, safe_point] : request->tenant_safe_points()) {
+    tenant_safe_points.insert({tenant_id, safe_point});
+  }
+
   auto ret = coordinator_control->UpdateGCSafePoint(request->safe_point(), request->gc_flag(), new_gc_safe_point,
-                                                    gc_stop, meta_increment);
+                                                    gc_stop, tenant_safe_points, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "UpdateGCSafePoint failed, gc_safe_point:" << request->safe_point()
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -2166,7 +2176,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 }
 
 void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
-                      const pb::coordinator::GetGCSafePointRequest * /*request*/,
+                      const pb::coordinator::GetGCSafePointRequest *request,
                       pb::coordinator::GetGCSafePointResponse *response, TrackClosure *done,
                       std::shared_ptr<CoordinatorControl> coordinator_control,
                       std::shared_ptr<Engine> /*raft_engine*/) {
@@ -2181,7 +2191,19 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   int64_t gc_safe_point = 0;
   bool gc_stop = false;
-  auto ret = coordinator_control->GetGCSafePoint(gc_safe_point, gc_stop);
+
+  std::vector<int64_t> tenant_ids;
+  if (!request->tenant_ids().empty()) {
+    tenant_ids.reserve(request->tenant_ids().size());
+    for (const auto &tenant_id : request->tenant_ids()) {
+      tenant_ids.push_back(tenant_id);
+    }
+  }
+
+  std::map<int64_t, int64_t> tenant_safe_points;
+
+  auto ret = coordinator_control->GetGCSafePoint(gc_safe_point, gc_stop, tenant_ids, request->get_all_tenant(),
+                                                 tenant_safe_points);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "GetGCSafePoint failed, errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -2190,6 +2212,13 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   response->set_safe_point(gc_safe_point);
   response->set_gc_stop(gc_stop);
+
+  if (!tenant_safe_points.empty()) {
+    auto *new_tenant_safe_points = response->mutable_tenant_safe_points();
+    for (const auto [tenant_id, safe_point] : tenant_safe_points) {
+      new_tenant_safe_points->insert({tenant_id, safe_point});
+    }
+  }
 
   DINGO_LOG(INFO) << "Response GetGCSafePoint Request:" << response->ShortDebugString();
 }
