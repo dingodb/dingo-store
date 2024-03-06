@@ -111,6 +111,11 @@ void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
 void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetTableMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+void SendCreateTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendUpdateTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendDropTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetTenants(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 void SendGetIndexesCount(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

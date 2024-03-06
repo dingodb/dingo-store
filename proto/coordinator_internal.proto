@@ -48,6 +48,8 @@ message TableInternal {
   // if the partition_is is continuous, this field will be set, else this field will be empty.
   // if this field is empty, we will do ScanRegions for each partition to get the region list.
   dingodb.pb.common.Range range = 5;
+
+  int64 tenant_id = 6;
 }
 
 // TableMetricsInternal is storage structure for table_metrics
@@ -61,12 +63,25 @@ message TableIndexInternal {
   int64 id = 1;
   repeated dingodb.pb.meta.DingoCommonId table_ids = 2;
   int64 revision = 3;
+  int64 tenant_id = 4;
 }
 
 // IndexMetricsInternal is storage structure for index_metrics
 message IndexMetricsInternal {
   int64 id = 1;
   dingodb.pb.meta.IndexMetrics index_metrics = 2;
+}
+
+// TenantInternal is storage structure for tenant
+message TenantInternal {
+  int64 id = 1;
+  string name = 2;
+  string comment = 3;
+  int64 create_timestamp = 10;
+  int64 update_timestamp = 11;
+  int64 delete_timestamp = 12;
+
+  int64 safe_point_ts = 20;
 }
 
 // SchemaInternal is storage structure for schema
@@ -76,6 +91,7 @@ message SchemaInternal {
   repeated int64 table_ids = 3;
   repeated int64 index_ids = 4;
   int64 revision = 5;
+  int64 tenant_id = 6;
 }
 
 // CoordinatorInteral stores coordinator info for SDK & stores.
@@ -119,6 +135,7 @@ enum IdEpochType {
   ID_NEXT_REGION = 5;
   ID_NEXT_TABLE = 6;
   ID_NEXT_INDEX = 7;  // deprecated for index id auto_increment
+  ID_NEXT_TENANT = 8;
 
   EPOCH_COORINATOR = 11;
   EPOCH_STORE = 12;
@@ -230,7 +247,7 @@ message MetaIncrementSchema {
   int64 id = 1;
   SchemaInternal schema_internal = 2;
   MetaIncrementOpType op_type = 3;
-  int64 schema_id = 4;  // parent schema
+  int64 schema_id = 4;  // DEPRECATED: parent schema is always 0 now
 }
 
 message MetaIncrementTable {
@@ -405,6 +422,13 @@ message MetaIncrementTso {
   dingodb.pb.meta.TsoRequest tso_request = 1;
 }
 
+// Tenant
+message MetaIncrementTenant {
+  int64 id = 1;
+  TenantInternal tenant = 2;
+  MetaIncrementOpType op_type = 3;
+}
+
 // MetaIncrement stores meta data need to be inserted or updated
 message MetaIncrement {
   repeated MetaIncrementCoordinator coordinators = 1;
@@ -437,6 +461,8 @@ message MetaIncrement {
 
   repeated MetaIncrementCommonDisk common_disk_s = 51;
   repeated MetaIncrementCommonMem common_mem_s = 52;
+
+  repeated MetaIncrementTenant tenants = 53;
 }
 
 message TsoStorage {
@@ -476,4 +502,6 @@ message MetaSnapshotFile {
 
   repeated dingodb.pb.common.KeyValue common_disk_map_kvs = 51;
   repeated dingodb.pb.common.KeyValue common_mem_map_kvs = 52;
+
+  repeated dingodb.pb.common.KeyValue tenant_map_kvs = 53;
 }

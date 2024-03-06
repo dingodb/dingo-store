@@ -637,6 +637,7 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
+  *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
   region.set_region_type(region_internal.region_type());
@@ -1304,6 +1305,7 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
                               split_from_region.definition().raw_engine(), "", store_ids.size(), new_range,
                               split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
                               split_from_region.definition().index_id(), split_from_region.definition().part_id(),
+                              split_from_region.definition().tenant_id(),
                               split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                               new_region_id, meta_increment);
   } else {
@@ -1311,16 +1313,17 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
                              split_from_region.definition().raw_engine(), "", store_ids.size(), new_range,
                              split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
                              split_from_region.definition().index_id(), split_from_region.definition().part_id(),
+                             split_from_region.definition().tenant_id(),
                              split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                              new_region_id, store_operations, meta_increment);
   }
 }
 
-butil::Status CoordinatorControl::CreateRegionForSplit(
-    const std::string& region_name, pb::common::RegionType region_type, const std::string& resource_tag,
-    pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
-    const pb::common::IndexParameter& index_parameter, int64_t split_from_region_id, int64_t& new_region_id,
-    pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region_name,
+                                                       pb::common::RegionType region_type,
+                                                       const std::string& resource_tag, pb::common::Range region_range,
+                                                       int64_t split_from_region_id, int64_t& new_region_id,
+                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (split_from_region_id <= 0) {
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "split_from_region_id must be positive");
   }
@@ -1341,20 +1344,11 @@ butil::Status CoordinatorControl::CreateRegionForSplit(
   // create region with split_from_region_id & store_ids
   std::vector<pb::coordinator::StoreOperation> store_operations;
   return CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(), resource_tag,
-                           store_ids.size(), region_range, schema_id, table_id, index_id, part_id, index_parameter,
-                           store_ids, split_from_region_id, new_region_id, store_operations, meta_increment);
-}
-
-butil::Status CoordinatorControl::CreateRegionAutoSelectStore(
-    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
-    const std::string& resource_tag, int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-    int64_t table_id, int64_t index_id, int64_t part_id, const pb::common::IndexParameter& index_parameter,
-    int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
-  std::vector<int64_t> store_ids;
-  std::vector<pb::coordinator::StoreOperation> store_operations;
-  return CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, region_range, schema_id,
-                           table_id, index_id, part_id, index_parameter, store_ids, 0, new_region_id, store_operations,
-                           meta_increment);
+                           store_ids.size(), region_range, split_from_region.definition().schema_id(),
+                           split_from_region.definition().table_id(), split_from_region.definition().index_id(),
+                           split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
+                           split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
+                           new_region_id, store_operations, meta_increment);
 }
 
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
@@ -1766,19 +1760,18 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_name, pb::common::RegionType region_type,
-                                                     pb::common::RawEngine raw_engine, const std::string& resource_tag,
-                                                     int32_t replica_num, pb::common::Range region_range,
-                                                     int64_t schema_id, int64_t table_id, int64_t index_id,
-                                                     int64_t part_id, const pb::common::IndexParameter& index_parameter,
-                                                     std::vector<int64_t>& store_ids, int64_t split_from_region_id,
-                                                     int64_t& new_region_id,
-                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateShadowRegion(
+    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
+    const std::string& resource_tag, int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+    int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
+    const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids, int64_t split_from_region_id,
+    int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateShadowRegion replica_num=" << replica_num << ", region_name=" << region_name
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
-                  << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
+                  << ", part_id=" << part_id << ", tenant_id=" << tenant_id
+                  << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
   auto ret = CheckRegionPrefix(region_range.start_key(), region_range.end_key());
@@ -1892,6 +1885,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
   region_definition->set_part_id(part_id);
+  region_definition->set_part_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
   if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
     *(region_definition->mutable_index_parameter()) = new_index_parameter;
@@ -1927,20 +1921,19 @@ butil::Status CoordinatorControl::CreateShadowRegion(const std::string& region_n
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_name, pb::common::RegionType region_type,
-                                                    pb::common::RawEngine raw_engine, const std::string& resource_tag,
-                                                    int32_t replica_num, pb::common::Range region_range,
-                                                    int64_t schema_id, int64_t table_id, int64_t index_id,
-                                                    int64_t part_id, const pb::common::IndexParameter& index_parameter,
-                                                    std::vector<int64_t>& store_ids, int64_t split_from_region_id,
-                                                    int64_t& new_region_id,
-                                                    std::vector<pb::coordinator::StoreOperation>& store_operations,
-                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::CreateRegionFinal(
+    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
+    const std::string& resource_tag, int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+    int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
+    const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids, int64_t split_from_region_id,
+    int64_t& new_region_id, std::vector<pb::coordinator::StoreOperation>& store_operations,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
-                  << ", part_id=" << part_id << ", index_parameter=" << index_parameter.ShortDebugString()
+                  << ", part_id=" << part_id << ", tenant_id=" << tenant_id
+                  << ", index_parameter=" << index_parameter.ShortDebugString()
                   << ", split_from_region_id=" << split_from_region_id;
 
   auto ret = CheckRegionPrefix(region_range.start_key(), region_range.end_key());
@@ -2038,6 +2031,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(const std::string& region_na
   region_definition->set_table_id(table_id);
   region_definition->set_index_id(index_id);
   region_definition->set_part_id(part_id);
+  region_definition->set_tenant_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
   *(region_definition->mutable_index_parameter()) = new_index_parameter;
 
@@ -4449,15 +4443,16 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     memory_info.set_table_index_map_size(table_index_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.table_index_map_size());
   }
+  { memory_info.set_common_disk_map_count(common_disk_meta_->Count()); }
   {
-    int64_t common_disk_map_count = common_disk_meta_->Count();
-    memory_info.set_common_disk_map_count(common_disk_map_count);
-  }
-  {
-    int64_t common_mem_map_count = common_mem_meta_->Count();
-    memory_info.set_common_mem_map_count(common_mem_map_count);
+    memory_info.set_common_mem_map_count(common_mem_meta_->Count());
     memory_info.set_common_mem_map_size(common_mem_map_.MemorySize());
     memory_info.set_total_size(memory_info.total_size() + memory_info.common_mem_map_size());
+  }
+  {
+    memory_info.set_tenant_map_count(tenant_map_.Size());
+    memory_info.set_tenant_map_size(tenant_map_.MemorySize());
+    memory_info.set_total_size(memory_info.total_size() + memory_info.tenant_map_size());
   }
   {
     int64_t meta_watch_count = meta_watch_node_map_.Size();
@@ -5331,9 +5326,11 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
 butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
                                                     pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
                                                     int64_t& new_safe_point, bool& gc_stop,
+                                                    std::map<int64_t, int64_t>& tenant_safe_points,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point
-                  << ", gc_flag=" << pb::coordinator::UpdateGCSafePointRequest::GcFlagType_Name(gc_flag);
+                  << ", gc_flag=" << pb::coordinator::UpdateGCSafePointRequest::GcFlagType_Name(gc_flag)
+                  << ", tenant_safe_points.count: " << tenant_safe_points.size();
 
   // update gc_stop
   pb::coordinator_internal::CommonInternal gc_stop_element;
@@ -5381,23 +5378,86 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
 
   if (now_safe_point >= safe_point) {
     DINGO_LOG(WARNING) << "UpdateGCSafePoint now_safe_point=" << now_safe_point << " >= safe_point=" << safe_point
-                       << ", skip update";
+                       << ", skip update default";
     new_safe_point = now_safe_point;
-    return butil::Status::OK();
+  } else {
+    new_safe_point = safe_point;
+    UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT, new_safe_point, meta_increment);
   }
 
-  new_safe_point = safe_point;
+  // check and update tenant safe_points
+  std::map<int64_t, int64_t> new_tenant_safe_points;
 
-  UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT, safe_point, meta_increment);
+  for (const auto [tenant_id, safe_point_in_map] : tenant_safe_points) {
+    if (tenant_id == 0) {
+      continue;
+    }
+
+    pb::coordinator_internal::TenantInternal tenant;
+    auto ret = tenant_map_.Get(tenant_id, tenant);
+    if (ret < 0) {
+      std::string s = "tenant_map_.Get failed, tenant_id=" + std::to_string(tenant_id);
+      return butil::Status(pb::error::EINTERNAL, s);
+    }
+
+    if (tenant.safe_point_ts() < safe_point_in_map) {
+      new_tenant_safe_points[tenant_id] = tenant.safe_point_ts();
+      auto* tenant_increment = meta_increment.add_tenants();
+      tenant_increment->set_id(tenant_id);
+      tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+      auto* increment_tenant = tenant_increment->mutable_tenant();
+      *increment_tenant = tenant;
+      increment_tenant->set_safe_point_ts(tenant_safe_points[tenant_id]);
+      increment_tenant->set_update_timestamp(butil::gettimeofday_ms());
+    }
+  }
 
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop) {
+butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop,
+                                                 const std::vector<int64_t>& tenant_ids, bool get_all_tenant,
+                                                 std::map<int64_t, int64_t>& tenant_safe_points) {
   safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
   pb::coordinator_internal::CommonInternal common;
   common_disk_meta_->Get(Constant::kGcStopKey, common);
   gc_stop = (common.value() == Constant::kGcStopValueTrue);
+
+  if (get_all_tenant) {
+    // get all tenant_ids
+    std::vector<pb::meta::Tenant> tenants;
+    auto ret1 = GetAllTenants(tenants);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "GetAllTenants failed, errcode=" << ret1.error_code() << " errmsg=" << ret1.error_str();
+      return ret1;
+    }
+
+    for (const auto& tenant : tenants) {
+      if (tenant.id() != 0) {
+        tenant_safe_points[tenant.id()] = tenant.safe_point_ts();
+      }
+    }
+
+    return butil::Status::OK();
+  } else {
+    // get safe_points for tenant_ids
+    for (const auto tenant_id : tenant_ids) {
+      if (tenant_id == 0) {
+        tenant_safe_points[tenant_id] = safe_point;
+        continue;
+      }
+
+      pb::coordinator_internal::TenantInternal tenant;
+      auto ret = tenant_map_.Get(tenant_id, tenant);
+      if (ret < 0) {
+        std::string s = "tenant_map_.Get failed, tenant_id=" + std::to_string(tenant_id);
+        return butil::Status(pb::error::EINTERNAL, s);
+      }
+
+      tenant_safe_points[tenant_id] = tenant.safe_point_ts();
+    }
+  }
+
   return butil::Status::OK();
 }
 

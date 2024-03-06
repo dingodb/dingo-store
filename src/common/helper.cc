@@ -839,6 +839,12 @@ std::string Helper::GenNewTableCheckName(int64_t schema_id, const std::string& t
   return buf.GetString() + table_name;
 }
 
+std::string Helper::GenNewTenantCheckName(int64_t tenant_id, const std::string& name) {
+  Buf buf(8);
+  buf.WriteLong(tenant_id);
+  return buf.GetString() + name;
+}
+
 bool Helper::Link(const std::string& old_path, const std::string& new_path) {
   int ret = ::link(old_path.c_str(), new_path.c_str());
   if (ret != 0) {

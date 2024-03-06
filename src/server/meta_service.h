@@ -183,6 +183,16 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void CleanDeletedIndex(google::protobuf::RpcController* controller, const pb::meta::CleanDeletedIndexRequest* request,
                          pb::meta::CleanDeletedIndexResponse* response, google::protobuf::Closure* done) override;
 
+  // Tenant
+  void CreateTenant(google::protobuf::RpcController* controller, const pb::meta::CreateTenantRequest* request,
+                    pb::meta::CreateTenantResponse* response, google::protobuf::Closure* done) override;
+  void UpdateTenant(google::protobuf::RpcController* controller, const pb::meta::UpdateTenantRequest* request,
+                    pb::meta::UpdateTenantResponse* response, google::protobuf::Closure* done) override;
+  void DropTenant(google::protobuf::RpcController* controller, const pb::meta::DropTenantRequest* request,
+                  pb::meta::DropTenantResponse* response, google::protobuf::Closure* done) override;
+  void GetTenants(google::protobuf::RpcController* controller, const pb::meta::GetTenantsRequest* request,
+                  pb::meta::GetTenantsResponse* response, google::protobuf::Closure* done) override;
+
   // hello
   void Hello(google::protobuf::RpcController* controller, const pb::meta::HelloRequest* request,
              pb::meta::HelloResponse* response, google::protobuf::Closure* done) override;

@@ -48,6 +48,7 @@ DEFINE_int32(port, 18888, "Request parameter port");
 DEFINE_string(peer, "", "Request parameter peer, for example: 127.0.0.1:22101");
 DEFINE_string(peers, "", "Request parameter peer, for example: 127.0.0.1:22101,127.0.0.1:22002,127.0.0.1:22103");
 DEFINE_string(name, "", "Request parameter name, for example: table_id for GetSchemaByName/GetTableByName");
+DEFINE_string(comment, "", "Request parameter comment");
 DEFINE_string(user, "", "Request parameter user");
 DEFINE_string(level, "", "Request log level [DEBUG, INFO, WARNING, ERROR, FATAL]");
 DEFINE_string(keyring, "", "Request parameter keyring");
@@ -171,6 +172,7 @@ DEFINE_string(db_path, "", "rocksdb path");
 DEFINE_bool(show_vector, false, "show vector data");
 DEFINE_string(metrics_type, "L2", "metrics type");
 DEFINE_int64(safe_point, 0, "gc safe point");
+DEFINE_int64(safe_point2, 0, "gc safe point");
 DEFINE_string(gc_flag, "", "gc_flag action, must be oneof [start, stop], if empty, no action will be taken");
 DEFINE_int64(def_version, 0, "version");
 
@@ -188,6 +190,10 @@ DEFINE_int64(scan_id, 1, "scan id client supply");
 // for meta watch
 DEFINE_int64(watch_id, 0, "watch id client supply");
 DEFINE_int64(start_revision, 0, "start revision client supply");
+
+// for tenant
+DEFINE_int64(tenant_id, 0, "tenant id");
+DEFINE_bool(get_all_tenant, false, "get all tenant");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -821,6 +827,17 @@ int CoordinatorSender() {
     SendCleanDeletedTable(coordinator_interaction_meta);
   } else if (FLAGS_method == "CleanDeletedIndex") {
     SendCleanDeletedIndex(coordinator_interaction_meta);
+  }
+
+  // tenant
+  else if (FLAGS_method == "CreateTenant") {
+    SendCreateTenant(coordinator_interaction_meta);
+  } else if (FLAGS_method == "UpdateTenant") {
+    SendUpdateTenant(coordinator_interaction_meta);
+  } else if (FLAGS_method == "DropTenant") {
+    SendDropTenant(coordinator_interaction_meta);
+  } else if (FLAGS_method == "GetTenants") {
+    SendGetTenants(coordinator_interaction_meta);
   }
 
   // indexes

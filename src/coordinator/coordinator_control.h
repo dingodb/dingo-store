@@ -250,7 +250,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
                                    pb::common::RawEngine raw_engine, const std::string &resource_tag,
                                    int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-                                   int64_t table_id, int64_t index_id, int64_t part_id,
+                                   int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
                                    const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                    int64_t split_from_region_id, int64_t &new_region_id,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -258,7 +258,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
                                   pb::common::RawEngine raw_engine, const std::string &resource_tag,
                                   int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-                                  int64_t table_id, int64_t index_id, int64_t part_id,
+                                  int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
                                   const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                   int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,
@@ -269,18 +269,10 @@ class CoordinatorControl : public MetaControl {
                                         const pb::common::IndexParameter &index_parameter,
                                         std::vector<int64_t> &store_ids);
 
-  butil::Status CreateRegionAutoSelectStore(const std::string &region_name, pb::common::RegionType region_type,
-                                            pb::common::RawEngine raw_engine, const std::string &resource_tag,
-                                            int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-                                            int64_t table_id, int64_t index_id, int64_t part_id,
-                                            const pb::common::IndexParameter &index_parameter, int64_t &new_region_id,
-                                            pb::coordinator_internal::MetaIncrement &meta_increment);
-
   butil::Status CreateRegionForSplit(const std::string &region_name, pb::common::RegionType region_type,
-                                     const std::string &resource_tag, pb::common::Range region_range, int64_t schema_id,
-                                     int64_t table_id, int64_t index_id, int64_t part_id,
-                                     const pb::common::IndexParameter &index_parameter, int64_t split_from_region_id,
-                                     int64_t &new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                                     const std::string &resource_tag, pb::common::Range region_range,
+                                     int64_t split_from_region_id, int64_t &new_region_id,
+                                     pb::coordinator_internal::MetaIncrement &meta_increment);
 
   butil::Status CreateRegionForSplitInternal(int64_t split_from_region_id, int64_t &new_region_id,
                                              bool is_shadow_create,
@@ -320,18 +312,18 @@ class CoordinatorControl : public MetaControl {
                                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
-  // in: parent_schema_id
+  // in: tenant_id
   // in: schema_name
   // out: new schema_id
   // return: errno
-  butil::Status CreateSchema(int64_t parent_schema_id, std::string schema_name, int64_t &new_schema_id,
+  butil::Status CreateSchema(int64_t tenant_id, std::string schema_name, int64_t &new_schema_id,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // drop schema
-  // in: parent_schema_id
+  // in: tenant_id
   // in: schema_id
   // return: 0 or -1
-  butil::Status DropSchema(int64_t parent_schema_id, int64_t schema_id,
+  butil::Status DropSchema(int64_t tenant_id, int64_t schema_id,
                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // delete table_name in safe_map in rollback
@@ -610,13 +602,14 @@ class CoordinatorControl : public MetaControl {
   void UpdateClusterReadOnly();
 
   // get schemas
-  butil::Status GetSchemas(int64_t schema_id, std::vector<pb::meta::Schema> &schemas);
+  // if tenant_id is -1, means get all schemas of all tenants
+  butil::Status GetSchemas(int64_t tenant_id, std::vector<pb::meta::Schema> &schemas);
 
   // get schema
   butil::Status GetSchema(int64_t schema_id, pb::meta::Schema &schema);
 
   // get schema by name
-  butil::Status GetSchemaByName(const std::string &schema_name, pb::meta::Schema &schema);
+  butil::Status GetSchemaByName(int64_t tenant_id, const std::string &schema_name, pb::meta::Schema &schema);
 
   // get tables
   butil::Status GetTables(int64_t schema_id, std::vector<pb::meta::TableDefinitionWithId> &table_definition_with_ids);
@@ -868,8 +861,10 @@ class CoordinatorControl : public MetaControl {
   // GC
   butil::Status UpdateGCSafePoint(int64_t safe_point, pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
                                   int64_t &new_safe_point, bool &gc_stop,
+                                  std::map<int64_t, int64_t> &tenant_safe_points,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop);
+  butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop, const std::vector<int64_t> &tenant_ids,
+                               bool get_all_tenant, std::map<int64_t, int64_t> &tenant_safe_points);
 
   // meta watch
   static butil::Status MetaWatchSendEvents(int64_t watch_id, std::bitset<WATCH_BITSET_SIZE> watch_bitset,
@@ -897,6 +892,16 @@ class CoordinatorControl : public MetaControl {
   void RecycledMetaWatcherByTime(int64_t max_outdate_time_ms);
   void RecycleOutdatedMetaWatcher();
   void TrimMetaWatchEventList();
+
+  // Tenant
+  void GetDefaultTenant(pb::coordinator_internal::TenantInternal &tenant_internal);
+  butil::Status CreateTenant(pb::meta::Tenant &tenant, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status DropTenant(int64_t tenant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateTenant(pb::meta::Tenant &tenant, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateTenantSafepoint(int64_t tenant_id, int64_t safe_point_ts,
+                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status GetTenants(std::vector<int64_t> tenant_ids, std::vector<pb::meta::Tenant> &tenants);
+  butil::Status GetAllTenants(std::vector<pb::meta::Tenant> &tenants);
 
  private:
   butil::Status ValidateTaskListConflict(int64_t region_id, int64_t second_region_id);
@@ -999,6 +1004,10 @@ class CoordinatorControl : public MetaControl {
   MetaDiskMap<pb::coordinator_internal::CommonInternal> *common_disk_meta_;
   DingoSafeStdMap<std::string, pb::coordinator_internal::CommonInternal> common_mem_map_;
   MetaMemMapStd<pb::coordinator_internal::CommonInternal> *common_mem_meta_;  // need construct
+
+  // 52. tenant map
+  DingoSafeMap<int64_t, pb::coordinator_internal::TenantInternal> tenant_map_;
+  MetaMemMapFlat<pb::coordinator_internal::TenantInternal> *tenant_meta_;  // need construct
 
   // root schema write to raft
   bool root_schema_writed_to_raft_;

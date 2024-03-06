@@ -46,6 +46,7 @@ namespace dingodb {
 DEFINE_int64(max_partition_num_of_table, 1024, "max partition num of table");
 DEFINE_int64(max_table_count, 10000, "max table num of dingo");
 DEFINE_int64(max_index_count, 10000, "max index num of dingo");
+DEFINE_int64(max_tenant_count, 1024, "max tenant num of dingo");
 DEFINE_uint32(default_replica_num, 3, "default replica number");
 
 butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
@@ -144,42 +145,52 @@ bool CoordinatorControl::ValidateSchema(int64_t schema_id) {
 // create new schema
 // only root schema can have sub schema
 // schema_name must be unique
-// in: parent_schema_id
+// in: tenant_id
 // in: schema_name
 // out: new_schema_id
 // out: meta_increment
 // return OK if success
 // return other if failed
-butil::Status CoordinatorControl::CreateSchema(int64_t parent_schema_id, std::string schema_name,
-                                               int64_t& new_schema_id,
+butil::Status CoordinatorControl::CreateSchema(int64_t tenant_id, std::string schema_name, int64_t& new_schema_id,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
-  // validate if parent_schema_id is root schema
-  // only root schema can have sub schema
-  if (parent_schema_id != ::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA) {
-    DINGO_LOG(ERROR) << " CreateSchema parent_schema_id is not root schema " << parent_schema_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "parent_schema_id is not root schema");
-  }
-
   if (schema_name.empty()) {
     DINGO_LOG(INFO) << " CreateSchema schema_name is illegal " << schema_name;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_name is empty");
   }
 
+  // check if tenant_id is exists
+  if (tenant_id < 0) {
+    DINGO_LOG(INFO) << " CreateSchema tenant_id is illegal " << tenant_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id is illegal");
+  }
+
+  if (tenant_id > 0) {
+    auto ret1 = tenant_map_.Exists(tenant_id);
+    if (!ret1) {
+      DINGO_LOG(INFO) << " CreateSchema tenant_id is not exist " << tenant_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id is not exist");
+    }
+  }
+
   // check if schema_name exists
+  auto new_check_name = Helper::GenNewTenantCheckName(tenant_id, schema_name);
   int64_t value = 0;
-  schema_name_map_safe_temp_.Get(schema_name, value);
+  schema_name_map_safe_temp_.Get(new_check_name, value);
   if (value != 0) {
-    DINGO_LOG(INFO) << " CreateSchema schema_name is exist " << schema_name;
-    return butil::Status(pb::error::Errno::ESCHEMA_EXISTS, "schema_name is exist");
+    std::string s = " CreateSchema schema_name is exist " + schema_name + ", tenant_id: " + std::to_string(tenant_id);
+    DINGO_LOG(INFO) << s;
+    return butil::Status(pb::error::Errno::ESCHEMA_EXISTS, s);
   }
 
   // create new schema id
   new_schema_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, meta_increment);
 
   // update schema_name_map_safe_temp_
-  if (schema_name_map_safe_temp_.PutIfAbsent(schema_name, new_schema_id) < 0) {
-    DINGO_LOG(INFO) << " CreateSchema schema_name" << schema_name
-                    << " is exist, when insert new_schema_id=" << new_schema_id;
+  if (schema_name_map_safe_temp_.PutIfAbsent(new_check_name, new_schema_id) < 0) {
+    std::string s = " CreateSchema schema_name: " + schema_name +
+                    " is exist, when insert new_schema_id=" + std::to_string(new_schema_id) +
+                    ", tenant_id: " + std::to_string(tenant_id);
+
     return butil::Status(pb::error::Errno::ESCHEMA_EXISTS, "schema_name is exist");
   }
 
@@ -187,12 +198,12 @@ butil::Status CoordinatorControl::CreateSchema(int64_t parent_schema_id, std::st
   pb::coordinator_internal::SchemaInternal new_schema_internal;
   new_schema_internal.set_id(new_schema_id);
   new_schema_internal.set_name(schema_name);
+  new_schema_internal.set_tenant_id(tenant_id);
 
   // update meta_increment
   auto* schema_increment = meta_increment.add_schemas();
   schema_increment->set_id(new_schema_id);
   schema_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
-  schema_increment->set_schema_id(parent_schema_id);
 
   auto* schema_increment_schema = schema_increment->mutable_schema_internal();
   *schema_increment_schema = new_schema_internal;
@@ -208,25 +219,32 @@ butil::Status CoordinatorControl::CreateSchema(int64_t parent_schema_id, std::st
 
 // DropSchema
 // drop schema
-// in: parent_schema_id
+// in: tenant_id
 // in: schema_id
 // return: 0 or -1
-butil::Status CoordinatorControl::DropSchema(int64_t parent_schema_id, int64_t schema_id,
+butil::Status CoordinatorControl::DropSchema(int64_t tenant_id, int64_t schema_id,
                                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   if (schema_id <= COORDINATOR_ID_OF_MAP_MIN) {
     DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
-  if (parent_schema_id < 0) {
-    DINGO_LOG(ERROR) << "ERRROR: parent_schema_id illegal " << schema_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "parent_schema_id is illegal");
+  // check if tenant_id is exists
+  if (tenant_id < 0) {
+    DINGO_LOG(INFO) << " DropSchema tenant_id is illegal " << tenant_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id is illegal");
+  }
+
+  if (tenant_id > 0) {
+    auto ret1 = tenant_map_.Exists(tenant_id);
+    if (!ret1) {
+      DINGO_LOG(INFO) << " DropSchema tenant_id is not exist " << tenant_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id is not exist");
+    }
   }
 
   pb::coordinator_internal::SchemaInternal schema_internal_to_delete;
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    // auto* schema_to_delete = schema_map_.seek(schema_id);
     int ret = schema_map_.Get(schema_id, schema_internal_to_delete);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "ERRROR: schema_id not found" << schema_id;
@@ -247,28 +265,23 @@ butil::Status CoordinatorControl::DropSchema(int64_t parent_schema_id, int64_t s
   auto* schema_to_delete = meta_increment.add_schemas();
   schema_to_delete->set_id(schema_id);
   schema_to_delete->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
-  schema_to_delete->set_schema_id(parent_schema_id);
 
   auto* schema_to_delete_schema = schema_to_delete->mutable_schema_internal();
   *schema_to_delete_schema = schema_internal_to_delete;
 
   // delete schema_name from schema_name_map_safe_temp_
-  schema_name_map_safe_temp_.Erase(schema_internal_to_delete.name());
+  auto new_check_name = Helper::GenNewTenantCheckName(tenant_id, schema_internal_to_delete.name());
+  schema_name_map_safe_temp_.Erase(new_check_name);
 
   return butil::Status::OK();
 }
 
 // GetSchemas
 // get schemas
-// in: schema_id
+// in: tenant_id
 // out: schemas
-butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::meta::Schema>& schemas) {
-  // only root schema can has sub schemas
-  if (schema_id != 0) {
-    DINGO_LOG(ERROR) << "ERRROR: schema_id illegal " << schema_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
-  }
-
+// if tenant_id is -1, means get all schemas
+butil::Status CoordinatorControl::GetSchemas(int64_t tenant_id, std::vector<pb::meta::Schema>& schemas) {
   if (!schemas.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: vector schemas is not empty , size=" << schemas.size();
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "vector schemas is not empty");
@@ -284,15 +297,21 @@ butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::
     }
 
     for (const auto& [schema_id, schema_internal] : schema_map_copy) {
+      // check tenant_id
+      if (tenant_id >= 0 && schema_internal.tenant_id() != tenant_id) {
+        continue;
+      }
+
+      // setup output schema
       pb::meta::Schema schema;
 
       auto* temp_id = schema.mutable_id();
       temp_id->set_entity_id(schema_id);
-      temp_id->set_parent_entity_id(schema_id);
       temp_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
       schema.set_name(schema_internal.name());
       schema.set_revision(schema_internal.revision());
+      schema.set_tenant_id(schema_internal.tenant_id());
 
       // construct table_ids in schema
       for (auto it_table : schema_internal.table_ids()) {
@@ -318,7 +337,7 @@ butil::Status CoordinatorControl::GetSchemas(int64_t schema_id, std::vector<pb::
     }
   }
 
-  DINGO_LOG(INFO) << "GetSchemas id=" << schema_id << " sub schema count=" << schema_map_.Size();
+  DINGO_LOG(INFO) << "GetSchemas tenant_id=" << tenant_id << " sub schema count=" << schema_map_.Size();
 
   return butil::Status::OK();
 }
@@ -348,6 +367,7 @@ butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema&
 
     schema.set_name(temp_schema.name());
     schema.set_revision(temp_schema.revision());
+    schema.set_tenant_id(temp_schema.tenant_id());
 
     for (auto it : temp_schema.table_ids()) {
       pb::meta::DingoCommonId table_id;
@@ -357,9 +377,19 @@ butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema&
 
       *(schema.add_table_ids()) = table_id;
     }
+
+    for (auto it : temp_schema.index_ids()) {
+      pb::meta::DingoCommonId table_id;
+      table_id.set_entity_id(it);
+      table_id.set_parent_entity_id(schema_id);
+      table_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+
+      *(schema.add_index_ids()) = table_id;
+    }
   }
 
-  DINGO_LOG(INFO) << "GetSchema id=" << schema_id << " sub table count=" << schema.table_ids_size();
+  DINGO_LOG(INFO) << "GetSchema id=" << schema_id << ", sub table count=" << schema.table_ids_size()
+                  << ", sub index count=" << schema.index_ids_size();
 
   return butil::Status::OK();
 }
@@ -367,14 +397,16 @@ butil::Status CoordinatorControl::GetSchema(int64_t schema_id, pb::meta::Schema&
 // GetSchemaByName
 // in: schema_name
 // out: schema
-butil::Status CoordinatorControl::GetSchemaByName(const std::string& schema_name, pb::meta::Schema& schema) {
+butil::Status CoordinatorControl::GetSchemaByName(int64_t tenant_id, const std::string& schema_name,
+                                                  pb::meta::Schema& schema) {
   if (schema_name.empty()) {
     DINGO_LOG(ERROR) << "ERRROR: schema_name illegal " << schema_name;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_name illegal");
   }
 
   int64_t temp_schema_id = 0;
-  auto ret = schema_name_map_safe_temp_.Get(schema_name, temp_schema_id);
+  auto new_check_name = Helper::GenNewTenantCheckName(tenant_id, schema_name);
+  auto ret = schema_name_map_safe_temp_.Get(new_check_name, temp_schema_id);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "WARNING: schema_name not found " << schema_name;
     return butil::Status(pb::error::Errno::ESCHEMA_NOT_FOUND, "schema_name not found");
@@ -501,14 +533,17 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
+  int64_t tenant_id = 0;
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    bool ret = schema_map_.Exists(schema_id);
-    if (!ret) {
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    auto ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
                        << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
+
+    tenant_id = schema_internal.tenant_id();
   }
 
   bool has_auto_increment_column = false;
@@ -690,11 +725,8 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
     auto ret = CreateRegionFinal(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type, "", replica,
-                                 new_part_range, schema_id, new_table_id, 0, new_part_id, index_parameter, store_ids, 0,
-                                 new_region_id, store_operations, meta_increment);
-    // auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type,
-    //                                        "", replica, new_part_range, schema_id, new_table_id, 0, new_part_id,
-    //                                        index_parameter, new_region_id, meta_increment);
+                                 new_part_range, schema_id, new_table_id, 0, new_part_id, tenant_id, index_parameter,
+                                 store_ids, 0, new_region_id, store_operations, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -958,13 +990,17 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
   }
 
+  int64_t tenant_id = 0;
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
-    bool ret = schema_map_.Exists(schema_id);
-    if (!ret) {
-      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id;
+    pb::coordinator_internal::SchemaInternal schema_internal;
+    auto ret = schema_map_.Get(schema_id, schema_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
+                       << ", table_definition:" << table_definition.ShortDebugString();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
+
+    tenant_id = schema_internal.tenant_id();
   }
 
   // validate index definition
@@ -1140,13 +1176,10 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    auto ret =
-        CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
-                          new_part_range, schema_id, 0, new_index_id, new_part_id, table_definition.index_parameter(),
-                          store_ids, 0, new_region_id, store_operations, meta_increment);
-    // auto ret = CreateRegionAutoSelectStore(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
-    //                                        "", replica, new_part_range, schema_id, 0, new_index_id, new_part_id,
-    //                                        table_definition.index_parameter(), new_region_id, meta_increment);
+    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
+                                 new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
+                                 table_definition.index_parameter(), store_ids, 0, new_region_id, store_operations,
+                                 meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
@@ -3174,6 +3207,235 @@ butil::Status CoordinatorControl::GetRegionsByTableInternal(
       DINGO_LOG(ERROR) << "ERRROR: ScanRegions failed, table_id=" << table_internal.id();
       return butil::Status(pb::error::Errno::EINDEX_DEFINITION_ILLEGAL, "ScanRegions failed");
     }
+  }
+
+  return butil::Status::OK();
+}
+
+// Tenant operations
+void CoordinatorControl::GetDefaultTenant(pb::coordinator_internal::TenantInternal& tenant_internal) {
+  tenant_internal.set_id(0);
+  tenant_internal.set_name("default");
+  tenant_internal.set_create_timestamp(butil::gettimeofday_ms());
+  tenant_internal.set_update_timestamp(butil::gettimeofday_ms());
+
+  tenant_internal.set_safe_point_ts(GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT));
+}
+
+butil::Status CoordinatorControl::CreateTenant(pb::meta::Tenant& tenant,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  // check if max_tenant_count is exceed
+  if (tenant_map_.Size() >= FLAGS_max_tenant_count) {
+    DINGO_LOG(ERROR) << "ERRROR: max_tenant_count is exceed, max_tenant_count=" << FLAGS_max_tenant_count;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "max_tenant_count is exceed");
+  }
+
+  pb::coordinator_internal::TenantInternal tenant_internal;
+
+  if (tenant.id() == 0) {
+    // get new tenant_id
+    auto new_tenant_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT, meta_increment);
+    if (new_tenant_id <= 0) {
+      DINGO_LOG(ERROR) << "ERRROR: GetNextId failed, new_tenant_id=" << new_tenant_id;
+      return butil::Status(pb::error::Errno::EINTERNAL, "GetNextId failed");
+    }
+    tenant.set_id(new_tenant_id);
+  }
+
+  int ret = tenant_map_.Get(tenant.id(), tenant_internal);
+  if (ret > 0) {
+    DINGO_LOG(ERROR) << "ERRROR: tenant_id already exist" << tenant.id();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id already exist");
+  }
+
+  auto* tenant_increment = meta_increment.add_tenants();
+  tenant_increment->set_id(tenant.id());
+  tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  auto* increment_tenant = tenant_increment->mutable_tenant();
+  increment_tenant->set_id(tenant.id());
+  increment_tenant->set_name(tenant.name());
+  increment_tenant->set_comment(tenant.comment());
+  increment_tenant->set_create_timestamp(butil::gettimeofday_ms());
+  increment_tenant->set_update_timestamp(butil::gettimeofday_ms());
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::DropTenant(int64_t tenant_id,
+                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (tenant_id == 0) {
+    DINGO_LOG(ERROR) << "ERRROR: cannot drop default tenant";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cannot drop default tenant");
+  }
+
+  if (tenant_id < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: tenant_id illegal " << tenant_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id illegal");
+  }
+
+  pb::coordinator_internal::TenantInternal tenant_internal;
+
+  int ret = tenant_map_.Get(tenant_id, tenant_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id not exist");
+  }
+
+  // check if there is schemas of the tenant_id in schema_map_
+  std::vector<pb::meta::Schema> schemas;
+  auto ret1 = GetSchemas(tenant_id, schemas);
+  if (!ret1.ok()) {
+    std::string s = "get schemas failed: " + std::to_string(tenant_id) + ", error_str: " + ret1.error_str();
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  if (!schemas.empty()) {
+    std::string s = "tenant_id has schemas, cannot drop: " + std::to_string(tenant_id) +
+                    ", schemas count: " + std::to_string(schemas.size());
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  auto* tenant_increment = meta_increment.add_tenants();
+  tenant_increment->set_id(tenant_id);
+  tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+  auto* increment_tenant = tenant_increment->mutable_tenant();
+  *increment_tenant = tenant_internal;
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::UpdateTenant(pb::meta::Tenant& tenant,
+                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (tenant.id() == 0) {
+    DINGO_LOG(ERROR) << "ERRROR: cannot update default tenant";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cannot update default tenant");
+  }
+
+  if (tenant.id() < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: tenant_id illegal " << tenant.id();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id illegal");
+  }
+
+  pb::coordinator_internal::TenantInternal tenant_internal;
+  int ret = tenant_map_.Get(tenant.id(), tenant_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant.id();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id not exist");
+  }
+
+  auto* tenant_increment = meta_increment.add_tenants();
+  tenant_increment->set_id(tenant.id());
+  tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  auto* increment_tenant = tenant_increment->mutable_tenant();
+  increment_tenant->set_id(tenant.id());
+  increment_tenant->set_name(tenant.name());
+  increment_tenant->set_comment(tenant.comment());
+  auto update_time_ms = butil::gettimeofday_ms();
+  increment_tenant->set_update_timestamp(update_time_ms);
+
+  tenant.set_update_timestamp(update_time_ms);
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::UpdateTenantSafepoint(int64_t tenant_id, int64_t safe_point_ts,
+                                                        pb::coordinator_internal::MetaIncrement& meta_increment) {
+  pb::coordinator_internal::TenantInternal tenant_internal;
+
+  if (tenant_id != 0) {
+    int ret = tenant_map_.Get(tenant_id, tenant_internal);
+    if (ret < 0) {
+      DINGO_LOG(ERROR) << "ERRROR: tenant_id not exist" << tenant_id;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "tenant_id not exist");
+    }
+
+    if (safe_point_ts <= tenant_internal.safe_point_ts()) {
+      DINGO_LOG(INFO) << "CAUTION: safe_point_ts is " << safe_point_ts
+                      << " smaller than before: " << tenant_internal.safe_point_ts() << ", no need to update";
+      return butil::Status::OK();
+    }
+
+    auto* tenant_increment = meta_increment.add_tenants();
+    tenant_increment->set_id(tenant_id);
+    tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    auto* increment_tenant = tenant_increment->mutable_tenant();
+    *increment_tenant = tenant_internal;
+    increment_tenant->set_update_timestamp(butil::gettimeofday_ms());
+    increment_tenant->set_safe_point_ts(safe_point_ts);
+  } else {
+    GetDefaultTenant(tenant_internal);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetTenants(std::vector<int64_t> tenant_ids, std::vector<pb::meta::Tenant>& tenants) {
+  if (tenant_ids.empty()) {
+    return butil::Status::OK();
+  }
+
+  for (const auto tenant_id : tenant_ids) {
+    pb::coordinator_internal::TenantInternal tenant_internal;
+
+    if (tenant_id != 0) {
+      int ret = tenant_map_.Get(tenant_id, tenant_internal);
+      if (ret < 0) {
+        std::string s = "tenant_id not exist: " + std::to_string(tenant_id);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+
+    } else {
+      GetDefaultTenant(tenant_internal);
+    }
+
+    pb::meta::Tenant tenant;
+    tenant.set_id(tenant_internal.id());
+    tenant.set_name(tenant_internal.name());
+    tenant.set_comment(tenant_internal.comment());
+    tenant.set_create_timestamp(tenant_internal.create_timestamp());
+    tenant.set_update_timestamp(tenant_internal.update_timestamp());
+    tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
+
+    tenants.push_back(std::move(tenant));
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& tenants) {
+  butil::FlatMap<int64_t, pb::coordinator_internal::TenantInternal> temp_tenant_map;
+  auto ret = tenant_map_.GetRawMapCopy(temp_tenant_map);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "get tenant map failed, error: " << ret;
+    return butil::Status(pb::error::Errno::EINTERNAL, "get tenant map failed");
+  }
+
+  pb::coordinator_internal::TenantInternal tenant_internal;
+  GetDefaultTenant(tenant_internal);
+
+  pb::meta::Tenant tenant;
+  tenant.set_id(tenant_internal.id());
+  tenant.set_name(tenant_internal.name());
+  tenant.set_comment(tenant_internal.comment());
+  tenant.set_create_timestamp(tenant_internal.create_timestamp());
+  tenant.set_update_timestamp(tenant_internal.update_timestamp());
+  tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
+  tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
+  tenants.push_back(std::move(tenant));
+
+  for (const auto& [tenant_id, tenant_internal] : temp_tenant_map) {
+    pb::meta::Tenant tenant;
+    tenant.set_id(tenant_internal.id());
+    tenant.set_name(tenant_internal.name());
+    tenant.set_comment(tenant_internal.comment());
+    tenant.set_create_timestamp(tenant_internal.create_timestamp());
+    tenant.set_update_timestamp(tenant_internal.update_timestamp());
+    tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
+    tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
+
+    tenants.push_back(std::move(tenant));
   }
 
   return butil::Status::OK();

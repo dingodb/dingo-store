@@ -115,6 +115,18 @@ message PartitionRule {
   repeated Partition partitions = 10;
 }
 
+// Tenant
+message Tenant {
+  int64 id = 1;  // this is the tenant id, it's updated by coordinator
+  string name = 2;
+  string comment = 3;
+  int64 create_timestamp = 10;  // this field is updated by coordinator
+  int64 update_timestamp = 11;  // this field is updated by coordinator
+  int64 delete_timestamp = 12;  // this field is updated by coordinator
+
+  int64 safe_point_ts = 20;
+}
+
 // Schema
 message Schema {
   DingoCommonId id = 1;
@@ -122,6 +134,7 @@ message Schema {
   repeated DingoCommonId table_ids = 3;
   repeated DingoCommonId index_ids = 4;
   int64 revision = 10;
+  int64 tenant_id = 11;
 }
 
 // TableDefinition is for SQL
@@ -293,6 +306,7 @@ message TableIdWithPartIds {
 message GetSchemasRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   DingoCommonId schema_id = 2;
+  int64 tenant_id = 3;
 }
 
 message GetSchemasResponse {
@@ -304,6 +318,7 @@ message GetSchemasResponse {
 message GetSchemaRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   DingoCommonId schema_id = 2;
+  int64 tenant_id = 3;
 }
 
 message GetSchemaResponse {
@@ -315,6 +330,7 @@ message GetSchemaResponse {
 message GetSchemaByNameRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   string schema_name = 2;
+  int64 tenant_id = 3;
 }
 
 message GetSchemaByNameResponse {
@@ -326,11 +342,13 @@ message GetSchemaByNameResponse {
 message TableDefinitionWithId {
   DingoCommonId table_id = 1;
   TableDefinition table_definition = 2;
+  int64 tenant_id = 3;
 }
 
 message IndexDefinitionWithId {
   DingoCommonId index_id = 1;
   IndexDefinition index_definition = 2;
+  int64 tenant_id = 3;
 }
 
 message GetTablesBySchemaRequest {
@@ -542,6 +560,7 @@ message CreateSchemaRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   DingoCommonId parent_schema_id = 2;
   string schema_name = 3;
+  int64 tenant_id = 4;
 }
 
 message CreateSchemaResponse {
@@ -553,6 +572,7 @@ message CreateSchemaResponse {
 message DropSchemaRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   DingoCommonId schema_id = 2;
+  int64 tenant_id = 3;
 }
 
 message DropSchemaResponse {
@@ -1036,6 +1056,50 @@ message ListWatchResponse {
   repeated WatchNode watch_nodes = 3;
 }
 
+// Tenant
+message CreateTenantRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Tenant tenant = 2;
+}
+
+message CreateTenantResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  Tenant tenant = 3;
+}
+
+message UpdateTenantRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  Tenant tenant = 2;
+}
+
+message UpdateTenantResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  Tenant tenant = 3;
+}
+
+message DropTenantRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 tenant_id = 2;
+}
+
+message DropTenantResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetTenantsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  repeated int64 tenant_ids = 2;
+}
+
+message GetTenantsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated Tenant tenants = 3;
+}
+
 service MetaService {
   // Hello, this is for auto_increment
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -1244,4 +1308,24 @@ service MetaService {
   rpc ListWatch(ListWatchRequest) returns (ListWatchResponse) {}
 
   // Operation about Metrics
+
+  // Tenant
+  // CreateTenant
+  // in: parent_schema_id schema_name
+  // out: Tenant
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse);
+
+  // DropTenant
+  // in: parent_schema_id schema_name
+  // out: Tenant
+  rpc DropTenant(DropTenantRequest) returns (DropTenantResponse);
+
+  // UpdateTenant
+  // in: id name comment
+  // out: Tenant
+  rpc UpdateTenant(UpdateTenantRequest) returns (UpdateTenantResponse);
+
+  // GetTenants
+  // out: List<Tenant>
+  rpc GetTenants(GetTenantsRequest) returns (GetTenantsResponse);
 }

@@ -31,6 +31,7 @@ DECLARE_bool(log_each_request);
 DECLARE_int64(timeout_ms);
 DECLARE_string(id);
 DECLARE_string(name);
+DECLARE_string(comment);
 DECLARE_int64(schema_id);
 DECLARE_int64(table_id);
 DECLARE_int64(index_id);
@@ -54,6 +55,8 @@ DECLARE_string(engine);
 DECLARE_int64(tso_save_physical);
 DECLARE_int64(tso_new_physical);
 DECLARE_int64(tso_new_logical);
+
+DECLARE_int64(tenant_id);
 
 DEFINE_bool(is_updating_index, false, "is index");
 
@@ -86,10 +89,9 @@ void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   dingodb::pb::meta::GetSchemasRequest request;
   dingodb::pb::meta::GetSchemasResponse response;
 
-  auto* schema_id = request.mutable_schema_id();
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  request.set_tenant_id(FLAGS_tenant_id);
+
+  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
   auto status = coordinator_interaction->SendRequest("GetSchemas", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -109,25 +111,31 @@ void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   dingodb::pb::meta::GetSchemaRequest request;
   dingodb::pb::meta::GetSchemaResponse response;
 
-  auto* schema_id = request.mutable_schema_id();
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  request.set_tenant_id(FLAGS_tenant_id);
 
-  if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty, this is schema_id";
+  if (FLAGS_schema_id <= 0) {
+    DINGO_LOG(WARNING) << "schema_id is empty";
     return;
   }
-  schema_id->set_entity_id(std::stol(FLAGS_id));
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(FLAGS_schema_id);
 
   auto status = coordinator_interaction->SendRequest("GetSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
+                  << "schema_id=[" << response.schema().id().entity_id() << "]"
                   << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto& child_table_id : response.schema().table_ids()) {
     DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+  }
+  for (const auto& child_table_id : response.schema().index_ids()) {
+    DINGO_LOG(INFO) << "child index_id=[" << child_table_id.entity_id() << "]";
   }
 }
 
@@ -141,11 +149,16 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   }
   request.set_schema_name(FLAGS_name);
 
+  if (FLAGS_tenant_id > 0) {
+    request.set_tenant_id(FLAGS_tenant_id);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetSchemaByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "schema_id=[" << response.schema().id().entity_id() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
+                  << "schema_id=[" << response.schema().id().entity_id() << "]"
                   << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto& child_table_id : response.schema().table_ids()) {
@@ -520,12 +533,16 @@ void SendCreateSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
     return;
   }
 
+  request.set_tenant_id(FLAGS_tenant_id);
+
   auto* parent_schema_id = request.mutable_parent_schema_id();
   parent_schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   parent_schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   parent_schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
   request.set_schema_name(FLAGS_name);
+
+  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
   auto status = coordinator_interaction->SendRequest("CreateSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -1624,6 +1641,76 @@ void SendDropIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coord
   request.mutable_index_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
   auto status = coordinator_interaction->SendRequest("DropIndexOnTable", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendCreateTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CreateTenantRequest request;
+  dingodb::pb::meta::CreateTenantResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  if (FLAGS_comment.empty()) {
+    DINGO_LOG(WARNING) << "comment is empty";
+    return;
+  }
+
+  request.mutable_tenant()->set_id(FLAGS_tenant_id);
+  request.mutable_tenant()->set_name(FLAGS_name);
+  request.mutable_tenant()->set_comment(FLAGS_comment);
+
+  auto status = coordinator_interaction->SendRequest("CreateTenant", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendUpdateTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::UpdateTenantRequest request;
+  dingodb::pb::meta::UpdateTenantResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  if (FLAGS_comment.empty()) {
+    DINGO_LOG(WARNING) << "comment is empty";
+    return;
+  }
+
+  request.mutable_tenant()->set_id(FLAGS_tenant_id);
+  request.mutable_tenant()->set_name(FLAGS_name);
+  request.mutable_tenant()->set_comment(FLAGS_comment);
+
+  auto status = coordinator_interaction->SendRequest("UpdateTenant", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendDropTenant(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::DropTenantRequest request;
+  dingodb::pb::meta::DropTenantResponse response;
+
+  request.set_tenant_id(FLAGS_tenant_id);
+
+  auto status = coordinator_interaction->SendRequest("DropTenant", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendGetTenants(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::GetTenantsRequest request;
+  dingodb::pb::meta::GetTenantsResponse response;
+
+  if (FLAGS_tenant_id > 0) {
+    request.add_tenant_ids(FLAGS_tenant_id);
+  }
+
+  auto status = coordinator_interaction->SendRequest("GetTenants", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

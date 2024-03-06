@@ -70,6 +70,7 @@ DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
 DECLARE_int64(limit);
 DECLARE_int64(safe_point);
+DECLARE_int64(safe_point2);
 DECLARE_string(gc_flag);
 DECLARE_int64(replica);
 DECLARE_string(start_key);
@@ -90,6 +91,8 @@ DECLARE_int64(start_id);
 DECLARE_int64(end_id);
 DECLARE_string(raw_engine);
 DECLARE_bool(force_read_only);
+DECLARE_int64(tenant_id);
+DECLARE_bool(get_all_tenant);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -1892,6 +1895,16 @@ void SendGetGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
   dingodb::pb::coordinator::GetGCSafePointRequest request;
   dingodb::pb::coordinator::GetGCSafePointResponse response;
 
+  if (FLAGS_get_all_tenant) {
+    request.set_get_all_tenant(true);
+  }
+
+  if (FLAGS_tenant_id > 0) {
+    request.add_tenant_ids(FLAGS_tenant_id);
+  }
+
+  request.set_get_all_tenant(FLAGS_get_all_tenant);
+
   auto status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
@@ -1924,6 +1937,12 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   }
 
   request.set_safe_point(FLAGS_safe_point);
+
+  if (FLAGS_tenant_id > 0) {
+    request.mutable_tenant_safe_points()->insert({FLAGS_tenant_id, FLAGS_safe_point2});
+  }
+
+  DINGO_LOG(INFO) << "UpdateGCSafePoint request: " << request.DebugString();
 
   auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

@@ -307,7 +307,8 @@ message RegionDefinition {
   int64 schema_id = 11;
   int64 table_id = 12;
   int64 index_id = 13;
-  int64 part_id = 14;  // the partition is of this region, each partion contains one or more regions
+  int64 part_id = 14;    // the partition is of this region, each partion contains one or more regions
+  int64 tenant_id = 15;  // the tenant is of this region, each tenant contains one or more regions
 
   IndexParameter index_parameter = 20;
 

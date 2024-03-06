@@ -3803,6 +3803,7 @@ void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
   pb::coordinator::GetGCSafePointRequest request;
 
   request.mutable_request_info()->set_request_id(Server::GetInstance().Id());
+  request.set_get_all_tenant(true);
 
   start_time = Helper::TimestampMs();
   pb::coordinator::GetGCSafePointResponse response;
