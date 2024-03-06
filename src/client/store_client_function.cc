@@ -1683,14 +1683,20 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
   dingodb::pb::index::VectorAddResponse response;
 
   uint32_t max_size = 0;
-  if (vector_datas.size() > vector_datas_offset + vector_ids.size()) {
+  if (vector_datas.empty()) {
     max_size = vector_ids.size();
   } else {
-    max_size = vector_datas.size() > vector_datas_offset ? vector_datas.size() - vector_datas_offset : 0;
+    if (vector_datas.size() > vector_datas_offset + vector_ids.size()) {
+      max_size = vector_ids.size();
+    } else {
+      max_size = vector_datas.size() > vector_datas_offset ? vector_datas.size() - vector_datas_offset : 0;
+    }
   }
 
   if (max_size == 0) {
-    DINGO_LOG(INFO) << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size;
+    DINGO_LOG(INFO) << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
+                    << ", vector_datas.size: " << vector_datas.size()
+                    << ", vector_datas_offset: " << vector_datas_offset << ", vector_ids.size: " << vector_ids.size();
     return 0;
   } else {
     DINGO_LOG(DEBUG) << "vector_datas.size(): " << vector_datas.size()
