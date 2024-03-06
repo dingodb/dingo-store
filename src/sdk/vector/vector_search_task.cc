@@ -216,11 +216,11 @@ void VectorSearchPartTask::VectorSearchRpcCallback(const Status& status, VectorS
       status_ = status;
     }
   } else {
-    CHECK_EQ(rpc->Response()->batch_results_size(), rpc->Request()->vector_with_ids_size())
-        << Name() << ", rpc: " << rpc->Method()
-        << " request vector_with_ids_size: " << rpc->Request()->vector_with_ids_size()
-        << " response batch_results_size: " << rpc->Response()->batch_results_size()
-        << " request: " << rpc->Request()->DebugString() << " response: " << rpc->Response()->DebugString();
+    if (rpc->Response()->batch_results_size() != rpc->Request()->vector_with_ids_size()) {
+      DINGO_LOG(INFO) << Name() << " rpc: " << rpc->Method()
+                      << " request vector_with_ids_size: " << rpc->Request()->vector_with_ids_size()
+                      << " response batch_results_size: " << rpc->Response()->batch_results_size();
+    }
 
     {
       std::unique_lock<std::shared_mutex> w(rw_lock_);

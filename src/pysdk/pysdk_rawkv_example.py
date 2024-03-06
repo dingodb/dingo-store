@@ -319,3 +319,10 @@ if __name__ == "__main__":
     create_region("skd_example04", "wl00000000", "wn00000000", 3)
     raw_kv_example()
     post_clean()
+
+    create_region("skd_example01", "wa00000000", "wc00000000", 3, dingosdk.kBTree)
+    create_region("skd_example02", "wc00000000", "we00000000", 3, dingosdk.kBTree)
+    create_region("skd_example03", "we00000000", "wg00000000", 3, dingosdk.kBTree)
+    create_region("skd_example04", "wl00000000", "wn00000000", 3, dingosdk.kBTree)
+    raw_kv_example()
+    post_clean()
