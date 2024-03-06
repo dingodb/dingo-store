@@ -14,7 +14,7 @@ using namespace dingodb::sdk;
 %include <std_string.i>
 %include <std_vector.i>
 %include <std_map.i>
-// %include <std_unique_ptr.i> swig 4.0
+%include <std_unique_ptr.i>
 %include <std_shared_ptr.i>
 %include <typemaps.i>
 
@@ -24,28 +24,29 @@ using namespace dingodb::sdk;
 %ignore operator[];
 %ignore operator=;
 
+%template(Int64Vector)  std::vector<int64_t>;
+%template(FloatVector) std::vector<float>;
+%template(StringVector) std::vector<std::string>;
+
 %template(KVPairVector) std::vector<dingodb::sdk::KVPair>;
 %template(KeyOpStateVector) std::vector<dingodb::sdk::KeyOpState>;
 
-%template(VectorWithIdVector)  std::vector<dingodb::sdk::VectorWithId>;
-%template(SearchResultVector)  std::vector<dingodb::sdk::SearchResult>;
-%template(DeleteResultVector)  std::vector<dingodb::sdk::DeleteResult>;
+%template(VectorWithIdVector) std::vector<dingodb::sdk::VectorWithId>;
+%template(SearchResultVector) std::vector<dingodb::sdk::SearchResult>;
+%template(DeleteResultVector) std::vector<dingodb::sdk::DeleteResult>;
+%template(VectorWithDistanceVector) std::vector<dingodb::sdk::VectorWithDistance>;
 
-%template(Int64Vector)  std::vector<int64_t>; 
-%template(FloatValueVector) std::vector<float>;
-%template(StringVector) std::vector<std::string>;
-
-// %apply uint8_t { dingodb::sdk::SearchExtraParamType };
+%template(SearchExtraParamMap)  std::map<dingodb::sdk::SearchExtraParamType, int32_t>;
 
 // client
-%apply int64_t& OUTPUT  { int64_t& out_index_id };
+// vector index creator
 %apply bool& OUTPUT { bool& out_create_in_progress };
+%apply int64_t& OUTPUT  { int64_t& out_index_id };
 
 // rawkv
 %apply std::string& OUTPUT { std::string& out_value };
 %apply bool& OUTPUT { bool& out_state };
 %apply int64_t& OUTPUT { int64_t& out_delete_count };
-
 
 // region creator
 %apply int64_t& OUTPUT  { int64_t& out_region_id };
@@ -60,14 +61,22 @@ namespace dingodb {
         %feature("docstring") Client::NewVectorClient "return Status, VectorClient"
         %feature("docstring") Client::NewVectorIndexCreator "return Status, VectorIndexCreator"
         %feature("docstring") Client::IsCreateRegionInProgress "return Status, bool out_create_in_progress"
+        %feature("docstring") Client::GetIndexId "return Status, int64_t out_index_id"
 
         %feature("docstring") RawKV::Get "return Status, std::string out_value"
         %feature("docstring") RawKV::PutIfAbsent "return Status, bool out_state"
-        %feature("docstring") RawKV::DeleteRangeNonContinuous "return Status, int64_t& out_delete_count"
+        %feature("docstring") RawKV::DeleteRangeNonContinuous "return Status, int64_t out_delete_count"
         %feature("docstring") RawKV::DeleteRange "return Status, int64_t out_delete_count"
         %feature("docstring") RawKV::CompareAndSet "return Status, bool out_state"
 
         %feature("docstring") RegionCreator::Create "return Status, int64_t out_region_id"
+
+        %feature("docstring") VectorIndexCreator::Create "return Status, int64_t out_index_id"
+
+        %feature("docstring") VectorClient::SearchByIndexId "return Status, std::vector<SearchResult> out_result"
+        %feature("docstring") VectorClient::SearchByIndexName "return Status, std::vector<SearchResult> out_result"
+        %feature("docstring") VectorClient::DeleteByIndexId "return Status, std::vector<DeleteResult> out_result"
+        %feature("docstring") VectorClient::DeleteByIndexName "return Status, std::vector<DeleteResult> out_result"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -117,6 +126,31 @@ namespace dingodb {
         %typemap(argout) VectorIndexCreator** {
           %append_output(SWIG_NewPointerObj(%as_voidptr(*$1), $*1_descriptor, SWIG_POINTER_OWN));
         }
+
+        %typemap(in, numinputs=0) std::vector<SearchResult>& (std::vector<SearchResult> temp) {
+          $1 = &temp;
+        }
+        %typemap(argout) std::vector<SearchResult>& {
+            PyObject* obj = PyList_New($1->size());
+            for (size_t i = 0; i < $1->size(); i++) {
+                PyObject* item = SWIG_NewPointerObj(new SearchResult((*$1)[i]), SWIGTYPE_p_dingodb__sdk__SearchResult, SWIG_POINTER_OWN);
+                PyList_SetItem(obj, i, item);
+            }
+            $result = SWIG_AppendOutput($result, obj);
+        }
+
+        %typemap(in, numinputs=0) std::vector<DeleteResult>& (std::vector<DeleteResult> temp) {
+          $1 = &temp;
+        }
+        %typemap(argout) std::vector<DeleteResult>& {
+          PyObject* obj = PyList_New($1->size());
+          for (size_t i = 0; i < $1->size(); i++) {
+            PyObject* item = SWIG_NewPointerObj(new DeleteResult((*$1)[i]), SWIGTYPE_p_dingodb__sdk__DeleteResult, SWIG_POINTER_OWN);
+            PyList_SetItem(obj, i, item);
+          }
+          $result = SWIG_AppendOutput($result, obj);
+        }
+
     }
 
 }

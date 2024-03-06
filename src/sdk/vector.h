@@ -16,7 +16,7 @@
 #define DINGODB_SDK_VECTOR_H_
 
 #include <cstdint>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include "sdk/status.h"
@@ -265,7 +265,7 @@ struct SearchParameter {
   // TODO: coprocessorv2
   std::vector<int64_t> vector_ids;  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
   bool use_brute_force{false};      // use brute-force search
-  std::unordered_map<SearchExtraParamType, int32_t> extra_params;  // The search method to use
+  std::map<SearchExtraParamType, int32_t> extra_params;  // The search method to use
 };
 
 struct VectorWithDistance {
