@@ -181,6 +181,7 @@ void ServiceClosure<T, U>::Run() {
 
   tracker->SetTotalRpcTime();
   uint64_t elapsed_time = tracker->TotalRpcTime();
+  SetPbMessageResponseInfo(response_, tracker);
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -214,8 +215,6 @@ void ServiceClosure<T, U>::Run() {
           request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
     }
   }
-
-  SetPbMessageResponseInfo(response_, tracker);
 }
 
 template <>
@@ -226,6 +225,7 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
 
   tracker->SetTotalRpcTime();
   uint64_t elapsed_time = tracker->TotalRpcTime();
+  SetPbMessageResponseInfo(response_, tracker);
 
   if (response_->error().errcode() != 0) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -248,8 +248,6 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
           request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
     }
   }
-
-  SetPbMessageResponseInfo(response_, tracker);
 }
 
 // Wrapper brpc service closure for log.
@@ -285,6 +283,7 @@ void CoordinatorServiceClosure<T, U>::Run() {
 
   tracker->SetTotalRpcTime();
   uint64_t elapsed_time = tracker->TotalRpcTime();
+  SetPbMessageResponseInfo(response_, tracker);
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -314,8 +313,6 @@ void CoordinatorServiceClosure<T, U>::Run() {
           request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
     }
   }
-
-  SetPbMessageResponseInfo(response_, tracker);
 }
 
 template <typename T, typename U>
@@ -350,6 +347,7 @@ void NoContextServiceClosure<T, U>::Run() {
 
   tracker->SetTotalRpcTime();
   uint64_t elapsed_time = tracker->TotalRpcTime();
+  SetPbMessageResponseInfo(response_, tracker);
 
   if (response_->error().errcode() != 0) {
     // Set leader redirect info(pb.Error.leader_location).
@@ -372,8 +370,6 @@ void NoContextServiceClosure<T, U>::Run() {
         response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
         request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   }
-
-  SetPbMessageResponseInfo(response_, tracker);
 }
 
 }  // namespace dingodb

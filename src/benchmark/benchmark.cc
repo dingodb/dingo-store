@@ -274,7 +274,9 @@ bool Benchmark::Arrange() {
       if (dataset_ == nullptr || !dataset_->Init()) {
         return false;
       }
-      FLAGS_vector_dimension = dataset_->GetDimension();
+      if (dataset_->GetDimension() > 0) {
+        FLAGS_vector_dimension = dataset_->GetDimension();
+      }
     }
 
     if (FLAGS_vector_index_id > 0 || !FLAGS_vector_index_name.empty()) {

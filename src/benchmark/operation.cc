@@ -995,19 +995,27 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
       bool is_eof = false;
       for (int batch_num = thread_no;;) {
         if (!retry) {
+          uint64_t start_time = dingodb::Helper::TimestampUs();
           dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
+          LOG(INFO) << fmt::format("get data elapsed time: {} {}", vector_with_ids.size(),
+                                   dingodb::Helper::TimestampUs() - start_time);
         }
-        auto result = VectorPut(entry, vector_with_ids);
-        if (!result.status.IsOK()) {
-          fail_count.fetch_add(vector_with_ids.size());
-          retry = true;
-          continue;
+        if (!vector_with_ids.empty()) {
+          uint64_t start_time = dingodb::Helper::TimestampUs();
+          auto result = VectorPut(entry, vector_with_ids);
+          LOG(INFO) << fmt::format("vector put elapsed time: {}", dingodb::Helper::TimestampUs() - start_time);
+          if (!result.status.IsOK()) {
+            fail_count.fetch_add(vector_with_ids.size());
+            retry = true;
+            continue;
+          }
+
+          count.fetch_add(vector_with_ids.size());
+          vector_with_ids.clear();
+          batch_num += FLAGS_vector_arrange_concurrency;
+          retry = false;
         }
 
-        count.fetch_add(vector_with_ids.size());
-        vector_with_ids.clear();
-        batch_num += FLAGS_vector_arrange_concurrency;
-        retry = false;
         if (is_eof) {
           break;
         }
@@ -1102,7 +1110,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   search_param.with_table_data = FLAGS_vector_search_with_table_data;
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
   search_param.topk = FLAGS_vector_search_topk;
-  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 300));
+  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 128));
 
   auto offset = entry->GenId();
   auto& all_test_entries = entry->test_entries;
