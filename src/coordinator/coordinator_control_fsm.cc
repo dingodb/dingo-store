@@ -77,8 +77,9 @@ void CoordinatorControl::BuildTempMaps() {
     butil::FlatMap<int64_t, pb::coordinator_internal::SchemaInternal> schema_map_copy;
     schema_map_copy.init(10000);
     schema_map_.GetRawMapCopy(schema_map_copy);
-    for (const auto& it : schema_map_copy) {
-      schema_name_map_safe_temp_.Put(it.second.name(), it.first);
+    for (const auto& [schema_id, schema_internal] : schema_map_copy) {
+      auto new_check_name = Helper::GenNewTenantCheckName(schema_internal.tenant_id(), schema_internal.name());
+      schema_name_map_safe_temp_.Put(new_check_name, schema_id);
     }
   }
   DINGO_LOG(INFO) << "schema_name_map_safe_temp, count=" << schema_name_map_safe_temp_.Size();
