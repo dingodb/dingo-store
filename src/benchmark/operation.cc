@@ -1051,7 +1051,7 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
 
   std::cout << "\r"
             << fmt::format("Vector index({}) put data success({}) fail({}) .................. done", entry->index_id,
-                           total_vector_count, fail_count.load())
+                           count.load(), fail_count.load())
             << '\n';
 
   return true;

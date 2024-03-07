@@ -24,6 +24,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <queue>
@@ -55,6 +56,8 @@ DECLARE_bool(vector_search_not_insert);
 DEFINE_uint32(load_vector_dataset_concurrency, 4, "load vector dataset concurrency");
 
 DEFINE_uint32(batch_vector_entry_cache_size, 1024, "batch vector entry cache");
+
+DEFINE_string(vector_search_filter, "", "vector search filter,e.g. key=value;key=value");
 
 namespace dingodb {
 namespace benchmark {
@@ -522,7 +525,7 @@ void DatasetUtils::GenTestDataset(const std::string& dataset_name, const std::st
       return std::stoll(obj["_id"].GetString());
     }
 
-    return 0;
+    return -1;
   };
 
   // bootstrap thread pool
@@ -582,12 +585,13 @@ void DatasetUtils::GenTestDataset(const std::string& dataset_name, const std::st
       std::cout << fmt::format("train file: {} count: {}", train_filepath, array.Size()) << std::endl;
       for (int i = 0; i < array.Size(); ++i) {
         const auto& item = array[i].GetObject();
-        if (!item.HasMember("id") || !item.HasMember("emb")) {
+        if (!item.HasMember("emb")) {
           continue;
         }
 
         auto* entry = new VectorEntry();
         entry->id = get_id_func(item);
+        CHECK(entry->id != -1) << fmt::format("vector id({}) is invalid", entry->id);
 
         if (!item["emb"].IsArray()) {
           continue;
@@ -627,7 +631,7 @@ void DatasetUtils::GenTestDataset(const std::string& dataset_name, const std::st
 }
 
 void DatasetUtils::Test() {
-  // Wikipedia2212Dataset dataset("/root/work/dingodb/dataset/wikipedia-22-12-zh");
+  // JsonDataset dataset("/root/work/dingodb/dataset/wikipedia-22-12-zh");
   // if (!dataset.Init()) {
   //   return;
   // }
@@ -655,18 +659,18 @@ void DatasetUtils::Test() {
   // DatasetUtils::SplitDataset("/root/work/dingodb/dataset/wikipedia-22-12-zh/train-00000-of-00017-20a9866562d051fb.json",
   //                            1000);
 
-  DatasetUtils::GenTestDataset(
-      "wikipedia", "/root/work/dingodb/dataset/wikipedia-22-12-zh/test-00000-of-00017-20a9866562d051fb.json",
-      "/root/work/dingodb/dataset/wikipedia-22-12-zh/");
+  // DatasetUtils::GenTestDataset(
+  //     "wikipedia", "/root/work/dingodb/dataset/wikipedia-22-12-zh/test-00000-of-00017-20a9866562d051fb.json",
+  //     "/root/work/dingodb/dataset/wikipedia-22-12-zh/");
 
   // beir bioasq
   // DatasetUtils::SplitDataset("/root/work/dingodb/dataset/beir-bioasq/0000-0.json", 1000);
 
-  // DatasetUtils::GenTestDataset("wikipedia", "/root/work/dingodb/dataset/beir-bioasq/test-0000-0.json",
-  //                              "/root/work/dingodb/dataset/beir-bioasq");
+  DatasetUtils::GenTestDataset("beir-bioasq", "/root/work/dingodb/dataset/beir-bioasq/test-0000-0.json",
+                               "/root/work/dingodb/dataset/beir-bioasq");
 }
 
-bool Wikipedia2212Dataset::Init() {
+bool JsonDataset::Init() {
   std::lock_guard lock(mutex_);
 
   if (!FLAGS_vector_search_not_insert) {
@@ -692,13 +696,13 @@ bool Wikipedia2212Dataset::Init() {
   return !test_filepaths_.empty();
 }
 
-uint32_t Wikipedia2212Dataset::GetDimension() const { return FLAGS_vector_dimension; }
+uint32_t JsonDataset::GetDimension() const { return FLAGS_vector_dimension; }
 
-uint32_t Wikipedia2212Dataset::GetTrainDataCount() const { return 0; }
+uint32_t JsonDataset::GetTrainDataCount() const { return 0; }
 
-uint32_t Wikipedia2212Dataset::GetTestDataCount() const { return test_row_count_; }
+uint32_t JsonDataset::GetTestDataCount() const { return test_row_count_; }
 
-void Wikipedia2212Dataset::ParallelLoadTrainData(const std::vector<std::string>& filepaths) {
+void JsonDataset::ParallelLoadTrainData(const std::vector<std::string>& filepaths) {
   uint64_t start_time = dingodb::Helper::TimestampMs();
 
   std::atomic_int curr_file_pos = 0;
@@ -766,95 +770,16 @@ void Wikipedia2212Dataset::ParallelLoadTrainData(const std::vector<std::string>&
   LOG(INFO) << fmt::format("Parallel load train data elapsed time: {} ms", dingodb::Helper::TimestampMs() - start_time);
 }
 
-uint32_t Wikipedia2212Dataset::LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
-                                             std::vector<sdk::VectorWithId>& vector_with_ids) const {
+uint32_t JsonDataset::LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
+                                    std::vector<sdk::VectorWithId>& vector_with_ids) const {
   CHECK(doc != nullptr);
   CHECK(doc->IsArray());
 
   const auto& array = doc->GetArray();
   while (offset < array.Size()) {
-    const auto& item = array[offset++].GetObject();
-    if (!item.HasMember("id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("url") ||
-        !item.HasMember("wiki_id") || !item.HasMember("views") || !item.HasMember("paragraph_id") ||
-        !item.HasMember("langs") || !item.HasMember("emb")) {
-      continue;
-    }
-
-    std::vector<float> embedding;
-    if (item["emb"].IsArray()) {
-      uint32_t dimension = item["emb"].GetArray().Size();
-      CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
-      embedding.reserve(dimension);
-      for (auto& f : item["emb"].GetArray()) {
-        embedding.push_back(f.GetFloat());
-      }
-    }
-
     sdk::VectorWithId vector_with_id;
-    vector_with_id.id = item["id"].GetInt64() + 1;
-
-    vector_with_id.vector.value_type = sdk::ValueType::kFloat;
-    vector_with_id.vector.float_values.swap(embedding);
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kInt64;
-      sdk::ScalarField field;
-      field.long_data = item["id"].GetInt64() + 1;
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["id"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kInt64;
-      sdk::ScalarField field;
-      field.long_data = item["wiki_id"].GetInt64();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["wiki_id"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kInt64;
-      sdk::ScalarField field;
-      field.long_data = item["paragraph_id"].GetInt64();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["paragraph_id"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kInt64;
-      sdk::ScalarField field;
-      field.long_data = item["langs"].GetInt64();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["langs"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kString;
-      sdk::ScalarField field;
-      field.string_data = item["title"].GetString();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["title"] = scalar_value;
-    }
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kString;
-      sdk::ScalarField field;
-      field.string_data = item["url"].GetString();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["url"] = scalar_value;
-    }
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kString;
-      sdk::ScalarField field;
-      field.string_data = item["text"].GetString();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["text"] = scalar_value;
+    if (!ParseTrainData(array[offset++], vector_with_id)) {
+      continue;
     }
 
     vector_with_ids.push_back(vector_with_id);
@@ -866,7 +791,7 @@ uint32_t Wikipedia2212Dataset::LoadTrainData(std::shared_ptr<rapidjson::Document
   return offset;
 }
 
-void Wikipedia2212Dataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) {
+void JsonDataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) {
   is_eof = false;
   if (train_filepaths_.empty()) {
     return;
@@ -901,7 +826,7 @@ void Wikipedia2212Dataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWi
   }
 }
 
-std::vector<Dataset::TestEntryPtr> Wikipedia2212Dataset::GetTestData() {
+std::vector<Dataset::TestEntryPtr> JsonDataset::GetTestData() {
   std::vector<Dataset::TestEntryPtr> test_entries;
   for (auto& test_filepath : test_filepaths_) {
     std::ifstream ifs(test_filepath);
@@ -917,387 +842,302 @@ std::vector<Dataset::TestEntryPtr> Wikipedia2212Dataset::GetTestData() {
     const auto& array = doc.GetArray();
     test_row_count_ += array.Size();
     for (int i = 0; i < array.Size(); ++i) {
-      const auto& item = array[i].GetObject();
-
-      sdk::VectorWithId vector_with_id;
-      vector_with_id.id = item["id"].GetInt64() + 1;
-
-      std::vector<float> embedding;
-      if (item["emb"].IsArray()) {
-        uint32_t dimension = item["emb"].GetArray().Size();
-        CHECK(dimension == FLAGS_vector_dimension)
-            << fmt::format("dataset dimension({}) is not uniformity.", dimension);
-        embedding.reserve(dimension);
-        for (auto& f : item["emb"].GetArray()) {
-          embedding.push_back(f.GetFloat());
-        }
+      auto entry = ParseTestData(array[i]);
+      if (entry != nullptr) {
+        test_entries.push_back(entry);
       }
-
-      vector_with_id.vector.value_type = sdk::ValueType::kFloat;
-      vector_with_id.vector.float_values.swap(embedding);
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kInt64;
-      //   sdk::ScalarField field;
-      //   field.long_data = item["id"].GetInt64() + 1;
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["id"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kInt64;
-      //   sdk::ScalarField field;
-      //   field.long_data = item["wiki_id"].GetInt64();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["wiki_id"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kInt64;
-      //   sdk::ScalarField field;
-      //   field.long_data = item["paragraph_id"].GetInt64();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["paragraph_id"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kInt64;
-      //   sdk::ScalarField field;
-      //   field.long_data = item["langs"].GetInt64();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["langs"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kString;
-      //   sdk::ScalarField field;
-      //   field.string_data = item["title"].GetString();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["title"] = scalar_value;
-      // }
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kString;
-      //   sdk::ScalarField field;
-      //   field.string_data = item["url"].GetString();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["url"] = scalar_value;
-      // }
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kString;
-      //   sdk::ScalarField field;
-      //   field.string_data = item["text"].GetString();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["text"] = scalar_value;
-      // }
-
-      Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
-      entry->vector_with_id = vector_with_id;
-
-      const auto& neighbors = item["neighbors"].GetArray();
-      uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
-      for (uint32_t i = 0; i < size; ++i) {
-        const auto& neighbor_obj = neighbors[i].GetObject();
-
-        CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
-        CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
-        entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
-      }
-
-      test_entries.push_back(entry);
     }
   }
 
   return test_entries;
 }
 
-bool BeirBioasqDataset::Init() {
-  std::lock_guard lock(mutex_);
-
-  if (!FLAGS_vector_search_not_insert) {
-    auto train_filenames = dingodb::Helper::TraverseDirectory(dirpath_, std::string("train"));
-    for (auto& filelname : train_filenames) {
-      train_filepaths_.push_back(fmt::format("{}/{}", dirpath_, filelname));
-    }
-
-    if (train_filepaths_.empty()) {
-      return false;
-    }
-
-    batch_vector_entry_cache_.resize(FLAGS_batch_vector_entry_cache_size);
-    auto train_thread = std::thread([&] { ParallelLoadTrainData(train_filepaths_); });
-    train_thread.detach();
+bool Wikipedia2212Dataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithId& vector_with_id) const {
+  const auto& item = obj.GetObject();
+  if (!item.HasMember("id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("url") ||
+      !item.HasMember("wiki_id") || !item.HasMember("views") || !item.HasMember("paragraph_id") ||
+      !item.HasMember("langs") || !item.HasMember("emb")) {
+    return false;
   }
 
-  auto test_filenames = dingodb::Helper::TraverseDirectory(dirpath_, std::string("test"));
-  for (auto& filelname : test_filenames) {
-    test_filepaths_.push_back(fmt::format("{}/{}", dirpath_, filelname));
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
+    }
   }
 
-  return !test_filepaths_.empty();
+  vector_with_id.id = item["id"].GetInt64() + 1;
+
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = item["id"].GetInt64() + 1;
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["id"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = item["wiki_id"].GetInt64();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["wiki_id"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = item["paragraph_id"].GetInt64();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["paragraph_id"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = item["langs"].GetInt64();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["langs"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["title"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["title"] = scalar_value;
+  }
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["url"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["url"] = scalar_value;
+  }
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["text"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["text"] = scalar_value;
+  }
+
+  return true;
 }
 
-uint32_t BeirBioasqDataset::GetDimension() const { return FLAGS_vector_dimension; }
+Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value& obj) const {
+  const auto& item = obj.GetObject();
 
-uint32_t BeirBioasqDataset::GetTrainDataCount() const { return 0; }
+  sdk::VectorWithId vector_with_id;
+  vector_with_id.id = item["id"].GetInt64() + 1;
 
-uint32_t BeirBioasqDataset::GetTestDataCount() const { return test_row_count_; }
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
+    }
+  }
 
-void BeirBioasqDataset::ParallelLoadTrainData(const std::vector<std::string>& filepaths) {
-  uint64_t start_time = dingodb::Helper::TimestampMs();
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
 
-  std::atomic_int curr_file_pos = 0;
-  std::vector<std::thread> threads;
-  for (size_t thread_id = 0; thread_id < FLAGS_load_vector_dataset_concurrency; ++thread_id) {
-    threads.push_back(std::thread([&, thread_id] {
-      for (;;) {
-        int file_pos = curr_file_pos.fetch_add(1);
-        if (file_pos >= filepaths.size()) {
-          return;
-        }
+  if (!FLAGS_vector_search_filter.empty()) {
+    std::vector<std::string> kv_strs;
+    dingodb::Helper::SplitString(FLAGS_vector_search_filter, ';', kv_strs);
 
-        std::ifstream ifs(filepaths[file_pos]);
-        rapidjson::IStreamWrapper isw(ifs);
-        auto doc = std::make_shared<rapidjson::Document>();
-        doc->ParseStream(isw);
-        LOG_IF(ERROR, doc->HasParseError()) << fmt::format("parse json file {} failed, error: {}", filepaths[file_pos],
-                                                           static_cast<int>(doc->GetParseError()));
+    for (auto& kv_str : kv_strs) {
+      std::vector<std::string> kv;
+      dingodb::Helper::SplitString(kv_str, '=', kv);
+      CHECK(kv.size() >= 2) << fmt::format("filter string({}) invalid.", kv_str);
 
-        uint32_t offset = 0;
-        int64_t batch_vector_count = 0;
-        int64_t vector_count = 0;
-        for (;;) {
-          ++batch_vector_count;
-          auto batch_vector_entry = std::make_shared<BatchVectorEntry>();
-          batch_vector_entry->vector_with_ids.reserve(FLAGS_vector_put_batch_size);
-          offset = LoadTrainData(doc, offset, FLAGS_vector_put_batch_size, batch_vector_entry->vector_with_ids);
-          vector_count += batch_vector_entry->vector_with_ids.size();
-          if (batch_vector_entry->vector_with_ids.empty()) {
-            break;
-          }
-
-          for (;;) {
-            bool is_full = false;
-            {
-              std::lock_guard lock(mutex_);
-              // check is full
-              if ((head_pos_ + 1) % FLAGS_batch_vector_entry_cache_size == tail_pos_) {
-                is_full = true;
-              } else {
-                batch_vector_entry_cache_[tail_pos_] = batch_vector_entry;
-                tail_pos_ = (tail_pos_ + 1) % FLAGS_batch_vector_entry_cache_size;
-                break;
-              }
-            }
-
-            if (is_full) {
-              std::this_thread::sleep_for(std::chrono::milliseconds(1));
-            }
-          }
-        }
-
-        LOG(INFO) << fmt::format("filepath: {} file_pos: {} batch_vector_count: {} vector_count: {}",
-                                 filepaths[file_pos], file_pos, batch_vector_count, vector_count);
+      const auto& key = kv[0];
+      const auto& value = kv[1];
+      if (key == "title") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["title"] = scalar_value;
+      } else if (key == "text") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["text"] = scalar_value;
+      } else if (key == "langs") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = std::stoll(value);
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["langs"] = scalar_value;
+      } else if (key == "paragraph_id") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = std::stoll(value);
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["paragraph_id"] = scalar_value;
+      } else if (key == "wiki_id") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kInt64;
+        sdk::ScalarField field;
+        field.long_data = std::stoll(value);
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["wiki_id"] = scalar_value;
       }
-    }));
+    }
   }
 
-  for (auto& thread : threads) {
-    thread.join();
+  Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
+  entry->vector_with_id = vector_with_id;
+
+  const auto& neighbors = item["neighbors"].GetArray();
+  uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
+  for (uint32_t i = 0; i < size; ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
+    entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
   }
 
-  train_load_finish_.store(true);
-
-  LOG(INFO) << fmt::format("Parallel load train data elapsed time: {} ms", dingodb::Helper::TimestampMs() - start_time);
+  return entry;
 }
 
-uint32_t BeirBioasqDataset::LoadTrainData(std::shared_ptr<rapidjson::Document> doc, uint32_t offset, uint32_t size,
-                                          std::vector<sdk::VectorWithId>& vector_with_ids) const {
-  CHECK(doc != nullptr);
-  CHECK(doc->IsArray());
+bool BeirBioasqDataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithId& vector_with_id) const {
+  const auto& item = obj.GetObject();
+  if (!item.HasMember("_id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("emb")) {
+    return true;
+  }
 
-  const auto& array = doc->GetArray();
-  while (offset < array.Size()) {
-    const auto& item = array[offset++].GetObject();
-    if (!item.HasMember("_id") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("emb")) {
-      continue;
-    }
-
-    std::vector<float> embedding;
-    if (item["emb"].IsArray()) {
-      uint32_t dimension = item["emb"].GetArray().Size();
-      CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
-      embedding.reserve(dimension);
-      for (auto& f : item["emb"].GetArray()) {
-        embedding.push_back(f.GetFloat());
-      }
-    }
-
-    sdk::VectorWithId vector_with_id;
-    vector_with_id.id = std::stoll(item["_id"].GetString()) + 1;
-
-    vector_with_id.vector.value_type = sdk::ValueType::kFloat;
-    vector_with_id.vector.float_values.swap(embedding);
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kInt64;
-      sdk::ScalarField field;
-      field.long_data = std::stoll(item["_id"].GetString()) + 1;
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["id"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kString;
-      sdk::ScalarField field;
-      field.string_data = item["title"].GetString();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["title"] = scalar_value;
-    }
-
-    {
-      sdk::ScalarValue scalar_value;
-      scalar_value.type = sdk::ScalarFieldType::kString;
-      sdk::ScalarField field;
-      field.string_data = item["text"].GetString();
-      scalar_value.fields.push_back(field);
-      vector_with_id.scalar_data["text"] = scalar_value;
-    }
-
-    vector_with_ids.push_back(vector_with_id);
-    if (vector_with_ids.size() >= size) {
-      break;
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
     }
   }
 
-  return offset;
+  vector_with_id.id = std::stoll(item["_id"].GetString()) + 1;
+
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = std::stoll(item["_id"].GetString()) + 1;
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["id"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["title"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["title"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["text"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["text"] = scalar_value;
+  }
+
+  return true;
 }
 
-void BeirBioasqDataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWithId>& vector_with_ids, bool& is_eof) {
-  is_eof = false;
-  if (train_filepaths_.empty()) {
-    return;
-  }
+Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& obj) const {
+  const auto& item = obj.GetObject();
 
-  for (;;) {
-    bool is_empty = false;
+  sdk::VectorWithId vector_with_id;
+  vector_with_id.id = std::stoll(item["_id"].GetString()) + 1;
 
-    {
-      std::lock_guard lock(mutex_);
-
-      if (head_pos_ == tail_pos_) {
-        is_empty = true;
-        is_eof = train_load_finish_.load();
-        if (is_eof) {
-          return;
-        }
-      } else {
-        auto batch_vector_entry = batch_vector_entry_cache_[head_pos_];
-        head_pos_ = (head_pos_ + 1) % FLAGS_batch_vector_entry_cache_size;
-
-        for (auto& vector_with_id : batch_vector_entry->vector_with_ids) {
-          vector_with_ids.push_back(std::move(vector_with_id));
-        }
-        return;
-      }
-    }
-
-    if (is_empty) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-  }
-}
-
-std::vector<Dataset::TestEntryPtr> BeirBioasqDataset::GetTestData() {
-  std::lock_guard lock(mutex_);
-
-  std::vector<Dataset::TestEntryPtr> test_entries;
-  for (auto& test_filepath : test_filepaths_) {
-    std::ifstream ifs(test_filepath);
-    rapidjson::IStreamWrapper isw(ifs);
-    rapidjson::Document doc;
-    doc.ParseStream(isw);
-    if (doc.HasParseError()) {
-      DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", test_filepath,
-                                      static_cast<int>(doc.GetParseError()));
-      continue;
-    }
-
-    const auto& array = doc.GetArray();
-    test_row_count_ += array.Size();
-    for (int i = 0; i < array.Size(); ++i) {
-      const auto& item = array[i].GetObject();
-
-      sdk::VectorWithId vector_with_id;
-      vector_with_id.id = std::stoll(item["_id"].GetString()) + 1;
-
-      std::vector<float> embedding;
-      if (item["emb"].IsArray()) {
-        uint32_t dimension = item["emb"].GetArray().Size();
-        CHECK(dimension == FLAGS_vector_dimension)
-            << fmt::format("dataset dimension({}) is not uniformity.", dimension);
-        embedding.reserve(dimension);
-        for (auto& f : item["emb"].GetArray()) {
-          embedding.push_back(f.GetFloat());
-        }
-      }
-
-      vector_with_id.vector.value_type = sdk::ValueType::kFloat;
-      vector_with_id.vector.float_values.swap(embedding);
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kInt64;
-      //   sdk::ScalarField field;
-      //   field.long_data = std::stoll(item["_id"].GetString()) + 1;
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["id"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kString;
-      //   sdk::ScalarField field;
-      //   field.string_data = item["title"].GetString();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["title"] = scalar_value;
-      // }
-
-      // {
-      //   sdk::ScalarValue scalar_value;
-      //   scalar_value.type = sdk::ScalarFieldType::kString;
-      //   sdk::ScalarField field;
-      //   field.string_data = item["text"].GetString();
-      //   scalar_value.fields.push_back(field);
-      //   vector_with_id.scalar_data["text"] = scalar_value;
-      // }
-
-      Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
-      entry->vector_with_id = vector_with_id;
-
-      const auto& neighbors = item["neighbors"].GetArray();
-      uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
-      for (uint32_t i = 0; i < size; ++i) {
-        const auto& neighbor_obj = neighbors[i].GetObject();
-
-        CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
-        CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
-        entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
-      }
-
-      test_entries.push_back(entry);
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
     }
   }
 
-  return test_entries;
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
+
+  if (!FLAGS_vector_search_filter.empty()) {
+    std::vector<std::string> kv_strs;
+    dingodb::Helper::SplitString(FLAGS_vector_search_filter, ';', kv_strs);
+
+    for (auto& kv_str : kv_strs) {
+      std::vector<std::string> kv;
+      dingodb::Helper::SplitString(kv_str, '=', kv);
+      CHECK(kv.size() >= 2) << fmt::format("filter string({}) invalid.", kv_str);
+
+      const auto& key = kv[0];
+      const auto& value = kv[1];
+      if (key == "title") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["title"] = scalar_value;
+      } else if (key == "text") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["text"] = scalar_value;
+      }
+    }
+  }
+
+  Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
+  entry->vector_with_id = vector_with_id;
+
+  const auto& neighbors = item["neighbors"].GetArray();
+  CHECK(!neighbors.Empty()) << "neighbor size is empty.";
+  uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
+  for (uint32_t i = 0; i < size; ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
+    entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
+  }
+
+  return entry;
 }
 
 }  // namespace benchmark
