@@ -149,11 +149,41 @@ butil::Status VectorReader::SearchVector(
       }
 
     } else {  //! parameter.has_vector_coprocessor() && vector_with_ids[0].scalar_data().scalar_data_size() != 0
-      butil::Status status;
-      std::string s = fmt::format("CompareVectorScalarData deprecated. use coprocessor instead.");
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::EVECTOR_NOT_SUPPORT, s);
+      top_n *= 10;
+      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids,
+                                                                       parameter, tmp_results, top_n, {});
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+
+      for (auto& vector_with_distance_result : tmp_results) {
+        pb::index::VectorWithDistanceResult new_vector_with_distance_result;
+
+        for (auto& temp_vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
+          int64_t temp_id = temp_vector_with_distance.vector_with_id().id();
+          bool compare_result = false;
+          butil::Status status = CompareVectorScalarData(region_range, partition_id, temp_id,
+                                                         vector_with_ids[0].scalar_data(), compare_result);
+          if (!status.ok()) {
+            return status;
+          }
+          if (!compare_result) {
+            continue;
+          }
+
+          new_vector_with_distance_result.add_vector_with_distances()->Swap(&temp_vector_with_distance);
+          // topk
+          if (!enable_range_search) {
+            if (new_vector_with_distance_result.vector_with_distances_size() >= parameter.top_n()) {
+              break;
+            }
+          }
+        }
+        vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
+      }
     }
+
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
     butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, region_range,
                                                               vector_with_distance_results);
@@ -1096,7 +1126,42 @@ butil::Status VectorReader::SearchVectorDebug(
       }
       auto end_kv_get = lambda_time_now_function();
       scan_scalar_time_us = lambda_time_diff_microseconds_function(start_kv_get, end_kv_get);
+    } else {
+      top_n *= 10;
+      butil::Status status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids,
+                                                                       parameter, tmp_results, top_n, {});
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+
+      for (auto& vector_with_distance_result : tmp_results) {
+        pb::index::VectorWithDistanceResult new_vector_with_distance_result;
+
+        for (auto& temp_vector_with_distance : *vector_with_distance_result.mutable_vector_with_distances()) {
+          int64_t temp_id = temp_vector_with_distance.vector_with_id().id();
+          bool compare_result = false;
+          butil::Status status = CompareVectorScalarData(region_range, partition_id, temp_id,
+                                                         vector_with_ids[0].scalar_data(), compare_result);
+          if (!status.ok()) {
+            return status;
+          }
+          if (!compare_result) {
+            continue;
+          }
+
+          new_vector_with_distance_result.add_vector_with_distances()->Swap(&temp_vector_with_distance);
+          // topk
+          if (!enable_range_search) {
+            if (new_vector_with_distance_result.vector_with_distances_size() >= parameter.top_n()) {
+              break;
+            }
+          }
+        }
+        vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
+      }
     }
+
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
     butil::Status status = DoVectorSearchForVectorIdPreFilterDebug(vector_index, vector_with_ids, parameter,
                                                                    region_range, vector_with_distance_results,
@@ -1105,7 +1170,6 @@ butil::Status VectorReader::SearchVectorDebug(
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForVectorIdPreFilterDebug failed");
       return status;
     }
-
   } else if (dingodb::pb::common::VectorFilter::SCALAR_FILTER == vector_filter &&
              dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
 
@@ -1116,7 +1180,6 @@ butil::Status VectorReader::SearchVectorDebug(
       DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilterDebug failed ");
       return status;
     }
-
   } else if (dingodb::pb::common::VectorFilter::TABLE_FILTER ==
              vector_filter) {  //  table coprocessor pre filter search. not impl
     butil::Status status = DoVectorSearchForTableCoprocessor(vector_index, region_range, vector_with_ids, parameter,
