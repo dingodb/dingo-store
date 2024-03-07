@@ -499,7 +499,7 @@ Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
 
 Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
                                               const std::vector<sdk::VectorWithId>& vector_with_ids,
-                                              const sdk::SearchParameter& search_param) {
+                                              const sdk::SearchParam& search_param) {
   Operation::Result result;
 
   for (const auto& vector_with_id : vector_with_ids) {
@@ -1031,7 +1031,7 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
   std::vector<sdk::VectorWithId> vector_with_ids;
   vector_with_ids.reserve(FLAGS_batch_size);
 
-  sdk::SearchParameter search_param;
+  sdk::SearchParam search_param;
   search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
   search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
   search_param.with_table_data = FLAGS_vector_search_with_table_data;
@@ -1070,7 +1070,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   std::vector<sdk::VectorWithId> vector_with_ids;
   vector_with_ids.reserve(FLAGS_batch_size);
 
-  sdk::SearchParameter search_param;
+  sdk::SearchParam search_param;
   search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
   search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
   search_param.with_table_data = FLAGS_vector_search_with_table_data;

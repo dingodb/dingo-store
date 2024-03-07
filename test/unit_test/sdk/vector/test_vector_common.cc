@@ -182,11 +182,11 @@ TEST(VectorCommonTest, TestValueType2InternalValueTypePB) {
 }
 
 TEST(VectorCommonTest, TestFillearchFlatParamPB) {
-  SearchParameter parameter;
-  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+  SearchParam param;
+  param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
 
   pb::common::SearchFlatParam pb;
-  FillSearchFlatParamPB(&pb, parameter);
+  FillSearchFlatParamPB(&pb, param);
 
   EXPECT_EQ(pb.parallel_on_queries(), 1);
 }
@@ -253,25 +253,25 @@ TEST(VectorCommonTest, TestInternalVectorWithDistance2VectorWithDistance) {
 }
 
 TEST(VectorCommonTest, TestFillSearchIvfFlatParamPB) {
-  SearchParameter parameter;
-  parameter.extra_params[SearchExtraParamType::kNprobe] = 10;
-  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+  SearchParam param;
+  param.extra_params[SearchExtraParamType::kNprobe] = 10;
+  param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
 
   pb::common::SearchIvfFlatParam pb;
-  FillSearchIvfFlatParamPB(&pb, parameter);
+  FillSearchIvfFlatParamPB(&pb, param);
 
   EXPECT_EQ(pb.nprobe(), 10);
   EXPECT_EQ(pb.parallel_on_queries(), 1);
 }
 
 TEST(VectorCommonTest, TestFillSearchIvfPqParamPB) {
-  SearchParameter parameter;
-  parameter.extra_params[SearchExtraParamType::kNprobe] = 10;
-  parameter.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
-  parameter.extra_params[SearchExtraParamType::kRecallNum] = 5;
+  SearchParam param;
+  param.extra_params[SearchExtraParamType::kNprobe] = 10;
+  param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
+  param.extra_params[SearchExtraParamType::kRecallNum] = 5;
 
   pb::common::SearchIvfPqParam pb;
-  FillSearchIvfPqParamPB(&pb, parameter);
+  FillSearchIvfPqParamPB(&pb, param);
 
   EXPECT_EQ(pb.nprobe(), 10);
   EXPECT_EQ(pb.parallel_on_queries(), 1);
@@ -279,11 +279,11 @@ TEST(VectorCommonTest, TestFillSearchIvfPqParamPB) {
 }
 
 TEST(FillSearchHnswParamPBTest, TestFillSearchHnswParamPB) {
-  SearchParameter parameter;
-  parameter.extra_params[SearchExtraParamType::kEfSearch] = 20;
+  SearchParam param;
+  param.extra_params[SearchExtraParamType::kEfSearch] = 20;
 
   pb::common::SearchHNSWParam pb;
-  FillSearchHnswParamPB(&pb, parameter);
+  FillSearchHnswParamPB(&pb, param);
 
   EXPECT_EQ(pb.efsearch(), 20);
 }

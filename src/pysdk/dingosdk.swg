@@ -77,6 +77,8 @@ namespace dingodb {
         %feature("docstring") VectorClient::SearchByIndexName "return Status, std::vector<SearchResult> out_result"
         %feature("docstring") VectorClient::DeleteByIndexId "return Status, std::vector<DeleteResult> out_result"
         %feature("docstring") VectorClient::DeleteByIndexName "return Status, std::vector<DeleteResult> out_result"
+        %feature("docstring") VectorClient::BatchQueryByIndexId "return Status, QueryResult out_result"
+        %feature("docstring") VectorClient::BatchQueryByIndexName "return Status, QueryResult out_result"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -148,6 +150,14 @@ namespace dingodb {
             PyObject* item = SWIG_NewPointerObj(new DeleteResult((*$1)[i]), SWIGTYPE_p_dingodb__sdk__DeleteResult, SWIG_POINTER_OWN);
             PyList_SetItem(obj, i, item);
           }
+          $result = SWIG_AppendOutput($result, obj);
+        }
+
+        %typemap(in, numinputs=0) QueryResult& (QueryResult temp) {
+          $1 = &temp;
+        }
+        %typemap(argout) QueryResult& {
+          PyObject* obj = SWIG_NewPointerObj(new QueryResult(*$1), SWIGTYPE_p_dingodb__sdk__QueryResult, SWIG_POINTER_OWN);
           $result = SWIG_AppendOutput($result, obj);
         }
 

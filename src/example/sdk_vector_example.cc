@@ -167,7 +167,7 @@ static void VectorSearch(bool use_index_name = false) {
     init = init + 0.1;
   }
 
-  dingodb::sdk::SearchParameter param;
+  dingodb::sdk::SearchParam param;
   param.topk = 2;
   // param.use_brute_force = true;
   param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
@@ -182,7 +182,7 @@ static void VectorSearch(bool use_index_name = false) {
 
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
   for (const auto& r : result) {
-    DINGO_LOG(INFO) << "vector search result:" << dingodb::sdk::DumpToString(r);
+    DINGO_LOG(INFO) << "vector search result:" << r.ToString();
   }
 
   CHECK_EQ(result.size(), target_vectors.size());
@@ -197,6 +197,23 @@ static void VectorSearch(bool use_index_name = false) {
   }
 }
 
+static void VectorQuey(bool use_index_name = false) {
+  dingodb::sdk::QueryParam param;
+  param.vector_ids = g_vector_ids;
+
+  Status query;
+  dingodb::sdk::QueryResult result;
+  if (use_index_name) {
+    query = g_vector_client->BatchQueryByIndexName(g_schema_id, g_index_name, param, result);
+  } else {
+    query = g_vector_client->BatchQueryByIndexId(g_index_id, param, result);
+  }
+
+  DINGO_LOG(INFO) << "vector query:" << query.ToString();
+  DINGO_LOG(INFO) << "vector query result:" << result.ToString();
+  CHECK_EQ(result.vectors.size(), g_vector_ids.size());
+}
+
 static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
@@ -207,7 +224,7 @@ static void VectorDelete(bool use_index_name = false) {
   }
   DINGO_LOG(INFO) << "vector delete status: " << tmp.ToString();
   for (const auto& r : result) {
-    DINGO_LOG(INFO) << "vector delete result:" << dingodb::sdk::DumpToString(r);
+    DINGO_LOG(INFO) << "vector delete result:" << r.ToString();
   }
 }
 
@@ -242,6 +259,7 @@ int main(int argc, char* argv[]) {
 
     VectorAdd();
     VectorSearch();
+    VectorQuey();
     VectorDelete();
     VectorSearch();
 
@@ -254,6 +272,7 @@ int main(int argc, char* argv[]) {
 
     VectorAdd(true);
     VectorSearch(true);
+    VectorQuey(true);
     VectorDelete(true);
     VectorSearch(true);
 

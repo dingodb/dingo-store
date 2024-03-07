@@ -98,7 +98,7 @@ class BaseOperation : public Operation {
 
   Result VectorPut(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids);
   Result VectorSearch(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids,
-                      const sdk::SearchParameter& search_param);
+                      const sdk::SearchParam& search_param);
 
   std::shared_ptr<sdk::Client> client;
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;

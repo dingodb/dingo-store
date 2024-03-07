@@ -32,7 +32,7 @@ namespace sdk {
 class VectorSearchPartTask;
 class VectorSearchTask : public VectorTask {
  public:
-  VectorSearchTask(const ClientStub& stub, int64_t index_id, const SearchParameter& search_param,
+  VectorSearchTask(const ClientStub& stub, int64_t index_id, const SearchParam& search_param,
                    const std::vector<VectorWithId>& target_vectors, std::vector<SearchResult>& out_result)
       : VectorTask(stub),
         index_id_(index_id),
@@ -53,7 +53,7 @@ class VectorSearchTask : public VectorTask {
   void ConstructResultUnlocked();
 
   const int64_t index_id_;
-  const SearchParameter& search_param_;
+  const SearchParam& search_param_;
   const std::vector<VectorWithId>& target_vectors_;
 
   // target_vectors_ idx to search result
@@ -72,7 +72,7 @@ class VectorSearchTask : public VectorTask {
 
 class VectorSearchPartTask : public VectorTask {
  public:
-  VectorSearchPartTask(const ClientStub& stub, int64_t index_id, int64_t part_id, const SearchParameter& search_param,
+  VectorSearchPartTask(const ClientStub& stub, int64_t index_id, int64_t part_id, const SearchParam& search_param,
                        const std::vector<VectorWithId>& target_vectors)
       : VectorTask(stub),
         index_id_(index_id),
@@ -98,7 +98,7 @@ class VectorSearchPartTask : public VectorTask {
 
   const int64_t index_id_;
   const int64_t part_id_;
-  const SearchParameter& search_param_;
+  const SearchParam& search_param_;
   const std::vector<VectorWithId>& target_vectors_;
 
   std::shared_ptr<VectorIndex> vector_index_;

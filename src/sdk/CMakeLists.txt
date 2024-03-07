@@ -35,6 +35,7 @@ add_library(sdk
   vector/vector_param.cc
   vector/vector_task.cc
   vector/vector_add_task.cc
+  vector/vector_batch_query_task.cc
   vector/vector_delete_task.cc
   vector/vector_search_task.cc
   utils/thread_pool_actuator.cc
