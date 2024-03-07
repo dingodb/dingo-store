@@ -87,7 +87,7 @@ def vector_search(use_index_name=False):
 
         init = init + 0.1
 
-    param = dingosdk.SearchParameter()
+    param = dingosdk.SearchParam()
     param.topk = 2
     # param.use_brute_force = True
     param.extra_params[dingosdk.kParallelOnQueries] = 10
@@ -99,7 +99,7 @@ def vector_search(use_index_name=False):
 
     print(f"vector search status: {tmp.ToString()}")
     for r in result:
-        print(f"vector search result: {dingosdk.DumpToString(r)}")
+        print(f"vector search result: {r.ToString()}")
 
     assert len(result) == len(target_vectors)
 
@@ -111,6 +111,19 @@ def vector_search(use_index_name=False):
         assert vector_id.id == target_vectors[i].id
         assert vector_id.vector.Size() == target_vectors[i].vector.Size()
 
+def vector_query(use_index_name=False):
+    param = dingosdk.QueryParam()
+    param.vector_ids = g_vector_ids
+
+    if use_index_name:
+        tmp, query_result = g_vector_client.BatchQueryByIndexName(g_schema_id, g_index_name, param)
+    else:
+        tmp, query_result = g_vector_client.BatchQueryByIndexId(g_index_id, param)
+
+    print(f"vector query status: {tmp.ToString()}")
+    print(f"vector query result: {query_result.ToString()}")
+    assert(len(query_result.vectors) == len(g_vector_ids))
+
 def vector_delete(use_index_name=False):
     if use_index_name:
         tmp, result = g_vector_client.DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids)
@@ -119,7 +132,7 @@ def vector_delete(use_index_name=False):
 
     print(f"vector delete status: {tmp.ToString()}")
     for r in result:
-        print(f"vector delete result: {dingosdk.DumpToString(r)}")
+        print(f"vector delete result: {r.ToString()}")
 
     for i in range(len(result)):
         delete_result = result[i]
@@ -129,12 +142,14 @@ if __name__ == "__main__":
     prepare_vector_index()
     vector_add()
     vector_search()
+    vector_query()
     vector_delete()
     post_clean()
 
     prepare_vector_index()
     vector_add(True)
     vector_search(True)
+    vector_query(True)
     vector_delete(True)
     post_clean(True)
 

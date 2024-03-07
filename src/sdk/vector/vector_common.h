@@ -215,13 +215,13 @@ static VectorWithDistance InternalVectorWithDistance2VectorWithDistance(const pb
   return std::move(to_return);
 }
 
-static void FillSearchFlatParamPB(pb::common::SearchFlatParam* pb, const SearchParameter& parameter) {
+static void FillSearchFlatParamPB(pb::common::SearchFlatParam* pb, const SearchParam& parameter) {
   if (parameter.extra_params.find(SearchExtraParamType::kParallelOnQueries) != parameter.extra_params.end()) {
     pb->set_parallel_on_queries(parameter.extra_params.at(SearchExtraParamType::kParallelOnQueries));
   }
 }
 
-static void FillSearchIvfFlatParamPB(pb::common::SearchIvfFlatParam* pb, const SearchParameter& parameter) {
+static void FillSearchIvfFlatParamPB(pb::common::SearchIvfFlatParam* pb, const SearchParam& parameter) {
   if (parameter.extra_params.find(SearchExtraParamType::kNprobe) != parameter.extra_params.end()) {
     pb->set_nprobe(parameter.extra_params.at(SearchExtraParamType::kNprobe));
   }
@@ -230,7 +230,7 @@ static void FillSearchIvfFlatParamPB(pb::common::SearchIvfFlatParam* pb, const S
   }
 }
 
-static void FillSearchIvfPqParamPB(pb::common::SearchIvfPqParam* pb, const SearchParameter& parameter) {
+static void FillSearchIvfPqParamPB(pb::common::SearchIvfPqParam* pb, const SearchParam& parameter) {
   if (parameter.extra_params.find(SearchExtraParamType::kNprobe) != parameter.extra_params.end()) {
     pb->set_nprobe(parameter.extra_params.at(SearchExtraParamType::kNprobe));
   }
@@ -242,17 +242,17 @@ static void FillSearchIvfPqParamPB(pb::common::SearchIvfPqParam* pb, const Searc
   }
 }
 
-static void FillSearchHnswParamPB(pb::common::SearchHNSWParam* pb, const SearchParameter& parameter) {
+static void FillSearchHnswParamPB(pb::common::SearchHNSWParam* pb, const SearchParam& parameter) {
   if (parameter.extra_params.find(SearchExtraParamType::kEfSearch) != parameter.extra_params.end()) {
     pb->set_efsearch(parameter.extra_params.at(SearchExtraParamType::kEfSearch));
   }
 }
 
 // TODO: to support
-static void FillSearchDiskAnnParamPB(pb::common::SearchDiskAnnParam* pb, const SearchParameter& parameter) {}
+static void FillSearchDiskAnnParamPB(pb::common::SearchDiskAnnParam* pb, const SearchParam& parameter) {}
 
 static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal_parameter, VectorIndexType type,
-                                     const SearchParameter& parameter) {
+                                     const SearchParam& parameter) {
   internal_parameter->set_top_n(parameter.topk);
   internal_parameter->set_without_vector_data(!parameter.with_vector_data);
   internal_parameter->set_without_scalar_data(!parameter.with_scalar_data);

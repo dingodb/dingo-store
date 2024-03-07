@@ -27,48 +27,60 @@
 namespace dingodb {
 namespace sdk {
 
-std::string DumpToString(const Vector& obj) {
+std::string Vector::ToString() const {
   std::stringstream float_ss;
-  for (size_t i = 0; i < obj.float_values.size(); ++i) {
-    float_ss << obj.float_values[i];
-    if (i != obj.float_values.size() - 1) {
+  for (size_t i = 0; i < float_values.size(); ++i) {
+    float_ss << float_values[i];
+    if (i != float_values.size() - 1) {
       float_ss << ", ";
     }
   }
 
   std::stringstream binary_ss;
-  for (size_t i = 0; i < obj.binary_values.size(); ++i) {
-    binary_ss << obj.binary_values[i];
-    if (i != obj.binary_values.size() - 1) {
+  for (size_t i = 0; i < binary_values.size(); ++i) {
+    binary_ss << binary_values[i];
+    if (i != binary_values.size() - 1) {
       binary_ss << ", ";
     }
   }
 
-  return fmt::format("Vector {{ dimension: {}, value_type: {}, float_values: [{}], binary_values: [{}] }}",
-                     obj.dimension, ValueTypeToString(obj.value_type), float_ss.str(), binary_ss.str());
+  return fmt::format("Vector {{ dimension: {}, value_type: {}, float_values: [{}], binary_values: [{}] }}", dimension,
+                     ValueTypeToString(value_type), float_ss.str(), binary_ss.str());
 }
 
-std::string DumpToString(const VectorWithId& obj) {
-  return fmt::format("VectorWithId {{ id: {}, vector: {} }}", obj.id, DumpToString(obj.vector));
+std::string VectorWithId::ToString() const {
+  return fmt::format("VectorWithId {{ id: {}, vector: {} }}", id, vector.ToString());
 }
 
-std::string DumpToString(const VectorWithDistance& obj) {
-  return fmt::format("VectorWithDistance {{ vector: {}, distance: {}, metric_type: {} }}",
-                     DumpToString(obj.vector_data), obj.distance, MetricTypeToString(obj.metric_type));
+std::string VectorWithDistance::ToString() const {
+  return fmt::format("VectorWithDistance {{ vector: {}, distance: {}, metric_type: {} }}", vector_data.ToString(),
+                     distance, MetricTypeToString(metric_type));
 }
 
-std::string DumpToString(const SearchResult& obj) {
+std::string SearchResult::ToString() const {
   std::ostringstream oss;
-  oss << "SearchResult { id: " << DumpToString(obj.id) << ", vector_datas: [";
-  for (const auto& vector_data : obj.vector_datas) {
-    oss << DumpToString(vector_data) << ", ";
+  oss << "SearchResult { id: " << id.ToString() << ", vector_datas: [";
+  for (const auto& vector_data : vector_datas) {
+    oss << vector_data.ToString() << ", ";
   }
   oss << "]}";
   return oss.str();
 }
 
-std::string DumpToString(const DeleteResult& obj) {
-  return fmt::format("DeleteResult {{ vector_id: {}, deleted: {} }}", obj.vector_id, (obj.deleted ? "true" : "false"));
+std::string DeleteResult::ToString() const {
+  return fmt::format("DeleteResult {{ vector_id: {}, deleted: {} }}", vector_id, (deleted ? "true" : "false"));
+}
+
+std::string QueryResult::ToString() const {
+  std::ostringstream oss;
+  oss << "QueryResult: {";
+  oss << "vectors: [";
+  for (const auto& vector : vectors) {
+    oss << vector.ToString() << ", ";
+  }
+  oss << "]";
+  oss << "}";
+  return oss.str();
 }
 
 std::string VectorIndexTypeToString(VectorIndexType type) {

@@ -18,6 +18,7 @@
 #include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_add_task.h"
+#include "sdk/vector/vector_batch_query_task.h"
 #include "sdk/vector/vector_delete_task.h"
 #include "sdk/vector/vector_index_cache.h"
 #include "sdk/vector/vector_search_task.h"
@@ -43,7 +44,7 @@ Status VectorClient::AddByIndexName(int64_t schema_id, const std::string& index_
   return task.Run();
 }
 
-Status VectorClient::SearchByIndexId(int64_t index_id, const SearchParameter& search_param,
+Status VectorClient::SearchByIndexId(int64_t index_id, const SearchParam& search_param,
                                      const std::vector<VectorWithId>& target_vectors,
                                      std::vector<SearchResult>& out_result) {
   VectorSearchTask task(stub_, index_id, search_param, target_vectors, out_result);
@@ -51,7 +52,7 @@ Status VectorClient::SearchByIndexId(int64_t index_id, const SearchParameter& se
 }
 
 Status VectorClient::SearchByIndexName(int64_t schema_id, const std::string& index_name,
-                                       const SearchParameter& search_param,
+                                       const SearchParam& search_param,
                                        const std::vector<VectorWithId>& target_vectors,
                                        std::vector<SearchResult>& out_result) {
   int64_t index_id{0};
@@ -75,6 +76,21 @@ Status VectorClient::DeleteByIndexName(int64_t schema_id, const std::string& ind
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
   CHECK_GT(index_id, 0);
   VectorDeleteTask task(stub_, index_id, vector_ids, out_result);
+  return task.Run();
+}
+
+Status VectorClient::BatchQueryByIndexId(int64_t index_id, const QueryParam& query_param, QueryResult& out_result) {
+  VectorBatchQueryTask task(stub_, index_id, query_param, out_result);
+  return task.Run();
+}
+
+Status VectorClient::BatchQueryByIndexName(int64_t schema_id, const std::string& index_name,
+                                           const QueryParam& query_param, QueryResult& out_result) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+  VectorBatchQueryTask task(stub_, index_id, query_param, out_result);
   return task.Run();
 }
 

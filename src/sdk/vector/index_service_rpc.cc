@@ -33,6 +33,7 @@ DEFINE_INDEX_SERVICE_RPC(Hello);
 DEFINE_INDEX_SERVICE_RPC(VectorAdd);
 DEFINE_INDEX_SERVICE_RPC(VectorSearch);
 DEFINE_INDEX_SERVICE_RPC(VectorDelete);
+DEFINE_INDEX_SERVICE_RPC(VectorBatchQuery);
 
 }  // namespace sdk
 }  // namespace dingodb
