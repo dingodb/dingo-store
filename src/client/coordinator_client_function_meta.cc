@@ -153,6 +153,8 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
     request.set_tenant_id(FLAGS_tenant_id);
   }
 
+  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
+
   auto status = coordinator_interaction->SendRequest("GetSchemaByName", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
