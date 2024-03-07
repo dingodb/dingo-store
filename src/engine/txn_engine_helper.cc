@@ -3868,6 +3868,9 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     return;
   }
 
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn_gc] gc task start. safe_point_ts : {}", safe_point_ts);
+
   gc_safe_point->SetForceGcStop(false);
 
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
@@ -3980,6 +3983,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
   gc_safe_point->SetLastAccomplishedSafePointTs(safe_point_ts);
 #endif
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn_gc] gc task end. safe_point_ts : {}", safe_point_ts);
 }
 
 }  // namespace dingodb
