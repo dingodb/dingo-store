@@ -70,6 +70,8 @@ DECLARE_string(vector_data);
 DECLARE_string(csv_data);
 DECLARE_string(csv_output);
 DECLARE_int32(dimension);
+DECLARE_string(scalar_key);
+DECLARE_string(scalar_value);
 
 // for calc distance
 DEFINE_string(vector_data1, "", "vector data 1");
@@ -503,27 +505,66 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
 
-    for (int k = 0; k < 2; k++) {
-      ::dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
-      field->set_string_data("value" + std::to_string(k));
+    if (FLAGS_scalar_filter_key.empty() || FLAGS_scalar_filter_value.empty()) {
+      DINGO_LOG(ERROR) << "scalar_filter_key or scalar_filter_value is empty";
+      return;
+    }
 
-      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+    if (!FLAGS_scalar_filter_key.empty()) {
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(FLAGS_scalar_filter_value);
+
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key, scalar_value});
+
+      DINGO_LOG(INFO) << "scalar_filter_key: " << FLAGS_scalar_filter_key
+                      << " scalar_filter_value: " << FLAGS_scalar_filter_value;
+    }
+
+    if (!FLAGS_scalar_filter_key2.empty()) {
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(FLAGS_scalar_filter_value2);
+
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key2, scalar_value});
+
+      DINGO_LOG(INFO) << "scalar_filter_key2: " << FLAGS_scalar_filter_key2
+                      << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
     }
   }
 
   if (FLAGS_with_scalar_post_filter) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
+    if (FLAGS_scalar_filter_key.empty() || FLAGS_scalar_filter_value.empty()) {
+      DINGO_LOG(ERROR) << "scalar_filter_key or scalar_filter_value is empty";
+      return;
+    }
 
-    for (int k = 0; k < 2; k++) {
-      ::dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-      ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
-      field->set_string_data("value" + std::to_string(k));
+    if (!FLAGS_scalar_filter_key.empty()) {
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(FLAGS_scalar_filter_value);
 
-      vector->mutable_scalar_data()->mutable_scalar_data()->insert({"key" + std::to_string(k), scalar_value});
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key, scalar_value});
+
+      DINGO_LOG(INFO) << "scalar_filter_key: " << FLAGS_scalar_filter_key
+                      << " scalar_filter_value: " << FLAGS_scalar_filter_value;
+    }
+
+    if (!FLAGS_scalar_filter_key2.empty()) {
+      dingodb::pb::common::ScalarValue scalar_value;
+      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+      field->set_string_data(FLAGS_scalar_filter_value2);
+
+      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key2, scalar_value});
+
+      DINGO_LOG(INFO) << "scalar_filter_key2: " << FLAGS_scalar_filter_key2
+                      << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
     }
   }
 
@@ -580,21 +621,23 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
       }
     }
 
-    for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
-      std::vector<float> x_i = dingodb::Helper::PbRepeatedToVector(vector->vector().float_values());
-      std::vector<float> y_j =
-          dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values());
+    if (!FLAGS_without_vector) {
+      for (const auto& vector_with_distance : batch_result.vector_with_distances()) {
+        std::vector<float> x_i = dingodb::Helper::PbRepeatedToVector(vector->vector().float_values());
+        std::vector<float> y_j =
+            dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values());
 
-      auto faiss_l2 = dingodb::Helper::DingoFaissL2sqr(x_i.data(), y_j.data(), dimension);
-      auto faiss_ip = dingodb::Helper::DingoFaissInnerProduct(x_i.data(), y_j.data(), dimension);
-      auto hnsw_l2 = dingodb::Helper::DingoHnswL2Sqr(x_i.data(), y_j.data(), dimension);
-      auto hnsw_ip = dingodb::Helper::DingoHnswInnerProduct(x_i.data(), y_j.data(), dimension);
-      auto hnsw_ip_dist = dingodb::Helper::DingoHnswInnerProductDistance(x_i.data(), y_j.data(), dimension);
+        auto faiss_l2 = dingodb::Helper::DingoFaissL2sqr(x_i.data(), y_j.data(), dimension);
+        auto faiss_ip = dingodb::Helper::DingoFaissInnerProduct(x_i.data(), y_j.data(), dimension);
+        auto hnsw_l2 = dingodb::Helper::DingoHnswL2Sqr(x_i.data(), y_j.data(), dimension);
+        auto hnsw_ip = dingodb::Helper::DingoHnswInnerProduct(x_i.data(), y_j.data(), dimension);
+        auto hnsw_ip_dist = dingodb::Helper::DingoHnswInnerProductDistance(x_i.data(), y_j.data(), dimension);
 
-      DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id()
-                      << ", distance: " << vector_with_distance.distance() << ", [faiss_l2: " << faiss_l2
-                      << ", faiss_ip: " << faiss_ip << ", hnsw_l2: " << hnsw_l2 << ", hnsw_ip: " << hnsw_ip
-                      << ", hnsw_ip_dist: " << hnsw_ip_dist << "]";
+        DINGO_LOG(INFO) << "vector_id: " << vector_with_distance.vector_with_id().id()
+                        << ", distance: " << vector_with_distance.distance() << ", [faiss_l2: " << faiss_l2
+                        << ", faiss_ip: " << faiss_ip << ", hnsw_l2: " << hnsw_l2 << ", hnsw_ip: " << hnsw_ip
+                        << ", hnsw_ip_dist: " << hnsw_ip_dist << "]";
+      }
     }
   }
 
@@ -1732,19 +1775,37 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
     }
 
     if (with_scalar) {
-      for (int k = 0; k < 2; ++k) {
-        auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-        dingodb::pb::common::ScalarValue scalar_value;
-        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-        scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
-        (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
-      }
-      for (int k = 2; k < 4; ++k) {
-        auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-        dingodb::pb::common::ScalarValue scalar_value;
-        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
-        scalar_value.add_fields()->set_long_data(k);
-        (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+      if (FLAGS_scalar_filter_key.empty() || FLAGS_scalar_filter_value.empty()) {
+        for (int k = 0; k < 2; ++k) {
+          auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+          dingodb::pb::common::ScalarValue scalar_value;
+          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+          scalar_value.add_fields()->set_string_data(fmt::format("scalar_value{}", k));
+          (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+        }
+        for (int k = 2; k < 4; ++k) {
+          auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+          dingodb::pb::common::ScalarValue scalar_value;
+          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+          scalar_value.add_fields()->set_long_data(k);
+          (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
+        }
+      } else {
+        if (!FLAGS_scalar_filter_key.empty()) {
+          auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+          dingodb::pb::common::ScalarValue scalar_value;
+          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+          scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value);
+          (*scalar_data)[FLAGS_scalar_filter_key] = scalar_value;
+        }
+
+        if (!FLAGS_scalar_filter_key2.empty()) {
+          auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+          dingodb::pb::common::ScalarValue scalar_value;
+          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+          scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value2);
+          (*scalar_data)[FLAGS_scalar_filter_key2] = scalar_value;
+        }
       }
     }
 

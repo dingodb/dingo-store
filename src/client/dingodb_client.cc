@@ -157,6 +157,8 @@ DEFINE_bool(with_vector_ids, false, "Search vector with vector ids list default 
 DEFINE_bool(with_scalar_pre_filter, false, "Search vector with scalar data pre filter");
 DEFINE_bool(with_scalar_post_filter, false, "Search vector with scalar data post filter");
 DEFINE_bool(with_table_pre_filter, false, "Search vector with table data pre filter");
+DEFINE_string(scalar_key, "", "Request scalar_key");
+DEFINE_string(scalar_value, "", "Request scalar_value");
 DEFINE_int32(vector_ids_count, 100, "vector ids count");
 DEFINE_string(csv_data, "", "csv data");
 DEFINE_string(json_data, "", "json data");

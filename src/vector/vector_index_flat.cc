@@ -166,8 +166,8 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                      std::vector<std::shared_ptr<FilterFunctor>> filters, bool,
+butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                      const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool,
                                       const pb::common::VectorSearchParameter&,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
@@ -230,8 +230,8 @@ butil::Status VectorIndexFlat::Search(std::vector<pb::common::VectorWithId> vect
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexFlat::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                           std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+                                           const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                            bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
