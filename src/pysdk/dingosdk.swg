@@ -42,6 +42,7 @@ using namespace dingodb::sdk;
 // vector index creator
 %apply bool& OUTPUT { bool& out_create_in_progress };
 %apply int64_t& OUTPUT  { int64_t& out_index_id };
+%apply int64_t& OUTPUT  { int64_t& out_vector_id };
 
 // rawkv
 %apply std::string& OUTPUT { std::string& out_value };
@@ -79,6 +80,8 @@ namespace dingodb {
         %feature("docstring") VectorClient::DeleteByIndexName "return Status, std::vector<DeleteResult> out_result"
         %feature("docstring") VectorClient::BatchQueryByIndexId "return Status, QueryResult out_result"
         %feature("docstring") VectorClient::BatchQueryByIndexName "return Status, QueryResult out_result"
+        %feature("docstring") VectorClient::GetBorderByIndexId "return Status, int64_t out_vector_id"
+        %feature("docstring") VectorClient::GetBorderByIndexName "return Status, int64_t out_vector_id"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;

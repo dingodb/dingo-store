@@ -124,6 +124,29 @@ def vector_query(use_index_name=False):
     print(f"vector query result: {query_result.ToString()}")
     assert(len(query_result.vectors) == len(g_vector_ids))
 
+def vector_get_border(use_index_name=False):
+    # get max
+    vector_id = 0
+    if use_index_name:
+        tmp, vector_id= g_vector_client.GetBorderByIndexName(g_schema_id, g_index_name, True)
+    else:
+        tmp, vector_id = g_vector_client.GetBorderByIndexId(g_index_id, True)
+
+    print(f"vector get border: {tmp.ToString()}, max vector id: {vector_id}")
+    if tmp.ok():
+        assert vector_id == g_vector_ids[-1]
+
+    # get min
+    vector_id = 0
+    if use_index_name:
+        tmp, vector_id= g_vector_client.GetBorderByIndexName(g_schema_id, g_index_name, False)
+    else:
+        tmp, vector_id = g_vector_client.GetBorderByIndexId(g_index_id, False)
+
+    print(f"vector get border: {tmp.ToString()}, min vector id: {vector_id}")
+    if tmp.ok():
+        assert vector_id == g_vector_ids[0]
+
 def vector_delete(use_index_name=False):
     if use_index_name:
         tmp, result = g_vector_client.DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids)
@@ -143,6 +166,7 @@ if __name__ == "__main__":
     vector_add()
     vector_search()
     vector_query()
+    vector_get_border()
     vector_delete()
     post_clean()
 
@@ -150,6 +174,7 @@ if __name__ == "__main__":
     vector_add(True)
     vector_search(True)
     vector_query(True)
+    vector_get_border(True)
     vector_delete(True)
     post_clean(True)
 

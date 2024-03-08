@@ -20,6 +20,7 @@
 #include "sdk/vector/vector_add_task.h"
 #include "sdk/vector/vector_batch_query_task.h"
 #include "sdk/vector/vector_delete_task.h"
+#include "sdk/vector/vector_get_border_task.h"
 #include "sdk/vector/vector_index_cache.h"
 #include "sdk/vector/vector_search_task.h"
 
@@ -52,8 +53,7 @@ Status VectorClient::SearchByIndexId(int64_t index_id, const SearchParam& search
 }
 
 Status VectorClient::SearchByIndexName(int64_t schema_id, const std::string& index_name,
-                                       const SearchParam& search_param,
-                                       const std::vector<VectorWithId>& target_vectors,
+                                       const SearchParam& search_param, const std::vector<VectorWithId>& target_vectors,
                                        std::vector<SearchResult>& out_result) {
   int64_t index_id{0};
   DINGO_RETURN_NOT_OK(
@@ -91,6 +91,21 @@ Status VectorClient::BatchQueryByIndexName(int64_t schema_id, const std::string&
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
   CHECK_GT(index_id, 0);
   VectorBatchQueryTask task(stub_, index_id, query_param, out_result);
+  return task.Run();
+}
+
+Status VectorClient::GetBorderByIndexId(int64_t index_id, bool is_max, int64_t& out_vector_id) {
+  VectorGetBorderTask task(stub_, index_id, is_max, out_vector_id);
+  return task.Run();
+}
+
+Status VectorClient::GetBorderByIndexName(int64_t schema_id, const std::string& index_name, bool is_max,
+                                          int64_t& out_vector_id) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+  VectorGetBorderTask task(stub_, index_id, is_max, out_vector_id);
   return task.Run();
 }
 

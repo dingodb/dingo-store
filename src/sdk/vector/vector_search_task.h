@@ -82,7 +82,10 @@ class VectorSearchPartTask : public VectorTask {
 
   ~VectorSearchPartTask() override = default;
 
-  std::unordered_map<int64_t, std::vector<VectorWithDistance>>& GetSearchResult() { return search_result_; }
+  std::unordered_map<int64_t, std::vector<VectorWithDistance>>& GetSearchResult() {
+    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    return search_result_;
+  }
 
  private:
   friend class VectorSearchTask;
