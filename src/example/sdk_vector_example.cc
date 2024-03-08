@@ -214,6 +214,40 @@ static void VectorQuey(bool use_index_name = false) {
   CHECK_EQ(result.vectors.size(), g_vector_ids.size());
 }
 
+static void VectorGetBorder(bool use_index_name = false) {
+  {
+    // get max
+    Status tmp;
+    int64_t vector_id = 0;
+    if (use_index_name) {
+      tmp = g_vector_client->GetBorderByIndexName(g_schema_id, g_index_name, true, vector_id);
+    } else {
+      tmp = g_vector_client->GetBorderByIndexId(g_index_id, true, vector_id);
+    }
+
+    DINGO_LOG(INFO) << "vector get border:" << tmp.ToString() << ", max vecotor id:" << vector_id;
+    if (tmp.ok()) {
+      CHECK_EQ(vector_id, g_vector_ids[g_vector_ids.size() - 1]);
+    }
+  }
+
+  {
+    // get min
+    Status tmp;
+    int64_t vector_id = 0;
+    if (use_index_name) {
+      tmp = g_vector_client->GetBorderByIndexName(g_schema_id, g_index_name, false, vector_id);
+    } else {
+      tmp = g_vector_client->GetBorderByIndexId(g_index_id, false, vector_id);
+    }
+
+    DINGO_LOG(INFO) << "vector get border:" << tmp.ToString() << ", min vecotor id:" << vector_id;
+    if (tmp.ok()) {
+      CHECK_EQ(vector_id, g_vector_ids[0]);
+    }
+  }
+}
+
 static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
@@ -260,6 +294,7 @@ int main(int argc, char* argv[]) {
     VectorAdd();
     VectorSearch();
     VectorQuey();
+    VectorGetBorder();
     VectorDelete();
     VectorSearch();
 
@@ -273,6 +308,7 @@ int main(int argc, char* argv[]) {
     VectorAdd(true);
     VectorSearch(true);
     VectorQuey(true);
+    VectorGetBorder(true);
     VectorDelete(true);
     VectorSearch(true);
 

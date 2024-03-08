@@ -101,7 +101,6 @@ struct HnswParam {
       : dimension(p_dimension), metric_type(p_metric_type), max_elements(p_max_elements) {}
 
   static VectorIndexType Type() { return VectorIndexType::kHnsw; }
-
 };
 
 struct DiskAnnParam {
@@ -431,6 +430,9 @@ class VectorClient {
   Status BatchQueryByIndexId(int64_t index_id, const QueryParam& query_param, QueryResult& out_result);
   Status BatchQueryByIndexName(int64_t schema_id, const std::string& index_name, const QueryParam& query_param,
                                QueryResult& out_result);
+
+  Status GetBorderByIndexId(int64_t index_id, bool is_max, int64_t& out_vector_id);
+  Status GetBorderByIndexName(int64_t schema_id, const std::string& index_name, bool is_max, int64_t& out_vector_id);
 
  private:
   friend class Client;
