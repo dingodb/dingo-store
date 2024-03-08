@@ -1562,7 +1562,7 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
         *response->add_txn_result()->mutable_locked() = lock_info;
         continue;
       } else if (lock_info.lock_ts() == start_ts) {
-        if (lock_info.for_update_ts() == for_update_ts) {
+        if (lock_info.for_update_ts() <= for_update_ts) {
           // this is same pessimistic lock request, just do rollback.
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
