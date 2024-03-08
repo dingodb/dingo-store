@@ -192,9 +192,9 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexRawIvfPq::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                          std::vector<std::shared_ptr<FilterFunctor>> filters, bool /*reconstruct*/,
-                                          const pb::common::VectorSearchParameter& parameter,
+butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                          const std::vector<std::shared_ptr<FilterFunctor>>& filters,
+                                          bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                           std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "vector_with_ids is empty";
@@ -272,8 +272,9 @@ butil::Status VectorIndexRawIvfPq::Search(std::vector<pb::common::VectorWithId> 
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexRawIvfPq::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                               std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                               float radius,
+                                               const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                                bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                                std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {

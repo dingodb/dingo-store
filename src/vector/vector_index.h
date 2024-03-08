@@ -150,14 +150,14 @@ class VectorIndex {
 
   virtual butil::Status Load(const std::string& path);
 
-  virtual butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                               std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+  virtual butil::Status Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                               const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                const pb::common::VectorSearchParameter& parameter,
                                std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
-  virtual butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
-                                    const pb::common::VectorSearchParameter& parameter,
+  virtual butil::Status RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+                                    const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+                                    bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                     std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
   virtual void LockWrite() = 0;
@@ -359,7 +359,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
                             const pb::common::VectorSearchParameter& parameter,
                             std::vector<pb::index::VectorWithDistanceResult>& results);
 
-  static butil::Status SetVectorIndexFilter(
+  static butil::Status SetVectorIndexRangeFilter(
       VectorIndexPtr vector_index,
       std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
       int64_t min_vector_id, int64_t max_vector_id);

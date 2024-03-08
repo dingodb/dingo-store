@@ -858,7 +858,12 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
     VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
-    VectorIndexWrapper::SetVectorIndexFilter(vector_index, filters, min_vector_id, max_vector_id);
+    auto ret = VectorIndexWrapper::SetVectorIndexRangeFilter(vector_index, filters, min_vector_id, max_vector_id);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] set vector index filter failed, error: {}",
+                                      Id(), ret.error_str());
+      return ret;
+    }
   }
 
   return vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results);
@@ -914,7 +919,12 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
     VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
-    VectorIndexWrapper::SetVectorIndexFilter(vector_index, filters, min_vector_id, max_vector_id);
+    auto ret = VectorIndexWrapper::SetVectorIndexRangeFilter(vector_index, filters, min_vector_id, max_vector_id);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] set vector index filter failed, error: {}",
+                                      Id(), ret.error_str());
+      return ret;
+    }
   }
 
   return vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results);
@@ -935,14 +945,13 @@ bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
   return true;
 }
 
-butil::Status VectorIndexWrapper::SetVectorIndexFilter(
-    VectorIndexPtr vector_index,
-    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
+butil::Status VectorIndexWrapper::SetVectorIndexRangeFilter(
+    VectorIndexPtr vector_index, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
     int64_t min_vector_id, int64_t max_vector_id) {
   if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-    // filters.push_back(std::make_shared<VectorIndex::FlatRangeFilterFunctor>(min_vector_id, max_vector_id));
+  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT ||
+             vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
     filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
   } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
@@ -952,8 +961,16 @@ butil::Status VectorIndexWrapper::SetVectorIndexFilter(
     } else if (vector_index->VectorIndexSubType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
       filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
     } else {
-      // do nothing
+      return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
+                           fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
+                                       pb::common::VectorIndexType_Name(vector_index->VectorIndexType()),
+                                       pb::common::VectorIndexType_Name(vector_index->VectorIndexSubType())));
     }
+  } else {
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
+                         fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
+                                     pb::common::VectorIndexType_Name(vector_index->VectorIndexType()),
+                                     pb::common::VectorIndexType_Name(vector_index->VectorIndexSubType())));
   }
 
   return butil::Status::OK();

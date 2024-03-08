@@ -51,13 +51,13 @@ class VectorIndexBruteforce : public VectorIndex {
 
   butil::Status Delete(const std::vector<int64_t>& delete_ids) override;
 
-  butil::Status Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+  butil::Status Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                        const pb::common::VectorSearchParameter& parameter,
                        std::vector<pb::index::VectorWithDistanceResult>& results) override;
 
-  butil::Status RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
+  butil::Status RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+                            const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
                             const pb::common::VectorSearchParameter& parameter,
                             std::vector<pb::index::VectorWithDistanceResult>& results) override;
 

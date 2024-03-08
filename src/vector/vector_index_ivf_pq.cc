@@ -145,8 +145,8 @@ butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vector_with_ids, uint32_t topk,
-                                       std::vector<std::shared_ptr<FilterFunctor>> filters, bool reconstruct,
+butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
   BvarLatencyGuard bvar_guard(&g_ivf_pq_search_latency);
@@ -167,8 +167,8 @@ butil::Status VectorIndexIvfPq::Search(std::vector<pb::common::VectorWithId> vec
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfPq::RangeSearch(std::vector<pb::common::VectorWithId> vector_with_ids, float radius,
-                                            std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters,
+butil::Status VectorIndexIvfPq::RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+                                            const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
   BvarLatencyGuard bvar_guard(&g_ivf_pq_range_search_latency);

@@ -48,16 +48,16 @@ butil::Status VectorIndexBruteforce::Add(const std::vector<pb::common::VectorWit
 
 butil::Status VectorIndexBruteforce::Delete(const std::vector<int64_t>& /*delete_ids*/) { return butil::Status::OK(); }
 
-butil::Status VectorIndexBruteforce::Search(std::vector<pb::common::VectorWithId> /*vector_with_ids*/,
-                                            uint32_t /*topk*/, std::vector<std::shared_ptr<FilterFunctor>> /*filters*/,
+butil::Status VectorIndexBruteforce::Search(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/,
+                                            uint32_t /*topk*/, const std::vector<std::shared_ptr<FilterFunctor>>& /*filters*/,
                                             bool, const pb::common::VectorSearchParameter&,
                                             std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "not support");
 }
 
-butil::Status VectorIndexBruteforce::RangeSearch(std::vector<pb::common::VectorWithId> /*vector_with_ids*/,
+butil::Status VectorIndexBruteforce::RangeSearch(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/,
                                                  float /*radius*/,
-                                                 std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> /*filters*/,
+                                                 const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& /*filters*/,
                                                  bool /*reconstruct*/,
                                                  const pb::common::VectorSearchParameter& /*parameter*/,
                                                  std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {

@@ -134,12 +134,11 @@ class VectorReader {
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results, int64_t& scan_scalar_time_us,
-      int64_t& search_time_us);  // NOLINT
+      int64_t& search_time_us);
 
-  static butil::Status SetVectorIndexFilter(
-      VectorIndexWrapperPtr vector_index,
-      std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,  // NOLINT
-      const std::vector<int64_t>& vector_ids);
+  static butil::Status SetVectorIndexIdsFilter(VectorIndexWrapperPtr vector_index,
+                                               std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+                                               const std::vector<int64_t>& vector_ids);
 
   butil::Status SearchAndRangeSearchWrapper(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,

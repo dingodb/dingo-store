@@ -797,10 +797,15 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
     const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  VectorReader::SetVectorIndexFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto status =
+      VectorReader::SetVectorIndexIdsFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_str();
+    return status;
+  }
 
-  butil::Status status = VectorReader::SearchAndRangeSearchWrapper(
-      vector_index, region_range, vector_with_ids, parameter, vector_with_distance_results, parameter.top_n(), filters);
+  status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
+                                                     vector_with_distance_results, parameter.top_n(), filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -816,7 +821,14 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
 
   // scalar pre filter search
   butil::Status status;
-#if !defined(ENABLE_SCALAR_WITH_COPROCESSOR)
+  bool use_coprocessor = parameter.has_vector_coprocessor();
+
+  if (!use_coprocessor && vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
+    std::string s = fmt::format("vector_with_ids[0].scalar_data() empty not support");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
   const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
   auto lambda_scalar_compare_function =
       [&std_vector_scalar](const pb::common::VectorScalardata& internal_vector_scalar) {
@@ -834,21 +846,16 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
         return true;
       };
 
-#else  // ENABLE_SCALAR_WITH_COPROCESSOR
-  if (!parameter.has_vector_coprocessor()) {
-    std::string s = fmt::format("vector_coprocessor empty not support");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
-
   const auto& coprocessor = parameter.vector_coprocessor();
 
   std::shared_ptr<RawCoprocessor> scalar_coprocessor = std::make_shared<CoprocessorScalar>();
 
-  status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
-    return status;
+  if (use_coprocessor) {
+    status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
+      return status;
+    }
   }
 
   auto lambda_scalar_compare_with_coprocessor_function =
@@ -863,10 +870,6 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
         return is_reverse;
       };
 
-#endif  // #if defined(!ENABLE_SCALAR_WITH_COPROCESSOR)
-
-  // std::string start_key = VectorCodec::FillVectorScalarPrefix(region_range.start_key());
-  // std::string end_key = VectorCodec::FillVectorScalarPrefix(region_range.end_key());
   const std::string& start_key = region_range.start_key();
   const std::string& end_key = region_range.end_key();
 
@@ -889,11 +892,9 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
       return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
     }
 
-#if !defined(ENABLE_SCALAR_WITH_COPROCESSOR)
-    bool compare_result = lambda_scalar_compare_function(internal_vector_scalar);
-#else
-    bool compare_result = lambda_scalar_compare_with_coprocessor_function(internal_vector_scalar);
-#endif
+    bool compare_result = use_coprocessor ? lambda_scalar_compare_with_coprocessor_function(internal_vector_scalar)
+                                          : lambda_scalar_compare_function(internal_vector_scalar);
+
     if (compare_result) {
       std::string key(iter->Key());
       int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
@@ -907,7 +908,11 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  VectorReader::SetVectorIndexFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
   status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
                                                      vector_with_distance_results, parameter.top_n(), filters);
@@ -997,7 +1002,11 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  VectorReader::SetVectorIndexFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
   status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
                                                      vector_with_distance_results, parameter.top_n(), filters);
@@ -1225,15 +1234,20 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(  // NOLINT
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   auto start_ids = lambda_time_now_function();
-  VectorReader::SetVectorIndexFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto status =
+      VectorReader::SetVectorIndexIdsFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
   auto end_ids = lambda_time_now_function();
   deserialization_id_time_us = lambda_time_diff_microseconds_function(start_ids, end_ids);
 
   auto start_search = lambda_time_now_function();
 
-  butil::Status status = VectorReader::SearchAndRangeSearchWrapper(
-      vector_index, region_range, vector_with_ids, parameter, vector_with_distance_results, parameter.top_n(), filters);
+  status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
+                                                     vector_with_distance_results, parameter.top_n(), filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1350,7 +1364,11 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
 
-  VectorReader::SetVectorIndexFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
   auto start_search = lambda_time_now_function();
 
@@ -1366,12 +1384,13 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::SetVectorIndexFilter(VectorIndexWrapperPtr vector_index,
-                                                 std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
-                                                 const std::vector<int64_t>& vector_ids) {
+butil::Status VectorReader::SetVectorIndexIdsFilter(VectorIndexWrapperPtr vector_index,
+                                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+                                                    const std::vector<int64_t>& vector_ids) {
   if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
     filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
+  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT ||
+             vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
     filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids));
   } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
     filters.push_back(std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(vector_ids));
@@ -1381,9 +1400,18 @@ butil::Status VectorReader::SetVectorIndexFilter(VectorIndexWrapperPtr vector_in
     } else if (vector_index->SubType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
       filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids));
     } else {
-      // do nothing
+      return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
+                           fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
+                                       pb::common::VectorIndexType_Name(vector_index->Type()),
+                                       pb::common::VectorIndexType_Name(vector_index->SubType())));
     }
+  } else {
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
+                         fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
+                                     pb::common::VectorIndexType_Name(vector_index->Type()),
+                                     pb::common::VectorIndexType_Name(vector_index->SubType())));
   }
+
   return butil::Status::OK();
 }
 
@@ -1435,7 +1463,7 @@ butil::Status VectorReader::SearchAndRangeSearchWrapper(
       status = vector_index->Search(vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
                                     vector_with_distance_results);
       if (status.error_code() == pb::error::Errno::EVECTOR_NOT_SUPPORT) {
-        DINGO_LOG(INFO) << "Search vector index not support, try brute force, id: " << vector_index->Id();
+        DINGO_LOG(DEBUG) << "Search vector index not support, try brute force, id: " << vector_index->Id();
         return BruteForceSearch(vector_index, vector_with_ids, topk, region_range, filters, with_vector_data, parameter,
                                 vector_with_distance_results);
       } else if (!status.ok()) {
