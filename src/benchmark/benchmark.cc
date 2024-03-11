@@ -107,7 +107,7 @@ DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
 
 DECLARE_uint32(vector_put_batch_size);
 DECLARE_uint32(vector_arrange_concurrency);
-DECLARE_bool(vector_search_not_insert);
+DECLARE_bool(vector_search_arrange_data);
 
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);

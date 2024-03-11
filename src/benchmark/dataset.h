@@ -138,18 +138,6 @@ class Movielens10mDataset : public BaseDataset {
   ~Movielens10mDataset() override = default;
 };
 
-// dataset utils
-class DatasetUtils {
- public:
-  static void Test();
-
-  // split dataset for generate test dataset
-  static void SplitDataset(const std::string& filepath, uint32_t data_num);
-  // generate test dataset neighbors
-  static void GenTestDataset(const std::string& dataset_name, const std::string& test_dataset_filepath,
-                             const std::string& train_dataset_dirpath);
-};
-
 struct BatchVectorEntry {
   std::vector<sdk::VectorWithId> vector_with_ids;
 };
