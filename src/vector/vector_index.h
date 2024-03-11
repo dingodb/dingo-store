@@ -66,26 +66,6 @@ class VectorIndex {
     int64_t max_vector_id_;
   };
 
-  // Range filter just for flat
-  // Range transform list
-  // deprecated
-  class FlatRangeFilterFunctor : public FilterFunctor {
-   public:
-    FlatRangeFilterFunctor(int64_t min_vector_id, int64_t max_vector_id)
-        : min_vector_id_(min_vector_id), max_vector_id_(max_vector_id) {}
-
-    void Build(std::vector<faiss::idx_t>& id_map) override { this->id_map_ = &id_map; }
-
-    bool Check(int64_t index) override {
-      return (*id_map_)[index] >= min_vector_id_ && (*id_map_)[index] < max_vector_id_;
-    }
-
-   private:
-    int64_t min_vector_id_;
-    int64_t max_vector_id_;
-    std::vector<faiss::idx_t>* id_map_{nullptr};
-  };
-
   class ConcreteFilterFunctor : public FilterFunctor, public faiss::IDSelectorBatch {
    public:
     ConcreteFilterFunctor(const ConcreteFilterFunctor&) = delete;
@@ -99,35 +79,6 @@ class VectorIndex {
     ~ConcreteFilterFunctor() override = default;
 
     bool Check(int64_t vector_id) override { return is_member(vector_id); }
-  };
-
-  // List filter
-  // be careful not to use the parent class to release,
-  // otherwise there will be memory leaks
-  class HnswListFilterFunctor : public ConcreteFilterFunctor {
-   public:
-    explicit HnswListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
-    ~HnswListFilterFunctor() override = default;
-  };
-
-  class FlatListFilterFunctor : public ConcreteFilterFunctor {
-   public:
-    explicit FlatListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
-    ~FlatListFilterFunctor() override = default;
-  };
-
-  // List filter just for ivf flat
-  class IvfFlatListFilterFunctor : public ConcreteFilterFunctor {
-   public:
-    explicit IvfFlatListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
-    ~IvfFlatListFilterFunctor() override = default;
-  };
-
-  // List filter just for ivf pq
-  class IvfPqListFilterFunctor : public ConcreteFilterFunctor {
-   public:
-    explicit IvfPqListFilterFunctor(const std::vector<int64_t>& vector_ids) : ConcreteFilterFunctor(vector_ids) {}
-    ~IvfPqListFilterFunctor() override = default;
   };
 
   virtual int32_t GetDimension() = 0;

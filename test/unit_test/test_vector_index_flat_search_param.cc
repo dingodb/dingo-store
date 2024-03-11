@@ -212,7 +212,7 @@ TEST_F(VectorIndexFlatSearchParamTest, Search) {
     auto vector_ids_for_search_copy = vector_ids_for_search;
 
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-    filters.emplace_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids_for_search)));
+    filters.emplace_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_ids_for_search)));
 
     ok = vector_index_flat->Search(vector_with_ids, topk, filters, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);

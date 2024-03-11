@@ -407,8 +407,8 @@ TEST_F(VectorIndexIvfPqTest, SearchNotTrain) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -484,8 +484,8 @@ TEST_F(VectorIndexIvfPqTest, RangeSearchNotTrain) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -1093,8 +1093,8 @@ TEST_F(VectorIndexIvfPqTest, Search) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -1230,8 +1230,8 @@ TEST_F(VectorIndexIvfPqTest, RangeSearch) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -1431,8 +1431,8 @@ TEST_F(VectorIndexIvfPqTest, SearchAfterLoad) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -1568,8 +1568,8 @@ TEST_F(VectorIndexIvfPqTest, RangeSearchAfterLoad) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -2140,8 +2140,8 @@ TEST_F(VectorIndexIvfPqTest, SearchForIvfPq) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);
@@ -2401,8 +2401,8 @@ TEST_F(VectorIndexIvfPqTest, SearchAfterLoadForIvfPq) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfPqListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_pq()->set_nprobe(10);

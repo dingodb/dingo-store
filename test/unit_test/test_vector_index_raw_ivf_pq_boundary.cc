@@ -405,8 +405,8 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
           std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
           // std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-          std::shared_ptr<VectorIndex::IvfPqListFilterFunctor> filter =
-              std::make_shared<VectorIndex::IvfPqListFilterFunctor>(vector_select_ids);
+          std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+              std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_select_ids);
           bool reconstruct = false;
           pb::common::VectorSearchParameter parameter;
           parameter.mutable_ivf_pq()->set_nprobe(1);

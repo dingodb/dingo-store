@@ -1384,34 +1384,10 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::SetVectorIndexIdsFilter(VectorIndexWrapperPtr vector_index,
+butil::Status VectorReader::SetVectorIndexIdsFilter(VectorIndexWrapperPtr /*vector_index*/,
                                                     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                                     const std::vector<int64_t>& vector_ids) {
-  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
-    filters.push_back(std::make_shared<VectorIndex::HnswListFilterFunctor>(vector_ids));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_FLAT ||
-             vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
-    filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
-    filters.push_back(std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(vector_ids));
-  } else if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
-    if (vector_index->SubType() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
-      filters.push_back(std::make_shared<VectorIndex::IvfPqListFilterFunctor>(vector_ids));
-    } else if (vector_index->SubType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-      filters.push_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids));
-    } else {
-      return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
-                           fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
-                                       pb::common::VectorIndexType_Name(vector_index->Type()),
-                                       pb::common::VectorIndexType_Name(vector_index->SubType())));
-    }
-  } else {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
-                         fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
-                                     pb::common::VectorIndexType_Name(vector_index->Type()),
-                                     pb::common::VectorIndexType_Name(vector_index->SubType())));
-  }
-
+  filters.push_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids));
   return butil::Status::OK();
 }
 
