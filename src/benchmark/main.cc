@@ -18,9 +18,12 @@
 
 #include "benchmark/benchmark.h"
 #include "benchmark/dataset.h"
+#include "benchmark/dataset_util.h"
 #include "common/helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
+
+DECLARE_string(benchmark);
 
 const std::string kVersion = "0.1.0";
 
@@ -63,7 +66,7 @@ static std::string GetUsageMessage() {
   message += "\n  --ivf_nbits_per_idx IVF nbits per index, default(8)";
   message += "\n  --vector_index_id vector index id, default(0)";
   message += "\n  --vector_index_name vector index name, default()";
-  message += "\n  --vector_search_not_insert just search, not insert data, default(false)";
+  message += "\n  --vector_search_arrange_data arrange data, default(true)";
   message += "\n  --vector_search_topk vector search flag topk, default(10)";
   message += "\n  --vector_search_with_vector_data vector search flag with_vector_data, default(true)";
   message += "\n  --vector_search_with_scalar_data vector search flag with_scalar_data, default(false)";
@@ -123,8 +126,10 @@ int main(int argc, char* argv[]) {
   google::SetUsageMessage(GetUsageMessage());
   google::ParseCommandLineFlags(&argc, &argv, true);
 
-  // dingodb::benchmark::DatasetUtils::Test();
-  // return 0;
+  if (FLAGS_benchmark == "preprocess") {
+    dingodb::benchmark::DatasetUtils::Main();
+    return 0;
+  }
 
   SetupSignalHandler();
 

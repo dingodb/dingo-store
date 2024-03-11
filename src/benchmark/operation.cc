@@ -33,10 +33,11 @@
 #include "gflags/gflags.h"
 #include "gflags/gflags_declare.h"
 #include "glog/logging.h"
+#include "sdk/vector.h"
 
 DEFINE_string(benchmark, "fillseq", "Benchmark type");
 DEFINE_validator(benchmark, [](const char*, const std::string& value) -> bool {
-  return dingodb::benchmark::IsSupportBenchmarkType(value);
+  return dingodb::benchmark::IsSupportBenchmarkType(value) || value == "preprocess";
 });
 
 DEFINE_uint32(key_size, 64, "Key size");
@@ -62,6 +63,17 @@ DECLARE_bool(vector_search_with_table_data);
 DECLARE_bool(vector_search_use_brute_force);
 DECLARE_bool(vector_search_enable_range_search);
 DECLARE_double(vector_search_radius);
+DEFINE_string(vector_search_filter_type, "", "Vector search filter type, e.g. pre/post");
+DEFINE_validator(vector_search_filter_type, [](const char*, const std::string& value) -> bool {
+  auto filter_type = dingodb::Helper::ToUpper(value);
+  return filter_type.empty() || filter_type == "PRE" || filter_type == "POST";
+});
+
+DEFINE_string(vector_search_filter_source, "", "Vector search filter source, e.g. scalar/table/vector_id");
+DEFINE_validator(vector_search_filter_source, [](const char*, const std::string& value) -> bool {
+  auto filter_source = dingodb::Helper::ToUpper(value);
+  return filter_source.empty() || filter_source == "SCALAR" || filter_source == "TABLE" || filter_source == "VECTOR_ID";
+});
 
 DECLARE_uint32(vector_dimension);
 DECLARE_string(vector_value_type);
@@ -70,7 +82,7 @@ DEFINE_uint32(vector_put_batch_size, 512, "Vector put batch size");
 
 DEFINE_uint32(vector_arrange_concurrency, 10, "Vector arrange put concurrency");
 
-DEFINE_bool(vector_search_not_insert, false, "Just search, not insert data");
+DEFINE_bool(vector_search_arrange_data, true, "Arrange data for search");
 
 namespace dingodb {
 namespace benchmark {
@@ -487,6 +499,7 @@ Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
   if (!result.status.IsOK()) {
     return result;
   }
+
   result.status = vector_client->AddByIndexId(entry->index_id, vector_with_ids);
   if (!result.status.IsOK()) {
     LOG(ERROR) << fmt::format("put vector failed, error: {}", result.status.ToString());
@@ -888,7 +901,7 @@ Operation::Result VectorFillRandomOperation::Execute(VectorIndexEntryPtr entry) 
 }
 
 bool VectorSearchOperation::Arrange(VectorIndexEntryPtr entry, DatasetPtr dataset) {
-  if (FLAGS_vector_search_not_insert) {
+  if (!FLAGS_vector_search_arrange_data) {
     if (!FLAGS_vector_dataset.empty()) {
       entry->test_entries = dataset->GetTestData();
       return !entry->test_entries.empty();
@@ -917,7 +930,7 @@ bool VectorSearchOperation::ArrangeAutoData(VectorIndexEntryPtr entry) {
 
   std::atomic<int> stop_count = 0;
   std::atomic<uint32_t> count = 0;
-  std::atomic<uint32_t> fail_count = 0;
+  std::atomic<uint64_t> fail_count = 0;
 
   for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
     uint32_t actual_put_count_per_thread =
@@ -987,7 +1000,7 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
 
   std::atomic<int> stop_count = 0;
   std::atomic<uint32_t> count = 0;
-  std::atomic<uint32_t> fail_count = 0;
+  std::atomic<uint64_t> fail_count = 0;
   for (int thread_no = 0; thread_no < FLAGS_vector_arrange_concurrency; ++thread_no) {
     threads.emplace_back([this, thread_no, entry, dataset, &stop_count, &count, &fail_count]() {
       std::vector<sdk::VectorWithId> vector_with_ids;
@@ -997,8 +1010,6 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
         if (!retry) {
           uint64_t start_time = dingodb::Helper::TimestampUs();
           dataset->GetBatchTrainData(batch_num, vector_with_ids, is_eof);
-          LOG(INFO) << fmt::format("get data elapsed time: {} {}", vector_with_ids.size(),
-                                   dingodb::Helper::TimestampUs() - start_time);
         }
         if (!vector_with_ids.empty()) {
           uint64_t start_time = dingodb::Helper::TimestampUs();
@@ -1077,6 +1088,26 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
     search_param.topk = FLAGS_vector_search_topk;
   }
 
+  std::string filter_type = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_type);
+  if (filter_type == "PRE") {
+    search_param.filter_type = sdk::FilterType::kQueryPre;
+  } else if (filter_type == "POST") {
+    search_param.filter_type = sdk::FilterType::kQueryPost;
+  } else {
+    search_param.filter_type = sdk::FilterType::kNoneFilterType;
+  }
+
+  std::string filter_source = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_source);
+  if (filter_source == "SCLAR") {
+    search_param.filter_source = sdk::FilterSource::kScalarFilter;
+  } else if (filter_source == "TABLE") {
+    search_param.filter_source = sdk::FilterSource::kTableFilter;
+  } else if (filter_source == "VECTOR_ID") {
+    search_param.filter_source = sdk::FilterSource::kVectorIdFilter;
+  } else {
+    search_param.filter_source = sdk::FilterSource::kNoneFilterSource;
+  }
+
   if (FLAGS_batch_size <= 1) {
     vector_with_ids.push_back(GenVectorWithId(0));
   } else {
@@ -1111,6 +1142,26 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
   search_param.topk = FLAGS_vector_search_topk;
   search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 128));
+
+  std::string filter_type = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_type);
+  if (filter_type == "PRE") {
+    search_param.filter_type = sdk::FilterType::kQueryPre;
+  } else if (filter_type == "POST") {
+    search_param.filter_type = sdk::FilterType::kQueryPost;
+  } else {
+    search_param.filter_type = sdk::FilterType::kNoneFilterType;
+  }
+
+  std::string filter_source = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_source);
+  if (filter_source == "SCLAR") {
+    search_param.filter_source = sdk::FilterSource::kScalarFilter;
+  } else if (filter_source == "TABLE") {
+    search_param.filter_source = sdk::FilterSource::kTableFilter;
+  } else if (filter_source == "VECTOR_ID") {
+    search_param.filter_source = sdk::FilterSource::kVectorIdFilter;
+  } else {
+    search_param.filter_source = sdk::FilterSource::kNoneFilterSource;
+  }
 
   auto offset = entry->GenId();
   auto& all_test_entries = entry->test_entries;
