@@ -22,6 +22,7 @@
 #include "sdk/vector/vector_delete_task.h"
 #include "sdk/vector/vector_get_border_task.h"
 #include "sdk/vector/vector_index_cache.h"
+#include "sdk/vector/vector_scan_query_task.h"
 #include "sdk/vector/vector_search_task.h"
 
 namespace dingodb {
@@ -109,6 +110,21 @@ Status VectorClient::GetBorderByIndexName(int64_t schema_id, const std::string& 
   return task.Run();
 }
 
+Status VectorClient::ScanQueryByIndexId(int64_t index_id, const ScanQueryParam& query_param,
+                                        ScanQueryResult& out_result) {
+  VectorScanQueryTask task(stub_, index_id, query_param, out_result);
+  return task.Run();
+}
+
+Status VectorClient::ScanQueryByIndexName(int64_t schema_id, const std::string& index_name,
+                                          const ScanQueryParam& query_param, ScanQueryResult& out_result) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+  VectorScanQueryTask task(stub_, index_id, query_param, out_result);
+  return task.Run();
+}
 }  // namespace sdk
 
 }  // namespace dingodb

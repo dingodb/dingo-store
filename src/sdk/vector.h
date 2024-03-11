@@ -370,6 +370,64 @@ struct QueryResult {
   std::string ToString() const;
 };
 
+struct ScanQueryParam {
+  int64_t vector_id_start;
+  // the end id of scan
+  // if is_reverse is true, vector_id_end must be less than vector_id_start
+  // if is_reverse is false, vector_id_end must be greater than vector_id_start
+  // the real range is [start, end], include start and end
+  // if vector_id_end == 0, scan to the end of the region
+  int64_t vector_id_end{0};
+  int64_t max_scan_count;
+  bool is_reverse{false};
+
+  bool with_vector_data{true};
+  bool with_scalar_data{false};
+  // If with_scalar_data is true, selected_keys is used to select scalar data, and if this parameter is null, all scalar
+  // data will be returned.
+  std::vector<std::string> selected_keys;
+  bool with_table_data{false};  // Default false, if true, response without table data
+
+  // TODO: support use_scalar_filter
+  bool use_scalar_filter{false};
+  // std::map<std::string, ScalarValue> scalar_data;
+
+  explicit ScanQueryParam() = default;
+
+  ScanQueryParam(ScanQueryParam&& other) noexcept
+      : vector_id_start(other.vector_id_start),
+        vector_id_end(other.vector_id_end),
+        max_scan_count(other.max_scan_count),
+        is_reverse(other.is_reverse),
+        with_vector_data(other.with_vector_data),
+        with_scalar_data(other.with_scalar_data),
+        selected_keys(std::move(other.selected_keys)),
+        with_table_data(other.with_table_data),
+        use_scalar_filter(other.use_scalar_filter) {}
+
+  ScanQueryParam& operator=(ScanQueryParam&& other) noexcept {
+    if (this != &other) {
+      vector_id_start = other.vector_id_start;
+      vector_id_end = other.vector_id_end;
+      max_scan_count = other.max_scan_count;
+      is_reverse = other.is_reverse;
+      with_vector_data = other.with_vector_data;
+      with_scalar_data = other.with_scalar_data;
+      selected_keys = std::move(other.selected_keys);
+      with_table_data = other.with_table_data;
+      use_scalar_filter = other.use_scalar_filter;
+      // You can add more fields here if you add more fields to the struct
+    }
+    return *this;
+  }
+};
+
+struct ScanQueryResult {
+  std::vector<VectorWithId> vectors;
+
+  std::string ToString() const;
+};
+
 class VectorIndexCreator {
  public:
   ~VectorIndexCreator();
@@ -433,6 +491,10 @@ class VectorClient {
 
   Status GetBorderByIndexId(int64_t index_id, bool is_max, int64_t& out_vector_id);
   Status GetBorderByIndexName(int64_t schema_id, const std::string& index_name, bool is_max, int64_t& out_vector_id);
+
+  Status ScanQueryByIndexId(int64_t index_id, const ScanQueryParam& query_param, ScanQueryResult& out_result);
+  Status ScanQueryByIndexName(int64_t schema_id, const std::string& index_name, const ScanQueryParam& query_param,
+                              ScanQueryResult& out_result);
 
  private:
   friend class Client;

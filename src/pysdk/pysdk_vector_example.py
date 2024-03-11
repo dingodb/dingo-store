@@ -147,6 +147,40 @@ def vector_get_border(use_index_name=False):
     if tmp.ok():
         assert vector_id == g_vector_ids[0]
 
+def vector_scan_query(use_index_name=False):
+    # forward
+    param = dingosdk.ScanQueryParam()
+    param.vector_id_start = g_vector_ids[0]
+    param.vector_id_end = g_vector_ids[-1]
+    param.max_scan_count = 2
+
+    if use_index_name:
+        tmp, result = g_vector_client.ScanQueryByIndexName(g_schema_id, g_index_name, param)
+    else:
+        tmp, result = g_vector_client.ScanQueryByIndexId(g_index_id, param)
+
+    print(f"vector scan query status:{tmp.ToString()}, result: {result.ToString()}")
+    if tmp.ok():
+        assert result.vectors[0].id == g_vector_ids[0]
+        assert result.vectors[1].id == g_vector_ids[1]
+
+    # backward
+    param = dingosdk.ScanQueryParam()
+    param.vector_id_start = g_vector_ids[-1]
+    param.vector_id_end = g_vector_ids[0]
+    param.max_scan_count = 2
+    param.is_reverse = True
+
+    if use_index_name:
+        tmp, result = g_vector_client.ScanQueryByIndexName(g_schema_id, g_index_name, param)
+    else:
+        tmp, result = g_vector_client.ScanQueryByIndexId(g_index_id, param)
+
+    print(f"vector scan query status:{tmp.ToString()}, result: {result.ToString()}")
+    if tmp.ok():
+        assert result.vectors[0].id == g_vector_ids[-1]
+        assert result.vectors[1].id == g_vector_ids[-2]
+
 def vector_delete(use_index_name=False):
     if use_index_name:
         tmp, result = g_vector_client.DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids)
@@ -167,6 +201,7 @@ if __name__ == "__main__":
     vector_search()
     vector_query()
     vector_get_border()
+    vector_scan_query()
     vector_delete()
     post_clean()
 
@@ -175,6 +210,7 @@ if __name__ == "__main__":
     vector_search(True)
     vector_query(True)
     vector_get_border(True)
+    vector_scan_query(True)
     vector_delete(True)
     post_clean(True)
 

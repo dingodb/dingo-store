@@ -82,6 +82,8 @@ namespace dingodb {
         %feature("docstring") VectorClient::BatchQueryByIndexName "return Status, QueryResult out_result"
         %feature("docstring") VectorClient::GetBorderByIndexId "return Status, int64_t out_vector_id"
         %feature("docstring") VectorClient::GetBorderByIndexName "return Status, int64_t out_vector_id"
+        %feature("docstring") VectorClient::ScanQueryByIndexId "return Status, ScanQueryResult out_result"
+        %feature("docstring") VectorClient::ScanQueryByIndexName "return Status, ScanQueryResult out_result"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -161,6 +163,14 @@ namespace dingodb {
         }
         %typemap(argout) QueryResult& {
           PyObject* obj = SWIG_NewPointerObj(new QueryResult(*$1), SWIGTYPE_p_dingodb__sdk__QueryResult, SWIG_POINTER_OWN);
+          $result = SWIG_AppendOutput($result, obj);
+        }
+
+        %typemap(in, numinputs=0) ScanQueryResult& (ScanQueryResult temp) {
+          $1 = &temp;
+        }
+        %typemap(argout) ScanQueryResult& {
+          PyObject* obj = SWIG_NewPointerObj(new ScanQueryResult(*$1), SWIGTYPE_p_dingodb__sdk__ScanQueryResult, SWIG_POINTER_OWN);
           $result = SWIG_AppendOutput($result, obj);
         }
 
