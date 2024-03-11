@@ -101,6 +101,8 @@ void VectorSearchTask::SubTaskCallback(Status status, VectorSearchPartTask* sub_
         CHECK(tmp_out_result_.insert({result.first, std::move(result.second)}).second);
       }
     }
+
+    next_part_ids_.erase(sub_task->part_id_);
   }
 
   if (sub_tasks_count_.fetch_sub(1) == 1) {
@@ -164,6 +166,11 @@ void VectorSearchPartTask::DoAsync() {
   if (!s.ok()) {
     DoAsyncDone(s);
     return;
+  }
+
+  {
+    std::unique_lock<std::shared_mutex> w(rw_lock_);
+    search_result_.clear();
   }
 
   controllers_.clear();

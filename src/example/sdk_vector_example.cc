@@ -248,6 +248,53 @@ static void VectorGetBorder(bool use_index_name = false) {
   }
 }
 
+static void VectorScanQuery(bool use_index_name = false) {
+  {
+    // forward
+    dingodb::sdk::ScanQueryParam param;
+    param.vector_id_start = g_vector_ids[0];
+    param.vector_id_end = g_vector_ids[g_vector_ids.size() - 1];
+    param.max_scan_count = 2;
+
+    dingodb::sdk::ScanQueryResult result;
+    Status tmp;
+    if (use_index_name) {
+      tmp = g_vector_client->ScanQueryByIndexName(g_schema_id, g_index_name, param, result);
+    } else {
+      tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
+    }
+
+    DINGO_LOG(INFO) << "vector scan query:" << tmp.ToString() << ", result:" << result.ToString();
+    if (tmp.ok()) {
+      CHECK_EQ(result.vectors[0].id, g_vector_ids[0]);
+      CHECK_EQ(result.vectors[1].id, g_vector_ids[1]);
+    }
+  }
+
+  {
+    // backward
+    dingodb::sdk::ScanQueryParam param;
+    param.vector_id_start = g_vector_ids[g_vector_ids.size() - 1];
+    param.vector_id_end = g_vector_ids[0];
+    param.max_scan_count = 2;
+    param.is_reverse = true;
+
+    dingodb::sdk::ScanQueryResult result;
+    Status tmp;
+    if (use_index_name) {
+      tmp = g_vector_client->ScanQueryByIndexName(g_schema_id, g_index_name, param, result);
+    } else {
+      tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
+    }
+
+    DINGO_LOG(INFO) << "vector scan query:" << tmp.ToString() << ", result:" << result.ToString();
+    if (tmp.ok()) {
+      CHECK_EQ(result.vectors[0].id, g_vector_ids[g_vector_ids.size() - 1]);
+      CHECK_EQ(result.vectors[1].id, g_vector_ids[g_vector_ids.size() - 2]);
+    }
+  }
+}
+
 static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
@@ -295,6 +342,7 @@ int main(int argc, char* argv[]) {
     VectorSearch();
     VectorQuey();
     VectorGetBorder();
+    VectorScanQuery();
     VectorDelete();
     VectorSearch();
 
@@ -309,6 +357,7 @@ int main(int argc, char* argv[]) {
     VectorSearch(true);
     VectorQuey(true);
     VectorGetBorder(true);
+    VectorScanQuery(true);
     VectorDelete(true);
     VectorSearch(true);
 

@@ -83,6 +83,18 @@ std::string QueryResult::ToString() const {
   return oss.str();
 }
 
+std::string ScanQueryResult::ToString() const {
+  std::ostringstream oss;
+  oss << "ScanQueryResult: {";
+  oss << "vectors: [";
+  for (const auto& vector : vectors) {
+    oss << vector.ToString() << ", ";
+  }
+  oss << "]";
+  oss << "}";
+  return oss.str();
+}
+
 std::string VectorIndexTypeToString(VectorIndexType type) {
   switch (type) {
     case VectorIndexType::kNoneIndexType:
