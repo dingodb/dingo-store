@@ -161,7 +161,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Search) {
 
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
     if (has_filter) {
-      filters.emplace_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids_for_search)));
+      filters.emplace_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_ids_for_search)));
     }
 
     ok = vector_index_flat->Search(vector_with_ids, topk, filters, false, {}, results);
@@ -365,7 +365,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, SearchAfterInsert) {
 
     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
     if (has_filter) {
-      filters.emplace_back(std::make_shared<VectorIndex::FlatListFilterFunctor>(std::move(vector_ids_for_search)));
+      filters.emplace_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_ids_for_search)));
     }
 
     ok = vector_index_flat->Search(vector_with_ids, topk, filters, false, {}, results);

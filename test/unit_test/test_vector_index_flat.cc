@@ -413,7 +413,7 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
       vector_ids.push_back(cnt + data_base_size);
     }
 
-    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids);
 
     ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1168,7 +1168,7 @@ TEST_F(VectorIndexFlatTest, RangeSearch) {
       vector_ids.push_back(cnt + data_base_size);
     }
 
-    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids);
 
     ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
@@ -1351,8 +1351,8 @@ TEST_F(VectorIndexFlatTest, SearchAfterLoad) {
     std::vector<int64_t> vector_select_ids(vector_ids.begin(), vector_ids.begin() + (data_base_size / 2));
     std::vector<int64_t> vector_select_ids_clone = vector_select_ids;
 
-    std::shared_ptr<VectorIndex::IvfFlatListFilterFunctor> filter =
-        std::make_shared<VectorIndex::IvfFlatListFilterFunctor>(std::move(vector_select_ids));
+    std::shared_ptr<VectorIndex::ConcreteFilterFunctor> filter =
+        std::make_shared<VectorIndex::ConcreteFilterFunctor>(std::move(vector_select_ids));
     const bool reconstruct = false;
     pb::common::VectorSearchParameter parameter;
     parameter.mutable_ivf_flat()->set_nprobe(10);
@@ -1694,7 +1694,7 @@ TEST_F(VectorIndexFlatTest, RangeSearchAfterLoad) {
       vector_ids.push_back(cnt + data_base_size);
     }
 
-    auto flat_list_filter_functor = std::make_shared<VectorIndex::FlatListFilterFunctor>(vector_ids);
+    auto flat_list_filter_functor = std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids);
 
     ok = vector_index_flat_l2->RangeSearch(vector_with_ids, radius, {flat_list_filter_functor}, false, {}, results_l2);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);

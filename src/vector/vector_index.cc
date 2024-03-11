@@ -946,33 +946,9 @@ bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
 }
 
 butil::Status VectorIndexWrapper::SetVectorIndexRangeFilter(
-    VectorIndexPtr vector_index, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+    VectorIndexPtr /*vector_index*/, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
     int64_t min_vector_id, int64_t max_vector_id) {
-  if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
-    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_FLAT ||
-             vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
-    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_FLAT) {
-    filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-  } else if (vector_index->VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
-    if (vector_index->VectorIndexSubType() == pb::common::VECTOR_INDEX_TYPE_IVF_PQ) {
-      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-    } else if (vector_index->VectorIndexSubType() == pb::common::VECTOR_INDEX_TYPE_FLAT) {
-      filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
-    } else {
-      return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
-                           fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
-                                       pb::common::VectorIndexType_Name(vector_index->VectorIndexType()),
-                                       pb::common::VectorIndexType_Name(vector_index->VectorIndexSubType())));
-    }
-  } else {
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT,
-                         fmt::format("SetVectorIndexFilter not support index type: {} sub type: {}",
-                                     pb::common::VectorIndexType_Name(vector_index->VectorIndexType()),
-                                     pb::common::VectorIndexType_Name(vector_index->VectorIndexSubType())));
-  }
-
+  filters.push_back(std::make_shared<VectorIndex::RangeFilterFunctor>(min_vector_id, max_vector_id));
   return butil::Status::OK();
 }
 
