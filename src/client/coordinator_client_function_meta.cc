@@ -1511,12 +1511,12 @@ void SendAddIndexOnTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   }
 
   if (FLAGS_index_id == 0) {
-    DINGO_LOG(WARNING) << "index_id is empty";
+    DINGO_LOG(WARNING) << "index_id is empty, please use CreateTableIds to get one id";
     return;
   }
 
   if (FLAGS_def_version == 0) {
-    DINGO_LOG(WARNING) << "version is empty";
+    DINGO_LOG(WARNING) << "def_version is empty, must > 0";
     return;
   }
 

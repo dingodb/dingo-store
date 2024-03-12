@@ -257,17 +257,16 @@ message MetaIncrementTable {
   MetaIncrementOpType op_type = 3;
 }
 
-// @Deprecated
-// message MetaIncrementIndex {
-//   int64 id = 1;
-//   IndexInternal index = 2;
-//   MetaIncrementOpType op_type = 3;
-// }
-
+// MetaIncrementTableIndex
+// CAUTION:  if op_type is UDPATE, there will only whole update using the table_indexes=3 or partial update using
+// table_ids_to_add=4 or table_ids_to_del=5
+// the UPDATE cannot do both whole update and partial update at the same time
 message MetaIncrementTableIndex {
   int64 id = 1;
   TableIndexInternal table_indexes = 2;
   MetaIncrementOpType op_type = 3;
+  repeated dingodb.pb.meta.DingoCommonId table_ids_to_add = 4;
+  repeated dingodb.pb.meta.DingoCommonId table_ids_to_del = 5;
 }
 
 message MetaIncrementCommonDisk {

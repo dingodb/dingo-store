@@ -1512,7 +1512,6 @@ butil::Status CoordinatorControl::GetTables(int64_t schema_id,
   }
 
   {
-    // BAIDU_SCOPED_LOCK(schema_map_mutex_);
     pb::coordinator_internal::SchemaInternal schema_internal;
     int ret = schema_map_.Get(schema_id, schema_internal);
     if (ret < 0) {
@@ -2578,31 +2577,44 @@ void CoordinatorControl::CreateTableIndexesMap(pb::coordinator_internal::TableIn
 
 butil::Status CoordinatorControl::GetTableIndexes(int64_t schema_id, int64_t table_id,
                                                   pb::meta::GetTablesResponse* response) {
-  pb::meta::TableDefinitionWithId definition_with_id;
-  butil::Status ret = GetTable(schema_id, table_id, definition_with_id);
+  pb::meta::TableDefinitionWithId main_definition_with_id;
+  butil::Status ret = GetTable(schema_id, table_id, main_definition_with_id);
   if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "error while get table_indexes GetTable failed, schema_id: " << schema_id
+                     << ", table_id: " << table_id << ", error_code: " << ret.error_code()
+                     << ", error_msg: " << ret.error_str();
     return ret;
   }
-
-  *(response->add_table_definition_with_ids()) = definition_with_id;
 
   pb::coordinator_internal::TableIndexInternal table_index_internal;
   int result = table_index_map_.Get(table_id, table_index_internal);
   if (result >= 0) {
-    // found
-    for (const auto& temp_id : table_index_internal.table_ids()) {
-      pb::meta::TableDefinitionWithId temp_definition_with_id;
-      ret = GetIndex(schema_id, temp_id.entity_id(), false, temp_definition_with_id);
+    // found table_index, first add main table definition to response
+    *(response->add_table_definition_with_ids()) = main_definition_with_id;
+
+    // get all index's definition and add to response
+    for (const auto& index_id : table_index_internal.table_ids()) {
+      pb::meta::TableDefinitionWithId index_definition_with_id;
+      ret = GetIndex(schema_id, index_id.entity_id(), false, index_definition_with_id);
       if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "error while get table_indexes GetIndex failed, schema_id: " << schema_id
+                         << ", index_id: " << index_id.entity_id() << ", error_code: " << ret.error_code()
+                         << ", error_msg: " << ret.error_str();
         return ret;
       }
 
-      *(response->add_table_definition_with_ids()) = temp_definition_with_id;
+      *(response->add_table_definition_with_ids()) = index_definition_with_id;
     }
+
+    // set revision
     response->set_revision(table_index_internal.revision());
+
   } else {
-    // not found
-    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+    // not found, return error
+    std::string s =
+        "cannot find indexes, schema_id: " + std::to_string(schema_id) + ", table_id: " + std::to_string(table_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
   return butil::Status::OK();
@@ -2610,14 +2622,17 @@ butil::Status CoordinatorControl::GetTableIndexes(int64_t schema_id, int64_t tab
 
 butil::Status CoordinatorControl::DropTableIndexes(int64_t schema_id, int64_t table_id,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
-  if (!ValidateSchema(schema_id)) {
-    DINGO_LOG(ERROR) << "ERRROR: schema_id not valid" << schema_id;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id not valid");
+  pb::meta::TableDefinitionWithId definition_with_id;
+  butil::Status ret = GetTable(schema_id, table_id, definition_with_id);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "error while dropping index GetTable failed, schema_id: " << schema_id
+                     << ", table_id: " << table_id << ", error_code: " << ret.error_code()
+                     << ", error_msg: " << ret.error_str();
+    return ret;
   }
 
   // drop indexes of the table
   pb::coordinator_internal::TableIndexInternal table_index_internal;
-  butil::Status ret;
   int result = table_index_map_.Get(table_id, table_index_internal);
   if (result >= 0) {
     // find in map
@@ -2633,9 +2648,13 @@ butil::Status CoordinatorControl::DropTableIndexes(int64_t schema_id, int64_t ta
     auto* table_index_increment = meta_increment.add_table_indexes();
     table_index_increment->set_id(table_id);
     table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::DELETE);
+    *table_index_increment->mutable_table_indexes() = table_index_internal;
   } else {
     // not find in map
-    DINGO_LOG(INFO) << "cannot find indexes, schema_id: " << schema_id << ", table_id: " << table_id;
+    std::string s = "cannot find in table_index_map_, schema_id: " + std::to_string(schema_id) +
+                    ", table_id: " + std::to_string(table_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
   // drop table finally
@@ -2650,7 +2669,7 @@ butil::Status CoordinatorControl::DropTableIndexes(int64_t schema_id, int64_t ta
 
 butil::Status CoordinatorControl::RemoveTableIndex(int64_t table_id, int64_t index_id,
                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
-  butil::Status ret = DropIndex(table_id, index_id, false, meta_increment);
+  auto ret = DropIndex(table_id, index_id, false, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "error while dropping index, table_id: " << table_id << ", index_id: " << index_id;
     return ret;
@@ -2668,19 +2687,18 @@ butil::Status CoordinatorControl::RemoveTableIndex(int64_t table_id, int64_t ind
   for (size_t i = 0; i < table_index_internal.table_ids_size(); i++) {
     if (table_index_internal.table_ids(i).entity_id() == index_id) {
       found_index = true;
-      table_index_internal.mutable_table_ids()->DeleteSubrange(i, 1);
       break;
     }
   }
 
   if (found_index) {
     DINGO_LOG(INFO) << "remove success, table_id: " << table_id << ", index_id: " << index_id
-                    << ", size: " << source_size << " --> " << table_index_internal.table_ids_size();
+                    << ", origin_ids_size: " << source_size;
 
     auto* table_index_increment = meta_increment.add_table_indexes();
     table_index_increment->set_id(table_id);
-    *(table_index_increment->mutable_table_indexes()) = table_index_internal;
     table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+    table_index_increment->add_table_ids_to_del()->set_entity_id(index_id);
   } else {
     DINGO_LOG(WARNING) << "cannot find index, table_id: " << table_id << ", index_id: " << index_id;
   }
@@ -3056,14 +3074,15 @@ butil::Status CoordinatorControl::AddIndexOnTable(int64_t table_id, int64_t inde
   }
 
   // add index to table_index_map_
-  auto* new_index_id = table_index_internal.add_table_ids();
-  new_index_id->set_entity_id(index_id);
-  new_index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
-  new_index_id->set_parent_entity_id(table_internal.schema_id());
+  pb::meta::DingoCommonId new_index_id;
+  new_index_id.set_entity_id(index_id);
+  new_index_id.set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  new_index_id.set_parent_entity_id(table_internal.schema_id());
+
   auto* table_index_increment = meta_increment.add_table_indexes();
   table_index_increment->set_id(table_id);
   table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-  *(table_index_increment->mutable_table_indexes()) = table_index_internal;
+  *table_index_increment->add_table_ids_to_add() = new_index_id;
 
   return butil::Status::OK();
 }
@@ -3112,19 +3131,18 @@ butil::Status CoordinatorControl::DropIndexOnTable(int64_t table_id, int64_t ind
   }
 
   // del index from table_index_map_
-  pb::coordinator_internal::TableIndexInternal table_index_internal_new;
-  table_index_internal_new.set_id(table_index_internal.id());
+  pb::meta::DingoCommonId del_index_id;
   for (const auto& id : table_index_internal.table_ids()) {
     if (id.entity_id() != index_id) {
-      auto* new_index_id = table_index_internal_new.add_table_ids();
-      *new_index_id = id;
+      del_index_id = id;
+      break;
     }
   }
 
   auto* table_index_increment = meta_increment.add_table_indexes();
   table_index_increment->set_id(table_id);
   table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-  *(table_index_increment->mutable_table_indexes()) = table_index_internal_new;
+  *table_index_increment->add_table_ids_to_del() = del_index_id;
 
   return butil::Status::OK();
 }
