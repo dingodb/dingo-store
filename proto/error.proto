@@ -230,6 +230,7 @@ enum Errno {
   // txn
   ETXN_RESULT_INFO_NOT_NULL = 130000;
   ETXN_SCAN_FINISH = 130001;
+  ETXN_LOCK_CONFLICT = 130002;
 }
 
 message StoreRegionInfo {

@@ -96,9 +96,10 @@ butil::Status TxnIterator::Init() {
   lock_iter_->Seek(lock_iter_options.lower_bound);
 
   if ((!write_iter_->Valid()) && (!lock_iter_->Valid())) {
-    DINGO_LOG(ERROR) << "[txn]write_iter is not valid and lock_iter is not valid, start_ts: " << start_ts_
-                     << ", seek_ts: " << seek_ts_ << ", write_iter->Valid(): " << write_iter_->Valid()
-                     << ", lock_iter->Valid(): " << lock_iter_->Valid();
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]write_iter is not valid and lock_iter is not valid, start_ts: " << start_ts_
+        << ", seek_ts: " << seek_ts_ << ", write_iter->Valid(): " << write_iter_->Valid()
+        << ", lock_iter->Valid(): " << lock_iter_->Valid();
   }
 
   return butil::Status::OK();
@@ -107,7 +108,11 @@ butil::Status TxnIterator::Init() {
 butil::Status TxnIterator::Seek(const std::string &key) {
   auto ret = InnerSeek(key);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "[txn]InnerSeek failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+    if (ret.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+      DINGO_LOG(INFO) << "[txn]InnerSeek failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+    } else {
+      DINGO_LOG(ERROR) << "[txn]InnerSeek failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+    }
     return ret;
   }
 
@@ -182,6 +187,9 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
         << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << Helper::StringToHex(value_)
         << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
+  } else if (ret.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+    DINGO_LOG(INFO) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+    return ret;
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
     return ret;
@@ -218,8 +226,8 @@ butil::Status TxnIterator::Next() {
 
 butil::Status TxnIterator::InnerNext() {
   if (key_.empty()) {
-    DINGO_LOG(ERROR) << "[txn]Scan Next key_ is empty, scan is finished, start_ts: " << start_ts_
-                     << ", seek_ts: " << seek_ts_;
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]Scan Next key_ is empty, scan is finished, start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status(pb::error::Errno::ETXN_SCAN_FINISH, "key_ is empty");
   }
 
@@ -308,6 +316,9 @@ butil::Status TxnIterator::InnerNext() {
         << "[txn]GetCurrentValue OK, key_: " << Helper::StringToHex(key_) << ", value_: " << Helper::StringToHex(value_)
         << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     return butil::Status::OK();
+  } else if (ret.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+    DINGO_LOG(INFO) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+    return ret;
   } else {
     DINGO_LOG(ERROR) << "[txn]GetCurrentValue failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
     return ret;
@@ -493,7 +504,7 @@ butil::Status TxnIterator::GetCurrentValue() {
                          << ", seek_ts: " << seek_ts_ << ", lock_info: " << lock_info.ShortDebugString();
       key_.clear();
       value_.clear();
-      return butil::Status(pb::error::Errno::EBRAFT_EINVAL, "lock conflict");
+      return butil::Status(pb::error::Errno::ETXN_LOCK_CONFLICT, "lock conflict");
     }
 
     // if lock_key == write_key, then we can get data from write_cf
