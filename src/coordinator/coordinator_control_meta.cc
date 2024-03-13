@@ -1742,7 +1742,6 @@ butil::Status CoordinatorControl::GetIndex(int64_t schema_id, int64_t index_id, 
 
   // validate index_id & get index definition
   {
-    // BAIDU_SCOPED_LOCK(index_map_mutex_);
     pb::coordinator_internal::TableInternal table_internal;
     int ret = index_map_.Get(index_id, table_internal);
     if (ret < 0) {
