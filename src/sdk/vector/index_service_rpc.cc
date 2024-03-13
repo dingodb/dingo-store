@@ -36,6 +36,7 @@ DEFINE_INDEX_SERVICE_RPC(VectorDelete);
 DEFINE_INDEX_SERVICE_RPC(VectorBatchQuery);
 DEFINE_INDEX_SERVICE_RPC(VectorGetBorderId);
 DEFINE_INDEX_SERVICE_RPC(VectorScanQuery);
+DEFINE_INDEX_SERVICE_RPC(VectorGetRegionMetrics);
 
 }  // namespace sdk
 }  // namespace dingodb

@@ -21,6 +21,7 @@
 #include "sdk/vector/vector_batch_query_task.h"
 #include "sdk/vector/vector_delete_task.h"
 #include "sdk/vector/vector_get_border_task.h"
+#include "sdk/vector/vector_get_index_metrics_task.h"
 #include "sdk/vector/vector_index_cache.h"
 #include "sdk/vector/vector_scan_query_task.h"
 #include "sdk/vector/vector_search_task.h"
@@ -123,6 +124,21 @@ Status VectorClient::ScanQueryByIndexName(int64_t schema_id, const std::string& 
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
   CHECK_GT(index_id, 0);
   VectorScanQueryTask task(stub_, index_id, query_param, out_result);
+  return task.Run();
+}
+
+Status VectorClient::GetIndexMetricsByIndexId(int64_t index_id, IndexMetricsResult& out_result) {
+  VectorGetIndexMetricsTask task(stub_, index_id, out_result);
+  return task.Run();
+}
+
+Status VectorClient::GetIndexMetricsByIndexName(int64_t schema_id, const std::string& index_name,
+                                                IndexMetricsResult& out_result) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+  VectorGetIndexMetricsTask task(stub_, index_id, out_result);
   return task.Run();
 }
 }  // namespace sdk

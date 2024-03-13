@@ -144,6 +144,19 @@ std::string ValueTypeToString(ValueType type) {
   }
 }
 
+std::string IndexMetricsResult::ToString() const {
+  std::ostringstream oss;
+  oss << "IndexMetricsResult: {";
+  oss << "index_type: " << VectorIndexTypeToString(index_type) << ", ";
+  oss << "count: " << count << ", ";
+  oss << "deleted_count: " << deleted_count << ", ";
+  oss << "max_vector_id: " << max_vector_id << ", ";
+  oss << "min_vector_id: " << min_vector_id << ", ";
+  oss << "memory_bytes: " << memory_bytes;
+  oss << "}";
+  return oss.str();
+}
+
 }  // namespace sdk
 }  // namespace dingodb
 #endif  // DINGODB_SDK_VECTOR_UTIL_H_

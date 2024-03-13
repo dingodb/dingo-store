@@ -23,6 +23,7 @@
 #include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
+#include "sdk/vector/vector_get_index_metrics_task.h"
 #include "sdk/vector/vector_index.h"
 #include "sdk/vector/vector_index_cache.h"
 
@@ -295,6 +296,25 @@ static void VectorScanQuery(bool use_index_name = false) {
   }
 }
 
+static void VectorGetIndexMetrics(bool use_index_name = false) {
+  Status tmp;
+  dingodb::sdk::IndexMetricsResult result;
+  if (use_index_name) {
+    tmp = g_vector_client->GetIndexMetricsByIndexName(g_schema_id, g_index_name, result);
+  } else {
+    tmp = g_vector_client->GetIndexMetricsByIndexId(g_index_id, result);
+  }
+
+  DINGO_LOG(INFO) << "vector get index metrics:" << tmp.ToString() << ", result :" << result.ToString();
+  if (tmp.ok()) {
+    CHECK_EQ(result.index_type, dingodb::sdk::VectorIndexType::kFlat);
+    CHECK_EQ(result.count, g_vector_ids.size());
+    CHECK_EQ(result.deleted_count, 0);
+    CHECK_EQ(result.max_vector_id, g_vector_ids[g_vector_ids.size() - 1]);
+    CHECK_EQ(result.min_vector_id, g_vector_ids[0]);
+  }
+}
+
 static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
@@ -343,6 +363,7 @@ int main(int argc, char* argv[]) {
     VectorQuey();
     VectorGetBorder();
     VectorScanQuery();
+    VectorGetIndexMetrics();
     VectorDelete();
     VectorSearch();
 
@@ -358,6 +379,7 @@ int main(int argc, char* argv[]) {
     VectorQuey(true);
     VectorGetBorder(true);
     VectorScanQuery(true);
+    VectorGetIndexMetrics(true);
     VectorDelete(true);
     VectorSearch(true);
 

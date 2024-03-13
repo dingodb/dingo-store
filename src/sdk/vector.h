@@ -428,6 +428,17 @@ struct ScanQueryResult {
   std::string ToString() const;
 };
 
+struct IndexMetricsResult {
+  VectorIndexType index_type{kNoneIndexType};
+  int64_t count{0};
+  int64_t deleted_count{0};
+  int64_t max_vector_id{0};
+  int64_t min_vector_id{0};
+  int64_t memory_bytes{0};
+
+  std::string ToString() const;
+};
+
 class VectorIndexCreator {
  public:
   ~VectorIndexCreator();
@@ -495,6 +506,9 @@ class VectorClient {
   Status ScanQueryByIndexId(int64_t index_id, const ScanQueryParam& query_param, ScanQueryResult& out_result);
   Status ScanQueryByIndexName(int64_t schema_id, const std::string& index_name, const ScanQueryParam& query_param,
                               ScanQueryResult& out_result);
+
+  Status GetIndexMetricsByIndexId(int64_t index_id, IndexMetricsResult& out_result);
+  Status GetIndexMetricsByIndexName(int64_t schema_id, const std::string& index_name, IndexMetricsResult& out_result);
 
  private:
   friend class Client;

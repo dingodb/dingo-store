@@ -84,6 +84,8 @@ namespace dingodb {
         %feature("docstring") VectorClient::GetBorderByIndexName "return Status, int64_t out_vector_id"
         %feature("docstring") VectorClient::ScanQueryByIndexId "return Status, ScanQueryResult out_result"
         %feature("docstring") VectorClient::ScanQueryByIndexName "return Status, ScanQueryResult out_result"
+        %feature("docstring") VectorClient::GetIndexMetricsByIndexId "return Status, IndexMetricsResult out_result"
+        %feature("docstring") VectorClient::GetIndexMetricsByIndexName "return Status, IndexMetricsResult out_result"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -162,7 +164,7 @@ namespace dingodb {
           $1 = &temp;
         }
         %typemap(argout) QueryResult& {
-          PyObject* obj = SWIG_NewPointerObj(new QueryResult(*$1), SWIGTYPE_p_dingodb__sdk__QueryResult, SWIG_POINTER_OWN);
+          PyObject* obj = SWIG_NewPointerObj(new QueryResult(*$1), $1_descriptor, SWIG_POINTER_OWN);
           $result = SWIG_AppendOutput($result, obj);
         }
 
@@ -170,7 +172,15 @@ namespace dingodb {
           $1 = &temp;
         }
         %typemap(argout) ScanQueryResult& {
-          PyObject* obj = SWIG_NewPointerObj(new ScanQueryResult(*$1), SWIGTYPE_p_dingodb__sdk__ScanQueryResult, SWIG_POINTER_OWN);
+          PyObject* obj = SWIG_NewPointerObj(new ScanQueryResult(*$1), $1_descriptor, SWIG_POINTER_OWN);
+          $result = SWIG_AppendOutput($result, obj);
+        }
+
+        %typemap(in, numinputs=0) IndexMetricsResult& (IndexMetricsResult temp) {
+          $1 = &temp;
+        }
+        %typemap(argout) IndexMetricsResult& {
+          PyObject* obj = SWIG_NewPointerObj(new IndexMetricsResult(*$1), $1_descriptor, SWIG_POINTER_OWN);
           $result = SWIG_AppendOutput($result, obj);
         }
 
