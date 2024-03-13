@@ -38,7 +38,7 @@ class Constant {
   static const int64_t kCoordinatorSchemaId = 0;
 
   // Define mbvar metrics number
-  static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 100;
+  static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 20000;
 
   // Define Store data column family.
   // table and vector_index's vector use "default"
