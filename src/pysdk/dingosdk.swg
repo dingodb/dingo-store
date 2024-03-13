@@ -43,6 +43,7 @@ using namespace dingodb::sdk;
 %apply bool& OUTPUT { bool& out_create_in_progress };
 %apply int64_t& OUTPUT  { int64_t& out_index_id };
 %apply int64_t& OUTPUT  { int64_t& out_vector_id };
+%apply int64_t& OUTPUT  { int64_t& out_count };
 
 // rawkv
 %apply std::string& OUTPUT { std::string& out_value };
@@ -86,6 +87,8 @@ namespace dingodb {
         %feature("docstring") VectorClient::ScanQueryByIndexName "return Status, ScanQueryResult out_result"
         %feature("docstring") VectorClient::GetIndexMetricsByIndexId "return Status, IndexMetricsResult out_result"
         %feature("docstring") VectorClient::GetIndexMetricsByIndexName "return Status, IndexMetricsResult out_result"
+        %feature("docstring") VectorClient::CountByIndexId "return Status, int64_t out_count"
+        %feature("docstring") VectorClient::CountByIndexName "return Status, int64_t out_count"
 
         %typemap(in, numinputs=0) Client** (Client* temp){
           temp = NULL;
@@ -142,7 +145,7 @@ namespace dingodb {
         %typemap(argout) std::vector<SearchResult>& {
             PyObject* obj = PyList_New($1->size());
             for (size_t i = 0; i < $1->size(); i++) {
-                PyObject* item = SWIG_NewPointerObj(new SearchResult((*$1)[i]), SWIGTYPE_p_dingodb__sdk__SearchResult, SWIG_POINTER_OWN);
+                PyObject* item = SWIG_NewPointerObj(new SearchResult((*$1)[i]), $descriptor(dingodb::sdk::SearchResult*), SWIG_POINTER_OWN);
                 PyList_SetItem(obj, i, item);
             }
             $result = SWIG_AppendOutput($result, obj);
@@ -154,7 +157,7 @@ namespace dingodb {
         %typemap(argout) std::vector<DeleteResult>& {
           PyObject* obj = PyList_New($1->size());
           for (size_t i = 0; i < $1->size(); i++) {
-            PyObject* item = SWIG_NewPointerObj(new DeleteResult((*$1)[i]), SWIGTYPE_p_dingodb__sdk__DeleteResult, SWIG_POINTER_OWN);
+            PyObject* item = SWIG_NewPointerObj(new DeleteResult((*$1)[i]), $descriptor(dingodb::sdk::DeleteResult*), SWIG_POINTER_OWN);
             PyList_SetItem(obj, i, item);
           }
           $result = SWIG_AppendOutput($result, obj);

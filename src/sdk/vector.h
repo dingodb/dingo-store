@@ -510,6 +510,9 @@ class VectorClient {
   Status GetIndexMetricsByIndexId(int64_t index_id, IndexMetricsResult& out_result);
   Status GetIndexMetricsByIndexName(int64_t schema_id, const std::string& index_name, IndexMetricsResult& out_result);
 
+  Status CountByIndexId(int64_t index_id, int64_t start_vector_id, int64_t end_vector_id, int64_t& out_count);
+  Status CountByIndexName(int64_t schema_id, const std::string& index_name, int64_t start_vector_id, int64_t end_vector_id, int64_t& out_count);
+
  private:
   friend class Client;
 

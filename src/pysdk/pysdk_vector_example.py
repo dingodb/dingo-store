@@ -195,6 +195,39 @@ def vector_get_index_metrics(use_index_name=False):
         assert result.max_vector_id == g_vector_ids[-1]
         assert result.min_vector_id == g_vector_ids[0]
 
+def vector_count(use_index_name=False):
+    result = 0
+    if use_index_name:
+        tmp, result = g_vector_client.CountByIndexName(g_schema_id, g_index_name, 0, g_vector_ids[-1] + 1)
+    else:
+        tmp, result= g_vector_client.CountByIndexId(g_index_id, 0, g_vector_ids[-1] + 1)
+
+    print(f"vector count: {tmp.ToString()}, result: {result}")
+    if tmp.ok():
+        assert result == len(g_vector_ids)
+
+    result = 0
+    start_vector_id = g_vector_ids[-1] + 1
+    end_vector_id = start_vector_id + 1
+    if use_index_name:
+        tmp, result = g_vector_client.CountByIndexName(g_schema_id, g_index_name, start_vector_id, end_vector_id)
+    else:
+        tmp, result= g_vector_client.CountByIndexId(g_index_id, start_vector_id, end_vector_id)
+
+    print(f"vector count: {tmp.ToString()}, result: {result}")
+    if tmp.ok():
+        assert result == 0
+
+    result = 0
+    if use_index_name:
+        tmp, result = g_vector_client.CountByIndexName(g_schema_id, g_index_name, g_vector_ids[0], g_vector_ids[-1])
+    else:
+        tmp, result = g_vector_client.CountByIndexId(g_index_id, g_vector_ids[0], g_vector_ids[-1])
+
+    print(f"vector count: {tmp.ToString()}, result: {result}")
+    if tmp.ok():
+        assert result == len(g_vector_ids) - 1
+
 def vector_delete(use_index_name=False):
     if use_index_name:
         tmp, result = g_vector_client.DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids)
@@ -217,6 +250,7 @@ if __name__ == "__main__":
     vector_get_border()
     vector_scan_query()
     vector_get_index_metrics()
+    vector_count()
     vector_delete()
     post_clean()
 
@@ -227,6 +261,7 @@ if __name__ == "__main__":
     vector_get_border(True)
     vector_scan_query(True)
     vector_get_index_metrics(True)
+    vector_count(True)
     vector_delete(True)
     post_clean(True)
 

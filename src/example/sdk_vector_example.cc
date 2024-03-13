@@ -315,6 +315,57 @@ static void VectorGetIndexMetrics(bool use_index_name = false) {
   }
 }
 
+static void VectorCount(bool use_index_name = false) {
+  {
+    Status tmp;
+    int64_t result{0};
+    if (use_index_name) {
+      tmp = g_vector_client->CountByIndexName(g_schema_id, g_index_name, 0, g_vector_ids[g_vector_ids.size() - 1] + 1,
+                                              result);
+    } else {
+      tmp = g_vector_client->CountByIndexId(g_index_id, 0, g_vector_ids[g_vector_ids.size() - 1] + 1, result);
+    }
+
+    DINGO_LOG(INFO) << "vector count:" << tmp.ToString() << ", result :" << result;
+    if (tmp.ok()) {
+      CHECK_EQ(result, g_vector_ids.size());
+    }
+  }
+
+  {
+    Status tmp;
+    int64_t result{0};
+    int64_t start_vector_id = g_vector_ids[g_vector_ids.size() - 1] + 1;
+    int64_t end_vector_id = start_vector_id + 1;
+    if (use_index_name) {
+      tmp = g_vector_client->CountByIndexName(g_schema_id, g_index_name, start_vector_id, end_vector_id, result);
+    } else {
+      tmp = g_vector_client->CountByIndexId(g_index_id, start_vector_id, end_vector_id, result);
+    }
+
+    DINGO_LOG(INFO) << "vector count:" << tmp.ToString() << ", result :" << result;
+    if (tmp.ok()) {
+      CHECK_EQ(result, 0);
+    }
+  }
+
+  {
+    Status tmp;
+    int64_t result{0};
+    if (use_index_name) {
+      tmp = g_vector_client->CountByIndexName(g_schema_id, g_index_name, g_vector_ids[0],
+                                              g_vector_ids[g_vector_ids.size() - 1], result);
+    } else {
+      tmp = g_vector_client->CountByIndexId(g_index_id, g_vector_ids[0], g_vector_ids[g_vector_ids.size() - 1], result);
+    }
+
+    DINGO_LOG(INFO) << "vector count:" << tmp.ToString() << ", result :" << result;
+    if (tmp.ok()) {
+      CHECK_EQ(result, g_vector_ids.size() - 1);
+    }
+  }
+}
+
 static void VectorDelete(bool use_index_name = false) {
   Status tmp;
   std::vector<dingodb::sdk::DeleteResult> result;
@@ -364,6 +415,7 @@ int main(int argc, char* argv[]) {
     VectorGetBorder();
     VectorScanQuery();
     VectorGetIndexMetrics();
+    VectorCount();
     VectorDelete();
     VectorSearch();
 
@@ -380,6 +432,7 @@ int main(int argc, char* argv[]) {
     VectorGetBorder(true);
     VectorScanQuery(true);
     VectorGetIndexMetrics(true);
+    VectorCount(true);
     VectorDelete(true);
     VectorSearch(true);
 
