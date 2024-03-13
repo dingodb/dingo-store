@@ -1313,13 +1313,13 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (!dingo_server.Recover()) {
-    DINGO_LOG(ERROR) << "Recover failed!";
+  if (!dingo_server.InitHeartbeat()) {
+    DINGO_LOG(ERROR) << "InitHeartbeat failed!";
     return -1;
   }
 
-  if (!dingo_server.InitHeartbeat()) {
-    DINGO_LOG(ERROR) << "InitHeartbeat failed!";
+  if (!dingo_server.Recover()) {
+    DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
   }
 
