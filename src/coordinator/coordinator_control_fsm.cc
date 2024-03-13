@@ -1801,6 +1801,144 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
+  // 12.index map
+  // CAUTION: for table with indexes, the read order is schema_map->table_map->table_index_map->index_map
+  //          so we need to update index_map_ after table_index_map_ and before table_map_
+  {
+    if (meta_increment.indexes_size() > 0) {
+      DINGO_LOG(INFO) << "12.indexes_size=" << meta_increment.indexes_size();
+    }
+
+    for (int i = 0; i < meta_increment.indexes_size(); i++) {
+      auto* index = meta_increment.mutable_indexes(i);
+      index->mutable_table()->mutable_definition()->set_revision(meta_revision);
+
+      if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = index_meta_->Put(index->id(), index->table());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, [id=" << index->id()
+                           << "] failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index CREATE, [id=" << index->id() << "] success";
+        }
+
+        // add index to parent schema
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        auto ret1 = schema_map_.Get(index->table().schema_id(), schema_to_update);
+        // auto* schema = schema_map_.seek(index.schema_id());
+        if (ret1 > 0) {
+          // add new created index's id to its parent schema's index_ids
+          schema_to_update.add_index_ids(index->id());
+          auto ret2 = schema_meta_->Put(index->table().schema_id(), schema_to_update);
+          if (!ret2.ok()) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, but Put failed, [id=" << index->id()
+                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str();
+          }
+
+          DINGO_LOG(INFO) << "5.index map CREATE new_sub_index id=" << index->id()
+                          << " parent_id=" << index->table().schema_id();
+
+        } else {
+          DINGO_LOG(FATAL) << " CREATE INDEX apply illegal schema_id=" << index->table().schema_id()
+                           << " index_id=" << index->id() << " index_name=" << index->table().definition().name();
+        }
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_CREATE);
+        event.mutable_index()->set_id(index->id());
+        *event.mutable_index()->mutable_definition() = index->table().definition();
+        event.mutable_index()->set_schema_id(index->table().schema_id());
+        event.mutable_index()->set_parent_table_id(index->table().table_id());
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_CREATE);
+
+      } else if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        // update index to index_map
+        pb::coordinator_internal::TableInternal table_internal;
+        int ret = index_map_.Get(index->id(), table_internal);
+        if (ret > 0) {
+          if (index->table().has_definition()) {
+            *(table_internal.mutable_definition()) = index->table().definition();
+          }
+          auto ret1 = index_meta_->Put(index->id(), table_internal);
+          if (!ret1.ok()) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement index UPDATE, but Put failed, [id=" << index->id()
+                             << "], errcode: " << ret1.error_code() << ", errmsg: " << ret1.error_str();
+          } else {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index->id() << "] success";
+          }
+        } else {
+          DINGO_LOG(ERROR) << " UPDATE INDEX apply illegal index_id=" << index->id()
+                           << " index_name=" << index->table().definition().name();
+        }
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_UPDATE);
+        event.mutable_index()->set_id(index->id());
+        *event.mutable_index()->mutable_definition() = index->table().definition();
+        event.mutable_index()->set_schema_id(index->table().schema_id());
+        event.mutable_index()->set_parent_table_id(index->table().table_id());
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_UPDATE);
+
+      } else if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        // delete from parent schema
+        pb::coordinator_internal::SchemaInternal schema_to_update;
+        auto ret1 = schema_map_.Get(index->table().schema_id(), schema_to_update);
+
+        if (ret1 > 0) {
+          pb::coordinator_internal::SchemaInternal new_schema;
+          new_schema = schema_to_update;
+
+          new_schema.clear_index_ids();
+
+          // add left index_id to new_schema
+          for (auto x : schema_to_update.index_ids()) {
+            if (x != index->id()) {
+              new_schema.add_index_ids(x);
+            }
+          }
+          schema_to_update = new_schema;
+          auto ret2 = schema_meta_->Put(index->table().schema_id(), schema_to_update);
+          if (!ret2.ok()) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement index DELETE, but Put failed, [id=" << index->id()
+                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str();
+          }
+
+          DINGO_LOG(INFO) << "5.index map DELETE new_sub_index id=" << index->id()
+                          << " parent_id=" << index->table().schema_id();
+
+        } else {
+          DINGO_LOG(FATAL) << " DROP INDEX apply illegal schema_id=" << index->table().schema_id()
+                           << " index_id=" << index->id() << " index_name=" << index->table().definition().name();
+        }
+
+        auto ret = index_meta_->Erase(index->id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement index DELETE, but Erase failed, [id=" << index->id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement index DELETE, success [id=" << index->id() << "]";
+        }
+
+        // delete index_metrics
+        index_metrics_map_.Erase(index->id());
+
+        // add event_list
+        pb::meta::MetaEvent event;
+        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_DELETE);
+        event.mutable_index()->set_id(index->id());
+        *event.mutable_index()->mutable_definition() = index->table().definition();
+        event.mutable_index()->set_schema_id(index->table().schema_id());
+        event.mutable_index()->set_parent_table_id(index->table().table_id());
+        event_list->push_back(event);
+        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_DELETE);
+      }
+    }
+  }
+
   // 6.table map
   {
     if (meta_increment.tables_size() > 0) {
@@ -1879,17 +2017,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         watch_bitset.set(pb::meta::MetaEventType::META_EVENT_TABLE_UPDATE);
 
       } else if (table->op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        auto ret = table_meta_->Erase(table->id());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement table DELETE, but Erase failed, [id=" << table->id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement table DELETE, success [id=" << table->id() << "]";
-        }
-
-        // delete table_metrics
-        table_metrics_map_.Erase(table->id());
-
         // delete from parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
         auto ret1 = schema_map_.Get(table->table().schema_id(), schema_to_update);
@@ -1922,6 +2049,18 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(FATAL) << " DROP TABLE apply illegal schema_id=" << table->table().schema_id()
                            << " table_id=" << table->id() << " table_name=" << table->table().definition().name();
         }
+
+        // after schema update, delete table from table_map
+        auto ret = table_meta_->Erase(table->id());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement table DELETE, but Erase failed, [id=" << table->id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        } else {
+          DINGO_LOG(INFO) << "ApplyMetaIncrement table DELETE, success [id=" << table->id() << "]";
+        }
+
+        // delete table_metrics
+        table_metrics_map_.Erase(table->id());
 
         // add event_list
         pb::meta::MetaEvent event;
@@ -2302,143 +2441,6 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement task_list DELETE, success [id=" << task_list.id() << "]";
         }
-      }
-    }
-  }
-
-  // 12.index map
-  {
-    if (meta_increment.indexes_size() > 0) {
-      DINGO_LOG(INFO) << "12.indexes_size=" << meta_increment.indexes_size();
-    }
-
-    // BAIDU_SCOPED_LOCK(index_map_mutex_);
-    for (int i = 0; i < meta_increment.indexes_size(); i++) {
-      auto* index = meta_increment.mutable_indexes(i);
-      index->mutable_table()->mutable_definition()->set_revision(meta_revision);
-
-      if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        auto ret = index_meta_->Put(index->id(), index->table());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, [id=" << index->id()
-                           << "] failed, errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement index CREATE, [id=" << index->id() << "] success";
-        }
-
-        // add index to parent schema
-        pb::coordinator_internal::SchemaInternal schema_to_update;
-        auto ret1 = schema_map_.Get(index->table().schema_id(), schema_to_update);
-        // auto* schema = schema_map_.seek(index.schema_id());
-        if (ret1 > 0) {
-          // add new created index's id to its parent schema's index_ids
-          schema_to_update.add_index_ids(index->id());
-          auto ret2 = schema_meta_->Put(index->table().schema_id(), schema_to_update);
-          if (!ret2.ok()) {
-            DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, but Put failed, [id=" << index->id()
-                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str();
-          }
-
-          DINGO_LOG(INFO) << "5.index map CREATE new_sub_index id=" << index->id()
-                          << " parent_id=" << index->table().schema_id();
-
-        } else {
-          DINGO_LOG(FATAL) << " CREATE INDEX apply illegal schema_id=" << index->table().schema_id()
-                           << " index_id=" << index->id() << " index_name=" << index->table().definition().name();
-        }
-
-        // add event_list
-        pb::meta::MetaEvent event;
-        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_CREATE);
-        event.mutable_index()->set_id(index->id());
-        *event.mutable_index()->mutable_definition() = index->table().definition();
-        event.mutable_index()->set_schema_id(index->table().schema_id());
-        event.mutable_index()->set_parent_table_id(index->table().table_id());
-        event_list->push_back(event);
-        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_CREATE);
-
-      } else if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        // update index to index_map
-        pb::coordinator_internal::TableInternal table_internal;
-        int ret = index_map_.Get(index->id(), table_internal);
-        if (ret > 0) {
-          if (index->table().has_definition()) {
-            *(table_internal.mutable_definition()) = index->table().definition();
-          }
-          auto ret1 = index_meta_->Put(index->id(), table_internal);
-          if (!ret1.ok()) {
-            DINGO_LOG(FATAL) << "ApplyMetaIncrement index UPDATE, but Put failed, [id=" << index->id()
-                             << "], errcode: " << ret1.error_code() << ", errmsg: " << ret1.error_str();
-          } else {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement index UPDATE, [id=" << index->id() << "] success";
-          }
-        } else {
-          DINGO_LOG(ERROR) << " UPDATE INDEX apply illegal index_id=" << index->id()
-                           << " index_name=" << index->table().definition().name();
-        }
-
-        // add event_list
-        pb::meta::MetaEvent event;
-        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_UPDATE);
-        event.mutable_index()->set_id(index->id());
-        *event.mutable_index()->mutable_definition() = index->table().definition();
-        event.mutable_index()->set_schema_id(index->table().schema_id());
-        event.mutable_index()->set_parent_table_id(index->table().table_id());
-        event_list->push_back(event);
-        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_UPDATE);
-
-      } else if (index->op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        auto ret = index_meta_->Erase(index->id());
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement index DELETE, but Erase failed, [id=" << index->id()
-                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-        } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement index DELETE, success [id=" << index->id() << "]";
-        }
-
-        // delete index_metrics
-        index_metrics_map_.Erase(index->id());
-
-        // delete from parent schema
-        pb::coordinator_internal::SchemaInternal schema_to_update;
-        auto ret1 = schema_map_.Get(index->table().schema_id(), schema_to_update);
-
-        if (ret1 > 0) {
-          pb::coordinator_internal::SchemaInternal new_schema;
-          new_schema = schema_to_update;
-
-          new_schema.clear_index_ids();
-
-          // add left index_id to new_schema
-          for (auto x : schema_to_update.index_ids()) {
-            if (x != index->id()) {
-              new_schema.add_index_ids(x);
-            }
-          }
-          schema_to_update = new_schema;
-          auto ret2 = schema_meta_->Put(index->table().schema_id(), schema_to_update);
-          if (!ret2.ok()) {
-            DINGO_LOG(FATAL) << "ApplyMetaIncrement index DELETE, but Put failed, [id=" << index->id()
-                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str();
-          }
-
-          DINGO_LOG(INFO) << "5.index map DELETE new_sub_index id=" << index->id()
-                          << " parent_id=" << index->table().schema_id();
-
-        } else {
-          DINGO_LOG(FATAL) << " DROP INDEX apply illegal schema_id=" << index->table().schema_id()
-                           << " index_id=" << index->id() << " index_name=" << index->table().definition().name();
-        }
-
-        // add event_list
-        pb::meta::MetaEvent event;
-        event.set_event_type(pb::meta::MetaEventType::META_EVENT_INDEX_DELETE);
-        event.mutable_index()->set_id(index->id());
-        *event.mutable_index()->mutable_definition() = index->table().definition();
-        event.mutable_index()->set_schema_id(index->table().schema_id());
-        event.mutable_index()->set_parent_table_id(index->table().table_id());
-        event_list->push_back(event);
-        watch_bitset.set(pb::meta::MetaEventType::META_EVENT_INDEX_DELETE);
       }
     }
   }
