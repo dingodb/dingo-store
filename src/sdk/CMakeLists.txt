@@ -36,6 +36,7 @@ add_library(sdk
   vector/vector_task.cc
   vector/vector_add_task.cc
   vector/vector_batch_query_task.cc
+  vector/vector_count_task.cc
   vector/vector_delete_task.cc
   vector/vector_get_border_task.cc
   vector/vector_get_index_metrics_task.cc

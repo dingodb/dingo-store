@@ -19,6 +19,7 @@
 #include "sdk/vector.h"
 #include "sdk/vector/vector_add_task.h"
 #include "sdk/vector/vector_batch_query_task.h"
+#include "sdk/vector/vector_count_task.h"
 #include "sdk/vector/vector_delete_task.h"
 #include "sdk/vector/vector_get_border_task.h"
 #include "sdk/vector/vector_get_index_metrics_task.h"
@@ -141,6 +142,24 @@ Status VectorClient::GetIndexMetricsByIndexName(int64_t schema_id, const std::st
   VectorGetIndexMetricsTask task(stub_, index_id, out_result);
   return task.Run();
 }
+
+Status VectorClient::CountByIndexId(int64_t index_id, int64_t start_vector_id, int64_t end_vector_id,
+                                    int64_t& out_count) {
+  VectorCountTask task(stub_, index_id, start_vector_id, end_vector_id, out_count);
+  return task.Run();
+}
+
+Status VectorClient::CountByIndexName(int64_t schema_id, const std::string& index_name, int64_t start_vector_id,
+                                      int64_t end_vector_id, int64_t& out_count) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+
+  VectorCountTask task(stub_, index_id, start_vector_id, end_vector_id, out_count);
+  return task.Run();
+}
+
 }  // namespace sdk
 
 }  // namespace dingodb
