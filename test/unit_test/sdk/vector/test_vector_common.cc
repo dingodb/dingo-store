@@ -252,6 +252,25 @@ TEST(VectorCommonTest, TestInternalVectorWithDistance2VectorWithDistance) {
   EXPECT_EQ(vector_with_distance.metric_type, MetricType::kL2);
 }
 
+TEST(VectorCommonTest, InternalVectorIndexMetrics2IndexMetricsResult) {
+  pb::common::VectorIndexMetrics pb;
+  pb.set_vector_index_type(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+  pb.set_current_count(100);
+  pb.set_deleted_count(10);
+  pb.set_max_id(200);
+  pb.set_min_id(1);
+  pb.set_memory_bytes(5000);
+
+  IndexMetricsResult result = InternalVectorIndexMetrics2IndexMetricsResult(pb);
+
+  EXPECT_EQ(result.index_type, VectorIndexType::kFlat);
+  EXPECT_EQ(result.count, 100);
+  EXPECT_EQ(result.deleted_count, 10);
+  EXPECT_EQ(result.max_vector_id, 200);
+  EXPECT_EQ(result.min_vector_id, 1);
+  EXPECT_EQ(result.memory_bytes, 5000);
+}
+
 TEST(VectorCommonTest, TestFillSearchIvfFlatParamPB) {
   SearchParam param;
   param.extra_params[SearchExtraParamType::kNprobe] = 10;

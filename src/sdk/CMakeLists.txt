@@ -38,6 +38,7 @@ add_library(sdk
   vector/vector_batch_query_task.cc
   vector/vector_delete_task.cc
   vector/vector_get_border_task.cc
+  vector/vector_get_index_metrics_task.cc
   vector/vector_scan_query_task.cc
   vector/vector_search_task.cc
   utils/thread_pool_actuator.cc

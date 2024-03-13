@@ -30,7 +30,7 @@ class VectorGetBorderPartTask;
 class VectorGetBorderTask : public VectorTask {
  public:
   VectorGetBorderTask(const ClientStub& stub, int64_t index_id, bool is_max, int64_t& out_vector_id)
-      : VectorTask(stub), index_id_(index_id), is_max_(is_max), out_vector_id_(out_vector_id), controller_(stub, rpc_) {
+      : VectorTask(stub), index_id_(index_id), is_max_(is_max), out_vector_id_(out_vector_id) {
     target_vector_id_ = is_max_ ? -1 : INT64_MAX;
   }
 
@@ -49,9 +49,6 @@ class VectorGetBorderTask : public VectorTask {
   int64_t& out_vector_id_;
   std::shared_ptr<VectorIndex> vector_index_;
   int64_t target_vector_id_;
-
-  VectorGetBorderIdRpc rpc_;
-  StoreRpcController controller_;
 
   std::shared_mutex rw_lock_;
   std::set<int64_t> next_part_ids_;

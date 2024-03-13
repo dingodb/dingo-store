@@ -181,6 +181,20 @@ def vector_scan_query(use_index_name=False):
         assert result.vectors[0].id == g_vector_ids[-1]
         assert result.vectors[1].id == g_vector_ids[-2]
 
+def vector_get_index_metrics(use_index_name=False):
+    if use_index_name:
+        tmp, result = g_vector_client.GetIndexMetricsByIndexName(g_schema_id, g_index_name)
+    else:
+        tmp, result = g_vector_client.GetIndexMetricsByIndexId(g_index_id)
+
+    print(f"vector get index metrics: {tmp.ToString()}, result : {result.ToString()}")
+    if tmp.ok():
+        assert result.index_type == dingosdk.kFlat
+        assert result.count == len(g_vector_ids)
+        assert result.deleted_count == 0
+        assert result.max_vector_id == g_vector_ids[-1]
+        assert result.min_vector_id == g_vector_ids[0]
+
 def vector_delete(use_index_name=False):
     if use_index_name:
         tmp, result = g_vector_client.DeleteByIndexName(g_schema_id, g_index_name, g_vector_ids)
@@ -202,6 +216,7 @@ if __name__ == "__main__":
     vector_query()
     vector_get_border()
     vector_scan_query()
+    vector_get_index_metrics()
     vector_delete()
     post_clean()
 
@@ -211,6 +226,7 @@ if __name__ == "__main__":
     vector_query(True)
     vector_get_border(True)
     vector_scan_query(True)
+    vector_get_index_metrics(True)
     vector_delete(True)
     post_clean(True)
 

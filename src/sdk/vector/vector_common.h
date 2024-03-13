@@ -272,6 +272,18 @@ static VectorWithDistance InternalVectorWithDistance2VectorWithDistance(const pb
   return std::move(to_return);
 }
 
+static IndexMetricsResult InternalVectorIndexMetrics2IndexMetricsResult(const pb::common::VectorIndexMetrics& pb) {
+  IndexMetricsResult to_return;
+  to_return.index_type = InternalVectorIndexTypePB2VectorIndexType(pb.vector_index_type());
+  to_return.count = pb.current_count();
+  to_return.deleted_count = pb.deleted_count();
+  to_return.max_vector_id = pb.max_id();
+  to_return.min_vector_id = pb.min_id();
+  to_return.memory_bytes = pb.memory_bytes();
+
+  return to_return;
+}
+
 static void FillSearchFlatParamPB(pb::common::SearchFlatParam* pb, const SearchParam& parameter) {
   if (parameter.extra_params.find(SearchExtraParamType::kParallelOnQueries) != parameter.extra_params.end()) {
     pb->set_parallel_on_queries(parameter.extra_params.at(SearchExtraParamType::kParallelOnQueries));
