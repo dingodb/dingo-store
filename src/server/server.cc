@@ -415,7 +415,7 @@ bool Server::InitCrontabManager() {
       "HEARTBEA",
       {pb::common::STORE, pb::common::INDEX},
       FLAGS_server_heartbeat_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerStoreHeartbeat({}, true); },
   });
 
@@ -462,7 +462,7 @@ bool Server::InitCrontabManager() {
         "SCAN",
         {pb::common::STORE},
         FLAGS_scan_scan_interval_s * 1000,
-        false,
+        true,
         [](void*) { ScanManager::RegularCleaningHandler(nullptr); },
     });
   }
@@ -476,7 +476,7 @@ bool Server::InitCrontabManager() {
         "SCAN_V2",
         {pb::common::STORE},
         FLAGS_scanv2_scan_interval_s * 1000,
-        false,
+        true,
         [](void*) { ScanManagerV2::RegularCleaningHandler(nullptr); },
     });
   }
@@ -491,7 +491,7 @@ bool Server::InitCrontabManager() {
           "SPLIT_CHECKER",
           {pb::common::STORE, pb::common::INDEX},
           FLAGS_region_split_check_interval_s * 1000,
-          false,
+          true,
           [](void*) { PreSplitChecker::TriggerPreSplitCheck(nullptr); },
       });
     }
@@ -504,7 +504,7 @@ bool Server::InitCrontabManager() {
       "PUSH",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_push_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCoordinatorPushToStore(nullptr); },
   });
 
@@ -515,7 +515,7 @@ bool Server::InitCrontabManager() {
       "UPDATE",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_update_state_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCoordinatorUpdateState(nullptr); },
   });
 
@@ -526,7 +526,7 @@ bool Server::InitCrontabManager() {
       "TASKLIST",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_task_list_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCoordinatorTaskListProcess(nullptr); },
   });
 
@@ -537,7 +537,7 @@ bool Server::InitCrontabManager() {
       "CALCULATE",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_calc_metrics_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCalculateTableMetrics(nullptr); },
   });
 
@@ -548,7 +548,7 @@ bool Server::InitCrontabManager() {
       "RECYCLE",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_recycle_orphan_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCoordinatorRecycleOrphan(nullptr); },
   });
 
@@ -559,7 +559,7 @@ bool Server::InitCrontabManager() {
       "meta_watch_clean",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_meta_watch_clean_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCoordinatorMetaWatchClean(nullptr); },
   });
 
@@ -570,7 +570,7 @@ bool Server::InitCrontabManager() {
       "REMOVE_WATCH",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_remove_watch_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerKvRemoveOneTimeWatch(nullptr); },
   });
 
@@ -581,7 +581,7 @@ bool Server::InitCrontabManager() {
       "LEASE",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_lease_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerLeaseTask(nullptr); },
   });
 
@@ -605,7 +605,7 @@ bool Server::InitCrontabManager() {
       "COMPACTION",
       {pb::common::COORDINATOR},
       FLAGS_coordinator_compaction_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerCompactionTask(nullptr); },
   });
 
@@ -616,7 +616,7 @@ bool Server::InitCrontabManager() {
       "SCRUB_VECTOR_INDEX",
       {pb::common::INDEX},
       FLAGS_server_scrub_vector_index_interval_s * 1000,
-      false,
+      true,
       [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
   });
 
@@ -628,7 +628,7 @@ bool Server::InitCrontabManager() {
         "RAFT_SNAPSHOT_CONTROLLER",
         {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX},
         FLAGS_raft_snapshot_interval_s * 1000,
-        false,
+        true,
         [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
     });
   }
@@ -640,7 +640,7 @@ bool Server::InitCrontabManager() {
       "GC_UPDATE_SAFE_POINT",
       {pb::common::STORE, pb::common::INDEX},
       FLAGS_gc_update_safe_point_interval_s * 1000,
-      false,
+      true,
       [](void*) { TxnEngineHelper::RegularUpdateSafePointTsHandler(nullptr); },
   });
 
@@ -650,7 +650,7 @@ bool Server::InitCrontabManager() {
       "GC_DO_GC",
       {pb::common::STORE, pb::common::INDEX},
       FLAGS_gc_do_gc_interval_s * 1000,
-      false,
+      true,
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
   });
 

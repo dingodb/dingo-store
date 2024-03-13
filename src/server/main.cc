@@ -406,7 +406,8 @@ void SetupSignalHandler() {
 // Modify gflag variable
 bool SetGflagVariable() {
   // Open bvar multi dimesion metrics.
-  if (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number == 0) {
+  if (bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number <
+      dingodb::Constant::kBvarMaxDumpMultiDimensionMetricNumberDefault) {
     if (google::SetCommandLineOption(
             "bvar_max_dump_multi_dimension_metric_number",
             std::to_string(dingodb::Constant::kBvarMaxDumpMultiDimensionMetricNumberDefault).c_str())
