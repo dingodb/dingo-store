@@ -76,7 +76,8 @@ DEFINE_int64(max_region_count, 40000, "max region of dingo");
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,
-                                           std::vector<pb::common::Location>& locations) {
+                                           std::vector<pb::common::Location>& locations,
+                                           pb::common::CoordinatorMap& coordinator_map) {
   if (cluster_id < 0) {
     return;
   }
@@ -87,8 +88,23 @@ void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, p
     return;
   }
 
+  // get leader server_location from raft_node
+  auto leader_peer_id = raft_node_->GetLeaderId();
+  pb::common::Location leader_raft_location;
+
+  int ret = Helper::PeerIdToLocation(leader_peer_id, leader_raft_location);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
+    return;
+  }
+
+  GetServerLocation(leader_raft_location, leader_location);
+
+  // get all peers
   std::vector<braft::PeerId> peers;
   raft_node_->ListPeers(&peers);
+  auto braft_status = raft_node_->GetStatus();
+  const auto& peer_status_map = braft_status->stable_followers();
 
   // get all server_location from raft_node
   for (const auto& peer : peers) {
@@ -104,19 +120,24 @@ void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, p
     GetServerLocation(raft_location, server_location);
 
     locations.push_back(server_location);
+
+    auto* new_coordinator = coordinator_map.add_coordinators();
+    *new_coordinator->mutable_location() = server_location;
+
+    if (peer == leader_peer_id) {
+      new_coordinator->set_state(pb::common::CoordinatorState::COORDINATOR_NORMAL);
+    } else if (peer_status_map.find(peer.to_string()) != peer_status_map.end()) {
+      const auto& peer_status = peer_status_map.at(peer.to_string());
+      if (peer_status.consecutive_error_times() > 0) {
+        new_coordinator->set_state(pb::common::CoordinatorState::COORDINATOR_OFFLINE);
+      } else {
+        new_coordinator->set_state(pb::common::CoordinatorState::COORDINATOR_NORMAL);
+      }
+    } else {
+      DINGO_LOG(ERROR) << "GetCoordinatorMap cannot find peer_status, peerid=" << peer;
+      new_coordinator->set_state(pb::common::CoordinatorState::COORDINATOR_ERROR);
+    }
   }
-
-  // get leader server_location from raft_node
-  auto leader_peer_id = raft_node_->GetLeaderId();
-  pb::common::Location leader_raft_location;
-
-  int ret = Helper::PeerIdToLocation(leader_peer_id, leader_raft_location);
-  if (ret < 0) {
-    DINGO_LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
-    return;
-  }
-
-  GetServerLocation(leader_raft_location, leader_location);
 }
 
 std::mt19937 CoordinatorControl::GetUrbg() {

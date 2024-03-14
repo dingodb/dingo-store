@@ -706,7 +706,7 @@ class CoordinatorControl : public MetaControl {
 
   // get coordinator_map
   void GetCoordinatorMap(int64_t cluster_id, int64_t &epoch, pb::common::Location &leader_location,
-                         std::vector<pb::common::Location> &locations);
+                         std::vector<pb::common::Location> &locations, pb::common::CoordinatorMap &coordinator_map);
 
   // get next id/epoch
   int64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,

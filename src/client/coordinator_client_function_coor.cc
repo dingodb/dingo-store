@@ -94,6 +94,8 @@ DECLARE_bool(force_read_only);
 DECLARE_int64(tenant_id);
 DECLARE_bool(get_all_tenant);
 
+DEFINE_bool(get_coordinator_map, false, "get_coordinator_map");
+
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
     return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
@@ -563,6 +565,8 @@ void SendGetCoordinatorMap(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   dingodb::pb::coordinator::GetCoordinatorMapResponse response;
 
   request.set_cluster_id(0);
+
+  request.set_get_coordinator_map(FLAGS_get_coordinator_map);
 
   auto status = coordinator_interaction->SendRequest("GetCoordinatorMap", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

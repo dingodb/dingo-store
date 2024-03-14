@@ -111,6 +111,7 @@ enum CoordinatorState {
   COORDINATOR_NEW = 0;
   COORDINATOR_NORMAL = 1;
   COORDINATOR_OFFLINE = 2;
+  COORDINATOR_ERROR = 3;
 }
 
 enum StoreState {

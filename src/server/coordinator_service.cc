@@ -983,10 +983,22 @@ void DoGetCoordinatorMap(google::protobuf::RpcController * /*controller*/,
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  if (request->get_coordinator_map()) {
+    auto is_leader = coordinator_control->IsLeader();
+    DINGO_LOG(DEBUG) << "Receive Get RegionMap Request, IsLeader:" << is_leader
+                     << ", Request:" << request->ShortDebugString();
+
+    if (!is_leader) {
+      coordinator_control->RedirectResponse(response);
+      return;
+    }
+  }
+
   int64_t epoch;
   pb::common::Location leader_location;
   std::vector<pb::common::Location> locations;
-  coordinator_control->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations);
+  auto *coordinator_map = response->mutable_coordinator_map();
+  coordinator_control->GetCoordinatorMap(request->cluster_id(), epoch, leader_location, locations, *coordinator_map);
 
   response->set_epoch(epoch);
 
