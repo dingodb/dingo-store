@@ -38,6 +38,7 @@ DECLARE_uint32(vector_dimension);
 DEFINE_string(sub_command, "", "sub command");
 DEFINE_string(filter_field, "", "filter field");
 DEFINE_string(filter_field_value, "", "filter field value");
+DEFINE_bool(filter_field_reverse, false, "reverse filter field");
 
 DEFINE_string(test_dataset_filepath, "", "test dataset filepath");
 
@@ -179,12 +180,32 @@ static bool FilterValue(const rapidjson::Value& obj) {
     return false;
   }
   if (obj[FLAGS_filter_field.c_str()].IsString()) {
-    if (obj[FLAGS_filter_field.c_str()].GetString() == FLAGS_filter_field_value) {
-      return true;
+    if (FLAGS_filter_field_reverse) {
+      if (obj[FLAGS_filter_field.c_str()].GetString() != FLAGS_filter_field_value) {
+        LOG(INFO) << fmt::format("filter value reverse: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
+                                 FLAGS_filter_field_value);
+        return true;
+      }
+    } else {
+      if (obj[FLAGS_filter_field.c_str()].GetString() == FLAGS_filter_field_value) {
+        LOG(INFO) << fmt::format("filter value: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
+                                 FLAGS_filter_field_value);
+        return true;
+      }
     }
   } else if (obj[FLAGS_filter_field.c_str()].IsInt64()) {
-    if (fmt::format("{}", obj[FLAGS_filter_field.c_str()].GetInt64()) == FLAGS_filter_field_value) {
-      return true;
+    if (FLAGS_filter_field_reverse) {
+      if (fmt::format("{}", obj[FLAGS_filter_field.c_str()].GetInt64()) != FLAGS_filter_field_value) {
+        LOG(INFO) << fmt::format("filter value reverse: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
+                                 FLAGS_filter_field_value);
+        return true;
+      }
+    } else {
+      if (fmt::format("{}", obj[FLAGS_filter_field.c_str()].GetInt64()) == FLAGS_filter_field_value) {
+        LOG(INFO) << fmt::format("filter value: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
+                                 FLAGS_filter_field_value);
+        return true;
+      }
     }
   }
 
