@@ -72,7 +72,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // CAUTION: may coredump here, so we cannot delete self store meta.
   *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance().Id()));
 
-  uint64_t temp_heartbeat_count = 0;
+  uint64_t temp_heartbeat_count = 524287;
   if (region_ids.empty()) {
     temp_heartbeat_count = heartbeat_counter.fetch_add(1, std::memory_order_relaxed);
   }
@@ -81,7 +81,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 
   // store_metrics
   bool need_report_store_own_metrics =
-      temp_heartbeat_count % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
+      temp_heartbeat_count % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0 || region_ids.size() > 2;
 
   // region metrics
   // only partial heartbeat or temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0 will report
@@ -89,7 +89,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   bool need_report_region_metrics =
       !region_ids.empty() || (temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0);
 
-  if (need_report_store_own_metrics || need_report_region_metrics) {
+  if (need_report_store_own_metrics) {
     *(request.mutable_store_metrics()) = (*store_metrics_manager->GetStoreMetrics()->Metrics());
     // setup id for store_metrics here, coordinator need this id to update store_metrics
     request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
@@ -99,6 +99,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
                                    first_start_time, request.mutable_store_metrics()->ByteSizeLong(),
                                    Helper::TimestampMs() - start_time)
                     << ", metrics: " << request.mutable_store_metrics()->ShortDebugString();
+  } else {
+    // setup id for store_metrics here, coordinator need this id to update store_metrics
+    request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
   }
 
   if (need_report_region_metrics) {
