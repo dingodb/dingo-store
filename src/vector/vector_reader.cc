@@ -183,7 +183,6 @@ butil::Status VectorReader::SearchVector(
         vector_with_distance_results.emplace_back(std::move(new_vector_with_distance_result));
       }
     }
-
   } else if (dingodb::pb::common::VectorFilter::VECTOR_ID_FILTER == vector_filter) {  // vector id array search
     butil::Status status = DoVectorSearchForVectorIdPreFilter(vector_index, vector_with_ids, parameter, region_range,
                                                               vector_with_distance_results);
@@ -818,6 +817,12 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EVECTOR_EMPTY, "vector_with_ids is empty");
+  }
+  if (vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
+    return butil::Status(pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND, "scalar data is empty");
+  }
 
   // scalar pre filter search
   butil::Status status;

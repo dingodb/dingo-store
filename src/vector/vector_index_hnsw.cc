@@ -424,8 +424,6 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
   RWLockReadGuard guard(&rw_lock_);
 
   if (search_parameter.hnsw().efsearch() > 0) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw][id({})] set ef_search({}).", Id(),
-                                   search_parameter.hnsw().efsearch());
     hnsw_index_->setEf(search_parameter.hnsw().efsearch());
   }
 

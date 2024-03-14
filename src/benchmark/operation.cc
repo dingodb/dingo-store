@@ -1098,7 +1098,7 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
   }
 
   std::string filter_source = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_source);
-  if (filter_source == "SCLAR") {
+  if (filter_source == "SCALAR") {
     search_param.filter_source = sdk::FilterSource::kScalarFilter;
   } else if (filter_source == "TABLE") {
     search_param.filter_source = sdk::FilterSource::kTableFilter;
@@ -1153,7 +1153,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   }
 
   std::string filter_source = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_source);
-  if (filter_source == "SCLAR") {
+  if (filter_source == "SCALAR") {
     search_param.filter_source = sdk::FilterSource::kScalarFilter;
   } else if (filter_source == "TABLE") {
     search_param.filter_source = sdk::FilterSource::kTableFilter;

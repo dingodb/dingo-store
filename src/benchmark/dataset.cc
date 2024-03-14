@@ -703,7 +703,7 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
     }
   } else {
     if (item.HasMember("filter")) {
-      for (const auto& m : item["item"].GetObject()) {
+      for (const auto& m : item["filter"].GetObject()) {
         if (m.value.IsString()) {
           sdk::ScalarValue scalar_value;
           scalar_value.type = sdk::ScalarFieldType::kString;
@@ -838,7 +838,7 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
     }
   } else {
     if (item.HasMember("filter")) {
-      for (const auto& m : item["item"].GetObject()) {
+      for (const auto& m : item["filter"].GetObject()) {
         if (m.value.IsString()) {
           sdk::ScalarValue scalar_value;
           scalar_value.type = sdk::ScalarFieldType::kString;
