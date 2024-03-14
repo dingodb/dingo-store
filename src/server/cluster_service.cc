@@ -871,7 +871,8 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   int64_t epoch = 0;
   pb::common::Location coordinator_leader_location;
   std::vector<pb::common::Location> locations;
-  coordinator_controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations);
+  pb::common::CoordinatorMap coordinator_map;
+  coordinator_controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations, coordinator_map);
 
   pb::common::Location kv_leader_location;
   kv_controller_->GetLeaderLocation(kv_leader_location);

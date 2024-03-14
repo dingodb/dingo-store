@@ -543,6 +543,7 @@ message CreateStoreResponse {
 message GetCoordinatorMapRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 cluster_id = 2;
+  bool get_coordinator_map = 3;
 }
 
 message GetCoordinatorMapResponse {
@@ -553,7 +554,8 @@ message GetCoordinatorMapResponse {
   dingodb.pb.common.Location kv_leader_location = 5;
   dingodb.pb.common.Location tso_leader_location = 6;
   dingodb.pb.common.Location auto_increment_leader_location = 7;
-  repeated dingodb.pb.common.Location coordinator_locations = 8;
+  repeated dingodb.pb.common.Location coordinator_locations = 8; // deprcated
+  dingodb.pb.common.CoordinatorMap coordinator_map = 9;
 }
 
 message ConfigCoordinatorRequest {
