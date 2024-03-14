@@ -2113,9 +2113,8 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   writer_ = std::make_shared<bdb::Writer>(GetSelfPtr());
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
-  // checkpoint_bthread_.Run([this]() { bdb::BdbHelper::CheckpointThread(envp_, is_close_); });
-  std::thread temp_checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, db_, is_close_); });
-  checkpoint_thread_.swap(temp_checkpoint_thread);
+  std::thread checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, db_, is_close_); });
+  checkpoint_thread.detach();
 
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
@@ -2124,6 +2123,8 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
 
 void BdbRawEngine::Close() {
   try {
+    is_close_.store(true);
+
     // Close our database handle if it was opened.
     if (db_ != nullptr) {
       db_->close(0);
@@ -2150,10 +2151,6 @@ void BdbRawEngine::Close() {
     DINGO_LOG(ERROR) << fmt::format("[bdb] error closing database and environment, exception: {} {}.",
                                     db_exception.get_errno(), db_exception.what());
   }
-
-  is_close_ = true;
-  // checkpoint_bthread_.Join();
-  checkpoint_thread_.join();
 
   DINGO_LOG(INFO) << "[bdb] I'm all done.";
 }

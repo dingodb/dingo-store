@@ -220,9 +220,9 @@ static void SignalHandler(int signo) {
     // clean temp directory
     dingodb::Helper::RemoveAllFileOrDirectory(dingodb::Server::GetInstance().GetCheckpointPath());
     dingodb::Helper::RemoveFileOrDirectory(dingodb::Server::GetInstance().PidFilePath());
-    DINGO_LOG(ERROR) << "GRACEFUL SHUTDOWN, clean up checkpoint dir: "
-                     << dingodb::Server::GetInstance().GetCheckpointPath()
-                     << ", clean up pid_file: " << dingodb::Server::GetInstance().PidFilePath();
+    DINGO_LOG(WARNING) << "GRACEFUL SHUTDOWN, clean up checkpoint dir: "
+                       << dingodb::Server::GetInstance().GetCheckpointPath()
+                       << ", clean up pid_file: " << dingodb::Server::GetInstance().PidFilePath();
     _exit(0);
   }
 

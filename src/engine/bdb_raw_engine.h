@@ -284,8 +284,6 @@ class BdbRawEngine : public RawEngine {
   RawEngine::WriterPtr writer_;
 
   std::atomic<bool> is_close_{false};
-  // Bthread checkpoint_bthread_;
-  std::thread checkpoint_thread_;
 };
 
 }  // namespace dingodb
