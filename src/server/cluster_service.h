@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <ostream>
-#include <string>
 
 #include "brpc/builtin/tabbed.h"
 #include "coordinator/auto_increment_control.h"
@@ -44,15 +43,8 @@ class ClusterStatImpl : public pb::cluster::dingo, public brpc::Tabbed {
   std::shared_ptr<TsoControl> tso_controller_;
   std::shared_ptr<AutoIncrementControl> auto_increment_controller_;
 
-  static void PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
-                             const std::vector<int32_t>& min_widths,
-                             const std::vector<std::vector<std::string>>& table_contents,
-                             const std::vector<std::vector<std::string>>& table_urls);
-
   void PrintStores(std::ostream& os, bool use_html);
   void PrintExecutors(std::ostream& os, bool use_html);
-  void PrintRegions(std::ostream& os, bool use_html);
-  void PrintSchemaTables(std::ostream& os, bool use_html);
 };
 
 }  // namespace dingodb

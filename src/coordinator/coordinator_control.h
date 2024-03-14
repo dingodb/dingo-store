@@ -601,6 +601,9 @@ class CoordinatorControl : public MetaControl {
   void UpdateRegionState();
   void UpdateClusterReadOnly();
 
+  // for web service
+  butil::Status GetMetaCount(int64_t &schema_count, int64_t &table_count, int64_t &index_count, int64_t &region_count);
+
   // get schemas
   // if tenant_id is -1, means get all schemas of all tenants
   butil::Status GetSchemas(int64_t tenant_id, std::vector<pb::meta::Schema> &schemas);

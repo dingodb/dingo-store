@@ -17,20 +17,24 @@
 
 #include <memory>
 
+#include "brpc/builtin/tabbed.h"
 #include "coordinator/coordinator_control.h"
 #include "proto/cluster_stat.pb.h"
 
 namespace dingodb {
 
-class RegionImpl : public pb::cluster::region {
+class RegionImpl : public pb::cluster::region, public brpc::Tabbed {
  public:
   RegionImpl() = default;
   void default_method(::google::protobuf::RpcController* controller, const pb::cluster::RegionRequest* request,
                       pb::cluster::RegionResponse* response, ::google::protobuf::Closure* done) override;
-  void SetControl(std::shared_ptr<CoordinatorControl> controller) { controller_ = controller; }
+  void GetTabInfo(brpc::TabInfoList*) const override;
+  void SetControl(std::shared_ptr<CoordinatorControl> controller) { coordinator_controller_ = controller; }
+
+  void PrintRegions(std::ostream& os, bool use_html);
 
  private:
-  std::shared_ptr<CoordinatorControl> controller_;
+  std::shared_ptr<CoordinatorControl> coordinator_controller_;
 };
 
 }  // namespace dingodb
