@@ -53,11 +53,12 @@ DEFINE_int64(store_heartbeat_report_region_multiple, 10,
              "store heartbeat report region multiple, this defines how many times of heartbeat will report "
              "region_metrics once to coordinator");
 
-int64_t HeartbeatTask::heartbeat_counter = 0;
+std::atomic<uint64_t> HeartbeatTask::heartbeat_counter = 0;
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
                                        std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   auto start_time = Helper::TimestampMs();
+  auto first_start_time = start_time;
   auto engine = Server::GetInstance().GetEngine();
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
 
@@ -71,18 +72,22 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   // CAUTION: may coredump here, so we cannot delete self store meta.
   *(request.mutable_store()) = (*store_meta_manager->GetStoreServerMeta()->GetStore(Server::GetInstance().Id()));
 
-  ++heartbeat_counter;
+  uint64_t temp_heartbeat_count = 0;
+  if (region_ids.empty()) {
+    temp_heartbeat_count = heartbeat_counter.fetch_add(1, std::memory_order_relaxed);
+  }
 
   auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
 
   // store_metrics
-  bool need_report_store_own_metrics = heartbeat_counter % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
+  bool need_report_store_own_metrics =
+      temp_heartbeat_count % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
 
   // region metrics
-  // only partial heartbeat or heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0 will report
+  // only partial heartbeat or temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0 will report
   // region_metrics, this is for reduce heartbeat size and cpu usage.
   bool need_report_region_metrics =
-      !region_ids.empty() || (heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0);
+      !region_ids.empty() || (temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0);
 
   if (need_report_store_own_metrics || need_report_region_metrics) {
     *(request.mutable_store_metrics()) = (*store_metrics_manager->GetStoreMetrics()->Metrics());
@@ -90,13 +95,15 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
     request.mutable_store_metrics()->set_is_update_epoch_version(is_update_epoch_version);
 
-    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] store_metrics size({}) elapsed time({} ms)",
-                                   request.mutable_store_metrics()->ByteSizeLong(), Helper::TimestampMs() - start_time)
+    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) store_metrics size({}) elapsed time({} ms)",
+                                   first_start_time, request.mutable_store_metrics()->ByteSizeLong(),
+                                   Helper::TimestampMs() - start_time)
                     << ", metrics: " << request.mutable_store_metrics()->ShortDebugString();
   }
 
   if (need_report_region_metrics) {
-    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] heartbeat_counter: {}", heartbeat_counter);
+    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) heartbeat_counter: {}", first_start_time,
+                                   temp_heartbeat_count);
 
     auto* mut_region_metrics_map = request.mutable_store_metrics()->mutable_region_metrics_map();
     auto region_metrics = store_metrics_manager->GetStoreRegionMetrics();
@@ -117,8 +124,9 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       auto inner_region = region_meta->InnerRegion();
       if (inner_region.state() == pb::common::StoreRegionState::SPLITTING ||
           inner_region.state() == pb::common::StoreRegionState::MERGING) {
-        DINGO_LOG(WARNING) << fmt::format("[heartbeat.store][region({})] region state({}) not suit heartbeat.",
-                                          inner_region.id(), pb::common::StoreRegionState_Name(inner_region.state()));
+        DINGO_LOG(WARNING) << fmt::format(
+            "[heartbeat.store][region({})] start_time({}) region state({}) not suit heartbeat.", inner_region.id(),
+            first_start_time, pb::common::StoreRegionState_Name(inner_region.state()));
         continue;
       }
 
@@ -166,9 +174,10 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       mut_region_metrics_map->insert({inner_region.id(), tmp_region_metrics});
     }
 
-    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] request region count({}) size({}) elapsed time({} ms)",
-                                   mut_region_metrics_map->size(), request.ByteSizeLong(),
-                                   Helper::TimestampMs() - start_time);
+    DINGO_LOG(INFO) << fmt::format(
+        "[heartbeat.store] start_time({}) request region count({}) size({}) region_ids_count({}), elapsed time({} ms)",
+        first_start_time, mut_region_metrics_map->size(), request.ByteSizeLong(), region_ids.size(),
+        Helper::TimestampMs() - start_time);
   }
 
   if (!region_ids.empty()) {
@@ -177,7 +186,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       region_ids_str += std::to_string(region_id) + ",";
     }
 
-    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] this is a partial heartbeat, {}", region_ids_str)
+    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) this is a partial heartbeat, {}", first_start_time,
+                                   region_ids_str)
                     << " request: " << request.ShortDebugString();
   }
 
@@ -185,13 +195,13 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   pb::coordinator::StoreHeartbeatResponse response;
   auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   if (!status.ok()) {
-    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] store heartbeat failed, error: {}",
-                                      Helper::PrintStatus(status));
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] start_time({}) store heartbeat failed, error: {}",
+                                      first_start_time, Helper::PrintStatus(status));
     return;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] response size({}) elapsed time({} ms)", response.ByteSizeLong(),
-                                 Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) response size({}) elapsed time({} ms)",
+                                 first_start_time, response.ByteSizeLong(), Helper::TimestampMs() - start_time);
 
   HeartbeatTask::HandleStoreHeartbeatResponse(store_meta_manager, response);
 }
