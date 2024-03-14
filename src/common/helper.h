@@ -23,7 +23,6 @@
 #include "braft/configuration.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
-#include "common/tracker.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -379,6 +378,11 @@ class Helper {
   static std::vector<float> StringToVector(const std::string& str);
 
   static bool SaveFile(const std::string& filepath, const std::string& data);
+
+  static void PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
+                             const std::vector<int32_t>& min_widths,
+                             const std::vector<std::vector<std::string>>& table_contents,
+                             const std::vector<std::vector<std::string>>& table_urls);
 };
 
 }  // namespace dingodb

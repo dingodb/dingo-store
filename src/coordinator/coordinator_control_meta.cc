@@ -3462,4 +3462,14 @@ butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& t
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::GetMetaCount(int64_t& schema_count, int64_t& table_count, int64_t& index_count,
+                                               int64_t& region_count) {
+  schema_count = schema_map_.Size();
+  table_count = table_map_.Size();
+  index_count = index_map_.Size();
+  region_count = region_map_.Size();
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb
