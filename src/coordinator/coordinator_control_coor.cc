@@ -165,7 +165,8 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
 }
 
 void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
-  std::vector<int64_t> store_ids_to_get;
+  std::vector<int64_t> store_ids_to_get_full;
+  std::set<int64_t> store_ids_to_get_own;
   std::vector<int64_t> all_store_ids;
   if (store_id == 0) {
     store_map_.GetAllKeys(all_store_ids);
@@ -180,25 +181,49 @@ void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb:
         const auto& store_metric = store_region_metrics_map_.at(id);
         if (store_metric.region_metrics_map_size() > 0) {
           store_metrics.push_back(store_metric);
-        } else {
-          store_ids_to_get.push_back(id);
         }
+
+        if ((!store_metric.has_store_own_metrics()) || store_metric.store_own_metrics().id() == 0) {
+          store_ids_to_get_own.insert(id);
+        }
+
       } else {
-        store_ids_to_get.push_back(id);
+        store_ids_to_get_full.push_back(id);
       }
     }
   }
 
-  // for store that has no regions, there is no store_own_metric in store_region_metrics_map, so we get store_own_metric
-  // from store_metrics_map
-  if (!store_ids_to_get.empty()) {
+  // for store that has no own metrics, so we get store_own_metric from store_metrics_map
+  if (!store_ids_to_get_full.empty()) {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
-    for (const auto& id : store_ids_to_get) {
+    for (const auto& id : store_ids_to_get_full) {
       if (store_metrics_map_.find(id) != store_metrics_map_.end()) {
         pb::common::StoreMetrics store_metric;
         store_metric.set_id(id);
         (*store_metric.mutable_store_own_metrics()) = store_metrics_map_.at(id).store_own_metrics;
         store_metrics.push_back(store_metric);
+
+        DINGO_LOG(INFO) << "GetStoreRegionMetrics... store_ids_to_get_full OK store_id=" << id
+                        << " store_own_metrics=" << store_metric.store_own_metrics().ShortDebugString();
+      }
+    }
+  }
+
+  // for store that only has partial heartbeat, so we get store_own_metric from store_map_
+  if (!store_ids_to_get_own.empty()) {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (auto& metrics_to_update : store_metrics) {
+      if (store_ids_to_get_own.contains(metrics_to_update.id())) {
+        if (store_metrics_map_.find(metrics_to_update.id()) != store_metrics_map_.end()) {
+          (*metrics_to_update.mutable_store_own_metrics()) =
+              store_metrics_map_.at(metrics_to_update.id()).store_own_metrics;
+
+          DINGO_LOG(INFO) << "GetStoreRegionMetrics... store_ids_to_get_own OK store_id=" << metrics_to_update.id()
+                          << " store_own_metrics=" << metrics_to_update.store_own_metrics().ShortDebugString();
+        } else {
+          DINGO_LOG(WARNING) << "GetStoreRegionMetrics... store_ids_to_get_own store_id=" << metrics_to_update.id()
+                             << " not exist in store_metrics_map_";
+        }
       }
     }
   }

@@ -48,7 +48,7 @@ class HeartbeatTask : public TaskRunnable {
   static void HandleStoreHeartbeatResponse(std::shared_ptr<StoreMetaManager> store_meta,
                                            const pb::coordinator::StoreHeartbeatResponse& response);
 
-  static int64_t heartbeat_counter;
+  static std::atomic<uint64_t> heartbeat_counter;
 
  private:
   bool is_update_epoch_version_;
