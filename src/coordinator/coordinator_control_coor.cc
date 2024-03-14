@@ -213,7 +213,7 @@ void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb:
   if (!store_ids_to_get_own.empty()) {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
     for (auto& metrics_to_update : store_metrics) {
-      if (store_ids_to_get_own.contains(metrics_to_update.id())) {
+      if (store_ids_to_get_own.count(metrics_to_update.id()) > 0) {
         if (store_metrics_map_.find(metrics_to_update.id()) != store_metrics_map_.end()) {
           (*metrics_to_update.mutable_store_own_metrics()) =
               store_metrics_map_.at(metrics_to_update.id()).store_own_metrics;
