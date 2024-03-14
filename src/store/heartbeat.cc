@@ -76,8 +76,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
 
   // store_metrics
-  bool need_reqport_store_own_metrics =
-      heartbeat_counter % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
+  bool need_report_store_own_metrics = heartbeat_counter % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0;
 
   // region metrics
   // only partial heartbeat or heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0 will report
@@ -85,7 +84,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
   bool need_report_region_metrics =
       !region_ids.empty() || (heartbeat_counter % FLAGS_store_heartbeat_report_region_multiple == 0);
 
-  if (need_reqport_store_own_metrics || need_report_region_metrics) {
+  if (need_report_store_own_metrics || need_report_region_metrics) {
     *(request.mutable_store_metrics()) = (*store_metrics_manager->GetStoreMetrics()->Metrics());
     // setup id for store_metrics here, coordinator need this id to update store_metrics
     request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
@@ -170,6 +169,16 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     DINGO_LOG(INFO) << fmt::format("[heartbeat.store] request region count({}) size({}) elapsed time({} ms)",
                                    mut_region_metrics_map->size(), request.ByteSizeLong(),
                                    Helper::TimestampMs() - start_time);
+  }
+
+  if (!region_ids.empty()) {
+    std::string region_ids_str = "region_ids_count: " + std::to_string(region_ids.size()) + ", region_ids: ";
+    for (const auto& region_id : region_ids) {
+      region_ids_str += std::to_string(region_id) + ",";
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] this is a partial heartbeat, {}", region_ids_str)
+                    << " request: " << request.ShortDebugString();
   }
 
   start_time = Helper::TimestampMs();

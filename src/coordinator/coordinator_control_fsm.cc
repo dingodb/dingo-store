@@ -1831,8 +1831,9 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           schema_to_update.add_index_ids(index->id());
           auto ret2 = schema_meta_->Put(index->table().schema_id(), schema_to_update);
           if (!ret2.ok()) {
-            DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, but Put failed, [id=" << index->id()
-                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str();
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement index CREATE, but schema_meta_->Put failed, [id=" << index->id()
+                             << "], errcode: " << ret2.error_code() << ", errmsg: " << ret2.error_str()
+                             << ", schema_id=" << index->table().schema_id();
           }
 
           DINGO_LOG(INFO) << "5.index map CREATE new_sub_index id=" << index->id()
@@ -1961,11 +1962,15 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // add table to parent schema
         pb::coordinator_internal::SchemaInternal schema_to_update;
         auto ret1 = schema_map_.Get(table->table().schema_id(), schema_to_update);
-        // auto* schema = schema_map_.seek(table.schema_id());
         if (ret1 > 0) {
           // add new created table's id to its parent schema's table_ids
           schema_to_update.add_table_ids(table->id());
-          schema_meta_->Put(table->table().schema_id(), schema_to_update);
+          auto ret1 = schema_meta_->Put(table->table().schema_id(), schema_to_update);
+          if (!ret1.ok()) {
+            DINGO_LOG(FATAL) << "ApplyMetaIncrement table CREATE, but schema_meta_->Put failed, [id=" << table->id()
+                             << "], errcode: " << ret1.error_code() << ", errmsg: " << ret1.error_str()
+                             << ", schema_id=" << table->table().schema_id();
+          }
 
           DINGO_LOG(INFO) << "5.table map CREATE new_sub_table id=" << table->id()
                           << " parent_id=" << table->table().schema_id();

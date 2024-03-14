@@ -2834,7 +2834,7 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
 
     // if lock is not exist, nothing to do
     if (lock_info.primary_lock().empty()) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback", region->Id())
                          << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
                          << ", start_ts: " << start_ts;
 

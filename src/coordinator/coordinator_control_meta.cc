@@ -1694,24 +1694,21 @@ butil::Status CoordinatorControl::GetTable(int64_t schema_id, int64_t table_id,
   }
 
   // validate table_id & get table definition
-  {
-    // BAIDU_SCOPED_LOCK(table_map_mutex_);
-    pb::coordinator_internal::TableInternal table_internal;
-    int ret = table_map_.Get(table_id, table_internal);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
-      return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
-    }
-
-    DINGO_LOG(INFO) << "GetTable found table_id=" << table_id;
-
-    auto* table_id_for_response = table_definition_with_id.mutable_table_id();
-    table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-    table_id_for_response->set_entity_id(table_id);
-    table_id_for_response->set_parent_entity_id(schema_id);
-
-    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
+  pb::coordinator_internal::TableInternal table_internal;
+  int ret = table_map_.Get(table_id, table_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: table_id not found" << table_id;
+    return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found");
   }
+
+  DINGO_LOG(INFO) << "GetTable found table_id=" << table_id;
+
+  auto* table_id_for_response = table_definition_with_id.mutable_table_id();
+  table_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id_for_response->set_entity_id(table_id);
+  table_id_for_response->set_parent_entity_id(schema_id);
+
+  *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
 
   DINGO_LOG(DEBUG) << fmt::format("GetTable schema_id={} table_id={} table_definition_with_id={}", schema_id, table_id,
                                   table_definition_with_id.ShortDebugString());
@@ -1741,27 +1738,25 @@ butil::Status CoordinatorControl::GetIndex(int64_t schema_id, int64_t index_id, 
   }
 
   // validate index_id & get index definition
-  {
-    pb::coordinator_internal::TableInternal table_internal;
-    int ret = index_map_.Get(index_id, table_internal);
-    if (ret < 0) {
-      DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
-      return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
-    }
-
-    // if (check_compatibility && table_internal.table_id() > 0) {
-    //   return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot get index created by new interface.");
-    // }
-
-    DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
-
-    auto* index_id_for_response = table_definition_with_id.mutable_table_id();
-    index_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
-    index_id_for_response->set_entity_id(index_id);
-    index_id_for_response->set_parent_entity_id(schema_id);
-
-    *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
+  pb::coordinator_internal::TableInternal table_internal;
+  int ret = index_map_.Get(index_id, table_internal);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ERRROR: index_id not found" << index_id;
+    return butil::Status(pb::error::Errno::EINDEX_NOT_FOUND, "index_id not found");
   }
+
+  // if (check_compatibility && table_internal.table_id() > 0) {
+  //   return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot get index created by new interface.");
+  // }
+
+  DINGO_LOG(INFO) << "GetIndex found index_id=" << index_id;
+
+  auto* index_id_for_response = table_definition_with_id.mutable_table_id();
+  index_id_for_response->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id_for_response->set_entity_id(index_id);
+  index_id_for_response->set_parent_entity_id(schema_id);
+
+  *(table_definition_with_id.mutable_table_definition()) = table_internal.definition();
 
   DINGO_LOG(DEBUG) << fmt::format("GetIndex schema_id={} index_id={} table_definition_with_id={}", schema_id, index_id,
                                   table_definition_with_id.ShortDebugString());
