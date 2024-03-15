@@ -68,9 +68,7 @@ set_target_properties(sdk
 )
 
 # CAUTION: the order of the libraries is important, because of the dependencies between them.
-target_link_libraries(sdk
-PRIVATE
-    $<TARGET_OBJECTS:PROTO_OBJS>
+set(SDK_LIBS
     ${BRPC_LIBRARIES}
     ${PROTOBUF_LIBRARIES}
     ${GFLAGS_LIBRARIES}
@@ -84,12 +82,24 @@ PRIVATE
     ${CRYPTO_LIBRARIES}
     ${GLOG_LIBRARIES}
     ${GTEST_LIBRARIES}
-    # ${LIBUNWIND_LIBRARIES}
     # ${LIBUNWIND_GENERIC_LIBRARIES}
     # ${LIBUNWIND_ARCH_LIBRARIES}
-    dl
-    Threads::Threads
-    ${GCOV_LIBRAR}
+)
+
+if(BRPC_ENABLE_CPU_PROFILER)
+  set(SDK_LIBS ${SDK_LIBS} ${GPERFTOOLS_LIBRARIES}  ${LIBUNWIND_LIBRARIES})
+endif()
+
+if(ENABLE_COVERAGE)
+  set(SDK_LIBS ${SDK_LIBS} ${GCOV_LIBRAR})
+endif()
+
+set(SDK_LIBS ${SDK_LIBS} dl Threads::Threads)
+
+target_link_libraries(sdk
+PRIVATE
+    $<TARGET_OBJECTS:PROTO_OBJS>
+    ${SDK_LIBS}
     )
 
 add_dependencies(sdk ${DEPEND_LIBS})

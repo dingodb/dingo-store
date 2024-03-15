@@ -23,7 +23,7 @@ SET(GPERFTOOLS_LIBRARIES "${GPERFTOOLS_INSTALL_DIR}/lib/libtcmalloc_and_profiler
 SET(GPERFTOOLS_MINIMAL_LIBRARIES "${GPERFTOOLS_INSTALL_DIR}/lib/libtcmalloc_minimal.a" CACHE FILEPATH "gperftools library." FORCE)
 
 if(BRPC_ENABLE_CPU_PROFILER)
-    set(CONFIGURE_COMMAND_GPERF sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-libunwind --enable-cpu-profiler --enable-heap-profiler --enable--heap-checker CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g)
+    set(CONFIGURE_COMMAND_GPERF sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --with-pic --enable-libunwind --enable-cpu-profiler --enable-heap-profiler --enable--heap-checker CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g)
     message(STATUS "gperftools found BRPC_ENABLE_CPU_PROFILER is enabled, enable all profiler")
 else()
     set(CONFIGURE_COMMAND_GPERF sh autogen.sh COMMAND sh ./configure --prefix=${GPERFTOOLS_INSTALL_DIR} --enable-shared=no --enable-static=yes --enable-minimal CPPFLAGS=-I${THIRD_PARTY_PATH}/install/libunwind/include LDFLAGS=-L${THIRD_PARTY_PATH}/install/libunwind/lib CXXFLAGS=-g)
