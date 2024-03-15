@@ -25,6 +25,7 @@
 #include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -2113,7 +2114,10 @@ bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::s
   writer_ = std::make_shared<bdb::Writer>(GetSelfPtr());
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);
 
-  std::thread checkpoint_thread([this]() { bdb::BdbHelper::CheckpointThread(envp_, db_, is_close_); });
+  std::thread checkpoint_thread([this]() {
+    pthread_setname_np(pthread_self(), "bdb_chkpt");
+    bdb::BdbHelper::CheckpointThread(envp_, db_, is_close_);
+  });
   checkpoint_thread.detach();
 
   DINGO_LOG(INFO) << fmt::format("[bdb] db path: {}", db_path_);

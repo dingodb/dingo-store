@@ -129,9 +129,9 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     bool need_apply = true;
     // Check region state
     auto region_state = region_->State();
-    if (region_state == pb::common::StoreRegionState::DELETING ||
-        region_state == pb::common::StoreRegionState::DELETED ||
-        region_state == pb::common::StoreRegionState::TOMBSTONE) {
+    if (BAIDU_UNLIKELY(region_state == pb::common::StoreRegionState::DELETING ||
+                       region_state == pb::common::StoreRegionState::DELETED ||
+                       region_state == pb::common::StoreRegionState::TOMBSTONE)) {
       std::string s = fmt::format("Region({}) is {} state, abandon apply log", region_->Id(),
                                   pb::common::StoreRegionState_Name(region_state));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);
@@ -142,7 +142,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     }
 
     // Check region epoch
-    if (need_apply && !Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch())) {
+    if (BAIDU_UNLIKELY(need_apply && !Helper::IsEqualRegionEpoch(raft_cmd->header().epoch(), region_->Epoch()))) {
       std::string s = fmt::format("Region({}) epoch is not match, region_epoch({}) raft_cmd_epoch({})", region_->Id(),
                                   region_->EpochToString(), Helper::RegionEpochToString(raft_cmd->header().epoch()));
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] {}", region_->Id(), s);

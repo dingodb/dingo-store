@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <string>
 
 #include "butil/compiler_specific.h"
 #include "common/helper.h"
@@ -291,9 +292,10 @@ std::vector<std::vector<std::string>> WorkerSet::GetPendingTaskTrace() {
   return traces;
 }
 
-PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
+PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread)
     : name_(name),
       worker_num_(worker_num),
+      use_pthread_(use_pthread),
       max_pending_task_count_(max_pending_task_count),
       total_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_total_task_count", name)),
       pending_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_pending_task_count", name)),
@@ -309,11 +311,13 @@ PriorWorkerSet::~PriorWorkerSet() {
 }
 
 bool PriorWorkerSet::Init() {
-  for (uint32_t i = 0; i < worker_num_; ++i) {
-    workers_.push_back(Bthread());
-  }
+  uint32_t i = 0;
 
-  auto worker_function = [this]() {
+  auto worker_function = [this, &i]() {
+    if (use_pthread_) {
+      pthread_setname_np(pthread_self(), (name_ + ":" + std::to_string(i)).c_str());
+    }
+
     while (true) {
       bthread_mutex_lock(&mutex_);
       while (pending_task_count_.load(std::memory_order_relaxed) == 0) {
@@ -333,7 +337,7 @@ bool PriorWorkerSet::Init() {
 
       bthread_mutex_unlock(&mutex_);
 
-      if (task != nullptr) {
+      if (BAIDU_UNLIKELY(task != nullptr)) {
         task->Run();
         queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
         DecPendingTaskCount();
@@ -342,16 +346,28 @@ bool PriorWorkerSet::Init() {
     }
   };
 
-  for (auto& bthread : workers_) {
-    bthread.Run(worker_function);
+  if (use_pthread_) {
+    for (i = 0; i < worker_num_; ++i) {
+      pthread_workers_.push_back(std::thread(worker_function));
+    }
+  } else {
+    for (i = 0; i < worker_num_; ++i) {
+      bthread_workers_.push_back(Bthread(worker_function));
+    }
   }
 
   return true;
 }
 
 void PriorWorkerSet::Destroy() {
-  for (const auto& bthread : workers_) {
-    bthread.Join();
+  if (use_pthread_) {
+    for (auto& std_thread : pthread_workers_) {
+      std_thread.join();
+    }
+  } else {
+    for (auto& bthread : bthread_workers_) {
+      bthread.Join();
+    }
   }
 }
 
@@ -367,24 +383,10 @@ bool PriorWorkerSet::Execute(TaskRunnablePtr task) {
   IncPendingTaskCount();
   IncTotalTaskCount();
 
-  // if the pending task count is less than the worker number, execute the task directly
-  // else push the task to the task queue
-  // the total count of pending task will be decreased in the worker function
-  // and the total concurrency is limited by the worker number
-  if (pend_task_count < worker_num_) {
-    int64_t now_time_us = Helper::TimestampUs();
-    task->Run();
-    queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
-
-    DecPendingTaskCount();
-    Notify(WorkerEventType::kFinishTask);
-
-  } else {
-    bthread_mutex_lock(&mutex_);
-    tasks_.push(task);
-    bthread_cond_signal(&cond_);
-    bthread_mutex_unlock(&mutex_);
-  }
+  bthread_mutex_lock(&mutex_);
+  tasks_.push(task);
+  bthread_cond_signal(&cond_);
+  bthread_mutex_unlock(&mutex_);
 
   return true;
 }
