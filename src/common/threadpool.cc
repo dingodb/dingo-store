@@ -15,6 +15,7 @@
 #include "common/threadpool.h"
 
 #include <exception>
+#include <string>
 
 #include "fmt/core.h"
 
@@ -26,8 +27,8 @@ ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num)
       total_task_count_metrics_(fmt::format("dingo_threadpool_{}_total_task_count", thread_name)),
       pending_task_count_metrics_(fmt::format("dingo_threadpool_{}_pending_task_count", thread_name)) {
   for (size_t i = 0; i < thread_num; ++i)
-    workers_.emplace_back([this] {
-      pthread_setname_np(pthread_self(), this->thread_name_.c_str());
+    workers_.emplace_back([this, &i] {
+      pthread_setname_np(pthread_self(), (thread_name_ + ":" + std::to_string(i)).c_str());
 
       for (;;) {
         TaskPtr task;

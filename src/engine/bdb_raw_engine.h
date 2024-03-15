@@ -20,7 +20,6 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <thread>
 #include <unordered_map>
 #include <vector>
 

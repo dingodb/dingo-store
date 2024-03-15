@@ -22,6 +22,7 @@
 #include <memory>
 #include <queue>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "bthread/execution_queue.h"
@@ -66,7 +67,7 @@ using TaskRunnablePtr = std::shared_ptr<TaskRunnable>;
 
 // Custom Comparator for priority_queue
 struct CompareTaskRunnable {
-  bool operator()(const TaskRunnablePtr& lhs, TaskRunnablePtr& rhs) const { return lhs < rhs; }
+  bool operator()(const TaskRunnablePtr& lhs, TaskRunnablePtr& rhs) const { return lhs.get() < rhs.get(); }
 };
 
 int ExecuteRoutine(void*, bthread::TaskIterator<TaskRunnablePtr>& iter);
@@ -171,11 +172,12 @@ using WorkerSetPtr = std::shared_ptr<WorkerSet>;
 
 class PriorWorkerSet {
  public:
-  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
+  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
   ~PriorWorkerSet();
 
-  static std::shared_ptr<PriorWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
-    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count);
+  static std::shared_ptr<PriorWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count,
+                                             bool use_pthead) {
+    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count, use_pthead);
   }
 
   bool Init();
@@ -206,7 +208,9 @@ class PriorWorkerSet {
   bthread_cond_t cond_;
   std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> tasks_;
 
-  std::vector<Bthread> workers_;
+  bool use_pthread_;
+  std::vector<Bthread> bthread_workers_;
+  std::vector<std::thread> pthread_workers_;
 
   int64_t max_pending_task_count_;
   uint32_t worker_num_;
