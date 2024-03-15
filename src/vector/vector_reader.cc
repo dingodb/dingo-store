@@ -817,13 +817,6 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
-  if (vector_with_ids.empty()) {
-    return butil::Status(pb::error::EVECTOR_EMPTY, "vector_with_ids is empty");
-  }
-  if (vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
-    return butil::Status(pb::error::EVECTOR_SCALAR_DATA_NOT_FOUND, "scalar data is empty");
-  }
-
   // scalar pre filter search
   butil::Status status;
   bool use_coprocessor = parameter.has_vector_coprocessor();
