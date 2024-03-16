@@ -62,7 +62,7 @@ DEFINE_bool(ip2hostname, false, "resolve ip to hostname for get map api");
 DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
-DEFINE_int32(max_hnsw_parallel_thread_num, 1, "max hnsw parallel thread num");
+DEFINE_int32(vector_operation_parallel_thread_num, 1, "vector operation parallel thread num");
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
 Server& Server::GetInstance() {
@@ -680,7 +680,7 @@ bool Server::InitStoreMetricsManager() {
 }
 
 bool Server::InitVectorIndexManager() {
-  vector_index_thread_pool_ = std::make_shared<ThreadPool>("vector_index", FLAGS_max_hnsw_parallel_thread_num);
+  vector_index_thread_pool_ = std::make_shared<ThreadPool>("vector_index", FLAGS_vector_operation_parallel_thread_num);
 
   vector_index_manager_ = VectorIndexManager::New();
   return vector_index_manager_->Init();

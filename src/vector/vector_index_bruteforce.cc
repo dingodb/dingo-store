@@ -30,8 +30,9 @@ namespace dingodb {
 DEFINE_int64(bruteforce_need_save_count, 10000, "bruteforce need save count");
 
 VectorIndexBruteforce::VectorIndexBruteforce(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                             const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, epoch, range) {
+                                             const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                             ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
   metric_type_ = vector_index_parameter.bruteforce_parameter().metric_type();
   dimension_ = vector_index_parameter.bruteforce_parameter().dimension();
 }
@@ -49,18 +50,18 @@ butil::Status VectorIndexBruteforce::Add(const std::vector<pb::common::VectorWit
 butil::Status VectorIndexBruteforce::Delete(const std::vector<int64_t>& /*delete_ids*/) { return butil::Status::OK(); }
 
 butil::Status VectorIndexBruteforce::Search(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/,
-                                            uint32_t /*topk*/, const std::vector<std::shared_ptr<FilterFunctor>>& /*filters*/,
-                                            bool, const pb::common::VectorSearchParameter&,
+                                            uint32_t /*topk*/,
+                                            const std::vector<std::shared_ptr<FilterFunctor>>& /*filters*/, bool,
+                                            const pb::common::VectorSearchParameter&,
                                             std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "not support");
 }
 
-butil::Status VectorIndexBruteforce::RangeSearch(const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/,
-                                                 float /*radius*/,
-                                                 const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& /*filters*/,
-                                                 bool /*reconstruct*/,
-                                                 const pb::common::VectorSearchParameter& /*parameter*/,
-                                                 std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
+butil::Status VectorIndexBruteforce::RangeSearch(
+    const std::vector<pb::common::VectorWithId>& /*vector_with_ids*/, float /*radius*/,
+    const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& /*filters*/, bool /*reconstruct*/,
+    const pb::common::VectorSearchParameter& /*parameter*/,
+    std::vector<pb::index::VectorWithDistanceResult>& /*results*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "not support");
 }
 

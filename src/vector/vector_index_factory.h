@@ -42,17 +42,20 @@ class VectorIndexFactory {
                                               ThreadPoolPtr thread_pool);
 
   static std::shared_ptr<VectorIndex> NewFlat(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+                                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                              ThreadPoolPtr thread_pool);
 
   static std::shared_ptr<VectorIndex> NewIvfFlat(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+                                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                                 ThreadPoolPtr thread_pool);
 
   static std::shared_ptr<VectorIndex> NewIvfPq(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
-                                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+                                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                               ThreadPoolPtr thread_pool);
 
   static std::shared_ptr<VectorIndex> NewBruteForce(int64_t id, const pb::common::VectorIndexParameter& index_parameter,
                                                     const pb::common::RegionEpoch& epoch,
-                                                    const pb::common::Range& range);
+                                                    const pb::common::Range& range, ThreadPoolPtr thread_pool);
 };
 
 }  // namespace dingodb

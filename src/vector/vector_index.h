@@ -25,6 +25,7 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/runnable.h"
+#include "common/threadpool.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "proto/common.pb.h"
@@ -39,7 +40,7 @@ namespace dingodb {
 class VectorIndex {
  public:
   VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-              const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+              const pb::common::RegionEpoch& epoch, const pb::common::Range& range, ThreadPoolPtr thread_pool);
   virtual ~VectorIndex();
 
   VectorIndex(const VectorIndex& rhs) = delete;
@@ -90,9 +91,12 @@ class VectorIndex {
 
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority);
+  butil::Status AddByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority = false);
 
   virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
   virtual butil::Status Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority);
+  butil::Status UpsertByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                 bool is_priority = false);
 
   virtual butil::Status Delete(const std::vector<int64_t>& delete_ids) = 0;
   virtual butil::Status Delete(const std::vector<int64_t>& delete_ids, bool is_priority);
@@ -106,10 +110,20 @@ class VectorIndex {
                                const pb::common::VectorSearchParameter& parameter,
                                std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
 
+  butil::Status SearchByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                 const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
+                                 const pb::common::VectorSearchParameter& parameter,
+                                 std::vector<pb::index::VectorWithDistanceResult>& results);
+
   virtual butil::Status RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
                                     const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                     bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                     std::vector<pb::index::VectorWithDistanceResult>& results) = 0;
+
+  butil::Status RangeSearchByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+                                      const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
+                                      bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                      std::vector<pb::index::VectorWithDistanceResult>& results);
 
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
@@ -161,6 +175,9 @@ class VectorIndex {
   pb::common::Range range;
 
   pb::common::VectorIndexParameter vector_index_parameter;
+
+  // vector index thread pool
+  ThreadPoolPtr thread_pool;
 };
 
 using VectorIndexPtr = std::shared_ptr<VectorIndex>;

@@ -47,8 +47,9 @@ namespace dingodb {
 DEFINE_int64(ivf_pq_need_save_count, 10000, "ivf pq need save count");
 
 VectorIndexRawIvfPq::VectorIndexRawIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, epoch, range) {
+                                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                         ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
   bthread_mutex_init(&mutex_, nullptr);
 
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();

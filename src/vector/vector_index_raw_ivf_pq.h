@@ -57,7 +57,8 @@ class RawIvfPqIDSelector : public faiss::IDSelector {
 class VectorIndexRawIvfPq : public VectorIndex {
  public:
   explicit VectorIndexRawIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                               const pb::common::RegionEpoch& epoch, const pb::common::Range& ranges);
+                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                               ThreadPoolPtr thread_pool);
 
   ~VectorIndexRawIvfPq() override;
 

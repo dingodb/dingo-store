@@ -35,25 +35,27 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
                                                      const pb::common::Range& range) {
   std::shared_ptr<VectorIndex> vector_index = nullptr;
 
+  auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+
   switch (index_parameter.vector_index_type()) {
     case pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE: {
-      vector_index = NewBruteForce(id, index_parameter, epoch, range);
+      vector_index = NewBruteForce(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_FLAT: {
-      vector_index = NewFlat(id, index_parameter, epoch, range);
+      vector_index = NewFlat(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_IVF_FLAT: {
-      vector_index = NewIvfFlat(id, index_parameter, epoch, range);
+      vector_index = NewIvfFlat(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_IVF_PQ: {
-      vector_index = NewIvfPq(id, index_parameter, epoch, range);
+      vector_index = NewIvfPq(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_HNSW: {
-      vector_index = NewHnsw(id, index_parameter, epoch, range, Server::GetInstance().GetVectorIndexThreadPool());
+      vector_index = NewHnsw(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_DISKANN: {
@@ -125,7 +127,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewHnsw(int64_t id,
 std::shared_ptr<VectorIndex> VectorIndexFactory::NewBruteForce(int64_t id,
                                                                const pb::common::VectorIndexParameter& index_parameter,
                                                                const pb::common::RegionEpoch& epoch,
-                                                               const pb::common::Range& range) {
+                                                               const pb::common::Range& range,
+                                                               ThreadPoolPtr thread_pool) {
   const auto& bruteforce_parameter = index_parameter.bruteforce_parameter();
 
   if (bruteforce_parameter.dimension() <= 0) {
@@ -139,7 +142,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewBruteForce(int64_t id,
 
   // create index may throw exeception, so we need to catch it
   try {
-    auto new_bruteforce_index = std::make_shared<VectorIndexBruteforce>(id, index_parameter, epoch, range);
+    auto new_bruteforce_index = std::make_shared<VectorIndexBruteforce>(id, index_parameter, epoch, range, thread_pool);
     if (new_bruteforce_index == nullptr) {
       DINGO_LOG(ERROR) << "create bruteforce index failed of new_bruteforce_index is nullptr"
                        << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
@@ -159,7 +162,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewBruteForce(int64_t id,
 std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(int64_t id,
                                                          const pb::common::VectorIndexParameter& index_parameter,
                                                          const pb::common::RegionEpoch& epoch,
-                                                         const pb::common::Range& range) {
+                                                         const pb::common::Range& range, ThreadPoolPtr thread_pool) {
   const auto& flat_parameter = index_parameter.flat_parameter();
 
   if (flat_parameter.dimension() <= 0) {
@@ -173,7 +176,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(int64_t id,
 
   // create index may throw exeception, so we need to catch it
   try {
-    auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter, epoch, range);
+    auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter, epoch, range, thread_pool);
     if (new_flat_index == nullptr) {
       DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr"
                        << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
@@ -192,7 +195,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(int64_t id,
 std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(int64_t id,
                                                             const pb::common::VectorIndexParameter& index_parameter,
                                                             const pb::common::RegionEpoch& epoch,
-                                                            const pb::common::Range& range) {
+                                                            const pb::common::Range& range, ThreadPoolPtr thread_pool) {
   const auto& ivf_flat_parameter = index_parameter.ivf_flat_parameter();
 
   if (ivf_flat_parameter.dimension() <= 0) {
@@ -213,7 +216,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(int64_t id,
 
   // create index may throw exception, so we need to catch it
   try {
-    auto new_ivf_flat_index = std::make_shared<VectorIndexIvfFlat>(id, index_parameter, epoch, range);
+    auto new_ivf_flat_index = std::make_shared<VectorIndexIvfFlat>(id, index_parameter, epoch, range, thread_pool);
     if (new_ivf_flat_index == nullptr) {
       DINGO_LOG(ERROR) << "create ivf flat index failed of new_ivf_flat_index is nullptr"
                        << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
@@ -233,7 +236,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(int64_t id,
 std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfPq(int64_t id,
                                                           const pb::common::VectorIndexParameter& index_parameter,
                                                           const pb::common::RegionEpoch& epoch,
-                                                          const pb::common::Range& range) {
+                                                          const pb::common::Range& range, ThreadPoolPtr thread_pool) {
   const auto& ivf_pq_parameter = index_parameter.ivf_pq_parameter();
 
   uint32_t dimension = ivf_pq_parameter.dimension();
@@ -300,7 +303,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfPq(int64_t id,
 
   // create index may throw exception, so we need to catch it
   try {
-    auto new_ivf_pq_index = std::make_shared<VectorIndexIvfPq>(id, index_parameter, epoch, range);
+    auto new_ivf_pq_index = std::make_shared<VectorIndexIvfPq>(id, index_parameter, epoch, range, thread_pool);
     if (new_ivf_pq_index == nullptr) {
       DINGO_LOG(ERROR) << "create ivf pq index failed of new_ivf_pq_index is nullptr"
                        << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();

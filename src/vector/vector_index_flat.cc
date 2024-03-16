@@ -49,8 +49,9 @@ bvar::LatencyRecorder g_flat_delete_latency("dingo_flat_delete_latency");
 bvar::LatencyRecorder g_flat_load_latency("dingo_flat_load_latency");
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, epoch, range) {
+                                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                 ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
   metric_type_ = vector_index_parameter.flat_parameter().metric_type();
   dimension_ = vector_index_parameter.flat_parameter().dimension();
 

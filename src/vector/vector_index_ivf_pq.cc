@@ -26,6 +26,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "common/threadpool.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/ProductQuantizer.h"
 #include "faiss/index_io.h"
@@ -45,8 +46,10 @@ bvar::LatencyRecorder g_ivf_pq_load_latency("dingo_ivf_pq_load_latency");
 bvar::LatencyRecorder g_ivf_pq_train_latency("dingo_ivf_pq_train_latency");
 
 VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                   const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : VectorIndex(id, vector_index_parameter, epoch, range), index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
+                                   const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                   ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool),
+      index_type_in_ivf_pq_(IndexTypeInIvfPq::kUnknow) {
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();
   dimension_ = vector_index_parameter.ivf_pq_parameter().dimension();
 
@@ -224,7 +227,8 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
 
   // first ivf pq
   auto internal_index_type_in_ivf_pq = IndexTypeInIvfPq::kIvfPq;
-  auto internal_index_raw_ivf_pq = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range);
+  auto internal_index_raw_ivf_pq =
+      std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range, thread_pool);
 
   status = internal_index_raw_ivf_pq->Load(path);
   if (status.ok()) {
@@ -248,7 +252,7 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
   ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
   flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
   flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-  auto internal_index_flat = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range);
+  auto internal_index_flat = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range, thread_pool);
 
   status = internal_index_flat->Load(path);
   if (status.ok()) {
@@ -552,10 +556,10 @@ void VectorIndexIvfPq::Init() {
     ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
     flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
     flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-    index_flat_ = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range);
+    index_flat_ = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range, thread_pool);
 
   } else if (IndexTypeInIvfPq::kIvfPq == index_type_in_ivf_pq_) {
-    index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range);
+    index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range, thread_pool);
   } else {
     DINGO_LOG(ERROR) << fmt::format("index_type_in_ivf_pq_ : {} . wrong  state.",
                                     static_cast<int>(index_type_in_ivf_pq_));

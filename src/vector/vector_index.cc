@@ -18,12 +18,14 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bthread/bthread.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -34,14 +36,66 @@
 
 namespace dingodb {
 
+DEFINE_uint32(upsert_vector_batch_size_per_task, 16, "upsert vector batch size per task");
+DEFINE_uint32(search_vector_batch_size_per_task, 1, "search vector batch size per task");
+
+// split VectorWithId set to multi batch
+static void SplitVectorWithId(const std::vector<pb::common::VectorWithId>& vector_with_ids, int batch_size,
+                              std::vector<std::vector<pb::common::VectorWithId>>& vector_with_id_batchs) {
+  auto mut_vector_with_ids = const_cast<std::vector<pb::common::VectorWithId>&>(vector_with_ids);
+  for (int i = 0; i < vector_with_ids.size(); i += batch_size) {
+    std::vector<pb::common::VectorWithId> vector_with_id_batch;
+    for (int j = i; j < i + batch_size && j < vector_with_ids.size(); ++j) {
+      vector_with_id_batch.push_back(std::move(mut_vector_with_ids[j]));
+    }
+
+    vector_with_id_batchs.push_back(std::move(vector_with_id_batch));
+  }
+}
+
+template <typename Function>
+butil::Status ParallelRun(ThreadPoolPtr thread_pool,
+                          const std::vector<std::vector<pb::common::VectorWithId>>& vector_with_id_batchs,
+                          bool is_priority, Function fn) {
+  std::vector<butil::Status> statuses(vector_with_id_batchs.size());
+
+  uint64_t start_time = Helper::TimestampMs();
+  std::vector<ThreadPool::TaskPtr> tasks;
+  for (uint32_t i = 0; i < vector_with_id_batchs.size(); ++i) {
+    auto task = thread_pool->ExecuteTask([&, i](void*) { statuses[i] = fn(vector_with_id_batchs[i], i); }, nullptr,
+                                         is_priority ? 1 : 0);
+
+    if (task != nullptr) {
+      tasks.push_back(task);
+    }
+  }
+
+  for (auto& task : tasks) {
+    task->Join();
+  }
+
+  DINGO_LOG(INFO) << fmt::format("batch_size: {} inner_batch_size: {} elapsed_time: {}", vector_with_id_batchs.size(),
+                                 vector_with_id_batchs[0].size(), Helper::TimestampMs() - start_time);
+
+  for (auto& status : statuses) {
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  return butil::Status();
+}
+
 VectorIndex::VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
+                         const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                         ThreadPoolPtr thread_pool)
     : id(id),
       apply_log_id(0),
       snapshot_log_id(0),
       vector_index_parameter(vector_index_parameter),
       epoch(epoch),
-      range(range) {
+      range(range),
+      thread_pool(thread_pool) {
   vector_index_type = vector_index_parameter.vector_index_type();
   DINGO_LOG(DEBUG) << fmt::format("[new.VectorIndex][id({})]", id);
 }
@@ -76,11 +130,78 @@ butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vect
   return Add(vector_with_ids);
 }
 
+butil::Status VectorIndex::AddByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                         bool is_priority) {
+  std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
+  SplitVectorWithId(vector_with_ids, FLAGS_upsert_vector_batch_size_per_task, vector_with_id_batchs);
+
+  return ParallelRun(thread_pool, vector_with_id_batchs, is_priority,
+                     [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
+                       return Add(vector_with_ids);
+                     });
+}
+
 butil::Status VectorIndex::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool) {
   return Upsert(vector_with_ids);
 }
 
+butil::Status VectorIndex::UpsertByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                            bool is_priority) {
+  std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
+  SplitVectorWithId(vector_with_ids, FLAGS_upsert_vector_batch_size_per_task, vector_with_id_batchs);
+  return ParallelRun(thread_pool, vector_with_id_batchs, is_priority,
+                     [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
+                       return Upsert(vector_with_ids);
+                     });
+}
+
 butil::Status VectorIndex::Delete(const std::vector<int64_t>& delete_ids, bool) { return Delete(delete_ids); }
+
+butil::Status VectorIndex::SearchByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
+                                            const std::vector<std::shared_ptr<FilterFunctor>>& filters,
+                                            bool reconstruct, const pb::common::VectorSearchParameter& parameter,
+                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
+  results.resize(vector_with_ids.size());
+
+  std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
+  SplitVectorWithId(vector_with_ids, FLAGS_search_vector_batch_size_per_task, vector_with_id_batchs);
+
+  return ParallelRun(
+      thread_pool, vector_with_id_batchs, true,
+      [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
+        std::vector<pb::index::VectorWithDistanceResult> part_results;
+        auto status = Search(vector_with_ids, topk, filters, reconstruct, parameter, part_results);
+
+        for (int i = 0; i < part_results.size(); ++i) {
+          results[index + i].Swap(&part_results[i]);
+        }
+
+        return status;
+      });
+}
+
+butil::Status VectorIndex::RangeSearchByParallel(
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+    const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
+    const pb::common::VectorSearchParameter& parameter, std::vector<pb::index::VectorWithDistanceResult>& results) {
+  results.resize(vector_with_ids.size());
+
+  std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
+  SplitVectorWithId(vector_with_ids, FLAGS_search_vector_batch_size_per_task, vector_with_id_batchs);
+
+  return ParallelRun(
+      thread_pool, vector_with_id_batchs, true,
+      [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
+        std::vector<pb::index::VectorWithDistanceResult> part_results;
+        auto status = RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, part_results);
+
+        for (int i = 0; i < part_results.size(); ++i) {
+          results[index + i].Swap(&part_results[i]);
+        }
+
+        return status;
+      });
+}
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
@@ -655,12 +776,13 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
   // Exist sibling vector index, so need to separate add vector.
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
-    auto status = sibling_vector_index->Add(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
+    auto status =
+        sibling_vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->Add(FilterVectorWithId(vector_with_ids, vector_index->Range()));
+    status = vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
       sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
       return status;
@@ -671,7 +793,7 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
     return status;
   }
 
-  auto status = vector_index->Add(vector_with_ids);
+  auto status = vector_index->AddByParallel(vector_with_ids);
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }
@@ -701,12 +823,13 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   // Exist sibling vector index, so need to separate upsert vector.
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
-    auto status = sibling_vector_index->Upsert(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
+    auto status =
+        sibling_vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->Upsert(FilterVectorWithId(vector_with_ids, vector_index->Range()));
+    status = vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
       sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
       return status;
@@ -717,7 +840,7 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
     return status;
   }
 
-  auto status = vector_index->Upsert(vector_with_ids);
+  auto status = vector_index->UpsertByParallel(vector_with_ids);
   if (status.ok()) {
     write_key_count_ += vector_with_ids.size();
   }
@@ -839,13 +962,14 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
     std::vector<pb::index::VectorWithDistanceResult> results_1;
-    auto status = sibling_vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_1);
+    auto status =
+        sibling_vector_index->SearchByParallel(vector_with_ids, topk, filters, reconstruct, parameter, results_1);
     if (!status.ok()) {
       return status;
     }
 
     std::vector<pb::index::VectorWithDistanceResult> results_2;
-    status = vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_2);
+    status = vector_index->SearchByParallel(vector_with_ids, topk, filters, reconstruct, parameter, results_2);
     if (!status.ok()) {
       return status;
     }
@@ -866,7 +990,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
     }
   }
 
-  return vector_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results);
+  return vector_index->SearchByParallel(vector_with_ids, topk, filters, reconstruct, parameter, results);
 }
 
 static void MergeRangeSearchResults(std::vector<pb::index::VectorWithDistanceResult>& input_1,
@@ -899,14 +1023,14 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
     std::vector<pb::index::VectorWithDistanceResult> results_1;
-    auto status =
-        sibling_vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_1);
+    auto status = sibling_vector_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter,
+                                                              results_1);
     if (!status.ok()) {
       return status;
     }
 
     std::vector<pb::index::VectorWithDistanceResult> results_2;
-    status = vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_2);
+    status = vector_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results_2);
     if (!status.ok()) {
       return status;
     }
@@ -927,7 +1051,7 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
     }
   }
 
-  return vector_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results);
+  return vector_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results);
 }
 
 bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {

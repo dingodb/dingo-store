@@ -22,7 +22,6 @@
 
 #include "butil/status.h"
 #include "common/synchronization.h"
-#include "common/threadpool.h"
 #include "hnswlib/hnswlib.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
@@ -108,9 +107,6 @@ class VectorIndexHnsw : public VectorIndex {
 
   // normalize vector
   bool normalize_;
-
-  // vector index thread pool
-  ThreadPoolPtr thread_pool_;
 };
 
 }  // namespace dingodb

@@ -1191,7 +1191,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     if ((count + 1) % Constant::kBuildVectorIndexBatchSize == 0) {
       int64_t upsert_start_time = Helper::TimestampMs();
 
-      vector_index->Add(vectors, false);
+      vector_index->AddByParallel(vectors, false);
 
       int32_t this_upsert_time = Helper::TimestampMs() - upsert_start_time;
       upsert_use_time += this_upsert_time;
@@ -1210,7 +1210,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   if (!vectors.empty()) {
     int64_t upsert_start_time = Helper::TimestampMs();
-    vector_index->Add(vectors, false);
+    vector_index->AddByParallel(vectors, false);
     upsert_use_time += (Helper::TimestampMs() - upsert_start_time);
   }
 
@@ -1562,7 +1562,8 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      std::string s = fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.", vector.id());
+      std::string s =
+          fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.", vector.id());
       DINGO_LOG(WARNING) << s;
       continue;
     }
