@@ -57,7 +57,8 @@ class FlatIDSelector : public faiss::IDSelector {
 class VectorIndexFlat : public VectorIndex {
  public:
   explicit VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                           const pb::common::RegionEpoch& epoch, const pb::common::Range& ranges);
+                           const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                           ThreadPoolPtr thread_pool);
 
   ~VectorIndexFlat() override;
 

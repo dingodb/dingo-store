@@ -30,8 +30,10 @@
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_factory.h"
 #include "vector/vector_index_flat.h"
 
 namespace dingodb {
@@ -1537,7 +1539,8 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
     vector_with_id_batch.push_back(vector_with_id);
 
     if (vector_with_id_batch.size() == FLAGS_vector_index_bruteforce_batch_count) {
-      auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+      auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+      auto flat_index = VectorIndexFactory::NewFlat(INT64_MAX, index_parameter, epoch, region_range, thread_pool);
       if (flat_index == nullptr) {
         DINGO_LOG(FATAL) << "flat_index is nullptr";
       }
@@ -1582,7 +1585,8 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   }
 
   if (!vector_with_id_batch.empty()) {
-    auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+    auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+    auto flat_index = VectorIndexFactory::NewFlat(INT64_MAX, index_parameter, epoch, region_range, thread_pool);
     if (flat_index == nullptr) {
       DINGO_LOG(FATAL) << "flat_index is nullptr";
     }
@@ -1706,7 +1710,8 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
     vector_with_id_batch.push_back(vector_with_id);
 
     if (vector_with_id_batch.size() == FLAGS_vector_index_bruteforce_batch_count) {
-      auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+      auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+      auto flat_index = VectorIndexFactory::NewFlat(INT64_MAX, index_parameter, epoch, region_range, thread_pool);
       if (flat_index == nullptr) {
         DINGO_LOG(FATAL) << "flat_index is nullptr";
       }
@@ -1751,7 +1756,8 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
   }
 
   if (!vector_with_id_batch.empty()) {
-    auto flat_index = std::make_shared<VectorIndexFlat>(INT64_MAX, index_parameter, epoch, region_range);
+    auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+    auto flat_index = VectorIndexFactory::NewFlat(INT64_MAX, index_parameter, epoch, region_range, thread_pool);
     if (flat_index == nullptr) {
       DINGO_LOG(FATAL) << "flat_index is nullptr";
     }
