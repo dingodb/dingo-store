@@ -59,6 +59,7 @@ DECLARE_int64(tso_new_logical);
 DECLARE_int64(tenant_id);
 
 DEFINE_bool(is_updating_index, false, "is index");
+DEFINE_bool(is_index, false, "is index");
 
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -217,7 +218,11 @@ void SendGetTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
   dingodb::pb::meta::GetTableResponse response;
 
   auto* table_id = request.mutable_table_id();
-  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  if (FLAGS_is_index) {
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  } else {
+    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  }
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   if (FLAGS_id.empty()) {

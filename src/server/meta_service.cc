@@ -229,11 +229,27 @@ void DoGetTable(google::protobuf::RpcController * /*controller*/, const pb::meta
   DINGO_LOG(DEBUG) << "GetTable request:  table_id = [" << request->table_id().entity_id() << "]";
 
   auto *table = response->mutable_table_definition_with_id();
-  auto ret =
-      coordinator_control->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
-  if (!ret.ok()) {
-    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-    response->mutable_error()->set_errmsg(ret.error_str());
+
+  if (request->table_id().entity_type() == pb::meta::EntityType::ENTITY_TYPE_TABLE) {
+    auto ret =
+        coordinator_control->GetTable(request->table_id().parent_entity_id(), request->table_id().entity_id(), *table);
+    if (!ret.ok()) {
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  } else if (request->table_id().entity_type() == pb::meta::ENTITY_TYPE_INDEX) {
+    auto ret = coordinator_control->GetIndex(request->table_id().parent_entity_id(), request->table_id().entity_id(),
+                                             false, *table);
+    if (!ret.ok()) {
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  } else {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("entity_type is illegal for GetTable, [" +
+                                          pb::meta::EntityType_Name(request->table_id().entity_type()) + "]");
     return;
   }
 }
