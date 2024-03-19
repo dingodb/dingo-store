@@ -296,7 +296,7 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
   // The outside has been locked. Remove the locking operation here.
   faiss::Index* internal_raw_index = nullptr;
   try {
-    faiss::Index* internal_raw_index = faiss::read_index(path.c_str(), 0);
+    internal_raw_index = faiss::read_index(path.c_str(), 0);
   } catch (std::exception& e) {
     std::string s = fmt::format("VectorIndexFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
     DINGO_LOG(ERROR) << s;

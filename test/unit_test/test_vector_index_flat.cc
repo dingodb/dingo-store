@@ -39,7 +39,10 @@ static const std::string kTempDataDirectory = "./unit_test/vector_index_flat";
 
 class VectorIndexFlatTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
+  static void SetUpTestSuite() {
+    Helper::CreateDirectories(kTempDataDirectory);
+    vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4);
+  }
 
   static void TearDownTestSuite() {
     vector_index_flat_l2.reset();
@@ -59,44 +62,24 @@ class VectorIndexFlatTest : public testing::Test {
   inline static faiss::idx_t dimension = 8;
   inline static int data_base_size = 10;
   inline static std::vector<float> data_base;
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexFlatTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexFlatTest, Create) {
   static const pb::common::Range kRange;
   static pb::common::RegionEpoch kEpoch;  // NOLINT
   kEpoch.set_conf_version(1);
   kEpoch.set_version(10);
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
-    EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
-  }
 
   // invalid param
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_l2 = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
@@ -106,7 +89,7 @@ TEST_F(VectorIndexFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_l2 = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
@@ -117,7 +100,7 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(64);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_l2 = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_flat_l2.get(), nullptr);
   }
 
@@ -128,7 +111,7 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_l2 = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_flat_l2.get(), nullptr);
   }
 
@@ -140,7 +123,7 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_flat_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_ip = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_flat_ip.get(), nullptr);
   }
 
@@ -151,7 +134,8 @@ TEST_F(VectorIndexFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
     index_parameter.mutable_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-    vector_index_flat_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+    vector_index_flat_cosine =
+        VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_flat_cosine.get(), nullptr);
   }
 }
@@ -735,21 +719,6 @@ TEST_F(VectorIndexFlatTest, Upsert) {
     ok = vector_index_flat_cosine->Add(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
-
-  // // must be delete .................................................................
-  // {
-  //   vector_index_flat_.reset();
-
-  //   int64_t id = 1;
-  //   pb::common::VectorIndexParameter index_parameter;
-  //   index_parameter.set_vector_index_type(
-  //       ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
-  //   index_parameter.mutable_flat_parameter()->set_dimension(dimension_);
-  //   index_parameter.mutable_flat_parameter()->set_metric_type(
-  //       ::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-  //   vector_index_flat_ = VectorIndexFactory::New(id, index_parameter);
-  //   EXPECT_NE(vector_index_flat_.get(), nullptr);
-  // }
 
   // empty OK
   {

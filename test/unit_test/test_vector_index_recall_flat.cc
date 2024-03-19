@@ -36,7 +36,7 @@ namespace dingodb {
 
 class VectorIndexRecallFlatTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4); }
 
   static void TearDownTestSuite() {
     vector_index_flat_l2.reset();
@@ -57,7 +57,7 @@ class VectorIndexRecallFlatTest : public testing::Test {
       index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
       index_parameter.mutable_flat_parameter()->set_dimension(dimension);
       index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-      vector_index_flat_l2 = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+      vector_index_flat_l2 = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
 
     // valid param IP
@@ -68,7 +68,7 @@ class VectorIndexRecallFlatTest : public testing::Test {
       index_parameter.mutable_flat_parameter()->set_dimension(dimension);
       index_parameter.mutable_flat_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-      vector_index_flat_ip = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+      vector_index_flat_ip = VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
 
     // valid param cosine
@@ -78,7 +78,8 @@ class VectorIndexRecallFlatTest : public testing::Test {
       index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
       index_parameter.mutable_flat_parameter()->set_dimension(dimension);
       index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
-      vector_index_flat_cosine = VectorIndexFactory::New(id, index_parameter, kEpoch, kRange);
+      vector_index_flat_cosine =
+          VectorIndexFactory::NewFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
   }
 
@@ -92,7 +93,11 @@ class VectorIndexRecallFlatTest : public testing::Test {
   inline static faiss::idx_t dimension = 8;
   inline static int data_base_size = 10;
   inline static std::vector<float> data_base;
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexRecallFlatTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexRecallFlatTest, Create) { ReCreate(); }
 

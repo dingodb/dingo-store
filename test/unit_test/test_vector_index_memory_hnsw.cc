@@ -35,7 +35,7 @@ namespace dingodb {
 
 class VectorIndexMemoryHnswTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4); }
 
   static void TearDownTestSuite() { vector_index_hnsw.reset(); }
 
@@ -51,7 +51,11 @@ class VectorIndexMemoryHnswTest : public testing::Test {
   inline static uint32_t max_elements = data_base_size;
   inline static int32_t nlinks = 5;
   inline static int step_count = 1000;
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexMemoryHnswTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexMemoryHnswTest, Create) {
   static const pb::common::Range kRange;
@@ -72,7 +76,7 @@ TEST_F(VectorIndexMemoryHnswTest, Create) {
 
     index_parameter.mutable_hnsw_parameter()->set_nlinks(nlinks);
 
-    vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_hnsw = VectorIndexFactory::NewHnsw(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_hnsw.get(), nullptr);
   }
 }
