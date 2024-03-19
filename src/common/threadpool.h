@@ -32,6 +32,7 @@ namespace dingodb {
 class ThreadPool {
  public:
   ThreadPool(const std::string &thread_name, uint32_t thread_num);
+  ThreadPool(const std::string &thread_name, uint32_t thread_num, std::function<void(void)> init_thread);
   ~ThreadPool();
 
   using Funcer = std::function<void(void *)>;

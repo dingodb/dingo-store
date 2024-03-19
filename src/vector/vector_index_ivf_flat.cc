@@ -88,19 +88,11 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
     return status_ids;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<faiss::idx_t[]>& ids2 = ids;
-
   const auto& [vectors, status] = VectorIndexUtils::CopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
-
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
@@ -110,13 +102,11 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
     return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
   }
 
-  std::thread([&]() {
-    if (is_upsert) {
-      faiss::IDSelectorArray sel(vector_with_ids.size(), ids2.get());
-      index_->remove_ids(sel);
-    }
-    index_->add_with_ids(vector_with_ids.size(), vectors2.get(), ids2.get());
-  }).join();
+  if (is_upsert) {
+    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+    index_->remove_ids(sel);
+  }
+  index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
 
   return butil::Status::OK();
 }
@@ -163,7 +153,6 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
 
   faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
 
-  size_t remove_count = 0;
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
@@ -173,12 +162,11 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
       return butil::Status::OK();
     }
 
-    std::thread([&]() { remove_count = index_->remove_ids(sel); }).join();
-  }
-
-  if (0 == remove_count) {
-    DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+    auto remove_count = index_->remove_ids(sel);
+    if (0 == remove_count) {
+      DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+    }
   }
 
   return butil::Status::OK();
@@ -216,10 +204,6 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
     return status;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
-
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
@@ -246,19 +230,15 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
-    // use std::thread to call faiss functions
-    std::thread t([&]() {
-      if (!filters.empty()) {
-        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
-        ivf_search_parameters.sel = ivf_flat_filter.get();
-        index_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data(),
-                       &ivf_search_parameters);
-      } else {
-        index_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data(),
-                       &ivf_search_parameters);
-      }
-    });
-    t.join();
+    if (!filters.empty()) {
+      auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+      ivf_search_parameters.sel = ivf_flat_filter.get();
+      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                     &ivf_search_parameters);
+    } else {
+      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                     &ivf_search_parameters);
+    }
   }
 
   VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
@@ -290,10 +270,6 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
-
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
@@ -329,36 +305,21 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
-    std::promise<butil::Status> promise_status;
-    std::future<butil::Status> future_status = promise_status.get_future();
-    // use std::thread to call faiss functions
-    std::thread t(
-        [&](std::promise<butil::Status>& promise_status) {
-          try {
-            if (!filters.empty()) {
-              auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
-              ivf_search_parameters.sel = ivf_flat_filter.get();
-              index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
-                                   &ivf_search_parameters);
-            } else {
-              index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
-                                   &ivf_search_parameters);
-            }
-            promise_status.set_value(butil::Status());
-          } catch (std::exception& e) {
-            std::string s = fmt::format("VectorIndexIvfFlat::RangeSearch failed. error : {}", e.what());
-            promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
-          }
-        },
-        std::ref(promise_status));
+    try {
+      if (!filters.empty()) {
+        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+        ivf_search_parameters.sel = ivf_flat_filter.get();
+        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+                             &ivf_search_parameters);
+      } else {
+        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+                             &ivf_search_parameters);
+      }
 
-    butil::Status status2 = future_status.get();
-
-    t.join();
-
-    if (!status2.ok()) {
-      DINGO_LOG(ERROR) << status2.error_cstr();
-      return status2;
+    } catch (std::exception& e) {
+      std::string s = fmt::format("VectorIndexIvfFlat::RangeSearch failed. error : {}", e.what());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
   }
 
@@ -383,38 +344,18 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   // Remove glog temporarily.
   if (BAIDU_UNLIKELY(path.empty())) {
     std::string s = fmt::format("path empty. not support");
-    // DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
-  // The outside has been locked. Remove the locking operation here.
-  // BAIDU_SCOPED_LOCK(mutex_);
-  std::promise<butil::Status> promise_status;
-  std::future<butil::Status> future_status = promise_status.get_future();
-  std::thread t(
-      [&](std::promise<butil::Status>& promise_status) {
-        try {
-          faiss::write_index(index_.get(), path.c_str());
-          promise_status.set_value(butil::Status());
-        } catch (std::exception& e) {
-          std::string s =
-              fmt::format("VectorIndexIvfFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
-          // LOG(ERROR) << "["
-          //            << "lambda faiss::write_index"
-          //            << "] " << s;
-          promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
-        }
-      },
-      std::ref(promise_status));
-
-  butil::Status status = future_status.get();
-  t.join();
-
-  if (status.ok()) {
-    // DINGO_LOG(INFO) << fmt::format("VectorIndexIvfFlat::Save success. path : {}", path);
+  try {
+    faiss::write_index(index_.get(), path.c_str());
+  } catch (std::exception& e) {
+    std::string s =
+        fmt::format("VectorIndexIvfFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
-  return status;
+  return butil::Status();
 }
 
 butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
@@ -426,38 +367,16 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_load_latency);
 
-  // The outside has been locked. Remove the locking operation here.
-  // BAIDU_SCOPED_LOCK(mutex_);
-  std::promise<std::pair<faiss::Index*, butil::Status>> promise_status;
-  std::future<std::pair<faiss::Index*, butil::Status>> future_status = promise_status.get_future();
-  std::thread t(
-      [&](std::promise<std::pair<faiss::Index*, butil::Status>>& promise_status) {
-        faiss::Index* internal_raw_index = nullptr;
-        try {
-          internal_raw_index = faiss::read_index(path.c_str(), 0);
-          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(internal_raw_index, butil::Status()));
-        } catch (std::exception& e) {
-          std::string s =
-              fmt::format("VectorIndexIvfFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
-          LOG(ERROR) << "["
-                     << "lambda faiss::read_index"
-                     << "] " << s;
-          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(
-              internal_raw_index, butil::Status(pb::error::Errno::EINTERNAL, s)));
-        }
-      },
-      std::ref(promise_status));
+  faiss::Index* internal_raw_index = nullptr;
+  try {
+    internal_raw_index = faiss::read_index(path.c_str(), 0);
 
-  auto [internal_raw_index, status] = future_status.get();
-  t.join();
-
-  if (!status.ok()) {
-    if (internal_raw_index) {
-      delete internal_raw_index;
-      internal_raw_index = nullptr;
-    }
-
-    return status;
+  } catch (std::exception& e) {
+    std::string s =
+        fmt::format("VectorIndexIvfFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
+    DINGO_LOG(ERROR) << s;
+    delete internal_raw_index;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   faiss::IndexIVFFlat* internal_index = dynamic_cast<faiss::IndexIVFFlat*>(internal_raw_index);
@@ -654,32 +573,16 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
     train_datas_ptr = const_cast<float*>(train_datas_for_normalize.data());
   }
 
-  std::promise<butil::Status> promise_status;
-  std::future<butil::Status> future_status = promise_status.get_future();
-  std::thread t(
-      [&](std::promise<butil::Status>& promise_status) {
-        try {
-          index_->train(data_size, train_datas_ptr);
-          promise_status.set_value(butil::Status());
-        } catch (std::exception& e) {
-          Reset();
-          std::string s = fmt::format("ivf flat train failed data size : {} dimension : {} exception {}", data_size,
-                                      dimension_, e.what());
-          LOG(ERROR) << "["
-                     << "lambda ivf_flat::train"
-                     << "] " << s;
-          promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
-        }
-      },
-      std::ref(promise_status));
+  try {
+    index_->train(data_size, train_datas_ptr);
 
-  butil::Status status = future_status.get();
-  t.join();
-
-  if (!status.ok()) {
+  } catch (std::exception& e) {
     Reset();
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
+    std::string s = fmt::format("ivf flat train failed data size : {} dimension : {} exception {}", data_size,
+                                dimension_, e.what());
+    DINGO_LOG(ERROR) << s;
+    Reset();
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   // double check

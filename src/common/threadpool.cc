@@ -22,13 +22,19 @@
 namespace dingodb {
 
 ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num)
+    : ThreadPool(thread_name, thread_num, nullptr) {}
+
+ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num, std::function<void(void)> init_thread)
     : thread_name_(thread_name),
       stop_(false),
       total_task_count_metrics_(fmt::format("dingo_threadpool_{}_total_task_count", thread_name)),
       pending_task_count_metrics_(fmt::format("dingo_threadpool_{}_pending_task_count", thread_name)) {
   for (size_t i = 0; i < thread_num; ++i)
-    workers_.emplace_back([this, &i] {
+    workers_.emplace_back([this, i, init_thread] {
       pthread_setname_np(pthread_self(), (thread_name_ + ":" + std::to_string(i)).c_str());
+      if (init_thread != nullptr) {
+        init_thread();
+      }
 
       for (;;) {
         TaskPtr task;
