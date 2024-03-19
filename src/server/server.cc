@@ -65,6 +65,13 @@ DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 DEFINE_int32(vector_operation_parallel_thread_num, 1, "vector operation parallel thread num");
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
+DEFINE_int32(omp_num_threads, 1, "omp num threads");
+
+extern "C" {
+extern void omp_set_num_threads(int) noexcept;  // NOLINT
+extern int omp_get_max_threads(void) noexcept;  // NOLINT
+}
+
 Server& Server::GetInstance() {
   static Server instance;
   return instance;
@@ -680,7 +687,12 @@ bool Server::InitStoreMetricsManager() {
 }
 
 bool Server::InitVectorIndexManager() {
-  vector_index_thread_pool_ = std::make_shared<ThreadPool>("vector_index", FLAGS_vector_operation_parallel_thread_num);
+  vector_index_thread_pool_ =
+      std::make_shared<ThreadPool>("vector_index", FLAGS_vector_operation_parallel_thread_num, []() {
+        omp_set_num_threads(FLAGS_omp_num_threads);
+
+        LOG(INFO) << fmt::format("omp max thread num per ancestor: {}", omp_get_max_threads());
+      });
 
   vector_index_manager_ = VectorIndexManager::New();
   return vector_index_manager_->Init();

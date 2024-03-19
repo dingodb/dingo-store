@@ -104,29 +104,20 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
     return status_ids;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<faiss::idx_t[]>& ids2 = ids;
-
   const auto& [vectors, status] = VectorIndexUtils::CopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
-
   BvarLatencyGuard bvar_guard(&g_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
-  std::thread([&]() {
-    if (is_upsert) {
-      faiss::IDSelectorArray sel(vector_with_ids.size(), ids2.get());
-      index_id_map2_->remove_ids(sel);
-    }
-    index_id_map2_->add_with_ids(vector_with_ids.size(), vectors2.get(), ids2.get());
-  }).join();
+
+  if (is_upsert) {
+    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+    index_id_map2_->remove_ids(sel);
+  }
+  index_id_map2_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
 
   return butil::Status::OK();
 }
@@ -152,16 +143,14 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
 
   faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
 
-  size_t remove_count = 0;
   {
     BvarLatencyGuard bvar_guard(&g_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
-    std::thread([&]() { remove_count = index_id_map2_->remove_ids(sel); }).join();
-  }
-
-  if (0 == remove_count) {
-    DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+    auto remove_count = index_id_map2_->remove_ids(sel);
+    if (0 == remove_count) {
+      DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+    }
   }
 
   return butil::Status::OK();
@@ -192,36 +181,20 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
     return status;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
-
-  faiss::SearchParameters flat_search_parameters;
-
   {
     BvarLatencyGuard bvar_guard(&g_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
-    // use std::thread to call faiss functions
-    std::thread t([&]() {
-      if (!filters.empty()) {
-        //   // Build array index list.
-        //   for (auto& filter : filters) {
-        //     filter->Build(index_id_map2_->id_map);
-        //   }
-        //   auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
-        //   SearchWithParam(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
-        //   flat_filter);
 
-        // use faiss's search_param to do pre-filter
-        auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
-        flat_search_parameters.sel = flat_filter.get();
-        index_id_map2_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data(),
-                               &flat_search_parameters);
-      } else {
-        index_id_map2_->search(vector_with_ids.size(), vectors2.get(), topk, distances.data(), labels.data());
-      }
-    });
-    t.join();
+    if (!filters.empty()) {
+      // use faiss's search_param to do pre-filter
+      auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
+      faiss::SearchParameters flat_search_parameters;
+      flat_search_parameters.sel = flat_filter.get();
+      index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+                             &flat_search_parameters);
+    } else {
+      index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+    }
   }
 
   VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
@@ -246,10 +219,6 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
     return status;
   }
 
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
-
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
 
@@ -261,37 +230,21 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
   {
     BvarLatencyGuard bvar_guard(&g_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
-    // use std::thread to call faiss functions
-    std::promise<butil::Status> promise_status;
-    std::future<butil::Status> future_status = promise_status.get_future();
-    // use std::thread to call faiss functions
-    std::thread t(
-        [&](std::promise<butil::Status>& promise_status) {
-          try {
-            std::unique_ptr<faiss::SearchParameters> params;
-            std::unique_ptr<FlatIDSelector> flat_filter;
-            if (!filters.empty()) {
-              params = std::make_unique<faiss::SearchParameters>();
-              flat_filter = std::make_unique<FlatIDSelector>(filters);
-              params->sel = flat_filter.get();
-            }
-            index_id_map2_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
-                                         params.get());
-            promise_status.set_value(butil::Status());
-          } catch (std::exception& e) {
-            std::string s = fmt::format("VectorIndexFlat::RangeSearch failed. error : {}", e.what());
-            promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
-          }
-        },
-        std::ref(promise_status));
 
-    butil::Status status2 = future_status.get();
-
-    t.join();
-
-    if (!status2.ok()) {
-      DINGO_LOG(ERROR) << status2.error_cstr();
-      return status2;
+    try {
+      std::unique_ptr<faiss::SearchParameters> params;
+      std::unique_ptr<FlatIDSelector> flat_filter;
+      if (!filters.empty()) {
+        params = std::make_unique<faiss::SearchParameters>();
+        flat_filter = std::make_unique<FlatIDSelector>(filters);
+        params->sel = flat_filter.get();
+      }
+      index_id_map2_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+                                   params.get());
+    } catch (std::exception& e) {
+      std::string s = fmt::format("VectorIndexFlat::RangeSearch failed. error : {}", e.what());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
   }
 
@@ -316,38 +269,19 @@ butil::Status VectorIndexFlat::Save(const std::string& path) {
   // Remove glog temporarily.
   if (BAIDU_UNLIKELY(path.empty())) {
     std::string s = fmt::format("path empty. not support");
-    // DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
   // The outside has been locked. Remove the locking operation here.
-  // BAIDU_SCOPED_LOCK(mutex_);
-  std::promise<butil::Status> promise_status;
-  std::future<butil::Status> future_status = promise_status.get_future();
-  std::thread t(
-      [&](std::promise<butil::Status>& promise_status) {
-        try {
-          faiss::write_index(index_id_map2_.get(), path.c_str());
-          promise_status.set_value(butil::Status());
-        } catch (std::exception& e) {
-          std::string s =
-              fmt::format("VectorIndexFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
-          // LOG(ERROR) << "["
-          //            << "lambda faiss::write_index"
-          //            << "] " << s;
-          promise_status.set_value(butil::Status(pb::error::Errno::EINTERNAL, s));
-        }
-      },
-      std::ref(promise_status));
-
-  butil::Status status = future_status.get();
-  t.join();
-
-  if (status.ok()) {
-    // DINGO_LOG(INFO) << fmt::format("VectorIndexFlat::Save success. path : {}", path);
+  try {
+    faiss::write_index(index_id_map2_.get(), path.c_str());
+  } catch (std::exception& e) {
+    std::string s =
+        fmt::format("VectorIndexFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
-  return status;
+  return butil::Status();
 }
 
 butil::Status VectorIndexFlat::Load(const std::string& path) {
@@ -360,37 +294,14 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
   BvarLatencyGuard bvar_guard(&g_flat_load_latency);
 
   // The outside has been locked. Remove the locking operation here.
-  // BAIDU_SCOPED_LOCK(mutex_);
-  std::promise<std::pair<faiss::Index*, butil::Status>> promise_status;
-  std::future<std::pair<faiss::Index*, butil::Status>> future_status = promise_status.get_future();
-  std::thread t(
-      [&](std::promise<std::pair<faiss::Index*, butil::Status>>& promise_status) {
-        faiss::Index* internal_raw_index = nullptr;
-        try {
-          faiss::Index* internal_raw_index = faiss::read_index(path.c_str(), 0);
-          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(internal_raw_index, butil::Status()));
-        } catch (std::exception& e) {
-          std::string s =
-              fmt::format("VectorIndexFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
-          LOG(ERROR) << "["
-                     << "lambda faiss::read_index"
-                     << "] " << s;
-          promise_status.set_value(std::pair<faiss::Index*, butil::Status>(
-              internal_raw_index, butil::Status(pb::error::Errno::EINTERNAL, s)));
-        }
-      },
-      std::ref(promise_status));
-
-  auto [internal_raw_index, status] = future_status.get();
-  t.join();
-
-  if (!status.ok()) {
-    if (internal_raw_index) {
-      delete internal_raw_index;
-      internal_raw_index = nullptr;
-    }
-
-    return status;
+  faiss::Index* internal_raw_index = nullptr;
+  try {
+    faiss::Index* internal_raw_index = faiss::read_index(path.c_str(), 0);
+  } catch (std::exception& e) {
+    std::string s = fmt::format("VectorIndexFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
+    DINGO_LOG(ERROR) << s;
+    delete internal_raw_index;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
   faiss::IndexIDMap2* internal_index = dynamic_cast<faiss::IndexIDMap2*>(internal_raw_index);
