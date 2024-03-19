@@ -72,7 +72,7 @@ butil::Status TxnIterator::Init() {
   // construct write iter
   IteratorOptions write_iter_options;
   write_iter_options.lower_bound = Helper::EncodeTxnKey(range_.start_key(), Constant::kMaxVer);
-  write_iter_options.upper_bound = Helper::EncodeTxnKey(range_.end_key(), 0);
+  write_iter_options.upper_bound = Helper::EncodeTxnKey(range_.end_key(), Constant::kMaxVer);
 
   write_iter_ = reader_->NewIterator(Constant::kTxnWriteCF, snapshot_, write_iter_options);
   if (write_iter_ == nullptr) {
