@@ -30,14 +30,18 @@ namespace dingodb {
 
 class VectorIndexWrapperTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() {}
+  static void SetUpTestSuite() { vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4); }
 
   static void TearDownTestSuite() {}
 
   void SetUp() override {}
 
   void TearDown() override {}
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexWrapperTest::vector_index_thread_pool = nullptr;
 
 pb::common::RegionEpoch GenEpoch(int version) {
   pb::common::RegionEpoch epoch;
@@ -89,7 +93,8 @@ TEST_F(VectorIndexWrapperTest, Add) {
   index_parameter.mutable_hnsw_parameter()->set_max_elements(100000);
   index_parameter.mutable_hnsw_parameter()->set_nlinks(2);
 
-  auto vector_index_hnsw = VectorIndexFactory::New(id, index_parameter, GenEpoch(10), GenRange(1, 1000));
+  auto vector_index_hnsw =
+      VectorIndexFactory::NewHnsw(id, index_parameter, GenEpoch(10), GenRange(1, 1000), vector_index_thread_pool);
 
   auto vector_index_wrapper = VectorIndexWrapper::New(id, index_parameter);
 
@@ -111,8 +116,10 @@ TEST_F(VectorIndexWrapperTest, Add_Sibling) {
   index_parameter.mutable_hnsw_parameter()->set_max_elements(100000);
   index_parameter.mutable_hnsw_parameter()->set_nlinks(2);
 
-  auto vector_index = VectorIndexFactory::New(id, index_parameter, GenEpoch(10), GenRange(1, 1000));
-  auto sibling_vector_index = VectorIndexFactory::New(id, index_parameter, GenEpoch(10), GenRange(1000, 2000));
+  auto vector_index =
+      VectorIndexFactory::NewHnsw(id, index_parameter, GenEpoch(10), GenRange(1, 1000), vector_index_thread_pool);
+  auto sibling_vector_index =
+      VectorIndexFactory::NewHnsw(id, index_parameter, GenEpoch(10), GenRange(1000, 2000), vector_index_thread_pool);
 
   auto vector_index_wrapper = VectorIndexWrapper::New(id, index_parameter);
 

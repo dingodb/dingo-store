@@ -40,7 +40,10 @@ static const std::string kTempDataDirectory = "./unit_test/vector_index_ivf_flat
 
 class VectorIndexIvfFlatTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
+  static void SetUpTestSuite() {
+    Helper::CreateDirectories(kTempDataDirectory);
+    vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4);
+  }
 
   static void TearDownTestSuite() {
     vector_index_ivf_flat_l2.reset();
@@ -64,7 +67,8 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+      vector_index_ivf_flat_ip =
+          VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
 
     // valid param L2
@@ -75,7 +79,8 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+      vector_index_ivf_flat_l2 =
+          VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
 
     // valid param cosine
@@ -87,7 +92,8 @@ class VectorIndexIvfFlatTest : public testing::Test {
       index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
           ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
       index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-      vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+      vector_index_ivf_flat_cosine =
+          VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
   }
 
@@ -106,7 +112,11 @@ class VectorIndexIvfFlatTest : public testing::Test {
   inline static std::string path_l2 = kTempDataDirectory + "/l2_ivf_flat";
   inline static std::string path_ip = kTempDataDirectory + "/ip_ivf_flat";
   inline static std::string path_cosine = kTempDataDirectory + "/cosine_ivf_flat";
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexIvfFlatTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexIvfFlatTest, Create) {
   static const pb::common::Range kRange;
@@ -118,25 +128,9 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
-    EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -146,7 +140,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -157,7 +152,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(64);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -169,7 +165,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -180,7 +177,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -193,7 +191,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_ip = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_ip =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_ivf_flat_ip.get(), nullptr);
   }
 
@@ -205,7 +204,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_l2 =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_ivf_flat_l2.get(), nullptr);
   }
 
@@ -218,7 +218,8 @@ TEST_F(VectorIndexIvfFlatTest, Create) {
     index_parameter.mutable_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE);
     index_parameter.mutable_ivf_flat_parameter()->set_ncentroids(ncentroids);
-    vector_index_ivf_flat_cosine = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_ivf_flat_cosine =
+        VectorIndexFactory::NewIvfFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_ivf_flat_cosine.get(), nullptr);
   }
 }

@@ -202,23 +202,29 @@ butil::Status VectorIndex::RangeSearchByParallel(
     const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
     const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool reconstruct,
     const pb::common::VectorSearchParameter& parameter, std::vector<pb::index::VectorWithDistanceResult>& results) {
-  results.resize(vector_with_ids.size());
+  if (VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    // parallel in inner
+    return RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results);
+  } else {
+    // parallel in here
+    results.resize(vector_with_ids.size());
 
-  std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
-  SplitVectorWithId(vector_with_ids, FLAGS_vector_read_batch_size_per_task, vector_with_id_batchs);
+    std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
+    SplitVectorWithId(vector_with_ids, FLAGS_vector_read_batch_size_per_task, vector_with_id_batchs);
 
-  return ParallelRun(
-      thread_pool, vector_with_id_batchs, true,
-      [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
-        std::vector<pb::index::VectorWithDistanceResult> part_results;
-        auto status = RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, part_results);
+    return ParallelRun(
+        thread_pool, vector_with_id_batchs, true,
+        [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
+          std::vector<pb::index::VectorWithDistanceResult> part_results;
+          auto status = RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, part_results);
 
-        for (int i = 0; i < part_results.size(); ++i) {
-          results[index + i].Swap(&part_results[i]);
-        }
+          for (int i = 0; i < part_results.size(); ++i) {
+            results[index + i].Swap(&part_results[i]);
+          }
 
-        return status;
-      });
+          return status;
+        });
+  }
 }
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {

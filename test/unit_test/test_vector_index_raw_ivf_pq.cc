@@ -41,7 +41,10 @@ static const std::string kTempDataDirectory = "./unit_test/vector_index_raw_ivf_
 
 class VectorIndexRawIvfPqTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
+  static void SetUpTestSuite() {
+    Helper::CreateDirectories(kTempDataDirectory);
+    vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4);
+  }
 
   static void TearDownTestSuite() {
     vector_index_raw_ivf_pq_l2.reset();
@@ -68,7 +71,8 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+      vector_index_raw_ivf_pq_ip =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
 
     // valid param L2
@@ -81,7 +85,8 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+      vector_index_raw_ivf_pq_l2 =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
 
     // valid param cosine
@@ -95,7 +100,8 @@ class VectorIndexRawIvfPqTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+      vector_index_raw_ivf_pq_cosine =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     }
   }
 
@@ -117,7 +123,11 @@ class VectorIndexRawIvfPqTest : public testing::Test {
   inline static std::string path_l2 = kTempDataDirectory + "/l2_raw_ivf_pq";
   inline static std::string path_ip = kTempDataDirectory + "/ip_raw_ivf_pq";
   inline static std::string path_cosine = kTempDataDirectory + "/cosine_raw_ivf_pq";
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexRawIvfPqTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexRawIvfPqTest, Create) {
   static const pb::common::Range kRange;
@@ -129,25 +139,9 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
   {
     int64_t id = 1;
     pb::common::VectorIndexParameter index_parameter;
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
-    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
-    index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
-    EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
-  }
-
-  // invalid param
-  {
-    int64_t id = 1;
-    pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -157,7 +151,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -168,7 +163,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(64);
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -179,7 +175,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
     index_parameter.mutable_ivf_pq_parameter()->set_dimension(dimension);
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -192,7 +189,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT);
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(-1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -207,7 +205,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
 
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -223,7 +222,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(1);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(-1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -239,7 +239,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(100);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(3);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(1);
-    vector_index_raw_ivf_pq_l2 = VectorIndexFactory::New(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -255,7 +256,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_ip =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_raw_ivf_pq_ip.get(), nullptr);
   }
 
@@ -269,7 +271,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_l2 =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_raw_ivf_pq_l2.get(), nullptr);
   }
 
@@ -283,7 +286,8 @@ TEST_F(VectorIndexRawIvfPqTest, Create) {
     index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
     index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
     index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-    vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, k_epoch, kRange);
+    vector_index_raw_ivf_pq_cosine =
+        VectorIndexFactory::NewIvfPq(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_raw_ivf_pq_cosine.get(), nullptr);
   }
 }

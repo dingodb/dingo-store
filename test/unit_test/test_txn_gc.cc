@@ -113,13 +113,6 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 class TxnGcTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
-    DingoLogger::ChangeGlogLevelUsingDingoLevel(dingodb::pb::node::LogLevel::DEBUG, 0);
-
-    // Set whether log messages go to stderr in addition to logfiles.
-    FLAGS_alsologtostderr = true;
-
-    // If set this flag to true, the log will show in the terminal
-    FLAGS_logtostderr = true;
     std::srand(std::time(nullptr));
 
     Helper::CreateDirectories(kStorePath);

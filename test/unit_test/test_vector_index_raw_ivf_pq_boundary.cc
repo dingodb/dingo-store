@@ -32,6 +32,7 @@
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
+#include "vector/vector_index_factory.h"
 #include "vector/vector_index_raw_ivf_pq.h"
 
 namespace dingodb {
@@ -40,7 +41,10 @@ static const std::string kTempDataDirectory = "./unit_test/vector_index_raw_ivf_
 
 class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
  protected:
-  static void SetUpTestSuite() { Helper::CreateDirectories(kTempDataDirectory); }
+  static void SetUpTestSuite() {
+    Helper::CreateDirectories(kTempDataDirectory);
+    vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index", 4);
+  }
 
   static void TearDownTestSuite() {
     vector_index_raw_ivf_pq_l2.reset();
@@ -66,7 +70,8 @@ class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+      vector_index_raw_ivf_pq_ip =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
 
     // valid param L2
@@ -79,7 +84,8 @@ class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+      vector_index_raw_ivf_pq_l2 =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
 
     // valid param cosine
@@ -93,7 +99,8 @@ class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
       index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(ncentroids);
       index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(nsubvector);
       index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(nbits_per_idx);
-      vector_index_raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+      vector_index_raw_ivf_pq_cosine =
+          VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     }
   }
 
@@ -112,7 +119,11 @@ class VectorIndexRawIvfPqBoundaryTest : public testing::Test {
   inline static int32_t nbits_per_idx = 8;
   inline static std::vector<float> data_base;
   inline static int32_t start_id = 1000;
+
+  static ThreadPoolPtr vector_index_thread_pool;
 };
+
+ThreadPoolPtr VectorIndexRawIvfPqBoundaryTest::vector_index_thread_pool = nullptr;
 
 TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
   GTEST_SKIP() << "run time too long, please adjust.";
@@ -205,7 +216,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_ip = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+            raw_ivf_pq_ip = VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
           }
 
           // valid param L2
@@ -219,7 +230,7 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_l2 = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+            raw_ivf_pq_l2 = VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
           }
 
           // valid param cosine
@@ -233,7 +244,8 @@ TEST_F(VectorIndexRawIvfPqBoundaryTest, Create) {
             index_parameter.mutable_ivf_pq_parameter()->set_ncentroids(internal_ncentroids);
             index_parameter.mutable_ivf_pq_parameter()->set_nsubvector(internal_nsubvector);
             index_parameter.mutable_ivf_pq_parameter()->set_nbits_per_idx(internal_nbits_per_idx);
-            raw_ivf_pq_cosine = std::make_shared<VectorIndexRawIvfPq>(id, index_parameter, kEpoch, kRange);
+            raw_ivf_pq_cosine =
+                VectorIndexFactory::NewIvfPq(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
           }
 
           if (data_base.empty()) {
