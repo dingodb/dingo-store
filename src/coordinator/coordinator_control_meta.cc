@@ -682,7 +682,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
                            fmt::format("send create auto increment internal error, code: {}, message: {}",
                                        status.error_code(), status.error_str()));
     }
-    DINGO_LOG(INFO) << "CreateTable AutoIncrement send create auto increment internal success";
+    DINGO_LOG(INFO) << "CreateTable AutoIncrement send create auto increment internal success, id: " << new_table_id << ", table_name: " << table_definition.name();
   }
 
   // create table

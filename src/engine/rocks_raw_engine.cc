@@ -748,7 +748,7 @@ bool CastValue(std::string value, std::string& dst_value) {
 }
 
 // set cf config
-static rocksdb::ColumnFamilyOptions GenRcoksDBColumnFamilyOptions(rocks::ColumnFamilyPtr column_family) {
+static rocksdb::ColumnFamilyOptions GenRocksDBColumnFamilyOptions(rocks::ColumnFamilyPtr column_family) {
   rocksdb::ColumnFamilyOptions family_options;
   rocksdb::BlockBasedTableOptions table_options;
 
@@ -818,7 +818,7 @@ static rocksdb::DB* InitDB(const std::string& db_path, rocks::ColumnFamilyMap& c
   std::vector<rocksdb::ColumnFamilyDescriptor> column_family_descs;
   for (auto [cf_name, column_family] : column_families) {
     column_family->Dump();
-    rocksdb::ColumnFamilyOptions family_options = GenRcoksDBColumnFamilyOptions(column_family);
+    rocksdb::ColumnFamilyOptions family_options = GenRocksDBColumnFamilyOptions(column_family);
     column_family_descs.push_back(rocksdb::ColumnFamilyDescriptor(cf_name, family_options));
   }
 
