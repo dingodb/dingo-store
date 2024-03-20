@@ -702,6 +702,7 @@ SegmentLogStorage::~SegmentLogStorage() {
 }
 
 int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) {
+  uint64_t start_time = Helper::TimestampMs();
   butil::FilePath dir_path(path_);
   butil::File::Error e;
   if (!butil::CreateDirectoryAndGetError(dir_path, &e, true)) {
@@ -748,6 +749,10 @@ int SegmentLogStorage::Init(braft::ConfigurationManager* configuration_manager) 
     last_log_index_.store(0);
     ret = SaveMeta(1);
   }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.log][region({})] init elapsed time: {}ms", region_id_,
+                                 Helper::TimestampMs() - start_time);
+
   return ret;
 }
 
@@ -1173,22 +1178,22 @@ int SegmentLogStorage::ListSegments(bool is_empty) {
     int64_t last_index = 0;
     match = sscanf(dir_reader.name(), SEGMENT_CLOSED_PATTERN, &first_index, &last_index);  // NOLINT
     if (match == 2) {
-      DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] restore closed segment, path: {}", region_id_,
-                                     first_index, last_index, path_);
+      DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] restore closed segment, path: {}/{}",
+                                     region_id_, first_index, last_index, path_, dir_reader.name());
       segments_[first_index] = std::make_shared<Segment>(region_id_, path_, first_index, last_index, checksum_type_);
       continue;
     }
 
     match = sscanf(dir_reader.name(), SEGMENT_OPEN_PATTERN, &first_index);  // NOLINT
     if (match == 1) {
-      DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({})] restore open segment, first_index: {} path: {}",
-                                      region_id_, first_index, path_);
+      DINGO_LOG(DEBUG) << fmt::format("[raft.log][region({})] restore open segment, first_index: {} path: {}/{}",
+                                      region_id_, first_index, path_, dir_reader.name());
       if (!open_segment_) {
         open_segment_ = std::make_shared<Segment>(region_id_, path_, first_index, checksum_type_);
         continue;
       } else {
-        DINGO_LOG(WARNING) << fmt::format("[raft.log][region({})] open segment conflict, first_index: {} path: {}",
-                                          region_id_, first_index, path_);
+        DINGO_LOG(WARNING) << fmt::format("[raft.log][region({})] open segment conflict, first_index: {} path: {}/{}",
+                                          region_id_, first_index, path_, dir_reader.name());
         return -1;
       }
     }
