@@ -114,6 +114,7 @@ namespace dingodb {
 DECLARE_int32(vector_background_worker_num);
 DECLARE_int32(vector_fast_background_worker_num);
 DECLARE_int64(vector_max_background_task_count);
+DECLARE_int32(vector_operation_parallel_thread_num);
 }  // namespace dingodb
 
 // Get server endpoint from config
@@ -551,6 +552,16 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
     }
   } else {
     // This is VectorIndex process, need to calc vector background worker num
+
+    // init vector operation parallel thread num
+    auto vector_operation_parallel_thread_num = config->GetInt("vector.operation_parallel_thread_num");
+    if (vector_operation_parallel_thread_num <= 0) {
+      vector_operation_parallel_thread_num = dingodb::FLAGS_vector_operation_parallel_thread_num;
+      DINGO_LOG(WARNING) << fmt::format("[config] vector.vector_operation_parallel_thread_num is too small, set default value({})",
+                                        dingodb::FLAGS_vector_operation_parallel_thread_num);
+    }
+    dingodb::FLAGS_vector_operation_parallel_thread_num = vector_operation_parallel_thread_num;
+    DINGO_LOG(INFO) << "vector.vector_operation_parallel_thread_num is set to " << dingodb::FLAGS_vector_operation_parallel_thread_num;
 
     // init vector index manager background worker num
     auto vector_background_worker_num = config->GetInt("vector.background_worker_num");
