@@ -90,13 +90,11 @@ void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, p
 
   // get leader server_location from raft_node
   auto leader_peer_id = raft_node_->GetLeaderId();
-  pb::common::Location leader_raft_location;
-
-  int ret = Helper::PeerIdToLocation(leader_peer_id, leader_raft_location);
-  if (ret < 0) {
+  if (leader_peer_id.is_empty()) {
     DINGO_LOG(ERROR) << "GetCoordinatorMap cannot transform raft leader peerid, peerid=" << leader_peer_id;
     return;
   }
+  pb::common::Location leader_raft_location = Helper::PeerIdToLocation(leader_peer_id);
 
   GetServerLocation(leader_raft_location, leader_location);
 
