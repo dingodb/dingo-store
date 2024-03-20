@@ -110,7 +110,7 @@ TEST_F(ThreadPoolActuatorTest, Schedule) {
   {
     std::unique_lock<std::mutex> lg(mutex);
     while (count.load() != 0) {
-      std::cout << "wait 1 ms" << std::endl;
+      LOG(INFO) << "wait 1 ms" << std::endl;
       cond.wait_for(lg, std::chrono::milliseconds(1));
     }
   }

@@ -73,7 +73,7 @@ TEST_F(TxnImplTest, BeginFail) {
         return Status::NetworkError("mock error");
       });
 
-  Transaction* txn;
+  Transaction* txn = nullptr;
   EXPECT_FALSE(client->NewTransaction(options, &txn).ok());
   delete txn;
 }

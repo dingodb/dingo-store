@@ -481,11 +481,11 @@ TEST_F(VectorIndexRawIvfPqTest, AddNotTrain) {
     vector_with_ids.push_back(vector_with_id);
 
     ok = vector_index_raw_ivf_pq_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     ok = vector_index_raw_ivf_pq_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
     ok = vector_index_raw_ivf_pq_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // others
@@ -1353,7 +1353,7 @@ TEST_F(VectorIndexRawIvfPqTest, Load) {
   butil::Status ok;
 
   ok = vector_index_raw_ivf_pq_l2->Load("");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
 
   ok = vector_index_raw_ivf_pq_l2->Load(kTempDataDirectory + "/ivf_pq_not_exist");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);

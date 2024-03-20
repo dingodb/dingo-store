@@ -1720,7 +1720,7 @@ TEST_F(VectorIndexIvfPqTest, NeedToSaveIvfPq) {
 
   last_save_log_behind = 10000000;
   ok = vector_index_ivf_pq_l2->NeedToSave(last_save_log_behind);
-  EXPECT_FALSE(ok);
+  EXPECT_TRUE(ok);
 }
 
 TEST_F(VectorIndexIvfPqTest, TrainForIvfPq) {

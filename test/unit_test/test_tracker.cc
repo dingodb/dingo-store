@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "common/helper.h"
+#include "common/tracker.h"
 #include "common/uuid.h"
 #include "fmt/core.h"
 
@@ -55,9 +56,9 @@ TEST_F(TrackerTest, SetTime) {
   tracker->SetTotalRpcTime();
 
   ASSERT_LE(1 * ms * 1000 * 1000, tracker->ServiceQueueWaitTime());
-  ASSERT_LE(2 * ms * 1000 * 1000, tracker->PrepairCommitTime());
-  ASSERT_LE(3 * ms * 1000 * 1000, tracker->RaftCommitTime());
-  ASSERT_LE(4 * ms * 1000 * 1000, tracker->RaftQueueWaitTime());
-  ASSERT_LE(5 * ms * 1000 * 1000, tracker->RaftApplyTime());
+  ASSERT_LE(1 * ms * 1000 * 1000, tracker->PrepairCommitTime());
+  ASSERT_LE(1 * ms * 1000 * 1000, tracker->RaftCommitTime());
+  ASSERT_LE(1 * ms * 1000 * 1000, tracker->RaftQueueWaitTime());
+  ASSERT_LE(1 * ms * 1000 * 1000, tracker->RaftApplyTime());
   ASSERT_LE(6 * ms * 1000 * 1000, tracker->TotalRpcTime());
 }

@@ -676,6 +676,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, false,
                               pb_coprocessor, &kvs);
+  LOG(INFO) << "HERE0001: " << ok.error_str();
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   for (const auto &kv : kvs) {
