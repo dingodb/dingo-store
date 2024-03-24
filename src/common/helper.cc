@@ -262,6 +262,8 @@ std::string Helper::PeerIdsToString(const std::vector<braft::PeerId>& peer_ids) 
 }
 
 butil::EndPoint Helper::LocationToEndPoint(const pb::common::Location& location) {
+  CHECK(!location.host().empty());
+
   butil::EndPoint endpoint;
   if (IsIp(location.host())) {
     int ret = butil::str2endpoint(location.host().c_str(), location.port(), &endpoint);

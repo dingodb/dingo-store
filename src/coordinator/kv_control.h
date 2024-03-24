@@ -147,7 +147,9 @@ class KvControl : public MetaControl {
     GetLeaderLocation(leader_location);
 
     auto *error_in_response = response->mutable_error();
-    *(error_in_response->mutable_leader_location()) = leader_location;
+    if (!leader_location.host().empty()) {
+      *(error_in_response->mutable_leader_location()) = leader_location;
+    }
     error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
     error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
