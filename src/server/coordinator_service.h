@@ -80,7 +80,9 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     this->coordinator_control_->GetLeaderLocation(leader_location);
 
     auto* error_in_response = response->mutable_error();
-    *(error_in_response->mutable_leader_location()) = leader_location;
+    if (!leader_location.host().empty()) {
+      *(error_in_response->mutable_leader_location()) = leader_location;
+    }
     error_in_response->set_errcode(Errno::ERAFT_NOTLEADER);
     error_in_response->set_errmsg("not leader, new leader location is " + leader_location.DebugString());
   }
@@ -99,7 +101,9 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
     coordinator_control_->GetServerLocation(leader_raft_location, leader_server_location);
 
     auto* error_in_response = response->mutable_error();
-    *(error_in_response->mutable_leader_location()) = leader_server_location;
+    if (!leader_server_location.host().empty()) {
+      *(error_in_response->mutable_leader_location()) = leader_server_location;
+    }
     error_in_response->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
     error_in_response->set_errmsg("not leader, new leader location is " + leader_server_location.DebugString());
   }

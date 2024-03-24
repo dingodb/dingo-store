@@ -195,8 +195,10 @@ class Helper {
   template <typename T>
   static void SetPbMessageErrorLeader(const pb::node::NodeInfo& node_info, T* message) {
     message->mutable_error()->set_store_id(node_info.id());
-    auto leader_location = message->mutable_error()->mutable_leader_location();
-    *leader_location = node_info.server_location();
+    if (!node_info.server_location().host().empty()) {
+      auto leader_location = message->mutable_error()->mutable_leader_location();
+      *leader_location = node_info.server_location();
+    }
   }
 
   static std::string MessageToJsonString(const google::protobuf::Message& message);
