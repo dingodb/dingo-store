@@ -1253,9 +1253,9 @@ int SegmentLogStorage::LoadSegments(braft::ConfigurationManager* configuration_m
   SegmentMap::iterator it;
   for (it = segments_.begin(); it != segments_.end(); ++it) {
     Segment* segment = it->second.get();
-    if (segment->LastIndex() < first_log_index_.load(std::memory_order_relaxed)) {
-      continue;
-    }
+    // if (segment->LastIndex() < first_log_index_.load(std::memory_order_relaxed)) {
+    //   continue;
+    // }
     DINGO_LOG(INFO) << fmt::format("[raft.log][region({}).index({}_{})] load closed segment, path: {}", region_id_,
                                    segment->FirstIndex(), segment->LastIndex(), path_);
     ret = segment->Load(configuration_manager);

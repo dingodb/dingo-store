@@ -1001,12 +1001,6 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
 
-  if (end_log_id < log_stroage->FirstLogIndex()) {
-    DINGO_LOG(FATAL) << fmt::format("[vector_index.replaywal][index_id({})] abnormal end_log_id({}) first_log_id({})",
-                                    vector_index->Id(), end_log_id, log_stroage->FirstLogIndex());
-    return butil::Status();
-  }
-
   int64_t min_vector_id = 0, max_vector_id = 0;
   VectorCodec::DecodeRangeToVectorId(vector_index->Range(), min_vector_id, max_vector_id);
 
