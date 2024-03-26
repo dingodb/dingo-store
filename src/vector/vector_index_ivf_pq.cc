@@ -237,7 +237,7 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
     index_flat_ = nullptr;
     return status;
   } else {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load failed : {} path:{}", status.error_cstr(), path);
+    std::string s = fmt::format("Load raw_ivf_pq index failed, error: {} path: {}", status.error_cstr(), path);
     DINGO_LOG(WARNING) << s;
     internal_index_raw_ivf_pq = nullptr;
     internal_index_type_in_ivf_pq = IndexTypeInIvfPq::kUnknow;
@@ -261,7 +261,7 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
     index_raw_ivf_pq_ = nullptr;
     return status;
   } else {
-    std::string s = fmt::format("VectorIndexFlat::Load failed : {} path:{}", status.error_cstr(), path);
+    std::string s = fmt::format("Load ivf_pq index failed, error: {} path: {}", status.error_cstr(), path);
     DINGO_LOG(WARNING) << s;
     internal_index_flat = nullptr;
     internal_index_type_in_ivf_pq = IndexTypeInIvfPq::kUnknow;
