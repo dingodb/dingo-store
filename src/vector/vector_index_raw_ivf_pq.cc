@@ -50,42 +50,28 @@ VectorIndexRawIvfPq::VectorIndexRawIvfPq(int64_t id, const pb::common::VectorInd
                                          const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
                                          ThreadPoolPtr thread_pool)
     : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
-  bthread_mutex_init(&mutex_, nullptr);
-
   metric_type_ = vector_index_parameter.ivf_pq_parameter().metric_type();
   dimension_ = vector_index_parameter.ivf_pq_parameter().dimension();
 
-  nlist_ = vector_index_parameter.ivf_pq_parameter().ncentroids();
+  nlist_ = vector_index_parameter.ivf_pq_parameter().ncentroids() > 0
+               ? vector_index_parameter.ivf_pq_parameter().ncentroids()
+               : Constant::kCreateIvfPqParamNcentroids;
 
-  nsubvector_ = vector_index_parameter.ivf_pq_parameter().nsubvector();
+  nsubvector_ = vector_index_parameter.ivf_pq_parameter().nsubvector() > 0
+                    ? vector_index_parameter.ivf_pq_parameter().nsubvector()
+                    : Constant::kCreateIvfPqParamNsubvector;
 
-  nbits_per_idx_ = vector_index_parameter.ivf_pq_parameter().nbits_per_idx();
+  nbits_per_idx_ = (vector_index_parameter.ivf_pq_parameter().nbits_per_idx() % 64) > 0
+                       ? (vector_index_parameter.ivf_pq_parameter().nbits_per_idx() % 64)
+                       : Constant::kCreateIvfPqParamNbitsPerIdx;
 
-  nbits_per_idx_ %= 64;
-
-  if (0 == nlist_) {
-    nlist_ = Constant::kCreateIvfPqParamNcentroids;
-  }
-
-  if (0 == nsubvector_) {
-    nsubvector_ = Constant::kCreateIvfPqParamNsubvector;
-  }
-
-  if (0 == nbits_per_idx_) {
-    nbits_per_idx_ = Constant::kCreateIvfPqParamNbitsPerIdx;
-  }
-
-  normalize_ = false;
-
-  if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
-    normalize_ = true;
-  }
+  normalize_ = (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_);
 
   train_data_size_ = 0;
   // Delay object creation.
 }
 
-VectorIndexRawIvfPq::~VectorIndexRawIvfPq() { bthread_mutex_destroy(&mutex_); }
+VectorIndexRawIvfPq::~VectorIndexRawIvfPq() {}
 
 butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                bool is_upsert) {
@@ -105,7 +91,8 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::Vec
     return status;
   }
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
+
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("ivf pq not train. train first.");
     DINGO_LOG(ERROR) << s;
@@ -164,7 +151,7 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
   faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockWriteGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf pq not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -213,7 +200,8 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
   }
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("ivf pq not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -288,7 +276,8 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
   }
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    RWLockReadGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
       std::string s = fmt::format("raw ivf pq not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
@@ -337,9 +326,9 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
   return butil::Status::OK();
 }
 
-void VectorIndexRawIvfPq::LockWrite() { bthread_mutex_lock(&mutex_); }
+void VectorIndexRawIvfPq::LockWrite() { rw_lock_.LockWrite(); }
 
-void VectorIndexRawIvfPq::UnlockWrite() { bthread_mutex_unlock(&mutex_); }
+void VectorIndexRawIvfPq::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
 bool VectorIndexRawIvfPq::SupportSave() { return true; }
 
@@ -493,7 +482,8 @@ int32_t VectorIndexRawIvfPq::GetDimension() { return this->dimension_; }
 pb::common::MetricType VectorIndexRawIvfPq::GetMetricType() { return this->metric_type_; }
 
 butil::Status VectorIndexRawIvfPq::GetCount(int64_t& count) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
+
   if (DoIsTrained()) {
     count = index_->ntotal;
   } else {
@@ -508,7 +498,7 @@ butil::Status VectorIndexRawIvfPq::GetDeletedCount(int64_t& deleted_count) {
 }
 
 butil::Status VectorIndexRawIvfPq::GetMemorySize(int64_t& memory_size) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     memory_size = 0;
@@ -556,10 +546,9 @@ butil::Status VectorIndexRawIvfPq::Train(const std::vector<float>& train_datas) 
     return butil::Status(pb::error::Errno::EINTERNAL, s);
   }
 
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
-    std::string s = fmt::format("already trained . ignore");
-    DINGO_LOG(WARNING) << s;
+    DINGO_LOG(WARNING) << fmt::format("already trained . ignore");
     return butil::Status::OK();
   }
 
@@ -630,7 +619,7 @@ butil::Status VectorIndexRawIvfPq::Train([[maybe_unused]] const std::vector<pb::
 }
 
 bool VectorIndexRawIvfPq::NeedToRebuild() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("not trained");
@@ -642,12 +631,13 @@ bool VectorIndexRawIvfPq::NeedToRebuild() {
 }
 
 bool VectorIndexRawIvfPq::IsTrained() {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
   return DoIsTrained();
 }
 
 bool VectorIndexRawIvfPq::NeedToSave(int64_t last_save_log_behind) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  RWLockReadGuard guard(&rw_lock_);
+
   if (BAIDU_UNLIKELY(!DoIsTrained())) {
     std::string s = fmt::format("not trained. train first");
     DINGO_LOG(WARNING) << s;
