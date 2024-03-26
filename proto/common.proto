@@ -650,9 +650,26 @@ enum ScalarIndexType {
   SCALAR_INDEX_TYPE_BTREE = 2;
 }
 
+message ScalarSchemaItem {
+  // field key
+  string key = 1;
+
+  // filed type
+  ScalarFieldType field_type = 2;
+
+  // need to speed up key
+  bool enable_speed_up = 3;
+}
+
+message ScalarSchema {
+  // array field
+  repeated ScalarSchemaItem fields = 1;
+}
+
 message ScalarIndexParameter {
   ScalarIndexType scalar_index_type = 1;
   bool is_unique = 2;  // for scalar index
+  ScalarSchema scalar_schema = 3;
 }
 
 message IndexParameter {
