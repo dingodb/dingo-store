@@ -108,6 +108,8 @@ DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
 DECLARE_uint32(vector_put_batch_size);
 DECLARE_uint32(vector_arrange_concurrency);
 DECLARE_bool(vector_search_arrange_data);
+DECLARE_uint32(vector_search_nprobe);
+DECLARE_uint32(vector_search_ef);
 
 DECLARE_string(benchmark);
 DECLARE_uint32(key_size);
@@ -898,7 +900,8 @@ void Environment::PrintParam() {
                            FLAGS_vector_search_enable_range_search ? "true" : "false")
             << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "vector_search_radius", FLAGS_vector_search_radius) << '\n';
-
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_search_nprobe", FLAGS_vector_search_nprobe) << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "vector_search_ef", FLAGS_vector_search_ef) << '\n';
   std::cout << '\n';
 }
 
