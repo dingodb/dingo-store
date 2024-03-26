@@ -74,6 +74,8 @@ static std::string GetUsageMessage() {
   message += "\n  --vector_search_use_brute_force vector search flag use_brute_force, default(false)";
   message += "\n  --vector_search_enable_range_search vector search flag enable_range_search, default(false)";
   message += "\n  --vector_search_radius vector search flag radius, default(0.1)";
+  message += "\n  --vector_search_nprobe vector search flag nprobe, default(80)";
+  message += "\n  --vector_search_ef vector search flag ef, default(128)";
 
   return message;
 }

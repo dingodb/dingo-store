@@ -75,6 +75,9 @@ DEFINE_validator(vector_search_filter_source, [](const char*, const std::string&
   return filter_source.empty() || filter_source == "SCALAR" || filter_source == "TABLE" || filter_source == "VECTOR_ID";
 });
 
+DEFINE_uint32(vector_search_nprobe, 80, "Vector search nprobe param");
+DEFINE_uint32(vector_search_ef, 128, "Vector search ef param");
+
 DECLARE_uint32(vector_dimension);
 DECLARE_string(vector_value_type);
 
@@ -1141,7 +1144,8 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   search_param.with_table_data = FLAGS_vector_search_with_table_data;
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
   search_param.topk = FLAGS_vector_search_topk;
-  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, 128));
+  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, FLAGS_vector_search_ef));
+  search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kNprobe, FLAGS_vector_search_nprobe));
 
   std::string filter_type = dingodb::Helper::ToUpper(FLAGS_vector_search_filter_type);
   if (filter_type == "PRE") {
