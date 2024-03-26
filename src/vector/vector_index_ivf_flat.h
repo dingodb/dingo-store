@@ -124,7 +124,6 @@ class VectorIndexIvfFlat : public VectorIndex {
   // only support L2 and IP
   pb::common::MetricType metric_type_;
 
-  // bthread_mutex_t mutex_;
   RWLock rw_lock_;
 
   // maybe 1 or vector_index_parameter.ivf_flat_parameter().ncentroids()

@@ -57,18 +57,13 @@ VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndex
   metric_type_ = vector_index_parameter.ivf_flat_parameter().metric_type();
   dimension_ = vector_index_parameter.ivf_flat_parameter().dimension();
 
-  nlist_org_ = vector_index_parameter.ivf_flat_parameter().ncentroids();
-
-  if (0 == nlist_org_) {
-    nlist_org_ = Constant::kCreateIvfFlatParamNcentroids;
-  }
+  nlist_org_ = vector_index_parameter.ivf_flat_parameter().ncentroids() > 0
+                   ? vector_index_parameter.ivf_flat_parameter().ncentroids()
+                   : Constant::kCreateIvfFlatParamNcentroids;
 
   nlist_ = nlist_org_;
 
-  normalize_ = false;
-  if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
-    normalize_ = true;
-  }
+  normalize_ = (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_);
 
   train_data_size_ = 0;
   // Delay object creation.
@@ -208,8 +203,7 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
     BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf flat not train. train first. ignored");
-      DINGO_LOG(WARNING) << s;
+      DINGO_LOG(WARNING) << fmt::format("ivf flat not train. train first. ignored");
 
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
@@ -283,8 +277,7 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
     BvarLatencyGuard bvar_guard(&g_ivf_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
     if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf flat not train. train first. ignored");
-      DINGO_LOG(WARNING) << s;
+      DINGO_LOG(WARNING) << fmt::format("ivf flat not train. train first. ignored");
 
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
