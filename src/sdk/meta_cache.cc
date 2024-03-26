@@ -17,6 +17,7 @@
 #include <string_view>
 
 #include "common/logging.h"
+#include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
@@ -339,29 +340,29 @@ void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, st
   std::vector<Replica> replicas;
   if (scan_region_info.has_leader()) {
     const auto& leader = scan_region_info.leader();
-    auto endpoint = Helper::LocationToEndPoint(leader);
-    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
-      DINGO_LOG(WARNING) << "receive leader is invalid:" << butil::endpoint2str(endpoint);
+    if (leader.host().empty() || leader.port() == 0) {
+      DINGO_LOG(WARNING) << fmt::format("receive leader is invalid: {} {}", leader.host(), leader.port());
     } else {
+      auto endpoint = Helper::LocationToEndPoint(leader);
       replicas.push_back({endpoint, kLeader});
     }
   }
 
   for (const auto& voter : scan_region_info.voters()) {
-    auto endpoint = Helper::LocationToEndPoint(voter);
-    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
-      DINGO_LOG(WARNING) << "receive voter is invalid:" << butil::endpoint2str(endpoint);
+    if (voter.host().empty() || voter.port() == 0) {
+      DINGO_LOG(WARNING) << fmt::format("receive voter is invalid: {} {}", voter.host(), voter.port());
     } else {
+      auto endpoint = Helper::LocationToEndPoint(voter);
       replicas.push_back({endpoint, kFollower});
     }
   }
 
   // TODO: support learner
   for (const auto& leaner : scan_region_info.learners()) {
-    auto endpoint = Helper::LocationToEndPoint(leaner);
-    if (endpoint.ip == butil::IP_ANY || endpoint.port == 0) {
-      DINGO_LOG(WARNING) << "receive leaner invalid:" << butil::endpoint2str(endpoint);
+    if (leaner.host().empty() || leaner.port() == 0) {
+      DINGO_LOG(WARNING) << fmt::format("receive voter is invalid: {} {}", leaner.host(), leaner.port());
     } else {
+      auto endpoint = Helper::LocationToEndPoint(leaner);
       replicas.push_back({endpoint, kFollower});
     }
   }
