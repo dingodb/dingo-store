@@ -1424,18 +1424,6 @@ std::shared_ptr<Segment> SegmentLogStorage::GetSegment(int64_t index) {
 
 std::vector<std::shared_ptr<Segment>> SegmentLogStorage::GetSegments(uint64_t begin_index, uint64_t end_index) {
   BAIDU_SCOPED_LOCK(mutex_);
-  uint64_t first_index = FirstLogIndex();
-  uint64_t last_index = LastLogIndex();
-  if (first_index == last_index + 1) {
-    return {};
-  }
-
-  if (end_index < first_index || begin_index > last_index) {
-    DINGO_LOG(WARNING) << fmt::format(
-        "[raft.log][region({}).index({}_{})] attempted to access entry {}-{} outside of log", region_id_, first_index,
-        last_index, begin_index, end_index);
-    return {};
-  }
 
   std::vector<std::shared_ptr<Segment>> segments;
   for (auto& [_, segment] : segments_) {
