@@ -529,26 +529,22 @@ butil::Status VectorIndexRawIvfPq::GetMemorySize(int64_t& memory_size) {
 
 bool VectorIndexRawIvfPq::IsExceedsMaxElements() { return false; }
 
-butil::Status VectorIndexRawIvfPq::Train(const std::vector<float>& train_datas) {
+butil::Status VectorIndexRawIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
 
   // check
-  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
-    std::string s =
-        fmt::format("train_datas float size : {} , dimension : {}, Not divisible ", train_datas.size(), dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  if (BAIDU_UNLIKELY(0 == data_size)) {
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("data size invalid"));
   }
 
-  if (BAIDU_UNLIKELY(0 == data_size)) {
-    std::string s = fmt::format("train_datas zero not support ");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
   }
 
   RWLockWriteGuard guard(&rw_lock_);
+
   if (BAIDU_UNLIKELY(DoIsTrained())) {
-    DINGO_LOG(WARNING) << fmt::format("already trained . ignore");
     return butil::Status::OK();
   }
 
@@ -557,44 +553,21 @@ butil::Status VectorIndexRawIvfPq::Train(const std::vector<float>& train_datas) 
 
   train_data_size_ = 0;
 
-  float* train_datas_ptr = const_cast<float*>(train_datas.data());
-  std::vector<float> train_datas_for_normalize;
   if (normalize_) {
-    try {
-      train_datas_for_normalize = train_datas;
-    } catch (const std::exception& e) {
-      Reset();
-      std::string s = fmt::format("copy train data exception : {}", e.what());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
-    }
-
     for (size_t i = 0; i < data_size; i++) {
-      VectorIndexUtils::NormalizeVectorForFaiss(const_cast<float*>(train_datas_for_normalize.data()) + i * dimension_,
-                                                dimension_);
+      VectorIndexUtils::NormalizeVectorForFaiss(const_cast<float*>(train_datas.data()) + i * dimension_, dimension_);
     }
-
-    train_datas_ptr = const_cast<float*>(train_datas_for_normalize.data());
   }
 
   try {
-    index_->train(data_size, train_datas_ptr);
+    index_->train(data_size, train_datas.data());
+    if (!index_->is_trained) {
+      Reset();
+      return butil::Status(pb::error::Errno::EINTERNAL, "check raw_ivf_pq index train failed");
+    }
   } catch (std::exception& e) {
     Reset();
-    std::string s =
-        fmt::format("ivf pq train failed data size : {} dimension : {} exception {}", data_size, dimension_, e.what());
-    DINGO_LOG(ERROR) << s;
-    Reset();
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
-  }
-
-  // double check
-  if (BAIDU_UNLIKELY(!index_->is_trained)) {
-    Reset();
-    std::string s =
-        fmt::format("ivf pq train failed. data size : {} dimension : {}. internal error", data_size, dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, "train raw_ivf_pq exception");
   }
 
   train_data_size_ = data_size;

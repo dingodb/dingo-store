@@ -111,15 +111,14 @@ butil::Status VectorIndexIvfFlat::AddOrUpsertWrapper(const std::vector<pb::commo
   auto status = AddOrUpsert(vector_with_ids, is_upsert);
   if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
     status = Train(vector_with_ids);
-    if (BAIDU_LIKELY(status.ok())) {
-      // try again
-      status = AddOrUpsert(vector_with_ids, is_upsert);
-      if (BAIDU_LIKELY(!status.ok())) {  // AddOrUpsert
-        DINGO_LOG(ERROR) << status;
-        return status;
-      }
-    } else {  // Train failed
-      DINGO_LOG(ERROR) << status;
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("train failed: ", status.error_str());
+      return status;
+    }
+
+    // try again
+    status = AddOrUpsert(vector_with_ids, is_upsert);
+    if (!status.ok()) {
       return status;
     }
   }
@@ -497,21 +496,17 @@ butil::Status VectorIndexIvfFlat::GetMemorySize(int64_t& memory_size) {
 
 bool VectorIndexIvfFlat::IsExceedsMaxElements() { return false; }
 
-butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
+butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
 
   // check
-  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
-    std::string s =
-        fmt::format("train_datas float size : {} , dimension : {}, Not divisible ", train_datas.size(), dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  if (BAIDU_UNLIKELY(0 == data_size)) {
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("data size invalid"));
   }
 
-  if (BAIDU_UNLIKELY(0 == data_size)) {
-    std::string s = fmt::format("train_datas zero not support ");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
   }
 
   faiss::ClusteringParameters clustering_parameters;
@@ -529,15 +524,12 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
   BvarLatencyGuard bvar_guard(&g_ivf_flat_train_latency);
   RWLockWriteGuard guard(&rw_lock_);
   if (BAIDU_UNLIKELY(DoIsTrained())) {
-    std::string s = fmt::format("already trained . ignore");
-    DINGO_LOG(WARNING) << s;
     return butil::Status::OK();
   }
 
   // critical code
   if (BAIDU_UNLIKELY(data_size < nlist_)) {
-    std::string s = fmt::format("train_datas size : {} too small. nlist : {} degenerate to 1", data_size, nlist_);
-    DINGO_LOG(WARNING) << s;
+    DINGO_LOG(WARNING) << fmt::format("train_datas size : {} too small. nlist : {} degenerate to 1", data_size, nlist_);
     nlist_ = 1;
   }
 
@@ -546,45 +538,22 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
 
   train_data_size_ = 0;
 
-  float* train_datas_ptr = const_cast<float*>(train_datas.data());
-  std::vector<float> train_datas_for_normalize;
   if (normalize_) {
-    try {
-      train_datas_for_normalize = train_datas;
-    } catch (const std::exception& e) {
-      Reset();
-      std::string s = fmt::format("copy train data exception : {}", e.what());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+    for (size_t i = 0; i < data_size; ++i) {
+      VectorIndexUtils::NormalizeVectorForFaiss(train_datas.data() + i * dimension_, dimension_);
     }
-
-    for (size_t i = 0; i < data_size; i++) {
-      VectorIndexUtils::NormalizeVectorForFaiss(const_cast<float*>(train_datas_for_normalize.data()) + i * dimension_,
-                                                dimension_);
-    }
-
-    train_datas_ptr = const_cast<float*>(train_datas_for_normalize.data());
   }
 
   try {
-    index_->train(data_size, train_datas_ptr);
+    index_->train(data_size, train_datas.data());
+    if (!index_->is_trained) {
+      Reset();
+      return butil::Status(pb::error::Errno::EINTERNAL, "check ivf_flat index train failed");
+    }
 
   } catch (std::exception& e) {
     Reset();
-    std::string s = fmt::format("ivf flat train failed data size : {} dimension : {} exception {}", data_size,
-                                dimension_, e.what());
-    DINGO_LOG(ERROR) << s;
-    Reset();
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
-  }
-
-  // double check
-  if (BAIDU_UNLIKELY(!index_->is_trained)) {
-    Reset();
-    std::string s =
-        fmt::format("ivf flat train failed. data size : {} dimension : {}. internal error", data_size, dimension_);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, "train ivf_flat exception");
   }
 
   train_data_size_ = data_size;
@@ -592,15 +561,12 @@ butil::Status VectorIndexIvfFlat::Train(const std::vector<float>& train_datas) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) {
+butil::Status VectorIndexIvfFlat::Train(const std::vector<pb::common::VectorWithId>& vectors) {
   std::vector<float> train_datas;
   train_datas.reserve(dimension_ * vectors.size());
   for (const auto& vector : vectors) {
     if (BAIDU_UNLIKELY(dimension_ != vector.vector().float_values().size())) {
-      std::string s =
-          fmt::format("ivf flat train failed. float_values size : {} unequal dimension : {}. internal error",
-                      vector.vector().float_values().size(), dimension_);
-      DINGO_LOG(ERROR) << s;
+      std::string s = fmt::format("dimension not match {} {}", vector.vector().float_values().size(), dimension_);
       return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
     train_datas.insert(train_datas.end(), vector.vector().float_values().begin(), vector.vector().float_values().end());
