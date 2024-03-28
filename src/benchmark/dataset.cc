@@ -84,6 +84,8 @@ std::shared_ptr<Dataset> Dataset::New(std::string filepath) {
     return std::make_shared<Wikipedia2212Dataset>(filepath);
   } else if (filepath.find("beir-bioasq") != std::string::npos) {
     return std::make_shared<BeirBioasqDataset>(filepath);
+  } else if (filepath.find("miracl") != std::string::npos) {
+    return std::make_shared<MiraclDataset>(filepath);
   }
 
   std::cout << "Not support dataset, path: " << filepath << std::endl;
@@ -875,5 +877,147 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
   return entry;
 }
 
+static int64_t GetMiraclVectorId(const rapidjson::Value& obj) {
+  std::string id(obj["docid"].GetString());
+  std::replace(id.begin(), id.end(), '#', '0');
+  return std::stoll(id);
+};
+
+bool MiraclDataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithId& vector_with_id) const {
+  const auto& item = obj.GetObject();
+  if (!item.HasMember("docid") || !item.HasMember("title") || !item.HasMember("text") || !item.HasMember("emb")) {
+    return true;
+  }
+
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
+    }
+  }
+
+  int64_t id = GetMiraclVectorId(item) + 1;
+  vector_with_id.id = id;
+
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kInt64;
+    sdk::ScalarField field;
+    field.long_data = id;
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["id"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["title"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["title"] = scalar_value;
+  }
+
+  {
+    sdk::ScalarValue scalar_value;
+    scalar_value.type = sdk::ScalarFieldType::kString;
+    sdk::ScalarField field;
+    field.string_data = item["text"].GetString();
+    scalar_value.fields.push_back(field);
+    vector_with_id.scalar_data["text"] = scalar_value;
+  }
+
+  return true;
+}
+
+Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) const {
+  const auto& item = obj.GetObject();
+
+  sdk::VectorWithId vector_with_id;
+  vector_with_id.id = GetMiraclVectorId(item) + 1;
+
+  std::vector<float> embedding;
+  if (item["emb"].IsArray()) {
+    uint32_t dimension = item["emb"].GetArray().Size();
+    CHECK(dimension == FLAGS_vector_dimension) << fmt::format("dataset dimension({}) is not uniformity.", dimension);
+    embedding.reserve(dimension);
+    for (const auto& f : item["emb"].GetArray()) {
+      embedding.push_back(f.GetFloat());
+    }
+  }
+
+  vector_with_id.vector.value_type = sdk::ValueType::kFloat;
+  vector_with_id.vector.float_values.swap(embedding);
+
+  if (!FLAGS_vector_search_filter.empty()) {
+    std::vector<std::string> kv_strs;
+    dingodb::Helper::SplitString(FLAGS_vector_search_filter, ';', kv_strs);
+
+    for (auto& kv_str : kv_strs) {
+      std::vector<std::string> kv;
+      dingodb::Helper::SplitString(kv_str, '=', kv);
+      CHECK(kv.size() >= 2) << fmt::format("filter string({}) invalid.", kv_str);
+
+      const auto& key = kv[0];
+      const auto& value = kv[1];
+      if (key == "title") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["title"] = scalar_value;
+      } else if (key == "text") {
+        sdk::ScalarValue scalar_value;
+        scalar_value.type = sdk::ScalarFieldType::kString;
+        sdk::ScalarField field;
+        field.string_data = value;
+        scalar_value.fields.push_back(field);
+        vector_with_id.scalar_data["text"] = scalar_value;
+      }
+    }
+  } else {
+    if (item.HasMember("filter")) {
+      for (const auto& m : item["filter"].GetObject()) {
+        if (m.value.IsString()) {
+          sdk::ScalarValue scalar_value;
+          scalar_value.type = sdk::ScalarFieldType::kString;
+          sdk::ScalarField field;
+          field.string_data = m.value.GetString();
+          scalar_value.fields.push_back(field);
+          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
+        } else if (m.value.IsInt64()) {
+          sdk::ScalarValue scalar_value;
+          scalar_value.type = sdk::ScalarFieldType::kInt64;
+          sdk::ScalarField field;
+          field.long_data = m.value.GetInt64();
+          scalar_value.fields.push_back(field);
+          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
+        }
+      }
+    }
+  }
+
+  Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
+  entry->vector_with_id = vector_with_id;
+
+  const auto& neighbors = item["neighbors"].GetArray();
+  CHECK(!neighbors.Empty()) << "neighbor size is empty.";
+  uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
+  for (uint32_t i = 0; i < size; ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
+    entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
+  }
+
+  return entry;
+}
 }  // namespace benchmark
 }  // namespace dingodb

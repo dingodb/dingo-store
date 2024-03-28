@@ -203,6 +203,15 @@ class BeirBioasqDataset : public JsonDataset {
   Dataset::TestEntryPtr ParseTestData(const rapidjson::Value& obj) const override;
 };
 
+class MiraclDataset : public JsonDataset {
+ public:
+  MiraclDataset(const std::string& dirpath) : JsonDataset(dirpath) {}
+  ~MiraclDataset() override = default;
+
+  bool ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithId& vector_with_id) const override;
+  Dataset::TestEntryPtr ParseTestData(const rapidjson::Value& obj) const override;
+};
+
 }  // namespace benchmark
 }  // namespace dingodb
 

@@ -212,19 +212,23 @@ static bool FilterValue(const rapidjson::Value& obj) {
   return false;
 }
 
+static int64_t GetVectorId(const std::string& dataset_name, const rapidjson::Value& obj) {
+  if (dataset_name == "wikipedia") {
+    return obj["id"].GetInt64();
+  } else if (dataset_name == "beir-bioasq") {
+    return std::stoll(obj["_id"].GetString());
+  } else if (dataset_name == "miracl") {
+    std::string id(obj["docid"].GetString());
+    std::replace(id.begin(), id.end(), '#', '0');
+    return std::stoll(id);
+  }
+
+  return -1;
+};
+
 void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::string& test_dataset_filepath,
                                const std::string& train_dataset_dirpath, const std::string& out_filepath) {
   std::vector<VectorEntry> test_entries;
-
-  auto get_id_func = [&](const rapidjson::Value& obj) -> int64_t {
-    if (dataset_name == "wikipedia") {
-      return obj["id"].GetInt64();
-    } else if (dataset_name == "beir-bioasq") {
-      return std::stoll(obj["_id"].GetString());
-    }
-
-    return -1;
-  };
 
   // bootstrap thread pool
   dingodb::ThreadPool thread_pool("distance", 8);
@@ -241,7 +245,7 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
       const auto& item = array[i].GetObject();
 
       VectorEntry entry;
-      entry.id = get_id_func(item);
+      entry.id = GetVectorId(dataset_name, item);
 
       if (item["emb"].IsArray()) {
         entry.emb.reserve(item["emb"].GetArray().Size());
@@ -288,7 +292,7 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
         }
 
         auto* entry = new VectorEntry();
-        entry->id = get_id_func(item);
+        entry->id = GetVectorId(dataset_name, item);
         CHECK(entry->id != -1) << fmt::format("vector id({}) is invalid", entry->id);
 
         if (!item["emb"].IsArray()) {
@@ -334,16 +338,6 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
 
 void DatasetUtils::GetStatisticsDistribution(const std::string& dataset_name, const std::string& train_dataset_dirpath,
                                              const std::string& field, const std::string& out_filepath) {
-  auto get_id_func = [&](const rapidjson::Value& obj) -> int64_t {
-    if (dataset_name == "wikipedia") {
-      return obj["id"].GetInt64();
-    } else if (dataset_name == "beir-bioasq") {
-      return std::stoll(obj["_id"].GetString());
-    }
-
-    return -1;
-  };
-
   std::vector<std::string> train_filepaths;
   auto train_filenames = dingodb::Helper::TraverseDirectory(train_dataset_dirpath, std::string("train"));
   train_filepaths.reserve(train_filenames.size());
@@ -374,7 +368,7 @@ void DatasetUtils::GetStatisticsDistribution(const std::string& dataset_name, co
       }
 
       ++total_count;
-      int64_t id = get_id_func(item);
+      int64_t id = GetVectorId(dataset_name, item);
       std::string value;
       if (item[field.c_str()].IsString()) {
         value = item[field.c_str()].GetString();
@@ -492,6 +486,8 @@ static std::string GetDatasetName() {
     dataset_name = "wikipedia";
   } else if (FLAGS_vector_dataset.find("bioasq") != std::string::npos) {
     dataset_name = "beir-bioasq";
+  } else if (FLAGS_vector_dataset.find("miracl") != std::string::npos) {
+    dataset_name = "miracl";
   }
 
   return dataset_name;
