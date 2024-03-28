@@ -18,9 +18,9 @@
 #include <optional>
 
 #include "butil/status.h"
-#include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "serial/schema/base_schema.h"
 #include "serial/schema/boolean_schema.h"
@@ -2220,6 +2220,460 @@ TEST_F(CoprocessorUtilsTest, DebugPrintAnyArray) {
   }
 
   Utils::DebugPrintAnyArray(records, "Dummy");
+}
+
+TEST_F(CoprocessorUtilsTest, CompareCoprocessorSchemaAndScalarSchema) {
+  butil::Status ok;
+
+  // bool
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  // int
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  // long
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  // float
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  // double
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  // string
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////
+  // bool
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::INT8);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // int
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // long
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // float
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // double
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_DOUBLE);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // string
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_STRING);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // bool list
+  {
+    dingodb::pb::common::Schema coprocessor_schema_core;
+    dingodb::pb::common::Schema *coprocessor_schema_core_ptr = &coprocessor_schema_core;
+    coprocessor_schema_core.set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOLLIST);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> coprocessor_schema(
+        reinterpret_cast<void *const *>(&coprocessor_schema_core_ptr));
+
+    dingodb::pb::common::ScalarSchemaItem scalar_schema_core;
+    dingodb::pb::common::ScalarSchemaItem *scalar_schema_core_ptr = &scalar_schema_core;
+    scalar_schema_core.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem> scalar_schema(
+        reinterpret_cast<void *const *>(&scalar_schema_core_ptr));
+
+    ok = Utils::CompareCoprocessorSchemaAndScalarSchema(coprocessor_schema, scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+}
+
+TEST_F(CoprocessorUtilsTest, FindSchemaInOriginalSchemaBySelectionColumnsIndex) {
+  butil::Status ok;
+
+  pb::common::CoprocessorV2 coprocessor_v2;
+  auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+  schema->set_name("key_bool");
+  schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+  schema->set_index(1);
+
+  schema = coprocessor_v2.mutable_original_schema()->add_schema();
+  schema->set_name("key_int");
+  schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+  schema->set_index(3);
+
+  schema = coprocessor_v2.mutable_original_schema()->add_schema();
+  schema->set_name("key_long");
+  schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+  schema->set_index(0);
+
+  schema = coprocessor_v2.mutable_original_schema()->add_schema();
+  schema->set_name("key_float");
+  schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+  schema->set_index(2);
+
+  coprocessor_v2.mutable_selection_columns()->Add(1);
+  coprocessor_v2.mutable_selection_columns()->Add(3);
+  coprocessor_v2.mutable_selection_columns()->Add(2);
+  coprocessor_v2.mutable_selection_columns()->Add(0);
+
+  {
+    for (auto selection_columns_index : coprocessor_v2.selection_columns()) {
+      google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> iter_schema;
+      ok = Utils::FindSchemaInOriginalSchemaBySelectionColumnsIndex(coprocessor_v2, selection_columns_index,
+                                                                    iter_schema);
+      EXPECT_EQ(ok.error_code(), pb::error::OK);
+      EXPECT_EQ(selection_columns_index, iter_schema->index());
+    }
+  }
+
+  {
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> iter_schema;
+    const int selection_columns_index = 4;
+    ok = Utils::FindSchemaInOriginalSchemaBySelectionColumnsIndex(coprocessor_v2, selection_columns_index, iter_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  {
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> iter_schema;
+    const int selection_columns_index = 20;
+    ok = Utils::FindSchemaInOriginalSchemaBySelectionColumnsIndex(coprocessor_v2, selection_columns_index, iter_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+}
+
+TEST_F(CoprocessorUtilsTest, CollectKeysFromCoprocessor) {
+  butil::Status ok;
+
+  // empty key
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+    auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_bool");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema->set_index(1);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_int");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema->set_index(3);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema->set_index(0);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema->set_index(2);
+
+    coprocessor_v2.mutable_selection_columns()->Add(1);
+    coprocessor_v2.mutable_selection_columns()->Add(3);
+    coprocessor_v2.mutable_selection_columns()->Add(2);
+    coprocessor_v2.mutable_selection_columns()->Add(0);
+    std::set<std::string> keys;
+    ok = Utils::CollectKeysFromCoprocessor(coprocessor_v2, keys);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // repeat key
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+    auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_bool");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema->set_index(1);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_int");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema->set_index(3);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema->set_index(0);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema->set_index(2);
+
+    coprocessor_v2.mutable_selection_columns()->Add(1);
+    coprocessor_v2.mutable_selection_columns()->Add(3);
+    coprocessor_v2.mutable_selection_columns()->Add(2);
+    coprocessor_v2.mutable_selection_columns()->Add(0);
+    std::set<std::string> keys;
+    ok = Utils::CollectKeysFromCoprocessor(coprocessor_v2, keys);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+    auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_bool");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema->set_index(1);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_int");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema->set_index(3);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema->set_index(0);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_float");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema->set_index(2);
+
+    coprocessor_v2.mutable_selection_columns()->Add(1);
+    coprocessor_v2.mutable_selection_columns()->Add(3);
+    coprocessor_v2.mutable_selection_columns()->Add(2);
+    coprocessor_v2.mutable_selection_columns()->Add(0);
+    std::set<std::string> keys;
+    ok = Utils::CollectKeysFromCoprocessor(coprocessor_v2, keys);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+  }
+}
+
+TEST_F(CoprocessorUtilsTest, CheckPbSchemaNameFieldExistEmptyName) {
+  butil::Status ok;
+  bool is_exist_empty_name = false;
+
+  // original schema empty
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+    ok = Utils::CheckPbSchemaNameFieldExistEmptyName(coprocessor_v2.original_schema().schema(), is_exist_empty_name);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_TRUE(is_exist_empty_name);
+  }
+
+  // exist one empty key
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+
+    auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_bool");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema->set_index(1);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema->set_index(3);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema->set_index(0);
+
+    ok = Utils::CheckPbSchemaNameFieldExistEmptyName(coprocessor_v2.original_schema().schema(), is_exist_empty_name);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_TRUE(is_exist_empty_name);
+  }
+
+  // normal
+  {
+    pb::common::CoprocessorV2 coprocessor_v2;
+
+    auto *schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_bool");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema->set_index(1);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_int");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema->set_index(3);
+
+    schema = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema->set_name("key_long");
+    schema->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema->set_index(0);
+
+    ok = Utils::CheckPbSchemaNameFieldExistEmptyName(coprocessor_v2.original_schema().schema(), is_exist_empty_name);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_FALSE(is_exist_empty_name);
+  }
 }
 
 }  // namespace dingodb

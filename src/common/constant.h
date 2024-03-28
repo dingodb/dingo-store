@@ -53,6 +53,7 @@ class Constant {
   // vector cf names
   inline static const std::string kVectorDataCF = "default";
   inline static const std::string kVectorScalarCF = "vector_scalar";
+  inline static const std::string kVectorScalarKeySpeedUpCF = "vector_scalar_key_speed_up";
   inline static const std::string kVectorTableCF = "vector_table";
 
   // region range prefix

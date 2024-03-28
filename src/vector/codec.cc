@@ -60,14 +60,35 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   buf.GetBytes(result);
 }
 
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
+                                  std::string& result) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {  // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "], vector_id:["
+                     << vector_id << "]";
+  }
+
+  if (BAIDU_UNLIKELY(scalar_key.empty())) {
+    DINGO_LOG(FATAL) << "Encode vector key failed, scalar_key is empty, prefix:[" << prefix << "], partition_id:["
+                     << partition_id << "], vector_id:[" << vector_id << "]";
+  }
+
+  // Buf buf(17 +  scalar_key.size());
+  Buf buf(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
+  buf.Write(scalar_key);
+  buf.GetBytes(result);
+}
+
 int64_t VectorCodec::DecodeVectorId(const std::string& value) {
   Buf buf(value);
-  if (value.size() == Constant::kVectorKeyMaxLenWithPrefix) {
+  if (value.size() >= Constant::kVectorKeyMaxLenWithPrefix) {
     buf.Skip(9);
   } else if (value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     return 0;
   } else {
-    DINGO_LOG(FATAL) << "Decode vector id failed, value size is not 9 or 17, value:[" << Helper::StringToHex(value)
+    DINGO_LOG(FATAL) << "Decode vector id failed, value size is not 9 or >=17, value:[" << Helper::StringToHex(value)
                      << "]";
     return 0;
   }
@@ -79,12 +100,24 @@ int64_t VectorCodec::DecodeVectorId(const std::string& value) {
 int64_t VectorCodec::DecodePartitionId(const std::string& value) {
   Buf buf(value);
 
-  // if (value.size() == 17 || value.size() == 9) {
-  if (value.size() == Constant::kVectorKeyMaxLenWithPrefix || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
+  // if (value.size() >= 17 || value.size() == 9) {
+  if (value.size() >= Constant::kVectorKeyMaxLenWithPrefix || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     buf.Skip(1);
   }
 
   return buf.ReadLong();
+}
+
+std::string VectorCodec::DecodeScalarKey(const std::string& value) {
+  Buf buf(value);
+  if (value.size() <= Constant::kVectorKeyMaxLenWithPrefix) {
+    DINGO_LOG(FATAL) << "Decode scalar key failed, value size <=17, value:[" << Helper::StringToHex(value) << "]";
+    return "";
+  }
+
+  buf.Skip(Constant::kVectorKeyMaxLenWithPrefix);
+
+  return buf.ReadString();
 }
 
 std::string VectorCodec::DecodeKeyToString(const std::string& key) {
@@ -110,7 +143,7 @@ void VectorCodec::DecodeRangeToVectorId(const pb::common::Range& range, int64_t&
 
 bool VectorCodec::IsValidKey(const std::string& key) {
   // return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
-  return (key.size() == Constant::kVectorKeyMinLenWithPrefix || key.size() == Constant::kVectorKeyMaxLenWithPrefix);
+  return (key.size() == Constant::kVectorKeyMinLenWithPrefix || key.size() >= Constant::kVectorKeyMaxLenWithPrefix);
 }
 
 bool VectorCodec::IsLegalVectorId(int64_t vector_id) { return vector_id > 0 && vector_id != INT64_MAX; }

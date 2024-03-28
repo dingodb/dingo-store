@@ -23,6 +23,7 @@
 #include "butil/status.h"
 #include "faiss/Index.h"
 #include "faiss/impl/AuxIndexStructures.h"
+#include "proto/common.pb.h"
 #include "proto/index.pb.h"
 
 namespace dingodb {
@@ -181,6 +182,29 @@ class VectorIndexUtils {
   static butil::Status CheckVectorIndexParameterCompatibility(const pb::common::VectorIndexParameter& source,
                                                               const pb::common::VectorIndexParameter& target);
   static butil::Status ValidateVectorIndexParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
+
+  [[deprecated("Use another function with the same name")]] static butil::Status ValidateScalarIndexParameter(const pb::common::ScalarIndexParameter& scalar_index_parameter);
+
+  static butil::Status ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema);
+
+  static butil::Status ValidateVectorScalarData(const pb::common::ScalarSchema& scalar_schema,
+                                                const pb::common::VectorScalardata& vector_scalar_data);
+
+  [[deprecated("Use another function with the same name")]] static butil::Status SplitVectorScalarData(
+      const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
+      std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs,  // NOLINT
+      pb::common::VectorScalardata& other_vector_scalar_data);                               // NOLINT
+
+  static butil::Status SplitVectorScalarData(
+      const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
+      std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs);  // NOLINT
+
+  static butil::Status IsNeedToScanKeySpeedUpCF(const pb::common::ScalarSchema& scalar_schema,
+                                                const pb::common::CoprocessorV2& coprocessor_v2,
+                                                bool& is_need);  // NOLINT
+  static butil::Status IsNeedToScanKeySpeedUpCF(const pb::common::ScalarSchema& scalar_schema,
+                                                const pb::common::VectorScalardata& vector_scalar_data,
+                                                bool& is_need);  // NOLINT
 };
 
 }  // namespace dingodb

@@ -16,7 +16,9 @@
 
 #include <cstdint>
 #include <deque>
+#include <limits>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -26,6 +28,7 @@
 #include "common/helper.h"
 #include "coprocessor/coprocessor_scalar.h"
 #include "coprocessor/coprocessor_v2.h"
+#include "coprocessor/utils.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -34,7 +37,7 @@
 #include "vector/codec.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_factory.h"
-#include "vector/vector_index_flat.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -45,6 +48,7 @@ namespace dingodb {
 
 DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
 DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");
+DEFINE_bool(dingo_log_switch_scalar_speed_up_detail, true, "scalar speed up log");
 
 bvar::LatencyRecorder g_bruteforce_search_latency("dingo_bruteforce_search_latency");
 bvar::LatencyRecorder g_bruteforce_range_search_latency("dingo_bruteforce_range_search_latency");
@@ -77,6 +81,7 @@ butil::Status VectorReader::QueryVectorWithId(const pb::common::Range& region_ra
 butil::Status VectorReader::SearchVector(
     int64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+    const pb::common::ScalarSchema& scalar_schema,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   if (vector_with_ids.empty()) {
     DINGO_LOG(WARNING) << "Empty vector with ids";
@@ -196,9 +201,9 @@ butil::Status VectorReader::SearchVector(
              dingodb::pb::common::VectorFilterType::QUERY_PRE == vector_filter_type) {  // scalar pre filter search
 
     butil::Status status = DoVectorSearchForScalarPreFilter(vector_index, region_range, vector_with_ids, parameter,
-                                                            vector_with_distance_results);
+                                                            scalar_schema, vector_with_distance_results);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilter failed ");
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForScalarPreFilter failed : {}", status.error_cstr());
       return status;
     }
   } else if (dingodb::pb::common::VectorFilter::TABLE_FILTER ==
@@ -206,7 +211,7 @@ butil::Status VectorReader::SearchVector(
     butil::Status status = DoVectorSearchForTableCoprocessor(vector_index, region_range, vector_with_ids, parameter,
                                                              vector_with_distance_results);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForTableCoprocessor failed ");
+      DINGO_LOG(ERROR) << fmt::format("DoVectorSearchForTableCoprocessor failed  : {}", status.error_cstr());
       return status;
     }
   }
@@ -413,7 +418,7 @@ butil::Status VectorReader::VectorBatchSearch(std::shared_ptr<Engine::VectorRead
                                               std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
   // Search vectors by vectors
   auto status = SearchVector(ctx->partition_id, ctx->vector_index, ctx->region_range, ctx->vector_with_ids,
-                             ctx->parameter, results);
+                             ctx->parameter, ctx->scalar_schema, results);
   if (!status.ok()) {
     return status;
   }
@@ -818,6 +823,7 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
 butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
     const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+    const pb::common::ScalarSchema& scalar_schema,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
   // scalar pre filter search
   butil::Status status;
@@ -829,81 +835,83 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
   }
 
-  const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
-  auto lambda_scalar_compare_function =
-      [&std_vector_scalar](const pb::common::VectorScalardata& internal_vector_scalar) {
-        for (const auto& [key, value] : std_vector_scalar.scalar_data()) {
-          auto it = internal_vector_scalar.scalar_data().find(key);
-          if (it == internal_vector_scalar.scalar_data().end()) {
-            return false;
-          }
+  bool enable_speed_up = false;
+  if (use_coprocessor) {
+    status = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, parameter.vector_coprocessor(), enable_speed_up);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-          bool compare_result = Helper::IsEqualVectorScalarValue(value, it->second);
-          if (!compare_result) {
-            return false;
-          }
-        }
-        return true;
-      };
+  } else {
+    status =
+        VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_with_ids[0].scalar_data(), enable_speed_up);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+  }
 
-  const auto& coprocessor = parameter.vector_coprocessor();
-
-  std::shared_ptr<RawCoprocessor> scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+  std::set<std::string> compare_keys;
+  std::shared_ptr<RawCoprocessor> scalar_coprocessor;
 
   if (use_coprocessor) {
+    if (enable_speed_up) {
+      status = Utils::CollectKeysFromCoprocessor(parameter.vector_coprocessor(), compare_keys);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    }
+
+    const auto& coprocessor = parameter.vector_coprocessor();
+
+    scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+
     status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
     if (!status.ok()) {
       DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
       return status;
     }
+
+  } else {
+    if (enable_speed_up) {
+      const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
+      for (const auto& [key, _] : std_vector_scalar.scalar_data()) {
+        compare_keys.insert(key);
+      }
+    }
   }
 
-  auto lambda_scalar_compare_with_coprocessor_function =
-      [&scalar_coprocessor](const pb::common::VectorScalardata& internal_vector_scalar) {
-        bool is_reverse = false;
-        butil::Status status = scalar_coprocessor->Filter(internal_vector_scalar, is_reverse);
-        if (!status.ok()) {
-          LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] "
-                     << "scalar coprocessor::Filter failed " << status.error_cstr();
-          return false;
-        }
-        return is_reverse;
-      };
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail) << fmt::format(
+      "enable_speed_up : {} use_coprocessor : {} scalar_schema : {}", (enable_speed_up ? "true" : "false"),
+      (use_coprocessor ? "true" : "false"), scalar_schema.DebugString());
 
-  const std::string& start_key = region_range.start_key();
-  const std::string& end_key = region_range.end_key();
-
-  IteratorOptions options;
-  options.upper_bound = end_key;
-
-  auto iter = reader_->NewIterator(Constant::kVectorScalarCF, options);
-  if (iter == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                    Helper::StringToHex(region_range.start_key()),
-                                    Helper::StringToHex(region_range.end_key()));
-    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+  if (FLAGS_dingo_log_switch_scalar_speed_up_detail) {
+    std::string compare_keys_string;
+    for (const auto& key : compare_keys) {
+      compare_keys_string += (key + " ");
+    }
+    DINGO_LOG(INFO) << fmt::format("compare_keys : {}", compare_keys_string);
   }
 
   std::vector<int64_t> vector_ids;
   vector_ids.reserve(1024);
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    pb::common::VectorScalardata internal_vector_scalar;
-    if (!internal_vector_scalar.ParseFromString(std::string(iter->Value()))) {
-      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
+  if (enable_speed_up) {
+    const auto& std_vector_scalar = use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
+    status = InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
+        region_range, compare_keys, use_coprocessor, scalar_coprocessor, std_vector_scalar, vector_ids);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
     }
-
-    bool compare_result = use_coprocessor ? lambda_scalar_compare_with_coprocessor_function(internal_vector_scalar)
-                                          : lambda_scalar_compare_function(internal_vector_scalar);
-
-    if (compare_result) {
-      std::string key(iter->Key());
-      int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
-      if (0 == internal_vector_id) {
-        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
-        DINGO_LOG(ERROR) << s;
-        return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
-      }
-      vector_ids.push_back(internal_vector_id);
+  } else {
+    const auto& std_vector_scalar = use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
+    status = InternalVectorSearchForScalarPreFilterWithScalarCF(region_range, use_coprocessor, scalar_coprocessor,
+                                                                std_vector_scalar, vector_ids);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
     }
   }
 
@@ -919,6 +927,173 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
+  }
+
+  return butil::Status::OK();
+}
+
+bool VectorReader::ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
+                                     const pb::common::VectorScalardata& internal_vector_scalar) {
+  for (const auto& [key, value] : std_vector_scalar.scalar_data()) {  // NOLINT(*static)
+    auto it = internal_vector_scalar.scalar_data().find(key);
+    if (it == internal_vector_scalar.scalar_data().end()) {
+      return false;
+    }
+
+    bool compare_result = Helper::IsEqualVectorScalarValue(value, it->second);
+    if (!compare_result) {
+      return false;
+    }
+  }
+  return true;
+}
+
+butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarCF(
+    pb::common::Range region_range, bool use_coprocessor, const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+    const pb::common::VectorScalardata& std_vector_scalar,
+    std::vector<int64_t>& vector_ids) {  // NOLINT
+  // scalar pre filter search
+  butil::Status status;
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("exec vector search scalar pre filter with scalar");
+
+  const std::string& start_key = region_range.start_key();
+  const std::string& end_key = region_range.end_key();
+
+  IteratorOptions options;
+  options.upper_bound = end_key;
+
+  auto iter = reader_->NewIterator(Constant::kVectorScalarCF, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
+                                    Helper::StringToHex(region_range.start_key()),
+                                    Helper::StringToHex(region_range.end_key()));
+    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+  }
+
+  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    pb::common::VectorScalardata internal_vector_scalar;
+    if (!internal_vector_scalar.ParseFromString(std::string(iter->Value()))) {
+      return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
+    }
+
+    bool compare_result = use_coprocessor ? ScalarCompareWithCoprocessorCore(scalar_coprocessor, internal_vector_scalar)
+                                          : ScalarCompareCore(std_vector_scalar, internal_vector_scalar);
+
+    if (compare_result) {
+      std::string key(iter->Key());
+      int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
+      if (0 == internal_vector_id) {
+        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+      }
+      vector_ids.push_back(internal_vector_id);
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+bool VectorReader::ScalarCompareWithCoprocessorCore(
+    const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+    const pb::common::VectorScalardata& internal_vector_scalar) {  // NOLINT(*static)
+  bool is_reverse = false;
+  butil::Status status = scalar_coprocessor->Filter(internal_vector_scalar, is_reverse);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "scalar coprocessor::Filter failed " << status.error_cstr();
+    return false;
+  }
+  return is_reverse;
+}
+
+butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
+    pb::common::Range region_range, const std::set<std::string>& compare_keys, bool use_coprocessor,
+    const std::shared_ptr<RawCoprocessor>& scalar_coprocessor, const pb::common::VectorScalardata& std_vector_scalar,
+    std::vector<int64_t>& vector_ids) {  // NOLINT
+  // scalar pre filter search
+  butil::Status status;
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("exec vector search scalar pre filter with scalar key speed up");
+
+  const std::string& start_key = region_range.start_key();
+  const std::string& end_key = region_range.end_key();
+
+  IteratorOptions options;
+  options.upper_bound = end_key;
+
+  auto iter = reader_->NewIterator(Constant::kVectorScalarKeySpeedUpCF, options);
+  if (iter == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
+                                    Helper::StringToHex(region_range.start_key()),
+                                    Helper::StringToHex(region_range.end_key()));
+    return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+  }
+
+  int64_t last_vector_id = std::numeric_limits<int64_t>::min();
+  std::string last_key;
+  last_key.reserve(2 * 1024);  // 2K
+  pb::common::VectorScalardata internal_vector_scalar;
+  std::string key;
+  key.reserve(2 * 1024);  // 2K
+  int64_t internal_vector_id = 0;
+
+  auto lambda_scalar_compare_wrapper_function = [&vector_ids, &internal_vector_scalar, &last_key, &last_vector_id,
+                                                 &internal_vector_id, &key, use_coprocessor, &scalar_coprocessor,
+                                                 &std_vector_scalar, this]() {
+    bool compare_result = use_coprocessor
+                              ? this->ScalarCompareWithCoprocessorCore(scalar_coprocessor, internal_vector_scalar)
+                              : this->ScalarCompareCore(std_vector_scalar, internal_vector_scalar);
+    if (compare_result) {
+      if (0 == last_vector_id) {
+        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(last_key));
+        LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << s;
+        return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+      }
+      vector_ids.push_back(last_vector_id);
+    }
+
+    internal_vector_scalar.Clear();
+    return butil::Status::OK();
+  };
+
+  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    key = iter->Key();
+    internal_vector_id = VectorCodec::DecodeVectorId(key);
+
+    if (last_vector_id != internal_vector_id && last_vector_id != std::numeric_limits<int64_t>::min()) {
+      status = lambda_scalar_compare_wrapper_function();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    }
+
+    std::string scalar_key = VectorCodec::DecodeScalarKey(key);
+    if (scalar_key.empty()) {
+      std::string s = fmt::format("scalar_key empty. raw key : {}", Helper::StringToHex(last_key));
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EINTERNAL, s);
+    }
+    if (0 != compare_keys.count(scalar_key)) {
+      pb::common::ScalarValue scalar_value;
+      if (!scalar_value.ParseFromString(std::string(iter->Value()))) {
+        return butil::Status(pb::error::EINTERNAL, "Internal error, decode ScalarValue failed");
+      }
+      internal_vector_scalar.mutable_scalar_data()->insert({scalar_key, scalar_value});
+    }
+    last_vector_id = internal_vector_id;
+    last_key = key;
+  }
+
+  if (last_vector_id != std::numeric_limits<int64_t>::min()) {
+    status = lambda_scalar_compare_wrapper_function();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
   }
 
   return butil::Status::OK();

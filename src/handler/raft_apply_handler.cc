@@ -20,6 +20,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "bthread/bthread.h"
@@ -40,10 +41,12 @@
 #include "proto/raft.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
+#include "vector/vector_index_utils.h"
 
 DECLARE_int32(init_election_timeout_ms);
 
 namespace dingodb {
+DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
 int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                        const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t /*term_id*/,
@@ -992,9 +995,10 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
   std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  std::vector<pb::common::KeyValue> kvs_default;  // for vector data
-  std::vector<pb::common::KeyValue> kvs_scalar;   // for vector scalar data
-  std::vector<pb::common::KeyValue> kvs_table;    // for vector table data
+  std::vector<pb::common::KeyValue> kvs_default;          // for vector data
+  std::vector<pb::common::KeyValue> kvs_scalar;           // for vector scalar data
+  std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
+  std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
 
   auto region_start_key = region->Range().start_key();
   auto region_part_id = region->PartitionId();
@@ -1020,6 +1024,32 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       kv.set_value(vector.scalar_data().SerializeAsString());
       kvs_scalar.push_back(kv);
     }
+
+    // vector scalar data key speed up
+    {
+      std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+      pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+          << fmt::format("vector add. scalar_schema : {}", scalar_schema.DebugString());
+      VectorIndexUtils::SplitVectorScalarData(scalar_schema, vector.scalar_data(), scalar_key_value_pairs);
+      if (FLAGS_dingo_log_switch_scalar_speed_up_detail) {
+        std::string scalar_key_string;
+        for (const auto &[internal_scalar_key, _] : scalar_key_value_pairs) {
+          scalar_key_string += (internal_scalar_key + " ");
+        }
+        DINGO_LOG(INFO) << fmt::format("scalar_key : {}", scalar_key_string);
+      }
+
+      for (const auto &[key, scalar_value] : scalar_key_value_pairs) {
+        pb::common::KeyValue kv;
+        std::string result;
+        VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key, result);
+        kv.mutable_key()->swap(result);
+        kv.set_value(scalar_value.SerializeAsString());
+        kvs_scalar_speed_up.push_back(std::move(kv));
+      }
+    }
+
     // vector table data
     {
       pb::common::KeyValue kv;
@@ -1033,6 +1063,9 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
   kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
   kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
+  if (!kvs_scalar_speed_up.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kvs_scalar_speed_up);
+  }
   kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
 
   // Put vector data to rocksdb
@@ -1132,6 +1165,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
   std::vector<std::string> kv_deletes_default;
+  std::vector<std::string> kv_deletes_for_scalar_data_key_speed_up;
 
   std::vector<bool> key_states(request.ids_size(), false);
   // std::vector<std::string> keys;
@@ -1139,6 +1173,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   auto region_start_key = region->Range().start_key();
   auto region_part_id = region->PartitionId();
+  pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
   for (int i = 0; i < request.ids_size(); i++) {
     // set key_states
     std::string key;
@@ -1152,6 +1187,17 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       key_states[i] = true;
       delete_ids.push_back(request.ids(i));
 
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+          << fmt::format("vector delete. scalar_schema : {}", scalar_schema.DebugString());
+
+      for (const auto &field : scalar_schema.fields()) {
+        if (field.enable_speed_up()) {
+          std::string result;
+          VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), field.key(), result);
+          kv_deletes_for_scalar_data_key_speed_up.push_back(std::move(result));
+        }
+      }
+
       DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
     }
   }
@@ -1160,6 +1206,10 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
     kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
     kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCF, kv_deletes_default);
     kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, kv_deletes_default);
+  }
+
+  if (!kv_deletes_for_scalar_data_key_speed_up.empty()) {
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kv_deletes_for_scalar_data_key_speed_up);
   }
 
   // Delete vector and write wal

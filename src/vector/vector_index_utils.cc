@@ -14,8 +14,10 @@
 
 #include "vector/vector_index_utils.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -23,6 +25,7 @@
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "coprocessor/utils.h"
 #include "faiss/MetricType.h"
 #include "faiss/utils/extra_distances-inl.h"
 #include "fmt/core.h"
@@ -33,6 +36,8 @@
 #include "proto/error.pb.h"
 
 namespace dingodb {
+
+DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
 butil::Status VectorIndexUtils::CalcDistanceEntry(
     const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
@@ -829,9 +834,6 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
-
-    // If all checks pass, return a butil::Status object with no error.
-    return butil::Status::OK();
   }
 
   // if vector_index_type is diskann, check diskann_parameter is set
@@ -888,9 +890,235 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "diskann_parameter.num_threads is illegal " +
                                                                        std::to_string(diskann_parameter.num_threads()));
     }
+  }
 
-    // If all checks pass, return a butil::Status object with no error.
+  return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
+}
+
+butil::Status VectorIndexUtils::ValidateScalarIndexParameter(
+    const pb::common::ScalarIndexParameter& /*scalar_index_parameter*/) {
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema) {
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("scalar_schema : {}", scalar_schema.DebugString());
+  std::set<std::string> keys;
+  for (const auto& field : scalar_schema.fields()) {
+    const std::string& key = field.key();
+    if (key.empty()) {
+      std::string s = fmt::format("in scalar_schema exist empty key scalar_schema : {}", scalar_schema.DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    if (0 != keys.count(key)) {
+      std::string s =
+          fmt::format("in scalar_schema exist repeated key : {} scalar_schema : {}", key, scalar_schema.DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    pb::common::ScalarFieldType scalar_field_type = field.field_type();
+    switch (scalar_field_type) {
+      case pb::common::BOOL:
+        [[fallthrough]];
+      case pb::common::INT8:
+        [[fallthrough]];
+      case pb::common::INT16:
+        [[fallthrough]];
+      case pb::common::INT32:
+        [[fallthrough]];
+      case pb::common::INT64:
+        [[fallthrough]];
+      case pb::common::FLOAT32:
+        [[fallthrough]];
+      case pb::common::DOUBLE:
+        [[fallthrough]];
+      case pb::common::STRING:
+        [[fallthrough]];
+      case pb::common::BYTES:
+        break;
+      case pb::common::ScalarFieldType_INT_MIN_SENTINEL_DO_NOT_USE_:
+      case pb::common::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_:
+      case pb::common::NONE:
+      default: {
+        std::string s = fmt::format("invalid scalar field type : {} {}", static_cast<int>(scalar_field_type),
+                                    pb::common::ScalarFieldType_Name(scalar_field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+    }
+
+    keys.insert(key);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::ValidateVectorScalarData(const pb::common::ScalarSchema& scalar_schema,
+                                                         const pb::common::VectorScalardata& vector_scalar_data) {
+  for (const auto& field : scalar_schema.fields()) {
+    const std::string& key = field.key();
+    auto iter = vector_scalar_data.scalar_data().find(key);
+    if (field.enable_speed_up()) {
+      if (iter == vector_scalar_data.scalar_data().end()) {
+        std::string s = fmt::format(
+            "in vector scalar data not find key : {}. that is setted speed up must be exist in vector_scalar_data.",
+            key);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+    }
+
+    if (iter != vector_scalar_data.scalar_data().end()) {
+      if (field.field_type() != iter->second.field_type()) {
+        std::string s = fmt::format("scalar_schema field_type : {} and vector_scalar_data field_type  {} not match.",
+                                    pb::common::ScalarFieldType_Name(field.field_type()),
+                                    pb::common::ScalarFieldType_Name(iter->second.field_type()));
+
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::SplitVectorScalarData(
+    const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
+    std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs,  // NOLINT
+    pb::common::VectorScalardata& other_vector_scalar_data) {
+  other_vector_scalar_data = vector_scalar_data;
+  for (const auto& field : scalar_schema.fields()) {
+    if (field.enable_speed_up()) {
+      const std::string& key = field.key();
+      auto iter = other_vector_scalar_data.scalar_data().find(key);
+      if (iter != other_vector_scalar_data.scalar_data().end()) {
+        scalar_key_value_pairs.push_back({iter->first, iter->second});
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::SplitVectorScalarData(
+    const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
+    std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs) {
+  for (const auto& field : scalar_schema.fields()) {
+    if (field.enable_speed_up()) {
+      const std::string& key = field.key();
+      auto iter = vector_scalar_data.scalar_data().find(key);
+      if (iter != vector_scalar_data.scalar_data().end()) {
+        scalar_key_value_pairs.push_back({iter->first, iter->second});
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::IsNeedToScanKeySpeedUpCF(const pb::common::ScalarSchema& scalar_schema,
+                                                         const pb::common::CoprocessorV2& coprocessor_v2,
+                                                         bool& is_need) {
+  if (scalar_schema.fields().empty()) {
+    is_need = false;
     return butil::Status::OK();
+  }
+
+  // not find speed up key.
+  auto iter = std::find_if(scalar_schema.fields().begin(), scalar_schema.fields().end(),
+                           [](const pb::common::ScalarSchemaItem& item) { return item.enable_speed_up(); });
+  if (iter == scalar_schema.fields().end()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  if (coprocessor_v2.original_schema().schema().empty()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  if (coprocessor_v2.selection_columns().empty()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  is_need = true;
+  butil::Status status;
+  for (int schema_member_index : coprocessor_v2.selection_columns()) {
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema> iter_schema;
+    status = Utils::FindSchemaInOriginalSchemaBySelectionColumnsIndex(coprocessor_v2, schema_member_index, iter_schema);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+
+    const std::string& name = iter_schema->name();
+    if (BAIDU_UNLIKELY(name.empty())) {
+      std::string s = fmt::format("CoprocessorV2.original_schema.schema.name empty. not support. original_schema : {}",
+                                  coprocessor_v2.original_schema().DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    auto iter_scalar = std::find_if(
+        scalar_schema.fields().begin(), scalar_schema.fields().end(),
+        [&name](const pb::common::ScalarSchemaItem& item) { return item.enable_speed_up() && name == item.key(); });
+    if (iter_scalar == scalar_schema.fields().end()) {
+      is_need = false;
+      break;
+    }
+
+    status = Utils::CompareCoprocessorSchemaAndScalarSchema(iter_schema, iter_scalar);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::IsNeedToScanKeySpeedUpCF(const pb::common::ScalarSchema& scalar_schema,
+                                                         const pb::common::VectorScalardata& vector_scalar_data,
+                                                         bool& is_need) {  // NOLINT
+  if (scalar_schema.fields().empty()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  // not find speed up key.
+  auto iter = std::find_if(scalar_schema.fields().begin(), scalar_schema.fields().end(),
+                           [](const pb::common::ScalarSchemaItem& item) { return item.enable_speed_up(); });
+  if (iter == scalar_schema.fields().end()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  if (vector_scalar_data.scalar_data().empty()) {
+    is_need = false;
+    return butil::Status::OK();
+  }
+
+  is_need = true;
+  for (const auto& [key, _] : vector_scalar_data.scalar_data()) {
+    if (key.empty()) {
+      std::string s = fmt::format("VectorScalardata.scalar_data.key empty. not support.");
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    // c++20 fix this bug.
+    const auto& key2 = key;
+    auto iter = std::find_if(
+        scalar_schema.fields().begin(), scalar_schema.fields().end(),
+        [&key2](const pb::common::ScalarSchemaItem& item) { return item.enable_speed_up() && key2 == item.key(); });
+    if (iter == scalar_schema.fields().end()) {
+      is_need = false;
+      break;
+    }
   }
 
   return butil::Status::OK();

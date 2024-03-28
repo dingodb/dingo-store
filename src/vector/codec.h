@@ -26,9 +26,12 @@ class VectorCodec {
  public:
   static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& result);
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result);
+  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
+                              std::string& result);
 
   static int64_t DecodeVectorId(const std::string& value);
   static int64_t DecodePartitionId(const std::string& value);
+  static std::string DecodeScalarKey(const std::string& value);
 
   static std::string DecodeKeyToString(const std::string& key);
   static std::string DecodeRangeToString(const pb::common::Range& range);

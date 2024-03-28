@@ -500,6 +500,7 @@ message VectorIndexParameter {
     CreateDiskAnnParam diskann_parameter = 6;
     CreateBruteForceParam bruteforce_parameter = 7;
   }
+  ScalarSchema scalar_schema = 50;
 }
 
 message SearchFlatParam {
@@ -669,7 +670,6 @@ message ScalarSchema {
 message ScalarIndexParameter {
   ScalarIndexType scalar_index_type = 1;
   bool is_unique = 2;  // for scalar index
-  ScalarSchema scalar_schema = 3;
 }
 
 message IndexParameter {

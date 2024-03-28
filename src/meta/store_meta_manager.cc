@@ -303,6 +303,11 @@ void Region::LatchesRelease(Lock* lock, uint64_t who,
   }
 }
 
+pb::common::ScalarSchema Region::ScalarSchema() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().index_parameter().vector_index_parameter().scalar_schema();
+}
+
 RaftMeta::RaftMeta(int64_t region_id) {
   raft_meta_.set_region_id(region_id);
   raft_meta_.set_term(0);

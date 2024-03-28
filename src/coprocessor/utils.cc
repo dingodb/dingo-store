@@ -1823,6 +1823,177 @@ void Utils::DebugPrintAny(const std::any& record, size_t index) {
   }
 }
 
+butil::Status Utils::CompareCoprocessorSchemaAndScalarSchema(
+    const google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema>& coprocessor_schema,
+    const google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem>& scalar_schema) {
+  pb::common::Schema_Type type = coprocessor_schema->type();
+  switch (coprocessor_schema->type()) {
+    case pb::common::Schema_Type_BOOL: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::BOOL) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case pb::common::Schema_Type_INTEGER: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::INT32) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case pb::common::Schema_Type_FLOAT: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::FLOAT32) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case pb::common::Schema_Type_LONG: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::INT64) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case pb::common::Schema_Type_DOUBLE: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::DOUBLE) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case pb::common::Schema_Type_STRING: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::STRING) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+
+    case pb::common::Schema_Type_BOOLLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_INTEGERLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_FLOATLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_LONGLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_DOUBLELIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_STRINGLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_Schema_Type_INT_MIN_SENTINEL_DO_NOT_USE_:
+      [[fallthrough]];
+    case pb::common::Schema_Type_Schema_Type_INT_MAX_SENTINEL_DO_NOT_USE_:
+      [[fallthrough]];
+    default: {
+      std::string s = fmt::format("pb::common::Schema_Type : {} {} not support.", static_cast<int>(type),
+                                  pb::common::Schema_Type_Name(type));
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status Utils::FindSchemaInOriginalSchemaBySelectionColumnsIndex(
+    const pb::common::CoprocessorV2& coprocessor_v2, int selection_columns_index,
+    google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema>& iter_schema) {  // NOLINT
+
+  iter_schema =
+      std::find_if(coprocessor_v2.original_schema().schema().begin(), coprocessor_v2.original_schema().schema().end(),
+                   [selection_columns_index](const auto& schema) { return selection_columns_index == schema.index(); });
+  if (iter_schema == coprocessor_v2.original_schema().schema().end()) {
+    std::string s =
+        fmt::format("CoprocessorV2.selection_columns index : {} not find in original_schema member index. {}",
+                    selection_columns_index, coprocessor_v2.original_schema().DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Utils::CollectKeysFromCoprocessor(const pb::common::CoprocessorV2& coprocessor_v2,
+                                                std::set<std::string>& keys) {  // NOLINT
+  for (auto selection_columns_index : coprocessor_v2.selection_columns()) {
+    auto iter = std::find_if(
+        coprocessor_v2.original_schema().schema().begin(), coprocessor_v2.original_schema().schema().end(),
+        [selection_columns_index](const auto& schema) { return selection_columns_index == schema.index(); });
+    if (iter == coprocessor_v2.original_schema().schema().end()) {
+      std::string s =
+          fmt::format("CoprocessorV2.selection_columns index : {} not find in original_schema member index. {}",
+                      selection_columns_index, coprocessor_v2.original_schema().DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    const std::string& name = iter->name();
+    if (BAIDU_UNLIKELY(name.empty())) {
+      std::string s = fmt::format("CoprocessorV2.original_schema.schema.name empty. not support. original_schema : {}",
+                                  coprocessor_v2.original_schema().DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    if (0 != keys.count(name)) {
+      std::string s = fmt::format("exist repeated key : {} in CoprocessorV2.original_schema.  CoprocessorV2: {}", name,
+                                  coprocessor_v2.DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    keys.insert(name);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Utils::CheckPbSchemaNameFieldExistEmptyName(
+    const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas, bool& is_exist_empty_name) {  // NOLINT
+
+  is_exist_empty_name = false;
+
+  if (pb_schemas.empty()) {
+    is_exist_empty_name = true;
+    return butil::Status::OK();
+  }
+
+  auto iter = std::find_if(pb_schemas.begin(), pb_schemas.end(),
+                           [](const pb::common::Schema& pb_schema) { return pb_schema.name().empty(); });
+
+  if (iter != pb_schemas.end()) {
+    is_exist_empty_name = true;
+  }
+
+  return butil::Status::OK();
+}
+
 #undef COPROCESSOR_LOG
 #undef COPROCESSOR_LOG_FOR_LAMBDA
 

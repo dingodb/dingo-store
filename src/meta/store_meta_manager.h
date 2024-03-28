@@ -133,6 +133,8 @@ class Region {
   void LatchesRelease(Lock* lock, uint64_t who,
                       std::optional<std::pair<uint64_t, Lock*>> keep_latches_for_next_cmd = std::nullopt);
 
+  pb::common::ScalarSchema ScalarSchema();
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
