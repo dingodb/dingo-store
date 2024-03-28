@@ -102,7 +102,7 @@ class VectorIndexFlat : public VectorIndex {
   butil::Status GetDeletedCount(int64_t& deleted_count) override;
   butil::Status GetMemorySize(int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
-  butil::Status Train([[maybe_unused]] const std::vector<float>& train_datas) override { return butil::Status::OK(); }
+  butil::Status Train([[maybe_unused]] std::vector<float>& train_datas) override { return butil::Status::OK(); }
   butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {
     return butil::Status::OK();
   }

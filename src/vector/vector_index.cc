@@ -74,8 +74,9 @@ butil::Status ParallelRun(ThreadPoolPtr thread_pool,
     task->Join();
   }
 
-  DINGO_LOG(INFO) << fmt::format("batch_size: {} inner_batch_size: {} elapsed_time: {}", vector_with_id_batchs.size(),
-                                 vector_with_id_batchs[0].size(), Helper::TimestampMs() - start_time);
+  DINGO_LOG(DEBUG) << fmt::format("batch_size: {} inner_batch_size: {} elapsed_time: {}ms",
+                                  vector_with_id_batchs.size(), vector_with_id_batchs[0].size(),
+                                  Helper::TimestampMs() - start_time);
 
   for (auto& status : statuses) {
     if (!status.ok()) {

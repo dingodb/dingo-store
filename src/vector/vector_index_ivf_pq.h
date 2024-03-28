@@ -77,8 +77,8 @@ class VectorIndexIvfPq : public VectorIndex {
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
 
-  butil::Status Train(const std::vector<float>& train_datas) override;
-  butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override;
+  butil::Status Train(std::vector<float>& train_datas) override;
+  butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) override;
   bool NeedToRebuild() override;
   bool NeedTrain() override { return true; }
   bool IsTrained() override;
@@ -117,7 +117,7 @@ class VectorIndexIvfPq : public VectorIndex {
     kFlat = 1,
     kIvfPq = 2,
   };
-  IndexTypeInIvfPq index_type_in_ivf_pq_;
+  IndexTypeInIvfPq inner_index_type_;
 
   template <typename FLAT_FUNC_PTR, typename PQ_FUNC_PTR, typename... Args>
   butil::Status InvokeConcreteFunction(const char* name, FLAT_FUNC_PTR flat_func_ptr, PQ_FUNC_PTR pq_func_ptr,

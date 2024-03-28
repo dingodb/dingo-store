@@ -433,7 +433,8 @@ void LoadAsyncBuildVectorIndexTask::Run() {
         is_fast_load_ && (region->Epoch().version() == 1) && (applied_index <= FLAGS_vector_fast_build_log_gap);
 
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.load][index_id({}_v{})][trace({})] load vector index failed, will try to do async build, call "
+        "[vector_index.loadasyncbuild][index_id({}_v{})][trace({})] load vector index failed, will try to do async "
+        "build, call "
         "LaunchBuildVectorIndex error {} applied_index {} is_fast_build {} region_version {}",
         vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str(), applied_index,
         is_fast_build, region->Epoch().version());
@@ -1143,16 +1144,19 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   // This is done here to cancel the use of slower disk speed in exchange for memory usage.
 
   // build if need
-  if (BAIDU_UNLIKELY(vector_index->NeedTrain())) {
-    if (!vector_index->IsTrained()) {
-      auto status = TrainForBuild(vector_index, iter, start_key, end_key);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[vector_index.build][index_id({})][trace({})] TrainForBuild failed, error: {} {}", vector_index_id, trace,
-            status.error_code(), status.error_cstr());
-        return {};
-      }
+  if (vector_index->NeedTrain() && !vector_index->IsTrained()) {
+    auto status = TrainForBuild(vector_index, iter, start_key, end_key);
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.build][index_id({})][trace({})] Train finish, elapsed_time: {}ms error: {} {}", vector_index_id,
+        trace, Helper::TimestampMs() - start_time, status.error_code(), status.error_cstr());
+    if (!status.ok()) {
+      return {};
     }
+    start_time = Helper::TimestampMs();
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.build][index_id({})][trace({})] Maybe not need train, is_need_train: {} is_trained: {}",
+        vector_index_id, trace, vector_index->NeedTrain(), vector_index->IsTrained());
   }
 
   int64_t count = 0;
@@ -1179,10 +1183,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
       continue;
     }
 
-    ++count;
-
     vectors.push_back(vector);
-    if ((count + 1) % Constant::kBuildVectorIndexBatchSize == 0) {
+    if (++count % Constant::kBuildVectorIndexBatchSize == 0) {
       int64_t upsert_start_time = Helper::TimestampMs();
 
       vector_index->AddByParallel(vectors, false);
@@ -1576,8 +1578,7 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
   if (!train_vectors.empty()) {
     auto status = vector_index->Train(train_vectors);
     if (!status.ok()) {
-      std::string s = fmt::format("vector_index::Train failed train_vectors.size() : {}", train_vectors.size());
-      DINGO_LOG(ERROR) << s;
+      DINGO_LOG(ERROR) << fmt::format("Train failed, error: {}", status.error_str());
       return status;
     }
   }
