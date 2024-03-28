@@ -57,6 +57,7 @@ DECLARE_int64(tso_new_physical);
 DECLARE_int64(tso_new_logical);
 
 DECLARE_int64(tenant_id);
+DECLARE_bool(with_scalar_schema);
 
 DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
@@ -934,6 +935,81 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   if (FLAGS_with_auto_increment) {
     DINGO_LOG(INFO) << "with_auto_increment";
     index_definition->set_auto_increment(100);
+  }
+
+  // scalar key speed up
+  if (FLAGS_with_scalar_schema) {
+    auto* scalar_parameter = vector_index_parameter->mutable_scalar_schema();
+
+    auto* field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_int");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_float");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(true);
+
+  field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_int");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_float");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    field->set_enable_speed_up(false);
+
+  field = scalar_parameter->add_fields();
+    field->set_key("key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(false);
+
+  field = scalar_parameter->add_fields();
+    field->set_key("key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(false);
   }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();

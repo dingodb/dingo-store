@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "coprocessor/utils.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
@@ -40,7 +41,29 @@ bvar::LatencyRecorder CoprocessorScalar::coprocessor_v2_filter_scalar_latency(
 CoprocessorScalar::CoprocessorScalar() = default;
 CoprocessorScalar::~CoprocessorScalar() { Close(); }
 
-butil::Status CoprocessorScalar::Open(const std::any& coprocessor) { return CoprocessorV2::Open(coprocessor); }
+butil::Status CoprocessorScalar::Open(const std::any& coprocessor) {
+  butil::Status status = CoprocessorV2::Open(coprocessor);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  bool is_exist_empty_name = false;
+  status = Utils::CheckPbSchemaNameFieldExistEmptyName(coprocessor_.original_schema().schema(), is_exist_empty_name);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  if (is_exist_empty_name) {
+    std::string s =
+        fmt::format("exist empty name in CoprocessorV2.original_schema.schema : {}", coprocessor_.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return butil::Status();
+}
 
 butil::Status CoprocessorScalar::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                          std::vector<pb::common::KeyValue>* kvs, bool& has_more) {

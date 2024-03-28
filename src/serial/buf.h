@@ -59,6 +59,7 @@ class Buf {
   uint8_t Read();
   int32_t ReadInt();
   int64_t ReadLong();
+  std::string ReadString();
   uint8_t ReverseRead();
   int32_t ReverseReadInt();
   void ReverseSkipInt();

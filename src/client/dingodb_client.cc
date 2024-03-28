@@ -197,6 +197,9 @@ DEFINE_int64(start_revision, 0, "start revision client supply");
 DEFINE_int64(tenant_id, 0, "tenant id");
 DEFINE_bool(get_all_tenant, false, "get all tenant");
 
+// scalar key speed up
+DEFINE_bool(with_scalar_schema, false, "create vector index with scalar schema");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {

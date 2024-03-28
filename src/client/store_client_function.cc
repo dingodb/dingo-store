@@ -510,28 +510,117 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
       return;
     }
 
+    auto lambda_cmd_set_key_value_function = [](dingodb::pb::common::VectorScalardata& scalar_data,
+                                                const std::string& cmd_key, const std::string& cmd_value) {
+      // bool
+      if ("speedup_key_bool" == cmd_key || "key_bool" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        bool value = (cmd_value == "true");
+        field->set_bool_data(value);
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // int
+      if ("speedup_key_int" == cmd_key || "key_int" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        int value = std::stoi(cmd_value);
+        field->set_int_data(value);
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // long
+      if ("speedup_key_long" == cmd_key || "key_long" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        int64_t value = std::stoll(cmd_value);
+        field->set_long_data(value);
+
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // float
+      if ("speedup_key_float" == cmd_key || "key_float" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        float value = std::stof(cmd_value);
+        field->set_float_data(value);
+
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // double
+      if ("speedup_key_double" == cmd_key || "key_double" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        double value = std::stod(cmd_value);
+        field->set_double_data(value);
+
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // string
+      if ("speedup_key_string" == cmd_key || "key_string" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        std::string value = cmd_value;
+        field->set_string_data(value);
+
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+
+      // bytes
+      if ("speedup_key_bytes" == cmd_key || "key_bytes" == cmd_key) {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        std::string value = cmd_value;
+        field->set_bytes_data(value);
+
+        scalar_data.mutable_scalar_data()->insert({cmd_key, scalar_value});
+      }
+    };
+
     if (!FLAGS_scalar_filter_key.empty()) {
-      dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
-      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
-      field->set_string_data(FLAGS_scalar_filter_value);
+      if (std::string::size_type idx = FLAGS_scalar_filter_key.find("key"); idx != std::string::npos) {
+        lambda_cmd_set_key_value_function(*vector->mutable_scalar_data(), FLAGS_scalar_filter_key,
+                                          FLAGS_scalar_filter_value);
 
-      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key, scalar_value});
+      } else {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        field->set_string_data(FLAGS_scalar_filter_value);
 
-      DINGO_LOG(INFO) << "scalar_filter_key: " << FLAGS_scalar_filter_key
-                      << " scalar_filter_value: " << FLAGS_scalar_filter_value;
+        vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key, scalar_value});
+
+        DINGO_LOG(INFO) << "scalar_filter_key: " << FLAGS_scalar_filter_key
+                        << " scalar_filter_value: " << FLAGS_scalar_filter_value;
+      }
     }
 
     if (!FLAGS_scalar_filter_key2.empty()) {
-      dingodb::pb::common::ScalarValue scalar_value;
-      scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
-      dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
-      field->set_string_data(FLAGS_scalar_filter_value2);
+      if (std::string::size_type idx = FLAGS_scalar_filter_key2.find("key"); idx != std::string::npos) {
+        lambda_cmd_set_key_value_function(*vector->mutable_scalar_data(), FLAGS_scalar_filter_key2,
+                                          FLAGS_scalar_filter_value2);
+      } else {
+        dingodb::pb::common::ScalarValue scalar_value;
+        scalar_value.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+        dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+        field->set_string_data(FLAGS_scalar_filter_value2);
 
-      vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key2, scalar_value});
+        vector->mutable_scalar_data()->mutable_scalar_data()->insert({FLAGS_scalar_filter_key2, scalar_value});
 
-      DINGO_LOG(INFO) << "scalar_filter_key2: " << FLAGS_scalar_filter_key2
-                      << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
+        DINGO_LOG(INFO) << "scalar_filter_key2: " << FLAGS_scalar_filter_key2
+                        << " scalar_filter_value2: " << FLAGS_scalar_filter_value2;
+      }
     }
   }
 
@@ -1791,20 +1880,198 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
           (*scalar_data)[fmt::format("scalar_key{}", k)] = scalar_value;
         }
       } else {
-        if (!FLAGS_scalar_filter_key.empty()) {
+        if (FLAGS_scalar_filter_key == "enable_scalar_schema" || FLAGS_scalar_filter_key2 == "enable_scalar_schema") {
           auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-          dingodb::pb::common::ScalarValue scalar_value;
-          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-          scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value);
-          (*scalar_data)[FLAGS_scalar_filter_key] = scalar_value;
-        }
+          // bool speedup key
+          {
+            std::string key = "speedup_key_bool";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            bool value = i % 2;
+            field->set_bool_data(value);
 
-        if (!FLAGS_scalar_filter_key2.empty()) {
-          auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
-          dingodb::pb::common::ScalarValue scalar_value;
-          scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
-          scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value2);
-          (*scalar_data)[FLAGS_scalar_filter_key2] = scalar_value;
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // int speedup key
+          {
+            std::string key = "speedup_key_int";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            int value = i;
+            field->set_int_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // long speedup key
+          {
+            std::string key = "speedup_key_long";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            int64_t value = i + 1000;
+            field->set_long_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // float speedup key
+          {
+            std::string key = "speedup_key_float";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            float value = 0.23 + i;
+            field->set_float_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // double speedup key
+          {
+            std::string key = "speedup_key_double";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            double value = 0.23 + i + 1000;
+            field->set_double_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // string speedup key
+          {
+            std::string key = "speedup_key_string";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            std::string value(1024 * 2, 's');
+            value = std::to_string(i) + value;
+            field->set_string_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // bytes speedup key
+          {
+            std::string key = "speedup_key_bytes";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            std::string value(1024 * 2, 'b');
+            value = std::to_string(i) + value;
+            field->set_bytes_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          //////////////////////////////////no speedup
+          /// key/////////////////////////////////////////////////////////////////////////
+          // bool key
+          {
+            std::string key = "key_bool";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            bool value = i % 2;
+            field->set_bool_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // int key
+          {
+            std::string key = "key_int";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            int value = i;
+            field->set_int_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // long key
+          {
+            std::string key = "key_long";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            int64_t value = i + 1000;
+            field->set_long_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // float key
+          {
+            std::string key = "key_float";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            float value = 0.23 + i;
+            field->set_float_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // double key
+          {
+            std::string key = "key_double";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            double value = 0.23 + i + 1000;
+            field->set_double_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // string  key
+          {
+            std::string key = "key_string";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            std::string value(1024 * 2, 's');
+            value = std::to_string(i) + value;
+            field->set_string_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+          // bytes key
+          {
+            std::string key = "key_bytes";
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+            dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+            std::string value(1024 * 2, 'b');
+            value = std::to_string(i) + value;
+            field->set_bytes_data(value);
+
+            (*scalar_data)[key] = scalar_value;
+          }
+
+        } else {
+          if (!FLAGS_scalar_filter_key.empty()) {
+            auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value);
+            (*scalar_data)[FLAGS_scalar_filter_key] = scalar_value;
+          }
+
+          if (!FLAGS_scalar_filter_key2.empty()) {
+            auto* scalar_data = vector_with_id->mutable_scalar_data()->mutable_scalar_data();
+            dingodb::pb::common::ScalarValue scalar_value;
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            scalar_value.add_fields()->set_string_data(FLAGS_scalar_filter_value2);
+            (*scalar_data)[FLAGS_scalar_filter_key2] = scalar_value;
+          }
         }
       }
     }
@@ -1814,6 +2081,8 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
       table_data->set_table_key(fmt::format("table_key{}", vector_id));
       table_data->set_table_value(fmt::format("table_value{}", vector_id));
     }
+
+    DINGO_LOG(INFO) << "vector_with_id : " << vector_with_id->ShortDebugString();
   }
 
   butil::Status status =

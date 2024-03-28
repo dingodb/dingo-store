@@ -128,10 +128,25 @@ class Utils {
   static void DebugCoprocessorV2(const pb::common::CoprocessorV2& coprocessor);
 
   // Not high performance. Do not use in production environment.
-  static void DebugPrintAnyArray(const std::vector<std::any>& records, const std::string &name);
+  static void DebugPrintAnyArray(const std::vector<std::any>& records, const std::string& name);
 
   // Not high performance. Do not use in production environment.
   static void DebugPrintAny(const std::any& record, size_t index);
+
+  static butil::Status CompareCoprocessorSchemaAndScalarSchema(
+      const google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema>& coprocessor_schema,
+      const google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::ScalarSchemaItem>&
+          scalar_schema);
+
+  static butil::Status FindSchemaInOriginalSchemaBySelectionColumnsIndex(
+      const pb::common::CoprocessorV2& coprocessor_v2, int selection_columns_index,
+      google::protobuf::internal::RepeatedPtrIterator<const dingodb::pb::common::Schema>& iter_schema);  // NOLINT
+
+  static butil::Status CollectKeysFromCoprocessor(const pb::common::CoprocessorV2& coprocessor_v2,
+                                                  std::set<std::string>& keys);  // NOLINT
+
+  static butil::Status CheckPbSchemaNameFieldExistEmptyName(
+      const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas, bool& is_exist_empty_name);  // NOLINT
 };
 
 }  // namespace dingodb

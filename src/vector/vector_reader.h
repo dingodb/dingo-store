@@ -18,7 +18,10 @@
 #include <sys/types.h>
 
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <set>
+#include <string>
 #include <vector>
 
 #include "butil/status.h"
@@ -68,6 +71,7 @@ class VectorReader {
   butil::Status SearchVector(int64_t partition_id, VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
                              const std::vector<pb::common::VectorWithId>& vector_with_ids,
                              const pb::common::VectorSearchParameter& parameter,
+                             const pb::common::ScalarSchema& scalar_schema,
                              std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
   butil::Status QueryVectorScalarData(const pb::common::Range& region_range, int64_t partition_id,
@@ -103,11 +107,29 @@ class VectorReader {
       const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
+ public:
   butil::Status DoVectorSearchForScalarPreFilter(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+      const pb::common::ScalarSchema& scalar_schema,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
+  bool ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
+                         const pb::common::VectorScalardata& internal_vector_scalar);
+
+  butil::Status InternalVectorSearchForScalarPreFilterWithScalarCF(
+      pb::common::Range region_range, bool use_coprocessor, const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+      const pb::common::VectorScalardata& std_vector_scalar,
+      std::vector<int64_t>& vector_ids);  // NOLINT
+
+  bool ScalarCompareWithCoprocessorCore(const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+                                        const pb::common::VectorScalardata& internal_vector_scalar);
+
+  butil::Status InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
+      pb::common::Range region_range, const std::set<std::string>& compare_keys, bool use_coprocessor,
+      const std::shared_ptr<RawCoprocessor>& scalar_coprocessor, const pb::common::VectorScalardata& std_vector_scalar,
+      std::vector<int64_t>& vector_ids);  // NOLINT
+ private:
   butil::Status DoVectorSearchForTableCoprocessor(
       VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,

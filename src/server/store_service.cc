@@ -50,6 +50,8 @@ DECLARE_int64(max_prewrite_count);
 bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
 bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
 
+DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
+
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 StoreServiceImpl::StoreServiceImpl() = default;

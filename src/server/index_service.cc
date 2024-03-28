@@ -40,6 +40,7 @@
 #include "server/server.h"
 #include "server/service_helper.h"
 #include "vector/codec.h"
+#include "vector/vector_index_utils.h"
 
 using dingodb::pb::error::Errno;
 
@@ -60,6 +61,8 @@ static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 DECLARE_int64(max_prewrite_count);
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(vector_max_background_task_count);
+
+DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
@@ -279,6 +282,13 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   ctx->parameter = request->parameter();
   ctx->raw_engine_type = region->GetRawEngineType();
 
+  auto scalar_schema = region->ScalarSchema();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("vector search. scalar_schema : {}", scalar_schema.DebugString());
+  if (0 != scalar_schema.fields_size()) {
+    ctx->scalar_schema = scalar_schema;
+  }
+
   if (request->vector_with_ids_size() <= 0) {
     auto* err = response->mutable_error();
     err->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
@@ -407,8 +417,20 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
     return status;
   }
 
+  auto scalar_schema = region->ScalarSchema();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("validate vector add request. scalar_schema : {}", scalar_schema.DebugString());
+
   std::vector<int64_t> vector_ids;
   for (const auto& vector : request->vectors()) {
+    if (0 != scalar_schema.fields_size()) {
+      status = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector.scalar_data());
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    }
     vector_ids.push_back(vector.id());
   }
 
@@ -1560,6 +1582,18 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
               "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
         }
       }
+
+      auto scalar_schema = region->ScalarSchema();
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+          << fmt::format("vector txn pre write. scalar_schema : {}", scalar_schema.DebugString());
+      if (0 != scalar_schema.fields_size()) {
+        status = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector.scalar_data());
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
+        }
+      }
+
     } else if (mutation.op() == pb::store::Op::Delete || mutation.op() == pb::store::Op::CheckNotExists) {
       if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,

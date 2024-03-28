@@ -3032,6 +3032,16 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
         return;
       }
     }
+
+    if (index_parameter.has_scalar_index_parameter()) {
+      auto ret = CoordinatorControl::ValidateScalarIndexParameter(index_parameter.scalar_index_parameter());
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateRegion scalar_index_parameter is invalid, reject create region";
+        ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
+                                "scalar_index_parameter is invalid");
+        return;
+      }
+    }
   }
 
   // Run in queue.

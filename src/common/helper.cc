@@ -905,8 +905,14 @@ std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
             Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
-    return {Constant::kStoreDataCF, Constant::kStoreMetaCF,    Constant::kTxnDataCF,    Constant::kTxnLockCF,
-            Constant::kTxnWriteCF,  Constant::kVectorScalarCF, Constant::kVectorTableCF};
+    return {Constant::kStoreDataCF,
+            Constant::kStoreMetaCF,
+            Constant::kTxnDataCF,
+            Constant::kTxnLockCF,
+            Constant::kTxnWriteCF,
+            Constant::kVectorScalarCF,
+            Constant::kVectorScalarKeySpeedUpCF,
+            Constant::kVectorTableCF};
   }
 
   return {};
@@ -918,8 +924,9 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   } else if (GetRole() == pb::common::ClusterRole::STORE) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
-    return {Constant::kStoreDataCF, Constant::kTxnDataCF,      Constant::kTxnLockCF,
-            Constant::kTxnWriteCF,  Constant::kVectorScalarCF, Constant::kVectorTableCF};
+    return {Constant::kStoreDataCF,  Constant::kTxnDataCF,      Constant::kTxnLockCF,
+            Constant::kTxnWriteCF,   Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
+            Constant::kVectorTableCF};
   }
 
   return {};
@@ -936,9 +943,11 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF,    Constant::kTxnLockCF,      Constant::kTxnWriteCF,
-              Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorTableCF};
+              Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
+              Constant::kVectorTableCF};
     }
-    return {Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorTableCF};
+    return {Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
+            Constant::kVectorTableCF};
   }
 
   return {};
@@ -967,12 +976,14 @@ void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::strin
 
       raw_cf_names.push_back(Constant::kVectorDataCF);
       raw_cf_names.push_back(Constant::kVectorScalarCF);
+      raw_cf_names.push_back(Constant::kVectorScalarKeySpeedUpCF);
       raw_cf_names.push_back(Constant::kVectorTableCF);
 
       return;
     } else {
       raw_cf_names.push_back(Constant::kVectorDataCF);
       raw_cf_names.push_back(Constant::kVectorScalarCF);
+      raw_cf_names.push_back(Constant::kVectorScalarKeySpeedUpCF);
       raw_cf_names.push_back(Constant::kVectorTableCF);
     }
   }

@@ -44,6 +44,816 @@ class VectorIndexUtilsTest : public testing::Test {
   void TearDown() override {}
 };
 
+TEST_F(VectorIndexUtilsTest, ValidateVectorScalarSchema) {
+  butil::Status ok;
+
+  // empty ok
+  {
+    pb::common::ScalarSchema scalar_schema;
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // invalid empty key
+  {
+    pb::common::ScalarSchema scalar_schema;
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+      item->set_key("");
+      item->set_field_type(pb::common::ScalarFieldType::INT16);
+    }
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // invalid field type
+  {
+    pb::common::ScalarSchema scalar_schema;
+
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::NONE);
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+    scalar_schema.Clear();
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_);
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+
+    scalar_schema.Clear();
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::ScalarFieldType_INT_MIN_SENTINEL_DO_NOT_USE_);
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // repeated key
+  {
+    pb::common::ScalarSchema scalar_schema;
+    for (int i = 0; i < 10; i++) {
+      pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+      item->set_key("key" + std::to_string(i % 3));
+      item->set_field_type(pb::common::ScalarFieldType::INT16);
+      item->set_enable_speed_up(true);
+    }
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    pb::common::ScalarSchema scalar_schema;
+    pb::common::ScalarSchemaItem* item = nullptr;
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key2");
+    item->set_field_type(pb::common::ScalarFieldType::INT8);
+    item->set_enable_speed_up(false);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key3");
+    item->set_field_type(pb::common::ScalarFieldType::INT16);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key4");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key5");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key6");
+    item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key7");
+    item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key8");
+    item->set_field_type(pb::common::ScalarFieldType::STRING);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key9");
+    item->set_field_type(pb::common::ScalarFieldType::BYTES);
+    item->set_enable_speed_up(true);
+
+    ok = VectorIndexUtils::ValidateVectorScalarSchema(scalar_schema);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, ValidateScalarIndexParameter) {
+  butil::Status ok;
+  pb::common::ScalarIndexParameter scalar_index_parameter;
+  ok = VectorIndexUtils::ValidateScalarIndexParameter(scalar_index_parameter);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+}
+
+TEST_F(VectorIndexUtilsTest, ValidateVectorScalarData) {
+  butil::Status ok;
+  // empty ok
+  {
+    pb::common::ScalarSchema scalar_schema;
+    pb::common::VectorScalardata vector_scalar_data;
+    ok = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector_scalar_data);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // invalid . set key_speed not find key in vector_scalar_data
+  {
+    pb::common::ScalarSchema scalar_schema;
+    pb::common::ScalarSchemaItem* item = nullptr;
+    pb::common::VectorScalardata vector_scalar_data;
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    ok = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector_scalar_data);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // invalid . set key_speed  field type not match in  vector_scalar_data
+  {
+    pb::common::ScalarSchema scalar_schema;
+    pb::common::ScalarSchemaItem* item = nullptr;
+    pb::common::VectorScalardata vector_scalar_data;
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    std::string key = "key1";
+    pb::common::ScalarValue scalar_value;
+    scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+
+    vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
+
+    ok = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector_scalar_data);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // ok
+  {
+    pb::common::ScalarSchema scalar_schema;
+    pb::common::ScalarSchemaItem* item = nullptr;
+    pb::common::VectorScalardata vector_scalar_data;
+
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key2");
+    item->set_field_type(pb::common::ScalarFieldType::INT8);
+    item->set_enable_speed_up(false);
+
+    std::string key = "key1";
+    pb::common::ScalarValue scalar_value;
+    scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
+
+    key = "key3";
+    scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+
+    vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
+
+    ok = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector_scalar_data);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, SplitVectorScalarData) {
+  butil::Status ok;
+  pb::common::VectorScalardata vector_scalar_data;
+  std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+  pb::common::ScalarSchema scalar_schema;
+  pb::common::ScalarSchemaItem* item = nullptr;
+
+  item = scalar_schema.add_fields();
+  item->set_key("key1");
+  item->set_field_type(pb::common::ScalarFieldType::BOOL);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key2");
+  item->set_field_type(pb::common::ScalarFieldType::INT8);
+  item->set_enable_speed_up(false);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key3");
+  item->set_field_type(pb::common::ScalarFieldType::INT16);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key4");
+  item->set_field_type(pb::common::ScalarFieldType::INT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key5");
+  item->set_field_type(pb::common::ScalarFieldType::INT64);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key6");
+  item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key7");
+  item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key8");
+  item->set_field_type(pb::common::ScalarFieldType::STRING);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key9");
+  item->set_field_type(pb::common::ScalarFieldType::BYTES);
+  item->set_enable_speed_up(true);
+
+  ///////////////////////////////////////////////////////////////
+  std::string key = "key1";
+  pb::common::ScalarValue scalar_value;
+  scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+  vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
+
+  key = "key3";
+  scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT16);
+
+  vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
+
+  key = "key2";
+  scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT8);
+
+  ok = VectorIndexUtils::SplitVectorScalarData(scalar_schema, vector_scalar_data, scalar_key_value_pairs);
+
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+
+  EXPECT_EQ("key1", scalar_key_value_pairs[0].first);
+  EXPECT_EQ("key3", scalar_key_value_pairs[1].first);
+}
+
+TEST_F(VectorIndexUtilsTest, IsNeedToScanKeySpeedUpCF1) {
+  butil::Status ok;
+  pb::common::VectorScalardata vector_scalar_data;
+  pb::common::ScalarSchema scalar_schema;
+  pb::common::ScalarSchemaItem* item = nullptr;
+  bool is_need = false;
+  pb::common::CoprocessorV2 coprocessor_v2;
+
+  item = scalar_schema.add_fields();
+  item->set_key("key1");
+  item->set_field_type(pb::common::ScalarFieldType::BOOL);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key4");
+  item->set_field_type(pb::common::ScalarFieldType::INT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key5");
+  item->set_field_type(pb::common::ScalarFieldType::INT64);
+  item->set_enable_speed_up(false);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key6");
+  item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key7");
+  item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key8");
+  item->set_field_type(pb::common::ScalarFieldType::STRING);
+  item->set_enable_speed_up(true);
+
+  ///////////////////////////////////////////////////////////////
+  // selection_columns empty. is_need = false.
+  {
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key1");
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // coprocessor_v2 empty. is_need = false
+  {
+    coprocessor_v2.Clear();
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // key5 is not speed up key. is_need = false
+  {
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key1");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(0);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key4");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(1);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key5");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(2);
+
+    coprocessor_v2.add_selection_columns(0);
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(2);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // all keys speed up keys.
+  {
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key1");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(0);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key4");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(1);
+
+    coprocessor_v2.add_selection_columns(0);
+    coprocessor_v2.add_selection_columns(1);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_TRUE(is_need);
+  }
+
+  // scalar_schema emtpy. is_need = false
+  {
+    scalar_schema.Clear();
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key1");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(0);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key4");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(1);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key5");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(2);
+
+    coprocessor_v2.add_selection_columns(0);
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(2);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // scalar_schema not exist speed key
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(false);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key4");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(false);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key5");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(false);
+
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key1");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(0);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key4");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(1);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key5");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(2);
+
+    coprocessor_v2.add_selection_columns(0);
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(2);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  ///////////////////////////////////////////////////////////////////////////////////////////
+  // empty key
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_int");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_long");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_float");
+    item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    item->set_enable_speed_up(true);
+
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key_bool");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(1);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key_int");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(3);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key_long");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(0);
+
+    auto* schema4 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema4->set_name("");
+    schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema4->set_index(2);
+
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(3);
+    coprocessor_v2.add_selection_columns(2);
+    coprocessor_v2.add_selection_columns(0);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  //  key name not match
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_int");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_long");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_float");
+    item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    item->set_enable_speed_up(true);
+
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key_bool_");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(1);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key_int_");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(3);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key_long_");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(0);
+
+    auto* schema4 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema4->set_name("key_long_");
+    schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema4->set_index(2);
+
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(3);
+    coprocessor_v2.add_selection_columns(2);
+    coprocessor_v2.add_selection_columns(0);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // field_type not match
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_int");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_long");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_float");
+    item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    item->set_enable_speed_up(true);
+
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key_bool");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema1->set_index(1);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key_int");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema2->set_index(3);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key_long");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema3->set_index(0);
+
+    auto* schema4 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema4->set_name("key_float");
+    schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema4->set_index(2);
+
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(3);
+    coprocessor_v2.add_selection_columns(2);
+    coprocessor_v2.add_selection_columns(0);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+
+  // normal
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_int");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_long");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_float");
+    item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+    item->set_enable_speed_up(true);
+
+    coprocessor_v2.Clear();
+    auto* schema1 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema1->set_name("key_bool");
+    schema1->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_BOOL);
+    schema1->set_index(1);
+
+    auto* schema2 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema2->set_name("key_int");
+    schema2->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_INTEGER);
+    schema2->set_index(3);
+
+    auto* schema3 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema3->set_name("key_long");
+    schema3->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_LONG);
+    schema3->set_index(0);
+
+    auto* schema4 = coprocessor_v2.mutable_original_schema()->add_schema();
+    schema4->set_name("key_float");
+    schema4->set_type(::dingodb::pb::common::Schema_Type::Schema_Type_FLOAT);
+    schema4->set_index(2);
+
+    coprocessor_v2.add_selection_columns(1);
+    coprocessor_v2.add_selection_columns(3);
+    coprocessor_v2.add_selection_columns(2);
+    coprocessor_v2.add_selection_columns(0);
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, coprocessor_v2, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_TRUE(is_need);
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, IsNeedToScanKeySpeedUpCF2) {
+  butil::Status ok;
+  pb::common::VectorScalardata vector_scalar_data;
+  pb::common::ScalarSchema scalar_schema;
+  pb::common::ScalarSchemaItem* item = nullptr;
+  bool is_need = false;
+
+  item = scalar_schema.add_fields();
+  item->set_key("key1");
+  item->set_field_type(pb::common::ScalarFieldType::BOOL);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key2");
+  item->set_field_type(pb::common::ScalarFieldType::INT8);
+  item->set_enable_speed_up(false);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key3");
+  item->set_field_type(pb::common::ScalarFieldType::INT16);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key4");
+  item->set_field_type(pb::common::ScalarFieldType::INT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key5");
+  item->set_field_type(pb::common::ScalarFieldType::INT64);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key6");
+  item->set_field_type(pb::common::ScalarFieldType::FLOAT32);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key7");
+  item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key8");
+  item->set_field_type(pb::common::ScalarFieldType::STRING);
+  item->set_enable_speed_up(true);
+
+  item = scalar_schema.add_fields();
+  item->set_key("key9");
+  item->set_field_type(pb::common::ScalarFieldType::BYTES);
+  item->set_enable_speed_up(true);
+
+  ///////////////////////////////////////////////////////////////
+  // key empty. error.
+  {
+    vector_scalar_data.Clear();
+    vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key2", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"", {}});
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+  }
+  // vector_scalar_data empty. is_need = false
+  {
+    vector_scalar_data.Clear();
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // key2 is not speed up key. is_need = false
+  {
+    vector_scalar_data.Clear();
+    vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key2", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // all keys speed up keys.
+  {
+    vector_scalar_data.Clear();
+    vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_TRUE(is_need);
+  }
+
+  // scalar_schema emtpy. is_need = false
+  {
+    scalar_schema.Clear();
+    vector_scalar_data.Clear();
+    vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key2", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+
+  // scalar_schema not exist speed key
+  {
+    scalar_schema.Clear();
+    item = scalar_schema.add_fields();
+    item->set_key("key1");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(false);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key2");
+    item->set_field_type(pb::common::ScalarFieldType::INT8);
+    item->set_enable_speed_up(false);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key3");
+    item->set_field_type(pb::common::ScalarFieldType::INT16);
+    item->set_enable_speed_up(false);
+
+    vector_scalar_data.Clear();
+    vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+
+    ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_FALSE(is_need);
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
   // ok faiss l2
   {

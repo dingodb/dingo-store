@@ -163,21 +163,11 @@ uint8_t Buf::Peek() { return buf_.at(forward_pos_); }
 
 int32_t Buf::PeekInt() {
   if (this->le_) {
-    return 
-      (
-          ( buf_.at(forward_pos_    ) & 0xFF) << 24) 
-        | ((buf_.at(forward_pos_ + 1) & 0xFF) << 16) 
-        | ((buf_.at(forward_pos_ + 2) & 0xFF) << 8 ) 
-        | ( buf_.at(forward_pos_ + 3) & 0xFF
-      );
+    return ((buf_.at(forward_pos_) & 0xFF) << 24) | ((buf_.at(forward_pos_ + 1) & 0xFF) << 16) |
+           ((buf_.at(forward_pos_ + 2) & 0xFF) << 8) | (buf_.at(forward_pos_ + 3) & 0xFF);
   } else {
-    return
-      (
-          ( buf_.at(forward_pos_    ) & 0xFF)
-        | ((buf_.at(forward_pos_ + 1) & 0xFF) << 8 ) 
-        | ((buf_.at(forward_pos_ + 2) & 0xFF) << 16) 
-        | ((buf_.at(forward_pos_ + 3) & 0xFF) << 24)
-      );
+    return ((buf_.at(forward_pos_) & 0xFF) | ((buf_.at(forward_pos_ + 1) & 0xFF) << 8) |
+            ((buf_.at(forward_pos_ + 2) & 0xFF) << 16) | ((buf_.at(forward_pos_ + 3) & 0xFF) << 24));
   }
 }
 
@@ -219,6 +209,12 @@ int64_t Buf::ReadLong() {
     }
   }
   return l;
+}
+
+std::string Buf::ReadString() {
+  int internal_forward_pos = forward_pos_;
+  forward_pos_ = buf_.size();
+  return std::string(buf_.begin() + internal_forward_pos, buf_.end());
 }
 
 uint8_t Buf::ReverseRead() { return buf_.at(reverse_pos_--); }
@@ -310,8 +306,6 @@ std::string Buf::GetString() {
 
 bool Buf::IsLe() const { return this->le_; }
 
-bool Buf::IsEnd() const {
-  return (reverse_pos_ - forward_pos_ + 1) == 0;
-}
+bool Buf::IsEnd() const { return (reverse_pos_ - forward_pos_ + 1) == 0; }
 
 }  // namespace dingodb

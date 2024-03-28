@@ -120,6 +120,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
       bool use_scalar_filter{};
 
       VectorIndexWrapperPtr vector_index;
+      pb::common::ScalarSchema scalar_schema;
     };
 
     virtual butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
