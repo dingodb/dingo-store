@@ -33,6 +33,7 @@
 #include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -65,8 +66,8 @@ VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParame
     normalize_ = true;
     raw_index_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
   } else {
-    DINGO_LOG(WARNING) << fmt::format("Flat : not support metric type : {} use L2 default",
-                                      static_cast<int>(metric_type_));
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.flat][id({})] not support metric type({}), use L2.", Id(),
+                                      pb::common::MetricType_Name(metric_type_));
     raw_index_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
   }
 
@@ -74,18 +75,6 @@ VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParame
 }
 
 VectorIndexFlat::~VectorIndexFlat() { index_id_map2_->reset(); }
-
-// const float kFloatAccuracy = 0.00001;
-
-// void NormalizeVec(float* x, int32_t d) {
-//   float norm_l2_sqr = faiss::fvec_norm_L2sqr(x, d);
-//   if (norm_l2_sqr > 0 && std::abs(1.0f - norm_l2_sqr) > kFloatAccuracy) {
-//     float norm_l2 = std::sqrt(norm_l2_sqr);
-//     for (int32_t i = 0; i < d; i++) {
-//       x[i] = x[i] / norm_l2;
-//     }
-//   }
-// }
 
 butil::Status VectorIndexFlat::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                   bool is_upsert) {
@@ -148,8 +137,8 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
     RWLockWriteGuard guard(&rw_lock_);
     auto remove_count = index_id_map2_->remove_ids(sel);
     if (0 == remove_count) {
-      DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
-      return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.flat][id({})] remove not found vector id.", Id());
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, "remove not found vector id");
     }
   }
 
@@ -160,15 +149,8 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
                                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool,
                                       const pb::common::VectorSearchParameter&,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
-  if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "vector_with_ids is empty";
-    return butil::Status::OK();
-  }
-
-  if (topk == 0) {
-    DINGO_LOG(WARNING) << "topk is invalid";
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  CHECK(topk > 0) << "topk is 0";
 
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk * vector_with_ids.size(), 0.0f);
@@ -177,7 +159,6 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
 
   const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
@@ -199,7 +180,7 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
 
   VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
 
-  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.flat][id({})] result size {}", Id(), results.size());
 
   return butil::Status::OK();
 }
@@ -208,10 +189,7 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
                                            const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                            bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
-  if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "vector_with_ids is empty";
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
 
   const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
@@ -242,15 +220,13 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
       index_id_map2_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
                                    params.get());
     } catch (std::exception& e) {
-      std::string s = fmt::format("VectorIndexFlat::RangeSearch failed. error : {}", e.what());
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+      return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("range search exception, {}", e.what()));
     }
   }
 
   VectorIndexUtils::FillRangeSearchResult(range_search_result, metric_type_, dimension_, results);
 
-  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.flat][id({})] result size {}", Id(), results.size());
 
   return butil::Status::OK();
 }
@@ -267,29 +243,22 @@ butil::Status VectorIndexFlat::Save(const std::string& path) {
   // When calling glog,
   // the child process will hang.
   // Remove glog temporarily.
-  if (BAIDU_UNLIKELY(path.empty())) {
-    std::string s = fmt::format("path empty. not support");
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
+  CHECK(!path.empty()) << "path is empty";
 
   // The outside has been locked. Remove the locking operation here.
   try {
     faiss::write_index(index_id_map2_.get(), path.c_str());
   } catch (std::exception& e) {
-    std::string s =
-        fmt::format("VectorIndexFlat::Save faiss::write_index failed. path : {} error : {}", path, e.what());
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.flat][id({})] write index failed, exception: {} path: {}", Id(),
+                                    e.what(), path);
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: ", e.what()));
   }
 
   return butil::Status();
 }
 
 butil::Status VectorIndexFlat::Load(const std::string& path) {
-  if (BAIDU_UNLIKELY(path.empty())) {
-    std::string s = fmt::format("path empty. not support");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
+  CHECK(!path.empty()) << "path is empty";
 
   BvarLatencyGuard bvar_guard(&g_flat_load_latency);
 
@@ -298,10 +267,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
   try {
     internal_raw_index = faiss::read_index(path.c_str(), 0);
   } catch (std::exception& e) {
-    std::string s = fmt::format("VectorIndexFlat::Load faiss::read_index failed. path : {} error : {}", path, e.what());
-    DINGO_LOG(ERROR) << s;
     delete internal_raw_index;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {}", path, e.what()));
   }
 
   faiss::IndexIDMap2* internal_index = dynamic_cast<faiss::IndexIDMap2*>(internal_raw_index);
@@ -310,10 +277,7 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
       delete internal_raw_index;
       internal_raw_index = nullptr;
     }
-    std::string s =
-        fmt::format("VectorIndexFlat::Load faiss::read_index failed. Maybe not IndexIVFPq.  path : {} ", path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("type cast failed"));
   }
 
   // avoid mem leak!!!
@@ -321,16 +285,12 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
 
   // double check
   if (BAIDU_UNLIKELY(internal_index->d != dimension_)) {
-    std::string s = fmt::format("VectorIndexFlat::Load load dimension : {} !=  dimension_ : {}. path : {}",
-                                internal_index->d, dimension_, path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("dimension not match, {} {}", internal_index->d, dimension_));
   }
 
   if (BAIDU_UNLIKELY(!internal_index->is_trained)) {
-    std::string s = fmt::format("VectorIndexFlat::Load load is not train. path : {}", path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, "already trained");
   }
 
   switch (metric_type_) {
@@ -338,10 +298,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
       [[fallthrough]];
     case pb::common::METRIC_TYPE_L2: {
       if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_L2)) {
-        std::string s =
-            fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
-                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-        DINGO_LOG(ERROR) << s;
+        std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                    pb::common::MetricType_Name(metric_type_));
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
       break;
@@ -350,10 +308,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
     case pb::common::METRIC_TYPE_INNER_PRODUCT:
     case pb::common::METRIC_TYPE_COSINE: {
       if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_INNER_PRODUCT)) {
-        std::string s =
-            fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
-                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-        DINGO_LOG(ERROR) << s;
+        std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                    pb::common::MetricType_Name(metric_type_));
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
       break;
@@ -363,9 +319,8 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
     case pb::common::MetricType_INT_MAX_SENTINEL_DO_NOT_USE_:
       [[fallthrough]];
     default: {
-      std::string s = fmt::format("VectorIndexFlat::Load load from path type : {} != local type : {}. path : {}",
-                                  static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-      DINGO_LOG(ERROR) << s;
+      std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                  pb::common::MetricType_Name(metric_type_));
       return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
   }
@@ -377,7 +332,7 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
     normalize_ = true;
   }
 
-  DINGO_LOG(INFO) << fmt::format("VectorIndexFlat::Load success. path : {}", path);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.flat][id({})] load finsh, path: {}", Id(), path);
 
   return butil::Status::OK();
 }

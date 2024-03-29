@@ -1017,7 +1017,7 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
         if (!vector_with_ids.empty()) {
           uint64_t start_time = dingodb::Helper::TimestampUs();
           auto result = VectorPut(entry, vector_with_ids);
-          LOG(INFO) << fmt::format("vector put elapsed time: {}", dingodb::Helper::TimestampUs() - start_time);
+          LOG(INFO) << fmt::format("vector put elapsed time: {}us", dingodb::Helper::TimestampUs() - start_time);
           if (!result.status.IsOK()) {
             fail_count.fetch_add(vector_with_ids.size());
             retry = true;

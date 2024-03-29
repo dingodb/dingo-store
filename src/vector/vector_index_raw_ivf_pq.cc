@@ -93,10 +93,8 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::Vec
 
   RWLockWriteGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    std::string s = fmt::format("ivf pq not train. train first.");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, "ivf pq not train. train first");
   }
 
   if (is_upsert) {
@@ -121,15 +119,13 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsertWrapper(const std::vector<pb::comm
   auto status = AddOrUpsert(vector_with_ids, is_upsert);
   if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
     status = Train(vector_with_ids);
-    if (BAIDU_LIKELY(status.ok())) {
-      // try again
-      status = AddOrUpsert(vector_with_ids, is_upsert);
-      if (BAIDU_LIKELY(!status.ok())) {  // AddOrUpsert
-        DINGO_LOG(ERROR) << status;
-        return status;
-      }
-    } else {  // Train failed
-      DINGO_LOG(ERROR) << status;
+    if (!status.ok()) {
+      return status;
+    }
+
+    // try again
+    status = AddOrUpsert(vector_with_ids, is_upsert);
+    if (BAIDU_LIKELY(!status.ok())) {
       return status;
     }
   }
@@ -144,7 +140,6 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
 
   const auto& [ids, status] = VectorIndexUtils::CopyVectorId(delete_ids);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
@@ -152,16 +147,14 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
 
   {
     RWLockWriteGuard guard(&rw_lock_);
-    if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf pq not train. train first. ignored");
-      DINGO_LOG(WARNING) << s;
+    if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       return butil::Status::OK();
     }
 
     auto remove_count = index_->remove_ids(sel);
     if (0 == remove_count) {
-      DINGO_LOG(ERROR) << fmt::format("not found id : {}", id);
-      return butil::Status(pb::error::Errno::EVECTOR_INVALID, fmt::format("not found : {}", id));
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.raw_ivf_pq][id({})] remove not found vector id.", Id());
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, "remove not found vector id");
     }
   }
 
@@ -172,21 +165,10 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
                                           const std::vector<std::shared_ptr<FilterFunctor>>& filters,
                                           bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                           std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
-  if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "vector_with_ids is empty";
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  CHECK(topk > 0) << "topk is 0";
 
-  if (topk == 0) {
-    DINGO_LOG(WARNING) << "topk is invalid";
-    return butil::Status::OK();
-  }
-
-  int32_t nprobe = parameter.ivf_pq().nprobe();
-  if (BAIDU_UNLIKELY(nprobe <= 0)) {
-    DINGO_LOG(WARNING) << fmt::format("pb::common::VectorSearchParameter ivf_pq nprobe : {} <=0. use default", nprobe);
-    nprobe = Constant::kSearchIvfPqParamNprobe;
-  }
+  int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk * vector_with_ids.size(), 0.0f);
@@ -195,31 +177,21 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
 
   const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
   {
     RWLockReadGuard guard(&rw_lock_);
 
-    if (BAIDU_UNLIKELY(!DoIsTrained())) {
-      std::string s = fmt::format("ivf pq not train. train first. ignored");
-      DINGO_LOG(WARNING) << s;
+    if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
       }
       return butil::Status::OK();
     }
 
-    if (BAIDU_UNLIKELY(nprobe <= 0)) {
-      nprobe = index_->nprobe;
-    }
-
-    // Prevent users from passing parameters out of bounds.
-    nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
-
     faiss::IVFSearchParameters ivf_search_parameters;
-    ivf_search_parameters.nprobe = nprobe;
+    ivf_search_parameters.nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
@@ -236,7 +208,7 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
 
   VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
 
-  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.raw_ivf_pq][id({})] result size {}", Id(), results.size());
 
   return butil::Status::OK();
 }
@@ -246,26 +218,15 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
                                                const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                                bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                                std::vector<pb::index::VectorWithDistanceResult>& results) {
-  if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "vector_with_ids is empty";
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
 
-  int32_t nprobe = parameter.ivf_pq().nprobe();
-  if (BAIDU_UNLIKELY(nprobe <= 0)) {
-    DINGO_LOG(WARNING) << fmt::format("pb::common::VectorSearchParameter ivf_pq nprobe : {} <=0. use default", nprobe);
-    nprobe = Constant::kSearchIvfPqParamNprobe;
-  }
+  int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
   const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
-
-  // fix lambda can not capture rvalue. change rvalue -> lvalue.
-  // c++ 20 fix this bug.
-  const std::unique_ptr<float[]>& vectors2 = vectors;
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
@@ -278,7 +239,7 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
   {
     RWLockReadGuard guard(&rw_lock_);
 
-    if (BAIDU_UNLIKELY(!DoIsTrained())) {
+    if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       std::string s = fmt::format("raw ivf pq not train. train first. ignored");
       DINGO_LOG(WARNING) << s;
 
@@ -289,15 +250,8 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
       return butil::Status::OK();
     }
 
-    if (BAIDU_UNLIKELY(nprobe <= 0)) {
-      nprobe = index_->nprobe;
-    }
-
-    // Prevent users from passing parameters out of bounds.
-    nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
-
     faiss::IVFSearchParameters ivf_search_parameters;
-    ivf_search_parameters.nprobe = nprobe;
+    ivf_search_parameters.nprobe = std::min(nprobe, static_cast<int32_t>(index_->nlist));
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
@@ -306,22 +260,22 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
         auto ivf_pq_filter = filters.empty() ? nullptr : std::make_shared<RawIvfPqIDSelector>(filters);
         ivf_search_parameters.sel = ivf_pq_filter.get();
 
-        index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
+        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
                              &ivf_search_parameters);
       } else {
-        index_->range_search(vector_with_ids.size(), vectors2.get(), radius, range_search_result.get(),
+        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
                              &ivf_search_parameters);
       }
     } catch (std::exception& e) {
-      std::string s = fmt::format("VectorIndexIvfPq::RangeSearch failed. error : {}", e.what());
-      DINGO_LOG(ERROR) << s;
+      std::string s = fmt::format("range search exception: {}", e.what());
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.raw_ivf_pq][id({})] {}", Id(), s);
       butil::Status(pb::error::Errno::EINTERNAL, s);
     }
   }
 
   VectorIndexUtils ::FillRangeSearchResult(range_search_result, metric_type_, dimension_, results);
 
-  DINGO_LOG(DEBUG) << "result.size() = " << results.size();
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.raw_ivf_pq][id({})] result size {}", Id(), results.size());
 
   return butil::Status::OK();
 }
@@ -338,30 +292,22 @@ butil::Status VectorIndexRawIvfPq::Save(const std::string& path) {
   // When calling glog,
   // the child process will hang.
   // Remove glog temporarily.
-  if (BAIDU_UNLIKELY(path.empty())) {
-    std::string s = fmt::format("path empty. not support");
-    // DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
+  CHECK(!path.empty()) << "path is empty";
 
   // The outside has been locked. Remove the locking operation here.s
   try {
     faiss::write_index(index_.get(), path.c_str());
   } catch (std::exception& e) {
-    std::string s =
-        fmt::format("VectorIndexRawIvfPq::Save faiss::write_index failed. path : {} error : {}", path, e.what());
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.raw_ivf_pq][id({})] write index failed, exception: {} path: {}",
+                                    Id(), e.what(), path);
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: ", e.what()));
   }
 
   return butil::Status();
 }
 
 butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
-  if (BAIDU_UNLIKELY(path.empty())) {
-    std::string s = fmt::format("path empty. not support");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
+  CHECK(!path.empty()) << "path is empty";
 
   // The outside has been locked. Remove the locking operation here.
   faiss::Index* internal_raw_index = nullptr;
@@ -369,11 +315,8 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
     internal_raw_index = faiss::read_index(path.c_str(), 0);
 
   } catch (std::exception& e) {
-    std::string s =
-        fmt::format("VectorIndexRawIvfPq::Load faiss::read_index failed. path : {} error : {}", path, e.what());
     delete internal_raw_index;
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {}", path, e.what()));
   }
 
   faiss::IndexIVFPQ* internal_index = dynamic_cast<faiss::IndexIVFPQ*>(internal_raw_index);
@@ -382,10 +325,8 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
       delete internal_raw_index;
       internal_raw_index = nullptr;
     }
-    std::string s =
-        fmt::format("VectorIndexRawIvfPq::Load faiss::read_index failed. Maybe not IndexIVFPq.  path : {} ", path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("type cast failed"));
   }
 
   // avoid mem leak!!!
@@ -393,16 +334,12 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
 
   // double check
   if (BAIDU_UNLIKELY(internal_index->d != dimension_)) {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load load dimension : {} !=  dimension_ : {}. path : {}",
-                                internal_index->d, dimension_, path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("dimension not match, {} {}", internal_index->d, dimension_));
   }
 
   if (BAIDU_UNLIKELY(!internal_index->is_trained)) {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load load is not train. path : {}", path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL, "already trained");
   }
 
   switch (metric_type_) {
@@ -410,10 +347,8 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
       [[fallthrough]];
     case pb::common::METRIC_TYPE_L2: {
       if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_L2)) {
-        std::string s =
-            fmt::format("VectorIndexRawIvfPq::Load load from path type : {} != local type : {}. path : {}",
-                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-        DINGO_LOG(ERROR) << s;
+        std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                    pb::common::MetricType_Name(metric_type_));
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
       break;
@@ -422,10 +357,8 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
     case pb::common::METRIC_TYPE_INNER_PRODUCT:
     case pb::common::METRIC_TYPE_COSINE: {
       if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_INNER_PRODUCT)) {
-        std::string s =
-            fmt::format("VectorIndexRawIvfPq::Load load from path type : {} != local type : {}. path : {}",
-                        static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-        DINGO_LOG(ERROR) << s;
+        std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                    pb::common::MetricType_Name(metric_type_));
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
       break;
@@ -435,32 +368,25 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
     case pb::common::MetricType_INT_MAX_SENTINEL_DO_NOT_USE_:
       [[fallthrough]];
     default: {
-      std::string s = fmt::format("VectorIndexRawIvfPq::Load load from path type : {} != local type : {}. path : {}",
-                                  static_cast<int>(internal_index->metric_type), static_cast<int>(metric_type_), path);
-      DINGO_LOG(ERROR) << s;
+      std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
+                                  pb::common::MetricType_Name(metric_type_));
       return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
   }
 
   if (BAIDU_UNLIKELY(internal_index->nlist != nlist_)) {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load load list : {} !=  (nlist_:{}). path : {}",
-                                internal_index->nlist, nlist_, path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("nlist not match: {} {}", internal_index->nlist, nlist_));
   }
 
   if (BAIDU_UNLIKELY(internal_index->pq.M != nsubvector_)) {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load load pq.M : {} !=  (nsubvector_:{}). path : {}",
-                                internal_index->pq.M, nsubvector_, path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("M not match: {} {}", internal_index->pq.M, nsubvector_));
   }
 
   if (BAIDU_UNLIKELY(internal_index->pq.nbits != nbits_per_idx_)) {
-    std::string s = fmt::format("VectorIndexRawIvfPq::Load load pq.nbits : {} !=  (nbits_per_idx_:{}). path : {}",
-                                internal_index->pq.nbits, nbits_per_idx_, path);
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EINTERNAL, s);
+    return butil::Status(pb::error::Errno::EINTERNAL,
+                         fmt::format("nbits not match: {} {}", internal_index->pq.nbits, nbits_per_idx_));
   }
 
   quantizer_.reset();
@@ -472,7 +398,7 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
     normalize_ = true;
   }
 
-  DINGO_LOG(INFO) << fmt::format("VectorIndexRawIvfPq::Load success. path : {}", path);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.raw_ivf_pq][id({})] load finsh, path: {}", Id(), path);
 
   return butil::Status::OK();
 }
@@ -484,7 +410,7 @@ pb::common::MetricType VectorIndexRawIvfPq::GetMetricType() { return this->metri
 butil::Status VectorIndexRawIvfPq::GetCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (DoIsTrained()) {
+  if (IsTrainedImpl()) {
     count = index_->ntotal;
   } else {
     count = 0;
@@ -500,7 +426,7 @@ butil::Status VectorIndexRawIvfPq::GetDeletedCount(int64_t& deleted_count) {
 butil::Status VectorIndexRawIvfPq::GetMemorySize(int64_t& memory_size) {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     memory_size = 0;
     return butil::Status::OK();
   }
@@ -531,22 +457,17 @@ bool VectorIndexRawIvfPq::IsExceedsMaxElements() { return false; }
 
 butil::Status VectorIndexRawIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
-
-  // check
-  if (BAIDU_UNLIKELY(0 == data_size)) {
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("data size invalid"));
-  }
-
-  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
-  }
+  CHECK(data_size > 0) << "data size invalid";
+  CHECK(train_datas.size() % dimension_ == 0)
+      << fmt::format("dimension not match {} {}", train_datas.size(), dimension_);
 
   RWLockWriteGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(DoIsTrained())) {
+  if (BAIDU_UNLIKELY(IsTrainedImpl())) {
     return butil::Status::OK();
   }
+
+  DINGO_LOG(INFO) << fmt::format("[vector_index.raw_ivf_pq][id({})] train size: {}", Id(), train_datas.size());
 
   // init index
   Init();
@@ -594,7 +515,7 @@ butil::Status VectorIndexRawIvfPq::Train([[maybe_unused]] const std::vector<pb::
 bool VectorIndexRawIvfPq::NeedToRebuild() {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     std::string s = fmt::format("not trained");
     DINGO_LOG(WARNING) << s;
     return false;
@@ -605,15 +526,13 @@ bool VectorIndexRawIvfPq::NeedToRebuild() {
 
 bool VectorIndexRawIvfPq::IsTrained() {
   RWLockReadGuard guard(&rw_lock_);
-  return DoIsTrained();
+  return IsTrainedImpl();
 }
 
 bool VectorIndexRawIvfPq::NeedToSave(int64_t last_save_log_behind) {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    std::string s = fmt::format("not trained. train first");
-    DINGO_LOG(WARNING) << s;
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     return false;
   }
 
@@ -647,19 +566,20 @@ void VectorIndexRawIvfPq::Init() {
     index_ = std::make_unique<faiss::IndexIVFPQ>(quantizer_.get(), dimension_, nlist_, nsubvector_, nbits_per_idx_,
                                                  faiss::MetricType::METRIC_INNER_PRODUCT);
   } else {
-    DINGO_LOG(WARNING) << fmt::format("ivf pq : not support metric type : {} use L2 default",
-                                      static_cast<int>(metric_type_));
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.raw_ivf_pq][id({})] unknown index type.", Id());
     quantizer_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
     index_ = std::make_unique<faiss::IndexIVFPQ>(quantizer_.get(), dimension_, nlist_, nsubvector_, nbits_per_idx_,
                                                  faiss::MetricType::METRIC_L2);
   }
 }
 
-bool VectorIndexRawIvfPq::DoIsTrained() {
-  if ((index_ && !quantizer_ && index_->own_fields) || (quantizer_ && index_ && !index_->own_fields)) {
-    return index_->is_trained;
-  }
-  return false;
+bool VectorIndexRawIvfPq::IsTrainedImpl() {
+  bool is_trained = ((index_ && !quantizer_ && index_->own_fields) || (quantizer_ && index_ && !index_->own_fields))
+                        ? index_->is_trained
+                        : false;
+
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.raw_ivf_pq][id({})] is train {}", Id(), is_trained);
+  return is_trained;
 }
 
 void VectorIndexRawIvfPq::Reset() {
