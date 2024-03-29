@@ -43,8 +43,7 @@ ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num, std:
         {
           std::unique_lock<std::mutex> lock(this->task_mutex_);
 
-          this->task_condition_.wait_for(lock, std::chrono::milliseconds(10),
-                                         [this] { return this->stop_ || !this->tasks_.empty(); });
+          this->task_condition_.wait(lock, [this] { return this->stop_ || !this->tasks_.empty(); });
 
           if (this->stop_ && this->tasks_.empty()) {
             return;

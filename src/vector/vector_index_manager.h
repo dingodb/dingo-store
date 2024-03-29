@@ -33,8 +33,14 @@ namespace dingodb {
 // Rebuild vector index task
 class RebuildVectorIndexTask : public TaskRunnable {
  public:
-  RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id, const std::string& trace)
-      : vector_index_wrapper_(vector_index_wrapper), force_(job_id > 0), job_id_(job_id), trace_(trace) {
+  RebuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id, bool is_double_check,
+                         bool is_force, bool is_clear, const std::string& trace)
+      : vector_index_wrapper_(vector_index_wrapper),
+        is_double_check_(is_double_check),
+        is_force_(is_force),
+        is_clear_(is_clear),
+        job_id_(job_id),
+        trace_(trace) {
     start_time_ = Helper::TimestampMs();
   }
   ~RebuildVectorIndexTask() override = default;
@@ -47,7 +53,11 @@ class RebuildVectorIndexTask : public TaskRunnable {
 
  private:
   VectorIndexWrapperPtr vector_index_wrapper_;
-  bool force_;
+
+  bool is_double_check_;
+  bool is_force_;
+  bool is_clear_;
+
   int64_t job_id_{0};
   std::string trace_;
   int64_t start_time_;
@@ -196,8 +206,8 @@ class VectorIndexManager {
   // Invoke when server running.
   static butil::Status RebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const std::string& trace);
   // Launch rebuild vector index at execute queue.
-  static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id,
-                                       const std::string& trace);
+  static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id, bool is_double_check,
+                                       bool is_force, bool is_clear, const std::string& trace);
   static void LaunchBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
                                      bool is_fast_build, int64_t job_id, const std::string& trace);
 

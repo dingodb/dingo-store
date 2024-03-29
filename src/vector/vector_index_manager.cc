@@ -110,7 +110,7 @@ void RebuildVectorIndexTask::Run() {
     return;
   }
 
-  if (!force_) {
+  if (is_double_check_) {
     if (!vector_index_wrapper_->IsOwnReady()) {
       DINGO_LOG(INFO) << fmt::format(
           "[vector_index.rebuild][index_id({})][trace({})] vector index is not ready, gave up rebuild.",
@@ -123,7 +123,9 @@ void RebuildVectorIndexTask::Run() {
           vector_index_wrapper_->Id(), trace_);
       return;
     }
-  } else {
+  }
+
+  if (!is_force_) {
     // Compare vector index snapshot epoch and region epoch.
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
     if (snapshot_set != nullptr) {
@@ -164,7 +166,7 @@ void RebuildVectorIndexTask::Run() {
   vector_index_wrapper_->SetIsTempHoldVectorIndex(false);
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saved vector index {}", region->Id()));
 
-  if (force_) {
+  if (is_clear_) {
     if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper_->Id())) {
       vector_index_wrapper_->ClearVectorIndex(trace_);
     }
@@ -1222,6 +1224,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 }
 
 void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id,
+                                                  bool is_double_check, bool is_force, bool is_clear,
                                                   const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
 
@@ -1231,8 +1234,8 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
       vector_index_wrapper->Id(), vector_index_wrapper->RebuildingNum(), vector_index_wrapper->PendingTaskNum(),
       GetVectorIndexTaskRunningNum(), trace);
 
-  auto task =
-      std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, job_id, fmt::format("{}-{}", job_id, trace));
+  auto task = std::make_shared<RebuildVectorIndexTask>(vector_index_wrapper, job_id, is_double_check, is_force,
+                                                       is_clear, fmt::format("{}-{}", job_id, trace));
   if (!Server::GetInstance().GetVectorIndexManager()->ExecuteTask(vector_index_wrapper->Id(), task)) {
     DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})][trace({})] Launch rebuild vector index failed",
                                     vector_index_wrapper->Id(), job_id);
@@ -1530,7 +1533,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
     if (need_rebuild && vector_index_wrapper->RebuildingNum() == 0) {
       DINGO_LOG(INFO) << fmt::format("[vector_index.scrub][index_id({})] need rebuild, do rebuild vector index.",
                                      vector_index_id);
-      LaunchRebuildVectorIndex(vector_index_wrapper, 0, "from scrub");
+      LaunchRebuildVectorIndex(vector_index_wrapper, 0, true, false, false, "from scrub");
       continue;
     }
 
