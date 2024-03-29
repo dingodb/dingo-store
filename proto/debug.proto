@@ -110,6 +110,26 @@ message TriggerVectorIndexSnapshotResponse {
   dingodb.pb.error.Error error = 2;
 }
 
+message TriggerRebuildVectorIndexRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+}
+
+message TriggerRebuildVectorIndexResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TriggerSaveVectorIndexRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+}
+
+message TriggerSaveVectorIndexResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
 message CompactRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   string cf_name = 2;
@@ -190,16 +210,17 @@ message DebugResponse {
   message RawVectorIndexState {
     int64 id = 1;
     dingodb.pb.common.VectorIndexType type = 2;
-    int64 apply_log_id = 3;
-    int64 snapshot_log_id = 4;
-    dingodb.pb.common.RegionEpoch epoch = 5;
-    string start_key = 6;
-    string end_key = 7;
-    int64 key_count = 8;
-    int64 deleted_key_count = 9;
-    int64 memory_size = 10;
-    dingodb.pb.common.VectorIndexParameter parameter = 11;
-    string comment = 20;
+    dingodb.pb.common.VectorIndexType sub_type = 3;
+    int64 apply_log_id = 10;
+    int64 snapshot_log_id = 11;
+    dingodb.pb.common.RegionEpoch epoch = 12;
+    string start_key = 20;
+    string end_key = 21;
+    int64 key_count = 22;
+    int64 deleted_key_count = 23;
+    int64 memory_size = 24;
+    dingodb.pb.common.VectorIndexParameter parameter = 30;
+    string comment = 40;
   }
 
   message VectorIndexMetricsEntry {
@@ -263,10 +284,10 @@ enum WorkQueueType {
   WORK_QUEUE_NONE = 0;
 
   WORK_QUEUE_STORE_SERVICE_READ = 10;
-  WORK_QUEUE_STORE_SERVICE_WRITE =11;
+  WORK_QUEUE_STORE_SERVICE_WRITE = 11;
 
-  WORK_QUEUE_INDEX_SERVICE_READ  =20;
-  WORK_QUEUE_INDEX_SERVICE_WRITE  =21;
+  WORK_QUEUE_INDEX_SERVICE_READ = 20;
+  WORK_QUEUE_INDEX_SERVICE_WRITE = 21;
   WORK_QUEUE_VECTOR_INDEX_BACKGROUND = 22;
 }
 
@@ -293,7 +314,6 @@ message TraceWorkQueueResponse {
   repeated WorkerSetTrace worker_set_traces = 10;
 }
 
-
 service DebugService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
@@ -305,6 +325,8 @@ service DebugService {
   rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
 
   rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
+  rpc TriggerRebuildVectorIndex(TriggerRebuildVectorIndexRequest) returns (TriggerRebuildVectorIndexResponse);
+  rpc TriggerSaveVectorIndex(TriggerSaveVectorIndexRequest) returns (TriggerSaveVectorIndexResponse);
 
   rpc Compact(CompactRequest) returns (CompactResponse);
 
