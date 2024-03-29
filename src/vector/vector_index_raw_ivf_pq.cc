@@ -476,7 +476,7 @@ butil::Status VectorIndexRawIvfPq::Train(std::vector<float>& train_datas) {
 
   if (normalize_) {
     for (size_t i = 0; i < data_size; i++) {
-      VectorIndexUtils::NormalizeVectorForFaiss(const_cast<float*>(train_datas.data()) + i * dimension_, dimension_);
+      VectorIndexUtils::NormalizeVectorForFaiss(train_datas.data() + i * dimension_, dimension_);
     }
   }
 
@@ -516,8 +516,6 @@ bool VectorIndexRawIvfPq::NeedToRebuild() {
   RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-    std::string s = fmt::format("not trained");
-    DINGO_LOG(WARNING) << s;
     return false;
   }
 
@@ -536,11 +534,7 @@ bool VectorIndexRawIvfPq::NeedToSave(int64_t last_save_log_behind) {
     return false;
   }
 
-  int64_t element_count = 0;
-
-  element_count = index_->ntotal;
-
-  if (element_count == 0) {
+  if (index_->ntotal == 0) {
     return false;
   }
 

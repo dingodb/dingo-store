@@ -349,7 +349,8 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
     if (Server::GetInstance().IsLeader(to_region->Id())) {
-      VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id(), "child split");
+      VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id(), false, false,
+                                                   true, "child split");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
@@ -367,7 +368,8 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     }
 
     if (Server::GetInstance().IsLeader(from_region->Id())) {
-      VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id(), "parent split");
+      VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id(), false, false,
+                                                   true, "parent split");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] parent follower not need rebuild vector index.",
@@ -558,7 +560,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
     if (Server::GetInstance().IsLeader(child_region->Id())) {
-      VectorIndexManager::LaunchRebuildVectorIndex(child_region->VectorIndexWrapper(), request.job_id(), "child split");
+      VectorIndexManager::LaunchRebuildVectorIndex(child_region->VectorIndexWrapper(), request.job_id(), false, false,
+                                                   true, "child split");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
@@ -576,8 +579,8 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     }
 
     if (Server::GetInstance().IsLeader(parent_region->Id())) {
-      VectorIndexManager::LaunchRebuildVectorIndex(parent_region->VectorIndexWrapper(), request.job_id(),
-                                                   "parent split");
+      VectorIndexManager::LaunchRebuildVectorIndex(parent_region->VectorIndexWrapper(), request.job_id(), false, false,
+                                                   true, "parent split");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] parent follower not need rebuild vector index.",
@@ -905,7 +908,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
     if (Server::GetInstance().IsLeader(target_region->Id())) {
-      VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id(), "merge");
+      VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id(), false, false,
+                                                   true, "merge");
     } else {
       DINGO_LOG(WARNING) << fmt::format(
           "[merge.merging][job_id({}).region({}/{})] target follower not need rebuild vector index.", request.job_id(),
@@ -1220,7 +1224,8 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
   if (vector_index_wrapper != nullptr) {
     vector_index_wrapper->SaveApplyLogId(log_id);
 
-    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id(), "from raft");
+    VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id(), false, false, true,
+                                                 "from raft");
   }
 
   return 0;

@@ -455,13 +455,13 @@ butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
 
   faiss::ClusteringParameters clustering_parameters;
   if (BAIDU_UNLIKELY(data_size < (clustering_parameters.min_points_per_centroid * nlist_))) {
-    std::string s = fmt::format("train_datas size : {} not enough. suggest at least : {}.  ignore", data_size,
-                                clustering_parameters.min_points_per_centroid * nlist_);
+    std::string s = fmt::format("[vector_index.ivf_flat][id({})] train_datas size({}) not enough. suggest at least {}.",
+                                Id(), data_size, clustering_parameters.min_points_per_centroid * nlist_);
     DINGO_LOG(WARNING) << s;
   } else if (BAIDU_UNLIKELY(data_size >= clustering_parameters.min_points_per_centroid * nlist_ &&
                             data_size < clustering_parameters.max_points_per_centroid * nlist_)) {
-    std::string s = fmt::format("train_datas size : {} not enough. suggest at least : {}.  ignore", data_size,
-                                clustering_parameters.max_points_per_centroid * nlist_);
+    std::string s = fmt::format("[vector_index.ivf_flat][id({})] train_datas size({}) not enough. suggest at least {}.",
+                                Id(), data_size, clustering_parameters.max_points_per_centroid * nlist_);
     DINGO_LOG(WARNING) << s;
   }
 
@@ -527,8 +527,6 @@ bool VectorIndexIvfFlat::NeedToRebuild() {
   RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-    std::string s = fmt::format("not trained");
-    DINGO_LOG(WARNING) << s;
     return false;
   }
 
@@ -559,17 +557,12 @@ bool VectorIndexIvfFlat::IsTrained() {
 
 bool VectorIndexIvfFlat::NeedToSave(int64_t last_save_log_behind) {
   RWLockReadGuard guard(&rw_lock_);
+
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-    std::string s = fmt::format("not trained. train first");
-    DINGO_LOG(WARNING) << s;
     return false;
   }
 
-  int64_t element_count = 0;
-
-  element_count = index_->ntotal;
-
-  if (element_count == 0) {
+  if (index_->ntotal == 0) {
     return false;
   }
 

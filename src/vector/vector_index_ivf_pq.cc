@@ -203,8 +203,6 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_load_latency);
 
-  // The outside has been locked. Remove the locking operation here.
-
   // first ivf pq
   auto internal_index_raw_ivf_pq =
       std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range, thread_pool);
@@ -486,9 +484,11 @@ bool VectorIndexIvfPq::IsTrainedImpl() {
   switch (inner_index_type_) {
     case IndexTypeInIvfPq::kFlat: {
       is_trained = index_flat_->IsTrained();
+      break;
     }
     case IndexTypeInIvfPq::kIvfPq: {
       is_trained = index_raw_ivf_pq_->IsTrained();
+      break;
     }
     case IndexTypeInIvfPq::kUnknow:
       [[fallthrough]];

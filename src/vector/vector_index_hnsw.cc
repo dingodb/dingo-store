@@ -49,6 +49,7 @@ DECLARE_int64(vector_max_batch_count);
 
 DECLARE_uint32(vector_write_batch_size_per_task);
 DECLARE_uint32(vector_read_batch_size_per_task);
+DECLARE_uint32(parallel_log_threshold_time_ms);
 
 bvar::LatencyRecorder g_hnsw_upsert_latency("dingo_hnsw_upsert_latency");
 bvar::LatencyRecorder g_hnsw_search_latency("dingo_hnsw_search_latency");
@@ -123,8 +124,8 @@ inline void ParallelFor(ThreadPoolPtr thread_pool, size_t start, size_t end, uin
   }
 
   int64_t elapsed_time = Helper::TimestampMs() - start_time;
-  LOG_IF(INFO, elapsed_time > 10000) << fmt::format("ParallelFor vector count({}) is_priority({}) elapsed time: {}",
-                                                    end - start, is_priority, elapsed_time);
+  LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms) << fmt::format(
+      "ParallelFor vector count({}) is_priority({}) elapsed time: {}", end - start, is_priority, elapsed_time);
 }
 
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,

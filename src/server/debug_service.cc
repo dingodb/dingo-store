@@ -278,7 +278,8 @@ void DebugServiceImpl::TriggerRebuildVectorIndex(google::protobuf::RpcController
     return;
   }
 
-  VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, Helper::TimestampMs(), "from debug");
+  VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, Helper::TimestampMs(), false, true, true,
+                                               "from debug");
 }
 
 void DebugServiceImpl::TriggerSaveVectorIndex(google::protobuf::RpcController* controller,
