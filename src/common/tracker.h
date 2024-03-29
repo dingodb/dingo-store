@@ -36,6 +36,8 @@ class Tracker {
     uint64_t raft_commit_time_ns{0};
     uint64_t raft_queue_wait_time_ns{0};
     uint64_t raft_apply_time_ns{0};
+    uint64_t store_write_time_ns{0};
+    uint64_t vector_index_write_time_ns{0};
   };
 
   void SetTotalRpcTime();
@@ -55,6 +57,12 @@ class Tracker {
 
   void SetRaftApplyTime();
   uint64_t RaftApplyTime() const;
+
+  void SetStoreWriteTime(uint64_t elapsed_time);
+  uint64_t StoreWriteTime() const;
+
+  void SetVectorIndexWriteTime(uint64_t elapsed_time);
+  uint64_t VectorIndexwriteTime() const;
 
  private:
   uint64_t start_time_;

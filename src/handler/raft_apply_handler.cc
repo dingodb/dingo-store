@@ -982,6 +982,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
   butil::Status status;
   const auto &request = req.vector_add();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
   // Transform vector to kv
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
@@ -1032,8 +1033,10 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
   // Put vector data to rocksdb
   if (!kv_puts_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
     auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
       DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
                                       status.error_str());
@@ -1074,6 +1077,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
         auto start_time = Helper::TimestampNs();
         auto status = vector_index_wrapper->Upsert(vector_with_ids);
+        if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
                                         vector_with_ids.size(), Helper::TimestampNs() - start_time);
         if (status.ok()) {
@@ -1103,6 +1107,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   butil::Status status;
   const auto &request = req.vector_delete();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
   auto reader = engine->Reader();
   auto snapshot = engine->GetSnapshot();
@@ -1155,8 +1160,10 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
   // Delete vector and write wal
   if (!kv_deletes_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
     auto writer = engine->Writer();
     status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
       DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
                                       status.error_str());
@@ -1184,7 +1191,9 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (is_ready && !delete_ids.empty()) {
     if (log_id > vector_index_wrapper->ApplyLogId()) {
       try {
+        auto start_time = Helper::TimestampNs();
         auto status = vector_index_wrapper->Delete(delete_ids);
+        if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
           vector_index_wrapper->SetApplyLogId(log_id);
         } else {
