@@ -50,6 +50,17 @@ class DebugServiceImpl : public pb::debug::DebugService {
                                   pb::debug::TriggerVectorIndexSnapshotResponse* response,
                                   google::protobuf::Closure* done) override;
 
+  void TriggerRebuildVectorIndex(google::protobuf::RpcController* controller,
+                                  const pb::debug::TriggerRebuildVectorIndexRequest* request,
+                                  pb::debug::TriggerRebuildVectorIndexResponse* response,
+                                  google::protobuf::Closure* done) override;
+
+  void TriggerSaveVectorIndex(google::protobuf::RpcController* controller,
+                                  const pb::debug::TriggerSaveVectorIndexRequest* request,
+                                  pb::debug::TriggerSaveVectorIndexResponse* response,
+                                  google::protobuf::Closure* done) override;
+
+
   void Compact(google::protobuf::RpcController* controller, const pb::debug::CompactRequest* request,
                pb::debug::CompactResponse* response, google::protobuf::Closure* done) override;
 

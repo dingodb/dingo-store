@@ -254,6 +254,60 @@ void DebugServiceImpl::TriggerVectorIndexSnapshot(google::protobuf::RpcControlle
   }
 }
 
+void DebugServiceImpl::TriggerRebuildVectorIndex(google::protobuf::RpcController* controller,
+                                                 const pb::debug::TriggerRebuildVectorIndexRequest* request,
+                                                 pb::debug::TriggerRebuildVectorIndexResponse* response,
+                                                 google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto store_region_meta = GET_STORE_REGION_META;
+  auto region = store_region_meta->GetRegion(request->vector_index_id());
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    return;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    return;
+  }
+
+  VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, Helper::TimestampMs(), "from debug");
+}
+
+void DebugServiceImpl::TriggerSaveVectorIndex(google::protobuf::RpcController* controller,
+                                              const pb::debug::TriggerSaveVectorIndexRequest* request,
+                                              pb::debug::TriggerSaveVectorIndexResponse* response,
+                                              google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto store_region_meta = GET_STORE_REGION_META;
+  auto region = store_region_meta->GetRegion(request->vector_index_id());
+  if (region == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EREGION_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found region {}.", request->vector_index_id()));
+    return;
+  }
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (vector_index_wrapper == nullptr) {
+    auto* error = response->mutable_error();
+    error->set_errcode(Errno::EVECTOR_INDEX_NOT_FOUND);
+    error->set_errmsg(fmt::format("Not found vector index {}.", request->vector_index_id()));
+    return;
+  }
+
+  VectorIndexManager::LaunchSaveVectorIndex(vector_index_wrapper, "from debug");
+}
+
 void DebugServiceImpl::Compact(google::protobuf::RpcController* controller, const pb::debug::CompactRequest* request,
                                pb::debug::CompactResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
@@ -528,6 +582,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           auto* vector_index_state = entry->add_entries();
           vector_index_state->set_id(vector_index->Id());
           vector_index_state->set_type(vector_index->VectorIndexType());
+          vector_index_state->set_sub_type(vector_index->VectorIndexSubType());
           vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
           vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
