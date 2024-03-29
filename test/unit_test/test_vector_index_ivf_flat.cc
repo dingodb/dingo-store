@@ -586,11 +586,12 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
 
   // invalid.  no data
   {
-    ok = vector_index_ivf_flat_l2->Train(std::vector<float>{});
+    std::vector<float> vector_value;
+    ok = vector_index_ivf_flat_l2->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_ip->Train(std::vector<float>{});
+    ok = vector_index_ivf_flat_ip->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_flat_cosine->Train(std::vector<float>{});
+    ok = vector_index_ivf_flat_cosine->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 

@@ -723,11 +723,12 @@ TEST_F(VectorIndexIvfPqTest, Train) {
 
   // invalid.  no data
   {
-    ok = vector_index_ivf_pq_l2->Train(std::vector<float>{});
+    std::vector<float> vector_value;
+    ok = vector_index_ivf_pq_l2->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_pq_ip->Train(std::vector<float>{});
+    ok = vector_index_ivf_pq_ip->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_pq_cosine->Train(std::vector<float>{});
+    ok = vector_index_ivf_pq_cosine->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 
@@ -1774,11 +1775,12 @@ TEST_F(VectorIndexIvfPqTest, TrainForIvfPq) {
 
   // invalid.  no data
   {
-    ok = vector_index_ivf_pq_l2->Train(std::vector<float>{});
+    std::vector<float> vector_value;
+    ok = vector_index_ivf_pq_l2->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_pq_ip->Train(std::vector<float>{});
+    ok = vector_index_ivf_pq_ip->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
-    ok = vector_index_ivf_pq_cosine->Train(std::vector<float>{});
+    ok = vector_index_ivf_pq_cosine->Train(vector_value);
     EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
   }
 

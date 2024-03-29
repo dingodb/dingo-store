@@ -111,7 +111,7 @@ class VectorIndexIvfFlat : public VectorIndex {
  private:
   void Init();
 
-  bool DoIsTrained();
+  bool IsTrainedImpl();
 
   // train failed. reset
   void Reset();

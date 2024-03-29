@@ -63,8 +63,6 @@ VectorIndexIvfPq::VectorIndexIvfPq(int64_t id, const pb::common::VectorIndexPara
   nbits_per_idx_ = (vector_index_parameter.ivf_pq_parameter().nbits_per_idx() % 64) > 0
                        ? (vector_index_parameter.ivf_pq_parameter().nbits_per_idx() % 64)
                        : Constant::kCreateIvfPqParamNbitsPerIdx;
-
-  // Delay object creation.
 }
 
 VectorIndexIvfPq::~VectorIndexIvfPq() = default;
@@ -95,7 +93,6 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
   // train
   status = Train(vector_with_ids);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "train failed: " << status.error_cstr();
     return status;
   }
 
@@ -104,10 +101,6 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
     RWLockWriteGuard guard(&rw_lock_);
     status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
-  }
-
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
   }
 
   return status;
@@ -131,7 +124,6 @@ butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   butil::Status status =
       InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, false, delete_ids);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
-    DINGO_LOG(ERROR) << "VectorIndexIvfPq::Delete failed " << status.error_cstr();
     return status;
   }
 
@@ -147,7 +139,6 @@ butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithI
   butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
                                                 vector_with_ids, topk, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
-    DINGO_LOG(ERROR) << "VectorIndexIvfPq::Search failed " << status.error_cstr();
     return status;
   }
 
@@ -170,7 +161,6 @@ butil::Status VectorIndexIvfPq::RangeSearch(const std::vector<pb::common::Vector
       InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
                              vector_with_ids, radius, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
-    DINGO_LOG(ERROR) << "VectorIndexIvfPq::RangeSearch failed " << status.error_cstr();
     return status;
   }
 
@@ -207,13 +197,13 @@ butil::Status VectorIndexIvfPq::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexIvfPq::Load(const std::string& path) {
+  CHECK(!path.empty()) << "path is empty";
+
   butil::Status status;
-  std::string error_message;
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_load_latency);
 
   // The outside has been locked. Remove the locking operation here.
-  // BAIDU_SCOPED_LOCK(mutex_);
 
   // first ivf pq
   auto internal_index_raw_ivf_pq =
@@ -225,15 +215,12 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
     index_raw_ivf_pq_ = std::move(internal_index_raw_ivf_pq);
     index_flat_ = nullptr;
     return status;
-  } else {
-    std::string s = fmt::format("Load raw_ivf_pq index failed, error: {} path: {}", status.error_cstr(), path);
-    DINGO_LOG(WARNING) << s;
-    internal_index_raw_ivf_pq = nullptr;
-    error_message = s;
   }
 
-  // try flat again
+  DINGO_LOG(WARNING) << fmt::format("[vector_index.ivf_pq][id({})] load index failed, error: {} path: {}", Id(),
+                                    status.error_cstr(), path);
 
+  // try flat again
   pb::common::VectorIndexParameter index_parameter_flat;
   index_parameter_flat.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
   ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
@@ -247,14 +234,11 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
     index_flat_ = std::move(internal_index_flat);
     index_raw_ivf_pq_ = nullptr;
     return status;
-  } else {
-    std::string s = fmt::format("Load ivf_pq index failed, error: {} path: {}", status.error_cstr(), path);
-    DINGO_LOG(WARNING) << s;
-    internal_index_flat = nullptr;
-    return butil::Status(pb::error::Errno::EINTERNAL, error_message + s);
   }
 
-  return butil::Status::OK();
+  DINGO_LOG(WARNING) << fmt::format("[vector_index.ivf_pq][id({})] load index failed, error: {} path: {}", Id(),
+                                    status.error_cstr(), path);
+  return status;
 }
 
 int32_t VectorIndexIvfPq::GetDimension() { return this->dimension_; }
@@ -263,7 +247,7 @@ pb::common::MetricType VectorIndexIvfPq::GetMetricType() { return this->metric_t
 
 butil::Status VectorIndexIvfPq::GetCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
-  if (DoIsTrained()) {
+  if (IsTrainedImpl()) {
     switch (inner_index_type_) {
       case IndexTypeInIvfPq::kFlat: {
         return index_flat_->GetCount(count);
@@ -291,7 +275,7 @@ butil::Status VectorIndexIvfPq::GetDeletedCount(int64_t& deleted_count) {
 butil::Status VectorIndexIvfPq::GetMemorySize(int64_t& memory_size) {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     memory_size = 0;
     return butil::Status::OK();
   }
@@ -318,16 +302,9 @@ bool VectorIndexIvfPq::IsExceedsMaxElements() { return false; }
 
 butil::Status VectorIndexIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
-
-  // validate
-  if (BAIDU_UNLIKELY(0 == data_size)) {
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("data size invalid"));
-  }
-
-  if (BAIDU_UNLIKELY(0 != train_datas.size() % dimension_)) {
-    return butil::Status(pb::error::Errno::EINTERNAL,
-                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
-  }
+  CHECK(data_size > 0) << "data size invalid";
+  CHECK(train_datas.size() % dimension_ == 0)
+      << fmt::format("dimension not match {} {}", train_datas.size(), dimension_);
 
   faiss::ClusteringParameters clustering_parameters;
 
@@ -339,14 +316,16 @@ butil::Status VectorIndexIvfPq::Train(std::vector<float>& train_datas) {
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_train_latency);
   RWLockWriteGuard guard(&rw_lock_);
-  if (BAIDU_UNLIKELY(DoIsTrained())) {
+
+  if (BAIDU_UNLIKELY(IsTrainedImpl())) {
     return butil::Status::OK();
   }
 
   inner_index_type_ = data_size >= std::max(train_nlist_size, train_subvector_size) ? IndexTypeInIvfPq::kIvfPq
                                                                                     : IndexTypeInIvfPq::kFlat;
-  DINGO_LOG(INFO) << fmt::format("Train ivf_pq index type: {} data_size: {}", static_cast<int>(inner_index_type_),
-                                 data_size);
+  DINGO_LOG(INFO) << fmt::format("[vector_index.ivf_pq][id({})] train index type: {} data_size: {}", Id(),
+                                 static_cast<int>(inner_index_type_), data_size);
+
   // init index
   Init();
 
@@ -404,13 +383,9 @@ butil::Status VectorIndexIvfPq::Train(const std::vector<pb::common::VectorWithId
 bool VectorIndexIvfPq::NeedToRebuild() {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    DINGO_LOG(WARNING) << fmt::format("not trained");
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     return false;
   }
-
-  DINGO_LOG(INFO) << fmt::format("check need to rebuild, index_type_in_ivf_pq: {}",
-                                 static_cast<int>(inner_index_type_));
 
   switch (inner_index_type_) {
     case IndexTypeInIvfPq::kFlat: {
@@ -421,7 +396,6 @@ bool VectorIndexIvfPq::NeedToRebuild() {
       auto data_size = std::max(train_nlist_size, train_subvector_size);
       int64_t count = 0;
       index_flat_->GetCount(count);
-      DINGO_LOG(INFO) << fmt::format("check need to rebuild, threshold: {} count: {}", data_size, count);
       if (count >= data_size) {
         return true;
       }
@@ -442,14 +416,12 @@ bool VectorIndexIvfPq::NeedToRebuild() {
 
 bool VectorIndexIvfPq::IsTrained() {
   RWLockReadGuard guard(&rw_lock_);
-  return DoIsTrained();
+  return IsTrainedImpl();
 }
 
 bool VectorIndexIvfPq::NeedToSave(int64_t last_save_log_behind) {
   RWLockReadGuard guard(&rw_lock_);
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    std::string s = fmt::format("ivf pq not train. train first.");
-    DINGO_LOG(ERROR) << s;
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     return false;
   }
 
@@ -463,8 +435,7 @@ bool VectorIndexIvfPq::NeedToSave(int64_t last_save_log_behind) {
     case IndexTypeInIvfPq::kUnknow:
       [[fallthrough]];
     default: {
-      std::string s = fmt::format("ivf pq not train. train first.");
-      DINGO_LOG(ERROR) << s;
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.ivf_pq][id({})] unknown index type.", Id());
       return false;
     }
   }
@@ -475,8 +446,7 @@ bool VectorIndexIvfPq::NeedToSave(int64_t last_save_log_behind) {
 pb::common::VectorIndexType VectorIndexIvfPq::VectorIndexSubType() {
   RWLockReadGuard guard(&rw_lock_);
 
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    DINGO_LOG(ERROR) << fmt::format("ivf pq not train. train first.");
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
     return pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE;
   }
 
@@ -507,24 +477,28 @@ void VectorIndexIvfPq::Init() {
   } else if (IndexTypeInIvfPq::kIvfPq == inner_index_type_) {
     index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range, thread_pool);
   } else {
-    DINGO_LOG(ERROR) << fmt::format("inner_index_type_ : {} . wrong  state.", static_cast<int>(inner_index_type_));
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.ivf_pq][id({})] unknown index type.", Id());
   }
 }
 
-bool VectorIndexIvfPq::DoIsTrained() {
+bool VectorIndexIvfPq::IsTrainedImpl() {
+  bool is_trained = false;
   switch (inner_index_type_) {
     case IndexTypeInIvfPq::kFlat: {
-      return index_flat_->IsTrained();
+      is_trained = index_flat_->IsTrained();
     }
     case IndexTypeInIvfPq::kIvfPq: {
-      return index_raw_ivf_pq_->IsTrained();
+      is_trained = index_raw_ivf_pq_->IsTrained();
     }
     case IndexTypeInIvfPq::kUnknow:
       [[fallthrough]];
-    default: {
-      return false;
-    }
+    default:
+      is_trained = false;
   }
+
+  DINGO_LOG(DEBUG) << fmt::format("[vector_index.ivf_pq][id({})] is train {}", Id(), is_trained);
+
+  return is_trained;
 }
 
 void VectorIndexIvfPq::Reset() {
@@ -536,9 +510,9 @@ void VectorIndexIvfPq::Reset() {
 template <typename FLAT_FUNC_PTR, typename PQ_FUNC_PTR, typename... Args>
 butil::Status VectorIndexIvfPq::InvokeConcreteFunction(const char* name, FLAT_FUNC_PTR flat_func_ptr,
                                                        PQ_FUNC_PTR pq_func_ptr, bool use_glog, Args&&... args) {
-  if (BAIDU_UNLIKELY(!DoIsTrained())) {
-    std::string s = fmt::format("{} : ivf pq not train. train first.", name);
-    if (use_glog) DINGO_LOG(ERROR) << name << " : " << s;
+  if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
+    std::string s = fmt::format("{} not train, train first.", name);
+    DINGO_LOG_IF(ERROR, use_glog) << fmt::format("[vector_index.ivf_pq][id({})] {}", Id(), s);
     return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
   }
 
@@ -552,8 +526,8 @@ butil::Status VectorIndexIvfPq::InvokeConcreteFunction(const char* name, FLAT_FU
     case IndexTypeInIvfPq::kUnknow:
       [[fallthrough]];
     default: {
-      std::string s = fmt::format("{} : ivf pq not train. train first.", name);
-      if (use_glog) DINGO_LOG(ERROR) << name << " : " << s;
+      std::string s = fmt::format("{} unknown index type.", name);
+      DINGO_LOG_IF(ERROR, use_glog) << fmt::format("[vector_index.ivf_pq][id({})] {}", Id(), s);
       return butil::Status(pb::error::Errno::EVECTOR_NOT_TRAIN, s);
     }
   }

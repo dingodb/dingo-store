@@ -39,6 +39,8 @@ namespace dingodb {
 DEFINE_uint32(vector_write_batch_size_per_task, 16, "vector write batch size per task");
 DEFINE_uint32(vector_read_batch_size_per_task, 1, "vector read batch size per task");
 
+DEFINE_uint32(parallel_log_threshold_time_ms, 5000, "parallel log elapsed time");
+
 // split VectorWithId set to multi batch
 static void SplitVectorWithId(const std::vector<pb::common::VectorWithId>& vector_with_ids, int batch_size,
                               std::vector<std::vector<pb::common::VectorWithId>>& vector_with_id_batchs) {
@@ -74,9 +76,10 @@ butil::Status ParallelRun(ThreadPoolPtr thread_pool,
     task->Join();
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("batch_size: {} inner_batch_size: {} elapsed_time: {}ms",
-                                  vector_with_id_batchs.size(), vector_with_id_batchs[0].size(),
-                                  Helper::TimestampMs() - start_time);
+  int64_t elapsed_time = Helper::TimestampMs() - start_time;
+  DINGO_LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms)
+      << fmt::format("ParallelRun batch_size: {} inner_batch_size: {} elapsed_time: {}ms", vector_with_id_batchs.size(),
+                     vector_with_id_batchs[0].size(), elapsed_time);
 
   for (auto& status : statuses) {
     if (!status.ok()) {

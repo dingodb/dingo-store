@@ -177,7 +177,7 @@ class VectorIndexManager {
   static butil::Status BuildVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
                                             const pb::common::RegionEpoch& epoch, const std::string& trace);
 
-  // LaunchLoadAsyncBuildVectorIndex is unused now.
+  // LaunchLoadOrBuildVectorIndex is unused now.
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
                                            int64_t job_id, const std::string& trace);
   static void LaunchLoadAsyncBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
