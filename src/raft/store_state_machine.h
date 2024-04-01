@@ -54,7 +54,7 @@ class StoreStateMachine : public BaseStateMachine {
  public:
   explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
                              store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
-                             PriorWorkerSetPtr raft_apply_worker_set);
+                             SimpleWorkerSetPtr raft_apply_worker_set);
   ~StoreStateMachine() override;
 
   static bool Init();
@@ -98,7 +98,7 @@ class StoreStateMachine : public BaseStateMachine {
   bthread_mutex_t apply_mutex_;
 
   // raft_apply_worker_set
-  PriorWorkerSetPtr raft_apply_worker_set_;
+  SimpleWorkerSetPtr raft_apply_worker_set_;
 };
 
 }  // namespace dingodb

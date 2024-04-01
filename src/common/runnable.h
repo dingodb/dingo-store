@@ -125,13 +125,13 @@ class Worker {
 
 using WorkerPtr = std::shared_ptr<Worker>;
 
-class WorkerSet {
+class ExecqWorkerSet {
  public:
-  WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
-  ~WorkerSet();
+  ExecqWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
+  ~ExecqWorkerSet();
 
-  static std::shared_ptr<WorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
-    return std::make_shared<WorkerSet>(name, worker_num, max_pending_task_count);
+  static std::shared_ptr<ExecqWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
+    return std::make_shared<ExecqWorkerSet>(name, worker_num, max_pending_task_count);
   }
 
   bool Init();
@@ -168,16 +168,17 @@ class WorkerSet {
   bvar::Adder<int64_t> pending_task_count_metrics_;
 };
 
-using WorkerSetPtr = std::shared_ptr<WorkerSet>;
+using ExecqWorkerSetPtr = std::shared_ptr<ExecqWorkerSet>;
 
-class PriorWorkerSet {
+class SimpleWorkerSet {
  public:
-  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
-  ~PriorWorkerSet();
+  SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+                  bool use_prior);
+  ~SimpleWorkerSet();
 
-  static std::shared_ptr<PriorWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count,
-                                             bool use_pthead) {
-    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count, use_pthead);
+  static std::shared_ptr<SimpleWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count,
+                                              bool use_pthead, bool use_prior) {
+    return std::make_shared<SimpleWorkerSet>(name, worker_num, max_pending_task_count, use_pthead, use_prior);
   }
 
   bool Init();
@@ -206,9 +207,11 @@ class PriorWorkerSet {
 
   bthread_mutex_t mutex_;
   bthread_cond_t cond_;
-  std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> tasks_;
+  std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> prior_tasks_;
+  std::queue<TaskRunnablePtr> tasks_;
 
   bool use_pthread_;
+  bool use_prior_;
   std::vector<Bthread> bthread_workers_;
   std::vector<std::thread> pthread_workers_;
 
@@ -227,7 +230,7 @@ class PriorWorkerSet {
   bvar::LatencyRecorder queue_run_metrics_;
 };
 
-using PriorWorkerSetPtr = std::shared_ptr<PriorWorkerSet>;
+using SimpleWorkerSetPtr = std::shared_ptr<SimpleWorkerSet>;
 
 }  // namespace dingodb
 

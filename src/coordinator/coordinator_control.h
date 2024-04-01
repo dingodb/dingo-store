@@ -1062,7 +1062,7 @@ class CoordinatorControl : public MetaControl {
   bthread_mutex_t meta_watch_bitmap_mutex_;
   std::map<int64_t, std::bitset<WATCH_BITSET_SIZE>> meta_watch_bitmap_;
 
-  WorkerSetPtr meta_watch_worker_set_;
+  ExecqWorkerSetPtr meta_watch_worker_set_;
 };
 
 class MetaWatchSendTask : public TaskRunnable {

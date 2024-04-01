@@ -82,6 +82,7 @@ DEFINE_uint32(h2_server_max_frame_size, 16384, "max frame size");
 DEFINE_uint32(h2_server_max_header_list_size, UINT32_MAX, "max header list size");
 
 DEFINE_bool(use_pthread_prior_worker_set, true, "use pthread prior worker set");
+DEFINE_bool(use_prior_worker_set, false, "use prior worker set");
 DEFINE_int32(brpc_common_worker_num, 10, "brpc common worker num");
 DEFINE_int32(read_worker_num, 10, "read service worker num");
 DEFINE_int32(write_worker_num, 10, "write service worker num");
@@ -557,11 +558,13 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
     auto vector_operation_parallel_thread_num = config->GetInt("vector.operation_parallel_thread_num");
     if (vector_operation_parallel_thread_num <= 0) {
       vector_operation_parallel_thread_num = dingodb::FLAGS_vector_operation_parallel_thread_num;
-      DINGO_LOG(WARNING) << fmt::format("[config] vector.vector_operation_parallel_thread_num is too small, set default value({})",
-                                        dingodb::FLAGS_vector_operation_parallel_thread_num);
+      DINGO_LOG(WARNING) << fmt::format(
+          "[config] vector.vector_operation_parallel_thread_num is too small, set default value({})",
+          dingodb::FLAGS_vector_operation_parallel_thread_num);
     }
     dingodb::FLAGS_vector_operation_parallel_thread_num = vector_operation_parallel_thread_num;
-    DINGO_LOG(INFO) << "vector.vector_operation_parallel_thread_num is set to " << dingodb::FLAGS_vector_operation_parallel_thread_num;
+    DINGO_LOG(INFO) << "vector.vector_operation_parallel_thread_num is set to "
+                    << dingodb::FLAGS_vector_operation_parallel_thread_num;
 
     // init vector index manager background worker num
     auto vector_background_worker_num = config->GetInt("vector.background_worker_num");
@@ -934,9 +937,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::PriorWorkerSetPtr coordinator_worker_set = dingodb::PriorWorkerSet::New(
+    dingodb::SimpleWorkerSetPtr coordinator_worker_set = dingodb::SimpleWorkerSet::New(
         "coor_wkr", FLAGS_coordinator_service_worker_num, FLAGS_coordinator_service_worker_max_pending_num,
-        FLAGS_use_pthread_prior_worker_set);
+        FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!coordinator_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init CoordinatorService PriorWorkerSet failed!";
       return -1;
@@ -954,9 +957,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::PriorWorkerSetPtr meta_worker_set =
-        dingodb::PriorWorkerSet::New("meta_wkr", FLAGS_meta_service_worker_num,
-                                     FLAGS_meta_service_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr meta_worker_set = dingodb::SimpleWorkerSet::New(
+        "meta_wkr", FLAGS_meta_service_worker_num, FLAGS_meta_service_worker_max_pending_num,
+        FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!meta_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init MetaService PriorWorkerSet failed!";
       return -1;
@@ -974,9 +977,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::PriorWorkerSetPtr version_worker_set =
-        dingodb::PriorWorkerSet::New("version_wkr", FLAGS_version_service_worker_num,
-                                     FLAGS_version_service_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr version_worker_set = dingodb::SimpleWorkerSet::New(
+        "version_wkr", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num,
+        FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!version_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init VersionService PriorWorkerSet failed!";
       return -1;
@@ -1126,8 +1129,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::PriorWorkerSetPtr read_worker_set = dingodb::PriorWorkerSet::New(
-        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr read_worker_set =
+        dingodb::SimpleWorkerSet::New("read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!read_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init StoreServiceRead PriorWorkerSet failed!";
       return -1;
@@ -1135,8 +1139,9 @@ int main(int argc, char *argv[]) {
     store_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetStoreServiceReadWorkerSet(read_worker_set);
 
-    dingodb::PriorWorkerSetPtr write_worker_set = dingodb::PriorWorkerSet::New(
-        "write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!write_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init StoreServiceWrite PriorWorkerSet failed!";
       return -1;
@@ -1145,8 +1150,8 @@ int main(int argc, char *argv[]) {
     dingo_server.SetStoreServiceWriteWorkerSet(write_worker_set);
 
     if (FLAGS_raft_apply_worker_num > 0) {
-      dingodb::PriorWorkerSetPtr raft_apply_worker_set =
-          dingodb::PriorWorkerSet::New("apply_wkr", FLAGS_raft_apply_worker_num, 0, FLAGS_use_pthread_prior_worker_set);
+      dingodb::SimpleWorkerSetPtr raft_apply_worker_set = dingodb::SimpleWorkerSet::New(
+          "apply_wkr", FLAGS_raft_apply_worker_num, 0, FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
       if (!raft_apply_worker_set->Init()) {
         DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
         return -1;
@@ -1254,8 +1259,9 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingodb::PriorWorkerSetPtr read_worker_set = dingodb::PriorWorkerSet::New(
-        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr read_worker_set =
+        dingodb::SimpleWorkerSet::New("read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!read_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
       return -1;
@@ -1264,8 +1270,9 @@ int main(int argc, char *argv[]) {
     util_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
-    dingodb::PriorWorkerSetPtr write_worker_set = dingodb::PriorWorkerSet::New(
-        "write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num, FLAGS_use_pthread_prior_worker_set);
+    dingodb::SimpleWorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
     if (!write_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
       return -1;
@@ -1274,8 +1281,8 @@ int main(int argc, char *argv[]) {
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
 
     if (FLAGS_raft_apply_worker_num > 0) {
-      dingodb::PriorWorkerSetPtr raft_apply_worker_set =
-          dingodb::PriorWorkerSet::New("apply_wkr", FLAGS_raft_apply_worker_num, 0, FLAGS_use_pthread_prior_worker_set);
+      dingodb::SimpleWorkerSetPtr raft_apply_worker_set = dingodb::SimpleWorkerSet::New(
+          "apply_wkr", FLAGS_raft_apply_worker_num, 0, FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
       if (!raft_apply_worker_set->Init()) {
         DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
         return -1;

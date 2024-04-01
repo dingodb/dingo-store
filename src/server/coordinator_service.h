@@ -298,7 +298,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                       const pb::coordinator::GetGCSafePointRequest* request,
                       pb::coordinator::GetGCSafePointResponse* response, google::protobuf::Closure* done) override;
 
-  void SetWorkSet(PriorWorkerSetPtr worker_set) { worker_set_ = worker_set; }
+  void SetWorkSet(SimpleWorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
@@ -307,7 +307,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;
   // Run service request.
-  PriorWorkerSetPtr worker_set_;
+  SimpleWorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb

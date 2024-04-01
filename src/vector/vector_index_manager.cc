@@ -708,13 +708,14 @@ void VectorIndexManager::DecVectorIndexSlowBuildTaskRunningNum() {
 }
 
 bool VectorIndexManager::Init() {
-  background_workers_ = WorkerSet::New("vector_mgr_background", FLAGS_vector_background_worker_num, 0);
+  background_workers_ = ExecqWorkerSet::New("vector_mgr_background", FLAGS_vector_background_worker_num, 0);
   if (!background_workers_->Init()) {
     DINGO_LOG(ERROR) << "Init vector index manager background worker set failed!";
     return false;
   }
 
-  fast_background_workers_ = WorkerSet::New("vector_mgr_fast_background", FLAGS_vector_fast_background_worker_num, 0);
+  fast_background_workers_ =
+      ExecqWorkerSet::New("vector_mgr_fast_background", FLAGS_vector_fast_background_worker_num, 0);
   if (!fast_background_workers_->Init()) {
     DINGO_LOG(ERROR) << "Init vector index manager fast background worker set failed!";
     return false;

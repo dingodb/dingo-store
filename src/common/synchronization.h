@@ -165,7 +165,7 @@ class ResourcePool {
     BAIDU_SCOPED_LOCK(mutex_);
     pool_.push(item);
     (*pool_size_) << 1;
-    bthread_cond_signal(&cond_);
+    bthread_cond_broadcast(&cond_);
   }
 
   // Get a resource from the pool

@@ -96,9 +96,9 @@ class IndexServiceImpl : public pb::index::IndexService {
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
-  void SetReadWorkSet(PriorWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
-  void SetWriteWorkSet(PriorWorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
-  void SetRaftApplyWorkSet(PriorWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+  void SetReadWorkSet(SimpleWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
+  void SetWriteWorkSet(SimpleWorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
+  void SetRaftApplyWorkSet(SimpleWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
   void SetVectorIndexManager(VectorIndexManagerPtr vector_index_manager) {
     vector_index_manager_ = vector_index_manager;
   }
@@ -109,9 +109,9 @@ class IndexServiceImpl : public pb::index::IndexService {
  private:
   StoragePtr storage_;
   // Run service request.
-  PriorWorkerSetPtr read_worker_set_;
-  PriorWorkerSetPtr write_worker_set_;
-  PriorWorkerSetPtr raft_apply_worker_set_;
+  SimpleWorkerSetPtr read_worker_set_;
+  SimpleWorkerSetPtr write_worker_set_;
+  SimpleWorkerSetPtr raft_apply_worker_set_;
   VectorIndexManagerPtr vector_index_manager_;
 };
 
