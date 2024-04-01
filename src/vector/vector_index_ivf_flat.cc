@@ -166,7 +166,7 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
                                          std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
 
   CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
-  CHECK(topk > 0) << "topk is 0";
+  if (topk <= 0) return butil::Status::OK();
 
   int32_t nprobe =
       parameter.ivf_flat().nprobe() > 0 ? parameter.ivf_flat().nprobe() : Constant::kSearchIvfFlatParamNprobe;

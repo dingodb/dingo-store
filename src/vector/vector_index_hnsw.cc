@@ -303,13 +303,9 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
                                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                       const pb::common::VectorSearchParameter& search_parameter,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
-  if (vector_with_ids.empty()) {
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
 
-  if (topk == 0) {
-    return butil::Status::OK();
-  }
+  if (topk <= 0) return butil::Status::OK();
 
   if (vector_index_type != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");

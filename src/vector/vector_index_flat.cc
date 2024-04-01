@@ -150,7 +150,7 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
                                       const pb::common::VectorSearchParameter&,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
   CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
-  CHECK(topk > 0) << "topk is 0";
+  if (topk <= 0) return butil::Status::OK();
 
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk * vector_with_ids.size(), 0.0f);
