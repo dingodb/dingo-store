@@ -164,7 +164,7 @@ std::vector<std::string> Worker::GetPendingTaskTrace() {
   return traces;
 }
 
-WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
+ExecqWorkerSet::ExecqWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
     : name_(name),
       worker_num_(worker_num),
       max_pending_task_count_(max_pending_task_count),
@@ -172,9 +172,9 @@ WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_
       total_task_count_metrics_(fmt::format("dingo_worker_set_{}_total_task_count", name)),
       pending_task_count_metrics_(fmt::format("dingo_worker_set_{}_pending_task_count", name)) {}
 
-WorkerSet::~WorkerSet() = default;
+ExecqWorkerSet::~ExecqWorkerSet() = default;
 
-bool WorkerSet::Init() {
+bool ExecqWorkerSet::Init() {
   for (int i = 0; i < worker_num_; ++i) {
     auto worker = Worker::New([this](WorkerEventType type) { WatchWorker(type); });
     if (!worker->Init()) {
@@ -186,13 +186,13 @@ bool WorkerSet::Init() {
   return true;
 }
 
-void WorkerSet::Destroy() {
+void ExecqWorkerSet::Destroy() {
   for (const auto& worker : workers_) {
     worker->Destroy();
   }
 }
 
-bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
+bool ExecqWorkerSet::ExecuteRR(TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
     DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
@@ -209,7 +209,7 @@ bool WorkerSet::ExecuteRR(TaskRunnablePtr task) {
   return ret;
 }
 
-bool WorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) {
+bool ExecqWorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
     DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
@@ -226,7 +226,7 @@ bool WorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) {
   return ret;
 }
 
-bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
+bool ExecqWorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 &&
                      pending_task_count_.load(std::memory_order_relaxed) > max_pending_task_count_)) {
     DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
@@ -243,13 +243,13 @@ bool WorkerSet::ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) {
   return ret;
 }
 
-void WorkerSet::WatchWorker(WorkerEventType type) {
+void ExecqWorkerSet::WatchWorker(WorkerEventType type) {
   if (type == WorkerEventType::kFinishTask) {
     DecPendingTaskCount();
   }
 }
 
-uint32_t WorkerSet::LeastPendingTaskWorker() {
+uint32_t ExecqWorkerSet::LeastPendingTaskWorker() {
   uint32_t index = 0;
   int32_t min_pending_count = INT32_MAX;
   uint32_t worker_num = workers_.size();
@@ -265,23 +265,23 @@ uint32_t WorkerSet::LeastPendingTaskWorker() {
   return index;
 }
 
-uint64_t WorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
+uint64_t ExecqWorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
 
-void WorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
+void ExecqWorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
 
-uint64_t WorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+uint64_t ExecqWorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
 
-void WorkerSet::IncPendingTaskCount() {
+void ExecqWorkerSet::IncPendingTaskCount() {
   pending_task_count_metrics_ << 1;
   pending_task_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
-void WorkerSet::DecPendingTaskCount() {
+void ExecqWorkerSet::DecPendingTaskCount() {
   pending_task_count_metrics_ << -1;
   pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
 }
 
-std::vector<std::vector<std::string>> WorkerSet::GetPendingTaskTrace() {
+std::vector<std::vector<std::string>> ExecqWorkerSet::GetPendingTaskTrace() {
   std::vector<std::vector<std::string>> traces;
 
   traces.reserve(workers_.size());
@@ -292,10 +292,12 @@ std::vector<std::vector<std::string>> WorkerSet::GetPendingTaskTrace() {
   return traces;
 }
 
-PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread)
+SimpleWorkerSet::SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count,
+                                 bool use_pthread, bool use_prior)
     : name_(name),
       worker_num_(worker_num),
       use_pthread_(use_pthread),
+      use_prior_(use_prior),
       max_pending_task_count_(max_pending_task_count),
       total_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_total_task_count", name)),
       pending_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_pending_task_count", name)),
@@ -305,12 +307,12 @@ PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t ma
   bthread_cond_init(&cond_, nullptr);
 }
 
-PriorWorkerSet::~PriorWorkerSet() {
+SimpleWorkerSet::~SimpleWorkerSet() {
   bthread_cond_destroy(&cond_);
   bthread_mutex_destroy(&mutex_);
 }
 
-bool PriorWorkerSet::Init() {
+bool SimpleWorkerSet::Init() {
   uint32_t i = 0;
 
   auto worker_function = [this, &i]() {
@@ -318,30 +320,59 @@ bool PriorWorkerSet::Init() {
       pthread_setname_np(pthread_self(), (name_ + ":" + std::to_string(i)).c_str());
     }
 
-    while (true) {
-      bthread_mutex_lock(&mutex_);
-      while (pending_task_count_.load(std::memory_order_relaxed) == 0) {
-        bthread_cond_wait(&cond_, &mutex_);
+    if (!use_prior_) {
+      while (true) {
+        bthread_mutex_lock(&mutex_);
+        while (tasks_.empty()) {
+          bthread_cond_wait(&cond_, &mutex_);
+        }
+
+        // get task from task queue
+        TaskRunnablePtr task = nullptr;
+        if (BAIDU_LIKELY(!tasks_.empty())) {
+          task = tasks_.front();
+          tasks_.pop();
+        }
+
+        bthread_mutex_unlock(&mutex_);
+
+        if (BAIDU_UNLIKELY(task != nullptr)) {
+          int64_t now_time_us = Helper::TimestampUs();
+          queue_wait_metrics_ << now_time_us - task->CreateTimeUs();
+
+          task->Run();
+
+          queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
+          DecPendingTaskCount();
+          Notify(WorkerEventType::kFinishTask);
+        }
       }
+    } else {
+      while (true) {
+        bthread_mutex_lock(&mutex_);
+        while (pending_task_count_.load(std::memory_order_relaxed) == 0) {
+          bthread_cond_wait(&cond_, &mutex_);
+        }
 
-      // get task from task queue
-      TaskRunnablePtr task = nullptr;
-      int64_t now_time_us = 0;
-      if (!tasks_.empty()) {
-        task = tasks_.top();
-        tasks_.pop();
+        // get task from task queue
+        TaskRunnablePtr task = nullptr;
+        if (BAIDU_LIKELY(!prior_tasks_.empty())) {
+          task = prior_tasks_.top();
+          prior_tasks_.pop();
+        }
 
-        now_time_us = Helper::TimestampUs();
-        queue_wait_metrics_ << now_time_us - task->CreateTimeUs();
-      }
+        bthread_mutex_unlock(&mutex_);
 
-      bthread_mutex_unlock(&mutex_);
+        if (BAIDU_LIKELY(task != nullptr)) {
+          int64_t now_time_us = Helper::TimestampUs();
+          queue_wait_metrics_ << now_time_us - task->CreateTimeUs();
 
-      if (BAIDU_UNLIKELY(task != nullptr)) {
-        task->Run();
-        queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
-        DecPendingTaskCount();
-        Notify(WorkerEventType::kFinishTask);
+          task->Run();
+
+          queue_run_metrics_ << Helper::TimestampUs() - now_time_us;
+          DecPendingTaskCount();
+          Notify(WorkerEventType::kFinishTask);
+        }
       }
     }
   };
@@ -359,7 +390,7 @@ bool PriorWorkerSet::Init() {
   return true;
 }
 
-void PriorWorkerSet::Destroy() {
+void SimpleWorkerSet::Destroy() {
   if (use_pthread_) {
     for (auto& std_thread : pthread_workers_) {
       std_thread.join();
@@ -371,61 +402,66 @@ void PriorWorkerSet::Destroy() {
   }
 }
 
-bool PriorWorkerSet::Execute(TaskRunnablePtr task) {
-  auto pend_task_count = pending_task_count_.load(std::memory_order_relaxed);
-
-  if (BAIDU_UNLIKELY(max_pending_task_count_ > 0 && pend_task_count > max_pending_task_count_)) {
-    DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}",
-                                      pending_task_count_.load(std::memory_order_relaxed), max_pending_task_count_);
-    return false;
+bool SimpleWorkerSet::Execute(TaskRunnablePtr task) {
+  if (max_pending_task_count_ > 0) {
+    auto pend_task_count = pending_task_count_.load(std::memory_order_relaxed);
+    if (pend_task_count > max_pending_task_count_) {
+      DINGO_LOG(WARNING) << fmt::format("[execqueue] exceed max pending task limit, {}/{}", pend_task_count,
+                                        max_pending_task_count_);
+      return false;
+    }
   }
 
   IncPendingTaskCount();
   IncTotalTaskCount();
 
   bthread_mutex_lock(&mutex_);
-  tasks_.push(task);
-  bthread_cond_signal(&cond_);
+  if (!use_prior_) {
+    tasks_.push(task);
+  } else {
+    prior_tasks_.push(task);
+  }
+  bthread_cond_broadcast(&cond_);
   bthread_mutex_unlock(&mutex_);
 
   return true;
 }
 
-bool PriorWorkerSet::ExecuteRR(TaskRunnablePtr task) { return Execute(task); }
+bool SimpleWorkerSet::ExecuteRR(TaskRunnablePtr task) { return Execute(task); }
 
-bool PriorWorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) { return Execute(task); }
+bool SimpleWorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) { return Execute(task); }
 
-bool PriorWorkerSet::ExecuteHashByRegionId(int64_t /*region_id*/, TaskRunnablePtr task) { return Execute(task); }
+bool SimpleWorkerSet::ExecuteHashByRegionId(int64_t /*region_id*/, TaskRunnablePtr task) { return Execute(task); }
 
-void PriorWorkerSet::WatchWorker(WorkerEventType type) {
+void SimpleWorkerSet::WatchWorker(WorkerEventType type) {
   if (type == WorkerEventType::kFinishTask) {
     DecPendingTaskCount();
   }
 }
 
-uint64_t PriorWorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
+uint64_t SimpleWorkerSet::TotalTaskCount() { return total_task_count_metrics_.get_value(); }
 
-void PriorWorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
+void SimpleWorkerSet::IncTotalTaskCount() { total_task_count_metrics_ << 1; }
 
-uint64_t PriorWorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+uint64_t SimpleWorkerSet::PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
 
-void PriorWorkerSet::IncPendingTaskCount() {
+void SimpleWorkerSet::IncPendingTaskCount() {
   pending_task_count_metrics_ << 1;
   pending_task_count_.fetch_add(1, std::memory_order_relaxed);
 }
 
-void PriorWorkerSet::DecPendingTaskCount() {
+void SimpleWorkerSet::DecPendingTaskCount() {
   pending_task_count_metrics_ << -1;
   pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
 }
 
-std::vector<std::vector<std::string>> PriorWorkerSet::GetPendingTaskTrace() {  // NOLINT
+std::vector<std::vector<std::string>> SimpleWorkerSet::GetPendingTaskTrace() {  // NOLINT
   std::vector<std::vector<std::string>> traces;
 
   return traces;
 }
 
-void PriorWorkerSet::Notify(WorkerEventType type) {
+void SimpleWorkerSet::Notify(WorkerEventType type) {
   if (notify_func_ != nullptr) {
     notify_func_(type);
   }

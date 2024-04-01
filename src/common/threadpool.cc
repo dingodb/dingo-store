@@ -107,7 +107,7 @@ ThreadPool::TaskPtr ThreadPool::ExecuteTask(Funcer func, void *arg, int priority
   IncTotalTaskCount();
   IncPendingTaskCount();
 
-  task_condition_.notify_one();
+  task_condition_.notify_all();
 
   return task;
 }

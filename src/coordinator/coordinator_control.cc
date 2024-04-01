@@ -116,7 +116,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   // tenant
   tenant_map_.Init(1000);  // tenant_map_ is a small map
 
-  meta_watch_worker_set_ = WorkerSet::New("CoordinatorMetaWatchWorkerSet", 1, 0);
+  meta_watch_worker_set_ = ExecqWorkerSet::New("CoordinatorMetaWatchWorkerSet", 1, 0);
   if (!meta_watch_worker_set_->Init()) {
     DINGO_LOG(FATAL) << "Init CoordinatorMetaWatchWorkerSet failed!";
   }

@@ -176,13 +176,13 @@ class Server {
   bool IsLeader(int64_t region_id);
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
 
-  void SetStoreServiceReadWorkerSet(PriorWorkerSetPtr worker_set);
-  void SetStoreServiceWriteWorkerSet(PriorWorkerSetPtr worker_set);
-  void SetIndexServiceReadWorkerSet(PriorWorkerSetPtr worker_set);
-  void SetIndexServiceWriteWorkerSet(PriorWorkerSetPtr worker_set);
+  void SetStoreServiceReadWorkerSet(SimpleWorkerSetPtr worker_set);
+  void SetStoreServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set);
+  void SetIndexServiceReadWorkerSet(SimpleWorkerSetPtr worker_set);
+  void SetIndexServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set);
 
-  void SetRaftApplyWorkerSet(PriorWorkerSetPtr worker_set);
-  PriorWorkerSetPtr GetRaftApplyWorkerSet();
+  void SetRaftApplyWorkerSet(SimpleWorkerSetPtr worker_set);
+  SimpleWorkerSetPtr GetRaftApplyWorkerSet();
 
   std::vector<std::vector<std::string>> GetStoreServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetStoreServiceWriteWorkerSetTrace();
@@ -293,16 +293,16 @@ class Server {
   bool is_read_only_ = false;
 
   // reference worker queue, just for trace
-  PriorWorkerSetPtr store_service_read_worker_set_{nullptr};
-  PriorWorkerSetPtr store_service_write_worker_set_{nullptr};
-  PriorWorkerSetPtr index_service_read_worker_set_{nullptr};
-  PriorWorkerSetPtr index_service_write_worker_set_{nullptr};
+  SimpleWorkerSetPtr store_service_read_worker_set_{nullptr};
+  SimpleWorkerSetPtr store_service_write_worker_set_{nullptr};
+  SimpleWorkerSetPtr index_service_read_worker_set_{nullptr};
+  SimpleWorkerSetPtr index_service_write_worker_set_{nullptr};
 
   // vector index thread pool
   ThreadPoolPtr vector_index_thread_pool_;
 
   // RaftApply worker queue
-  PriorWorkerSetPtr raft_apply_worker_set_{nullptr};
+  SimpleWorkerSetPtr raft_apply_worker_set_{nullptr};
 };
 
 // Shortcut

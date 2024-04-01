@@ -303,8 +303,8 @@ class VectorIndexManager {
                                      const std::string& start_key, [[maybe_unused]] const std::string& end_key);
 
   // Execute all vector index load/build/rebuild/save task.
-  WorkerSetPtr background_workers_;
-  WorkerSetPtr fast_background_workers_;
+  ExecqWorkerSetPtr background_workers_;
+  ExecqWorkerSetPtr fast_background_workers_;
 };
 
 using VectorIndexManagerPtr = std::shared_ptr<VectorIndexManager>;

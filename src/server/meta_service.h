@@ -214,7 +214,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void ListWatch(google::protobuf::RpcController* controller, const pb::meta::ListWatchRequest* request,
                  pb::meta::ListWatchResponse* response, google::protobuf::Closure* done) override;
 
-  void SetWorkSet(PriorWorkerSetPtr worker_set) { worker_set_ = worker_set; }
+  void SetWorkSet(SimpleWorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
   // table and index definition convertor
   static void TableDefinitionToIndexDefinition(const pb::meta::TableDefinition& table_definition,
@@ -228,7 +228,7 @@ class MetaServiceImpl : public pb::meta::MetaService {
   std::shared_ptr<TsoControl> tso_control_;
   std::shared_ptr<Engine> engine_;
   // Run service request.
-  PriorWorkerSetPtr worker_set_;
+  SimpleWorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb
