@@ -134,6 +134,9 @@ butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithI
                                        const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (topk <= 0) return butil::Status::OK();
+
   BvarLatencyGuard bvar_guard(&g_ivf_pq_search_latency);
   RWLockReadGuard guard(&rw_lock_);
   butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,

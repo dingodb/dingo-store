@@ -213,7 +213,7 @@ static butil::Status ValidateVectorSearchRequest(StoragePtr storage, const pb::i
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
   }
 
-  if (request->vector_with_ids_size() > 0 && request->vector_with_ids().empty()) {
+  if (request->vector_with_ids().empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_with_ids is empty");
   }
 
@@ -265,6 +265,9 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+  if (request->parameter().top_n() == 0) {
     return;
   }
 
