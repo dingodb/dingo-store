@@ -76,3 +76,6 @@
 [submodule "contrib/hdf5"]
 	path = contrib/hdf5
 	url = https://github.com/HDFGroup/hdf5.git
+[submodule "contrib/nlohmann-json"]
+	path = contrib/nlohmann-json
+	url = https://github.com/nlohmann/json.git

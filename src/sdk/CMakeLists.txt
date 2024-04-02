@@ -1,3 +1,4 @@
+
 add_library(sdk
   admin_tool.cc
   client_stub.cc
@@ -44,6 +45,11 @@ add_library(sdk
   vector/vector_search_task.cc
   utils/thread_pool_actuator.cc
   common/param_config.cc
+  expression/coding.cc
+  expression/langchain_expr_encoder.cc
+  expression/langchain_expr_factory.cc
+  expression/langchain_expr.cc
+  expression/types.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
   ${PROJECT_SOURCE_DIR}/src/common/role.cc
@@ -100,6 +106,6 @@ target_link_libraries(sdk
 PRIVATE
     $<TARGET_OBJECTS:PROTO_OBJS>
     ${SDK_LIBS}
-    )
+)
 
 add_dependencies(sdk ${DEPEND_LIBS})

@@ -136,6 +136,13 @@ endif()
 if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
     set(CMAKE_STATIC_LIBRARY_SUFFIX "d.a")
 endif()
+SET(EXTERNAL_PROJECT_LOG_ARGS
+        LOG_DOWNLOAD 0
+        LOG_UPDATE 1
+        LOG_CONFIGURE 0
+        LOG_BUILD 0
+        LOG_TEST 1
+        LOG_INSTALL 0)
 
 if (CMAKE_CXX_STANDARD EQUAL 23)
     set(CMAKE_CXX_STANDARD 23)
@@ -202,6 +209,7 @@ include(rocksdb)
 include(bdb)
 include(brpc)
 include(braft)
+include(nlohmann)
 
 if(BUILD_BENCHMARK STREQUAL "ON")
     include(hdf5)
@@ -271,6 +279,7 @@ include_directories(${GFLAGS_INCLUDE_DIR})
 include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${BDB_INCLUDE_DIR})
 include_directories(${RAPIDJSON_INCLUDE_DIR})
+include_directories(${NLOHMANN_JSON_INCLUDE_DIR})
 if (ENABLE_XDPROCKS)
     include_directories(${XDPROCKS_PATH}/include)
 endif()
@@ -353,6 +362,7 @@ set(DEPEND_LIBS
     libbacktrace
     bdb
     rapidjson
+    nlohmann-json
     )
 
 if(WITH_MKL)
