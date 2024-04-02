@@ -61,6 +61,8 @@ DEFINE_uint32(batch_vector_entry_cache_size, 1024, "batch vector entry cache");
 
 DEFINE_string(vector_search_filter, "", "vector search filter,e.g. key=value;key=value");
 
+DEFINE_int64(arrange_data_start_offset, 0, "arrange data start offset");
+
 namespace dingodb {
 namespace benchmark {
 
@@ -513,6 +515,10 @@ void JsonDataset::GetBatchTrainData(uint32_t, std::vector<sdk::VectorWithId>& ve
         for (auto& vector_with_id : batch_vector_entry->vector_with_ids) {
           vector_with_ids.push_back(std::move(vector_with_id));
         }
+        train_data_count_ += batch_vector_entry->vector_with_ids.size();
+        if (train_data_count_ < FLAGS_arrange_data_start_offset) {
+          vector_with_ids.clear();
+        }
         return;
       }
     }
@@ -879,8 +885,11 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
 
 static int64_t GetMiraclVectorId(const rapidjson::Value& obj) {
   std::string id(obj["docid"].GetString());
-  std::replace(id.begin(), id.end(), '#', '0');
-  return std::stoll(id);
+  std::vector<std::string> sub_parts;
+  Helper::SplitString(id, '#', sub_parts);
+  CHECK(sub_parts.size() == 2) << fmt::format("id({}) is invalid", id);
+
+  return std::stoll(fmt::format("{}{:0>4}", sub_parts[0], sub_parts[1]));
 };
 
 bool MiraclDataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithId& vector_with_id) const {

@@ -177,6 +177,7 @@ class JsonDataset : public Dataset {
   std::vector<BatchVectorEntryPtr> batch_vector_entry_cache_;
   int head_pos_{0};
   int tail_pos_{0};
+  int64_t train_data_count_{0};
   std::mutex mutex_;
 
   // test dataset

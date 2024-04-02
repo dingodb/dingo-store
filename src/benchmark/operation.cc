@@ -487,9 +487,24 @@ end:
   return result;
 }
 
+static bool IsMonotoneIncreasing(const std::vector<sdk::VectorWithId>& vector_with_ids) {
+  int64_t vector_id = 0;
+  for (const auto& vector_with_id : vector_with_ids) {
+    if (vector_with_id.id <= vector_id) {
+      LOG(INFO) << fmt::format("is not monotoe increasing: {} {}", vector_id, vector_with_id.id);
+      return false;
+    }
+    vector_id = vector_with_id.id;
+  }
+
+  return true;
+}
+
 Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
                                            const std::vector<sdk::VectorWithId>& vector_with_ids) {
   Operation::Result result;
+
+  IsMonotoneIncreasing(vector_with_ids);
 
   for (const auto& vector_with_id : vector_with_ids) {
     result.write_bytes += vector_with_id.vector.Size();
@@ -1017,7 +1032,8 @@ bool VectorSearchOperation::ArrangeManualData(VectorIndexEntryPtr entry, Dataset
         if (!vector_with_ids.empty()) {
           uint64_t start_time = dingodb::Helper::TimestampUs();
           auto result = VectorPut(entry, vector_with_ids);
-          LOG(INFO) << fmt::format("vector put elapsed time: {}us", dingodb::Helper::TimestampUs() - start_time);
+          LOG(INFO) << fmt::format("put vector size({}) elapsed time: {}us", vector_with_ids.size(),
+                                   dingodb::Helper::TimestampUs() - start_time);
           if (!result.status.IsOK()) {
             fail_count.fetch_add(vector_with_ids.size());
             retry = true;

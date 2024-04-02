@@ -219,8 +219,12 @@ static int64_t GetVectorId(const std::string& dataset_name, const rapidjson::Val
     return std::stoll(obj["_id"].GetString());
   } else if (dataset_name == "miracl") {
     std::string id(obj["docid"].GetString());
-    std::replace(id.begin(), id.end(), '#', '0');
-    return std::stoll(id);
+
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(id, '#', sub_parts);
+    CHECK(sub_parts.size() == 2) << fmt::format("id({}) is invalid", id);
+
+    return std::stoll(fmt::format("{}{:0>4}", sub_parts[0], sub_parts[1]));
   }
 
   return -1;
