@@ -20,6 +20,7 @@
 #include "benchmark/dataset.h"
 #include "benchmark/dataset_util.h"
 #include "common/helper.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 
