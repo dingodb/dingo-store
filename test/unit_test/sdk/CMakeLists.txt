@@ -9,6 +9,8 @@ set(SDK_UNIT_TEST_SRCS
   test_region.cc
   test_store_rpc_controller.cc
   test_thread_pool_actuator.cc
+  expression/test_coding.cc
+  expression/test_langchain_expr_encoder.cc
   ${SDK_UNIT_TEST_RAWKV_SRCS}
   ${SDK_UNIT_TEST_TRANSACTION_SRCS}
   ${SDK_UNIT_TEST_VECTOR_SRCS}

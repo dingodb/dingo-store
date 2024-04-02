@@ -121,6 +121,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":TxnLockResolverTest.*";
     default_run_case += ":RawKvRegionScannerImplTest.*";
     default_run_case += ":RawKVTest.*";
+    default_run_case += ":SDKBytesHexConvert.*";
+    default_run_case += ":SDKLangChainExprEncoder.*";
 
     testing::GTEST_FLAG(filter) = default_run_case;
   }
