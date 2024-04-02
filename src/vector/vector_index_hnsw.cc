@@ -45,6 +45,8 @@ DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
 DEFINE_uint32(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
 
+DEFINE_uint32(hnsw_max_elements_amplification_multiple, 12, "hnsw max elements amplification multiple");
+
 DECLARE_int64(vector_max_batch_count);
 
 DECLARE_uint32(vector_write_batch_size_per_task);
@@ -80,8 +82,8 @@ class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
 };
 
 template <typename Function>
-inline void ParallelFor(ThreadPoolPtr thread_pool, size_t start, size_t end, uint32_t batch_size, bool is_priority,
-                        Function fn) {
+inline void ParallelFor(ThreadPoolPtr thread_pool, int64_t vector_index_id, size_t start, size_t end,
+                        uint32_t batch_size, bool is_priority, Function fn) {
   struct Parameter {
     size_t start_pos;
     size_t end_pos;
@@ -124,8 +126,9 @@ inline void ParallelFor(ThreadPoolPtr thread_pool, size_t start, size_t end, uin
   }
 
   int64_t elapsed_time = Helper::TimestampMs() - start_time;
-  LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms) << fmt::format(
-      "ParallelFor vector count({}) is_priority({}) elapsed time: {}", end - start, is_priority, elapsed_time);
+  LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms)
+      << fmt::format("[vector_index.parallelfor][index_id({})] vector count({}) is_priority({}) elapsed time: {}",
+                     vector_index_id, end - start, is_priority, elapsed_time);
 }
 
 VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -133,13 +136,15 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
                                  ThreadPoolPtr thread_pool)
     : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool), hnsw_space_(nullptr), hnsw_index_(nullptr) {
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-    const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+    // const auto& hnsw_parameter = vector_index_parameter.hnsw_parameter();
+    auto& hnsw_parameter = const_cast<pb::common::CreateHnswParam&>(vector_index_parameter.hnsw_parameter());
     assert(hnsw_parameter.dimension() > 0);
     assert(hnsw_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_NONE);
     assert(hnsw_parameter.efconstruction() > 0);
     assert(hnsw_parameter.max_elements() > 0);
     assert(hnsw_parameter.nlinks() > 0);
 
+    hnsw_parameter.set_max_elements(hnsw_parameter.max_elements() * FLAGS_hnsw_max_elements_amplification_multiple);
     this->dimension_ = hnsw_parameter.dimension();
 
     normalize_ = false;
@@ -218,13 +223,13 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
 
     if (!normalize_) {
-      ParallelFor(thread_pool, 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
+      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
                   [&](size_t row) {
                     this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
                                                 vector_with_ids[row].id(), false);
                   });
     } else {
-      ParallelFor(thread_pool, 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
+      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
                   [&](size_t row) {
                     // normalize vector
                     std::vector<float> norm_array(dimension_);
@@ -259,7 +264,7 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 
   // Add data to index
   try {
-    ParallelFor(thread_pool, 0, delete_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
+    ParallelFor(thread_pool, Id(), 0, delete_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
                 [&](size_t row) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
     std::string s = fmt::format("delete vector failed, error: {}", e.what());
@@ -427,47 +432,49 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
   }
 
   if (!normalize_) {
-    ParallelFor(thread_pool, 0, vector_with_ids.size(), FLAGS_vector_read_batch_size_per_task, true, [&](size_t row) {
-      std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
+    ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_read_batch_size_per_task, true,
+                [&](size_t row) {
+                  std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
-      try {
-        result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter.get());
-      } catch (std::runtime_error& e) {
-        std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
-        LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
-        statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
-        return;
-      }
+                  try {
+                    result = hnsw_index_->searchKnn(data.get() + dimension_ * row, topk, hnsw_filter.get());
+                  } catch (std::runtime_error& e) {
+                    std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
+                    LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
+                    statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
+                    return;
+                  }
 
-      statuses[row] = lambda_reverse_rse_result_function(result, row, topk);
-      if (statuses[row].ok()) {
-        statuses[row] = lambda_fill_results_function(row, topk, reconstruct);
-      }
-    });
+                  statuses[row] = lambda_reverse_rse_result_function(result, row, topk);
+                  if (statuses[row].ok()) {
+                    statuses[row] = lambda_fill_results_function(row, topk, reconstruct);
+                  }
+                });
   } else {  // normalize_
-    ParallelFor(thread_pool, 0, vector_with_ids.size(), FLAGS_vector_read_batch_size_per_task, true, [&](size_t row) {
-      std::vector<float> norm_array(dimension_);
-      VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,  // NOLINT
-                                               norm_array.data());
+    ParallelFor(
+        thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_read_batch_size_per_task, true, [&](size_t row) {
+          std::vector<float> norm_array(dimension_);
+          VectorIndexUtils::NormalizeVectorForHnsw((float*)(data.get() + dimension_ * row), dimension_,  // NOLINT
+                                                   norm_array.data());
 
-      std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
+          std::priority_queue<std::pair<float, hnswlib::labeltype>> result;
 
-      try {
-        result = hnsw_index_->searchKnn(norm_array.data(), topk, hnsw_filter.get());
-      } catch (std::runtime_error& e) {
-        std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
-        LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
-        statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
-        return;
-      }
+          try {
+            result = hnsw_index_->searchKnn(norm_array.data(), topk, hnsw_filter.get());
+          } catch (std::runtime_error& e) {
+            std::string s = fmt::format("parallel search vector failed, error: {}", e.what());
+            LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
+            statuses[row] = butil::Status(pb::error::Errno::EINTERNAL, s);
+            return;
+          }
 
-      statuses[row] = lambda_reverse_rse_result_function(result, row, topk);
+          statuses[row] = lambda_reverse_rse_result_function(result, row, topk);
 
-      // force  reconstruct false
-      if (statuses[row].ok()) {
-        statuses[row] = lambda_fill_results_function(row, topk, false);
-      }
-    });
+          // force  reconstruct false
+          if (statuses[row].ok()) {
+            statuses[row] = lambda_fill_results_function(row, topk, false);
+          }
+        });
   }
 
   // check

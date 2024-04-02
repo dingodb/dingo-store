@@ -56,7 +56,7 @@ static void SplitVectorWithId(const std::vector<pb::common::VectorWithId>& vecto
 }
 
 template <typename Function>
-butil::Status ParallelRun(ThreadPoolPtr thread_pool,
+butil::Status ParallelRun(ThreadPoolPtr thread_pool, int64_t vector_index_id,
                           const std::vector<std::vector<pb::common::VectorWithId>>& vector_with_id_batchs,
                           bool is_priority, Function fn) {
   std::vector<butil::Status> statuses(vector_with_id_batchs.size());
@@ -78,8 +78,8 @@ butil::Status ParallelRun(ThreadPoolPtr thread_pool,
 
   int64_t elapsed_time = Helper::TimestampMs() - start_time;
   DINGO_LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms)
-      << fmt::format("ParallelRun batch_size: {} inner_batch_size: {} elapsed_time: {}ms", vector_with_id_batchs.size(),
-                     vector_with_id_batchs[0].size(), elapsed_time);
+      << fmt::format("[vector_index.parallelrun][index_id({})] batch_size: {} inner_batch_size: {} elapsed_time: {}ms",
+                     vector_index_id, vector_with_id_batchs.size(), vector_with_id_batchs[0].size(), elapsed_time);
 
   for (auto& status : statuses) {
     if (!status.ok()) {
@@ -144,7 +144,7 @@ butil::Status VectorIndex::AddByParallel(const std::vector<pb::common::VectorWit
     std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
     SplitVectorWithId(vector_with_ids, FLAGS_vector_write_batch_size_per_task, vector_with_id_batchs);
 
-    return ParallelRun(thread_pool, vector_with_id_batchs, is_priority,
+    return ParallelRun(thread_pool, Id(), vector_with_id_batchs, is_priority,
                        [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
                          return Add(vector_with_ids);
                        });
@@ -164,7 +164,7 @@ butil::Status VectorIndex::UpsertByParallel(const std::vector<pb::common::Vector
     // parallel in here
     std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
     SplitVectorWithId(vector_with_ids, FLAGS_vector_write_batch_size_per_task, vector_with_id_batchs);
-    return ParallelRun(thread_pool, vector_with_id_batchs, is_priority,
+    return ParallelRun(thread_pool, Id(), vector_with_id_batchs, is_priority,
                        [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
                          return Upsert(vector_with_ids);
                        });
@@ -188,7 +188,7 @@ butil::Status VectorIndex::SearchByParallel(const std::vector<pb::common::Vector
     SplitVectorWithId(vector_with_ids, FLAGS_vector_read_batch_size_per_task, vector_with_id_batchs);
 
     return ParallelRun(
-        thread_pool, vector_with_id_batchs, true,
+        thread_pool, Id(), vector_with_id_batchs, true,
         [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
           std::vector<pb::index::VectorWithDistanceResult> part_results;
           auto status = Search(vector_with_ids, topk, filters, reconstruct, parameter, part_results);
@@ -217,7 +217,7 @@ butil::Status VectorIndex::RangeSearchByParallel(
     SplitVectorWithId(vector_with_ids, FLAGS_vector_read_batch_size_per_task, vector_with_id_batchs);
 
     return ParallelRun(
-        thread_pool, vector_with_id_batchs, true,
+        thread_pool, Id(), vector_with_id_batchs, true,
         [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t index) -> butil::Status {
           std::vector<pb::index::VectorWithDistanceResult> part_results;
           auto status = RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, part_results);

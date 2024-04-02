@@ -14,6 +14,7 @@
 
 #include "server/region_service.h"
 
+#include <cstdint>
 #include <ostream>
 #include <string>
 
@@ -21,6 +22,10 @@
 #include "brpc/closure_guard.h"
 #include "brpc/controller.h"
 #include "brpc/server.h"
+#include "common/helper.h"
+#include "fmt/core.h"
+#include "proto/common.pb.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -276,10 +281,18 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     line.push_back(std::to_string(region.definition().peers_size()));  // REPLICA
     url_line.push_back(std::string());
 
-    line.push_back(Helper::StringToHex(region.definition().range().start_key()));  // START_KEY
+    std::string start_key = Helper::StringToHex(region.definition().range().start_key());
+    std::string end_key = Helper::StringToHex(region.definition().range().end_key());
+    if (region.region_type() == pb::common::INDEX_REGION) {
+      int64_t min_vector_id = 0, max_vector_id = 0;
+      VectorCodec::DecodeRangeToVectorId(region.definition().range(), min_vector_id, max_vector_id);
+      start_key += fmt::format("({})", min_vector_id);
+      end_key += fmt::format("({})", max_vector_id);
+    }
+    line.push_back(start_key);  // START_KEY
     url_line.push_back(std::string());
 
-    line.push_back(Helper::StringToHex(region.definition().range().end_key()));  // END_KEY
+    line.push_back(end_key);  // END_KEY
     url_line.push_back(std::string());
 
     line.push_back(std::to_string(region.definition().schema_id()));  // SCHEMA_ID
