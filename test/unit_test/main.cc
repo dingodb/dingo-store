@@ -68,6 +68,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":UUIDGeneratorTest.*";
     default_run_case += ":TrackerTest.*";
     default_run_case += ":ThreadPoolTest.*";
+    default_run_case += ":SimpleWorkerSetTest.*";
 
     default_run_case += ":CoprocessorTest.*";
     default_run_case += ":CoprocessorUtilsTest.*";

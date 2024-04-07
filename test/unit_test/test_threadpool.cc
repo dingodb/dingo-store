@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -25,6 +26,7 @@
 
 #include "common/threadpool.h"
 #include "fmt/core.h"
+#include "gtest/gtest.h"
 
 class ThreadPoolTest : public testing::Test {
  protected:
@@ -155,4 +157,37 @@ TEST_F(ThreadPoolTest, Priority) {
   SetThreadPolicy(attr, policy);
 
   rs = pthread_attr_destroy(&attr);
+}
+
+TEST_F(ThreadPoolTest, ConditionVariable) {
+  GTEST_SKIP() << "Performence test, skip...";
+
+  dingodb::ThreadPool thread_pool("unit_test", 8);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  int64_t times = 20 * 1000 * 1000;
+  std::vector<dingodb::ThreadPool::TaskPtr> tasks;
+  tasks.reserve(times);
+  for (int64_t i = 1; i <= times; ++i) {
+    tasks.push_back(thread_pool.ExecuteTask(
+        [](void *) {
+          // std::cout << "thread: " << std::this_thread::get_id() << std::endl;
+
+          // std::this_thread::sleep_for(std::chrono::milliseconds(2));
+          int64_t mulple = 1;
+          for (int i = 1; i < 100000; ++i) {
+            mulple *= i;
+          }
+        },
+        nullptr));
+
+    if (i % 100 == 0) {
+      // thread_pool.Notify();
+    }
+  }
+
+  for (auto &task : tasks) {
+    task->Join();
+  }
 }

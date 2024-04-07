@@ -25,10 +25,10 @@
 #include "common/synchronization.h"
 #include "gflags/gflags.h"
 
-DEFINE_int64(worker_set_worker_num, 10, "The number of workers in the WorkerSet test");
-DEFINE_int64(worker_set_max_pending_num, 100000, "The max pending number in the WorkerSet test");
-DEFINE_int32(worker_set_bthread_num, 20, "The number of bthreads in the WorkerSet test");
-DEFINE_int32(worker_set_task_num_per_bthread, 10000, "The number of tasks per bthread in the WorkerSet test");
+DEFINE_int64(worker_set_worker_num, 10, "The number of workers in the ExecqWorkerSet test");
+DEFINE_int64(worker_set_max_pending_num, 100000, "The max pending number in the ExecqWorkerSet test");
+DEFINE_int32(worker_set_bthread_num, 20, "The number of bthreads in the ExecqWorkerSet test");
+DEFINE_int32(worker_set_task_num_per_bthread, 10000, "The number of tasks per bthread in the ExecqWorkerSet test");
 
 class DingoWorkerSetTest : public testing::Test {
  protected:
@@ -69,7 +69,7 @@ TEST(DingoWorkerSetTest, init) {
   EXPECT_TRUE(ret);
 
   dingodb::SimpleWorkerSetPtr test_prior_worker_set =
-      dingodb::SimpleWorkerSet::New("TestSimpleWorkerSet", 10, 100, true, false);
+      dingodb::SimpleWorkerSet::New("TestPriorWorkerSet", 10, 100, false, true);
   ret = test_worker_set->Init();
   EXPECT_TRUE(ret);
 }
@@ -121,7 +121,7 @@ TEST(DingoWorkerSetTest, perf) {
     bthread_usleep(1000);
   }
 
-  DINGO_LOG(ERROR) << "total_time_ns of WorkerSet: " << total_time_ns.load(std::memory_order_relaxed);
+  DINGO_LOG(ERROR) << "total_time_ns of ExecqWorkerSet: " << total_time_ns.load(std::memory_order_relaxed);
 }
 
 TEST(DingoWorkerSetTest, perf_prior) {
@@ -171,5 +171,5 @@ TEST(DingoWorkerSetTest, perf_prior) {
     bthread_usleep(1000);
   }
 
-  DINGO_LOG(ERROR) << "total_time_ns of WorkerSet: " << total_time_ns.load(std::memory_order_relaxed);
+  DINGO_LOG(ERROR) << "total_time_ns of ExecqWorkerSet: " << total_time_ns.load(std::memory_order_relaxed);
 }
