@@ -127,7 +127,7 @@ inline void ParallelFor(ThreadPoolPtr thread_pool, int64_t vector_index_id, size
 
   int64_t elapsed_time = Helper::TimestampMs() - start_time;
   LOG_IF(INFO, elapsed_time > FLAGS_parallel_log_threshold_time_ms)
-      << fmt::format("[vector_index.parallelfor][index_id({})] vector count({}) is_priority({}) elapsed time: {}",
+      << fmt::format("[vector_index.parallelfor][index_id({})] vector count({}) is_priority({}) elapsed time: {}ms",
                      vector_index_id, end - start, is_priority, elapsed_time);
 }
 

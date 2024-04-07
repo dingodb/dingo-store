@@ -120,7 +120,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   std::shared_ptr<KvControl> GetKvControl() { return this->kv_control_; };
   void SetTsoControl(std::shared_ptr<TsoControl> tso_control) { tso_control_ = tso_control; };
   std::shared_ptr<TsoControl> GetTsoControl() { return this->tso_control_; };
-  void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl>& auto_increment_control) {
+  void SetAutoIncrementControl(std::shared_ptr<AutoIncrementControl> auto_increment_control) {
     auto_increment_control_ = auto_increment_control;
   };
   std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl() { return this->auto_increment_control_; };
