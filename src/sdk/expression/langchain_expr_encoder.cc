@@ -18,8 +18,11 @@
 #include <cstdint>
 #include <iostream>
 
+#include "common/logging.h"
 #include "glog/logging.h"
+#include "sdk/common/param_config.h"
 #include "sdk/expression/coding.h"
+#include "sdk/expression/common.h"
 #include "sdk/expression/encodes.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/expression/types.h"
@@ -28,12 +31,39 @@ namespace dingodb {
 namespace sdk {
 namespace expression {
 
+pb::common::CoprocessorV2 LangChainExprEncoder::EncodeToCoprocessor(LangchainExpr* expr) {
+  pb::common::CoprocessorV2 coprocessor;
+
+  (*coprocessor.mutable_rel_expr()) = EncodeToFilter(expr);
+
+  // NOTE: get schema must below EncodeToFilter
+  auto* schema_wrapper = coprocessor.mutable_original_schema();
+  for (int i = 0; i < attribute_names_.size(); i++) {
+    const std::string& name = attribute_names_[i];
+    auto* schema = schema_wrapper->add_schema();
+
+    auto iter = attributes_info_.find(name);
+    CHECK(iter != attributes_info_.end());
+
+    schema->set_type(Type2InternalSchemaTypePB(iter->second.type));
+    schema->set_name(name);
+    schema->set_index(i);
+
+    coprocessor.add_selection_columns(i);
+  }
+
+  VLOG(kSdkVlogLevel) << "langchain expr: " << expr->ToString()
+                      << " encode hex string: " << BytesToHexString(coprocessor.rel_expr())
+                      << " coprocessor: " << coprocessor.DebugString();
+  return coprocessor;
+}
+
 std::string LangChainExprEncoder::EncodeToFilter(LangchainExpr* expr) {
   std::string encode;
   encode.append(sizeof(FILTER), FILTER);
   Visit(expr, &encode);
   encode.append(sizeof(EOE), EOE);
-  return encode;
+  return std::move(encode);
 }
 
 std::any LangChainExprEncoder::VisitAndOperatorExpr(AndOperatorExpr* expr, void* target) {

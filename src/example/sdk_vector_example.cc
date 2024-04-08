@@ -15,6 +15,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "common/logging.h"
 #include "common/synchronization.h"
@@ -39,6 +40,7 @@ static int32_t g_dimension = 2;
 static dingodb::sdk::FlatParam g_flat_param(g_dimension, dingodb::sdk::MetricType::kL2);
 static std::vector<int64_t> g_vector_ids;
 static dingodb::sdk::VectorClient* g_vector_client;
+static std::vector<std::string> g_scalar_col{"id", "name"};
 
 static void PrepareVectorIndex() {
   dingodb::sdk::VectorIndexCreator* creator;
@@ -136,7 +138,19 @@ static void VectorAdd(bool use_index_name = false) {
     dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
     tmp_vector.float_values.push_back(1.0 + delta);
     tmp_vector.float_values.push_back(2.0 + delta);
+
     dingodb::sdk::VectorWithId tmp(id, std::move(tmp_vector));
+    {
+      dingodb::sdk::ScalarValue scalar_value;
+      scalar_value.type = dingodb::sdk::ScalarFieldType::kInt64;
+
+      dingodb::sdk::ScalarField field;
+      field.long_data = id;
+      scalar_value.fields.push_back(field);
+
+      tmp.scalar_data.insert(std::make_pair(g_scalar_col[0], scalar_value));
+    }
+
     vectors.push_back(std::move(tmp));
 
     g_vector_ids.push_back(id);
@@ -170,6 +184,7 @@ static void VectorSearch(bool use_index_name = false) {
 
   dingodb::sdk::SearchParam param;
   param.topk = 2;
+  param.with_scalar_data = true;
   // param.use_brute_force = true;
   param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
 
@@ -183,7 +198,7 @@ static void VectorSearch(bool use_index_name = false) {
 
   DINGO_LOG(INFO) << "vector search status: " << tmp.ToString();
   for (const auto& r : result) {
-    DINGO_LOG(INFO) << "vector search result:" << r.ToString();
+    DINGO_LOG(INFO) << "vector search result: " << r.ToString();
   }
 
   CHECK_EQ(result.size(), target_vectors.size());
@@ -198,9 +213,80 @@ static void VectorSearch(bool use_index_name = false) {
   }
 }
 
+static void VectorSearchUseExpr(bool use_index_name = false) {
+  std::vector<dingodb::sdk::VectorWithId> target_vectors;
+  float init = 0.1f;
+  for (int i = 0; i < 5; i++) {
+    dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
+    tmp_vector.float_values.clear();
+    tmp_vector.float_values.push_back(init);
+    tmp_vector.float_values.push_back(init);
+
+    dingodb::sdk::VectorWithId tmp;
+    tmp.vector = std::move(tmp_vector);
+    target_vectors.push_back(std::move(tmp));
+
+    init = init + 0.1;
+  }
+
+  dingodb::sdk::SearchParam param;
+  {
+    param.topk = 100;
+    param.with_scalar_data = true;
+    param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
+
+    std::string json_str =
+        R"({
+      "type": "operator",
+      "operator": "and",
+      "arguments": [
+        {
+          "type": "comparator",
+          "comparator": "gte",
+          "attribute": "id",
+          "value": 5,
+          "value_type": "INT64"
+        },
+        {
+          "type": "comparator",
+          "comparator": "lt",
+          "attribute": "id",
+          "value": 20,
+          "value_type": "INT64"
+        }
+      ]
+    }
+  )";
+
+    param.langchain_expr_json = json_str;
+  }
+
+  Status tmp;
+  std::vector<dingodb::sdk::SearchResult> result;
+  if (use_index_name) {
+    tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
+  } else {
+    tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
+  }
+
+  DINGO_LOG(INFO) << "vector search expr status: " << tmp.ToString();
+  for (const auto& r : result) {
+    DINGO_LOG(INFO) << "vector search expr result: " << r.ToString();
+  }
+
+  for (auto& search_result : result) {
+    for (auto& distance : search_result.vector_datas) {
+      const auto& vector_id = distance.vector_data.id;
+      CHECK_GE(vector_id, 5);
+      CHECK_LT(vector_id, 20);
+    }
+  }
+}
+
 static void VectorQuey(bool use_index_name = false) {
   dingodb::sdk::QueryParam param;
   param.vector_ids = g_vector_ids;
+  param.with_scalar_data = true;
 
   Status query;
   dingodb::sdk::QueryResult result;
@@ -410,8 +496,9 @@ int main(int argc, char* argv[]) {
     PrepareVectorClient();
 
     VectorAdd();
-    VectorSearch();
     VectorQuey();
+    VectorSearch();
+    VectorSearchUseExpr();
     VectorGetBorder();
     VectorScanQuery();
     VectorGetIndexMetrics();
@@ -427,8 +514,9 @@ int main(int argc, char* argv[]) {
     PrepareVectorClient();
 
     VectorAdd(true);
-    VectorSearch(true);
     VectorQuey(true);
+    VectorSearch(true);
+    VectorSearchUseExpr(true);
     VectorGetBorder(true);
     VectorScanQuery(true);
     VectorGetIndexMetrics(true);

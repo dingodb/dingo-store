@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "proto/common.pb.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/expression/langchain_expr_visitor.h"
 #include "sdk/expression/types.h"
@@ -31,6 +32,8 @@ class LangChainExprEncoder : public LangchainExprVisitor {
  public:
   LangChainExprEncoder() = default;
   ~LangChainExprEncoder() override = default;
+
+  pb::common::CoprocessorV2 EncodeToCoprocessor(LangchainExpr* expr);
 
   std::string EncodeToFilter(LangchainExpr* expr);
 

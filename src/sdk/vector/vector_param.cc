@@ -48,6 +48,33 @@ std::string Vector::ToString() const {
                      ValueTypeToString(value_type), float_ss.str(), binary_ss.str());
 }
 
+std::string ScalarFieldToString(ScalarFieldType type) {
+  switch (type) {
+    case ScalarFieldType::kNone:
+      return "None";
+    case ScalarFieldType::kBool:
+      return "Bool";
+    case ScalarFieldType::kInt8:
+      return "Int8";
+    case ScalarFieldType::kInt16:
+      return "Int16";
+    case ScalarFieldType::kInt32:
+      return "Int32";
+    case ScalarFieldType::kInt64:
+      return "Int64";
+    case ScalarFieldType::kFloat32:
+      return "Float32";
+    case ScalarFieldType::kDouble:
+      return "Double";
+    case ScalarFieldType::kString:
+      return "String";
+    case ScalarFieldType::kBytes:
+      return "Bytes";
+    default:
+      return "Unknown";
+  }
+}
+
 std::string VectorWithId::ToString() const {
   return fmt::format("VectorWithId {{ id: {}, vector: {} }}", id, vector.ToString());
 }

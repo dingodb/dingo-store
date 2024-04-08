@@ -55,6 +55,7 @@ class VectorSearchTask : public VectorTask {
   const int64_t index_id_;
   const SearchParam& search_param_;
   const std::vector<VectorWithId>& target_vectors_;
+  pb::common::VectorSearchParameter search_parameter_;
 
   // target_vectors_ idx to search result
   std::unordered_map<int64_t, std::vector<VectorWithDistance>> tmp_out_result_;
@@ -72,12 +73,13 @@ class VectorSearchTask : public VectorTask {
 
 class VectorSearchPartTask : public VectorTask {
  public:
-  VectorSearchPartTask(const ClientStub& stub, int64_t index_id, int64_t part_id, const SearchParam& search_param,
+  VectorSearchPartTask(const ClientStub& stub, int64_t index_id, int64_t part_id,
+                       const pb::common::VectorSearchParameter& search_param,
                        const std::vector<VectorWithId>& target_vectors)
       : VectorTask(stub),
         index_id_(index_id),
         part_id_(part_id),
-        search_param_(search_param),
+        search_parameter_(search_param),
         target_vectors_(target_vectors) {}
 
   ~VectorSearchPartTask() override = default;
@@ -101,7 +103,7 @@ class VectorSearchPartTask : public VectorTask {
 
   const int64_t index_id_;
   const int64_t part_id_;
-  const SearchParam& search_param_;
+  const pb::common::VectorSearchParameter& search_parameter_;
   const std::vector<VectorWithId>& target_vectors_;
 
   std::shared_ptr<VectorIndex> vector_index_;

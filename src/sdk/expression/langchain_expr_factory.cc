@@ -16,6 +16,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "sdk/common/param_config.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/status.h"
 
@@ -110,6 +111,7 @@ Status LangchainExprFactory::CreateExpr(const std::string& expr_json_str, std::s
 
   expr = std::move(tmp);
 
+  VLOG(kSdkVlogLevel) << "expr_json_str: " << expr_json_str << " expr: " << expr->ToString();
   return Status::OK();
 }
 }  // namespace expression

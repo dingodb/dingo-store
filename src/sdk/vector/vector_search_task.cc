@@ -25,6 +25,10 @@
 #include "proto/index.pb.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
+#include "sdk/expression/langchain_expr.h"
+#include "sdk/expression/langchain_expr_encoder.h"
+#include "sdk/expression/langchain_expr_factory.h"
+#include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_common.h"
@@ -50,6 +54,18 @@ Status VectorSearchTask::Init() {
     next_part_ids_.emplace(part_id);
   }
 
+  {
+    // prepare search parameter
+    FillInternalSearchParams(&search_parameter_, vector_index_->GetVectorIndexType(), search_param_);
+    if (!search_param_.langchain_expr_json.empty()) {
+      std::shared_ptr<expression::LangchainExpr> expr;
+      DINGO_RETURN_NOT_OK(expression::LangchainExprFactory::CreateExpr(search_param_.langchain_expr_json, expr));
+
+      expression::LangChainExprEncoder encoder;
+      *(search_parameter_.mutable_vector_coprocessor()) = encoder.EncodeToCoprocessor(expr.get());
+    }
+  }
+
   return Status::OK();
 }
 
@@ -70,7 +86,7 @@ void VectorSearchTask::DoAsync() {
   sub_tasks_count_.store(next_part_ids.size());
 
   for (const auto& part_id : next_part_ids) {
-    auto* sub_task = new VectorSearchPartTask(stub, index_id_, part_id, search_param_, target_vectors_);
+    auto* sub_task = new VectorSearchPartTask(stub, index_id_, part_id, search_parameter_, target_vectors_);
     sub_task->AsyncRun([this, sub_task](auto&& s) { SubTaskCallback(std::forward<decltype(s)>(s), sub_task); });
   }
 }
@@ -202,7 +218,7 @@ void VectorSearchPartTask::DoAsync() {
 void VectorSearchPartTask::FillVectorSearchRpcRequest(pb::index::VectorSearchRequest* request,
                                                       const std::shared_ptr<Region>& region) {
   FillRpcContext(*request->mutable_context(), region->RegionId(), region->Epoch());
-  FillInternalSearchParams(request->mutable_parameter(), vector_index_->GetVectorIndexType(), search_param_);
+  *(request->mutable_parameter()) = search_parameter_;
   for (const auto& vector_id : target_vectors_) {
     // NOTE* vector_id is useless
     FillVectorWithIdPB(request->add_vector_with_ids(), vector_id, false);
