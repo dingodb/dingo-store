@@ -179,7 +179,7 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
   }
 }
 
-static pb::common::ScalarValue TransformScalarValue(const sdk::ScalarValue& scalar_value) {
+static pb::common::ScalarValue ScalarValue2InternalScalarValuePB(const sdk::ScalarValue& scalar_value) {
   pb::common::ScalarValue result;
   if (scalar_value.type == sdk::ScalarFieldType::kBool) {
     result.set_field_type(pb::common::ScalarFieldType::BOOL);
@@ -246,7 +246,7 @@ static void FillVectorWithIdPB(pb::common::VectorWithId* pb, const VectorWithId&
 
   auto* scalar_data = pb->mutable_scalar_data();
   for (const auto& [key, value] : vector_with_id.scalar_data) {
-    scalar_data->mutable_scalar_data()->insert({key, TransformScalarValue(value)});
+    scalar_data->mutable_scalar_data()->insert({key, ScalarValue2InternalScalarValuePB(value)});
   }
 }
 
@@ -387,8 +387,6 @@ static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal
       break;
   }
 
-  // TODO: support coprocessor
-  //   CoprocessorV2 vector_coprocessor = 23;
   for (const auto id : parameter.vector_ids) {
     internal_parameter->add_vector_ids(id);
   }

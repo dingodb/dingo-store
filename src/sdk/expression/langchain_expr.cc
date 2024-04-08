@@ -113,7 +113,7 @@ std::any LtComparatorExpr::Accept(LangchainExprVisitor* visitor, void* target) {
 
 std::any Var::Accept(LangchainExprVisitor* visitor, void* target) { return visitor->VisitVar(this, target); }
 
-std::string Var::ToString() const { return "Var(" + name + ", " + TypeToString(type) + ")"; }
+std::string Var::ToString() const { return "Var(Type:" + TypeToString(type) + ", Name: " + name + ")"; }
 
 std::any Val::Accept(LangchainExprVisitor* visitor, void* target) { return visitor->VisitVal(this, target); }
 

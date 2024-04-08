@@ -39,6 +39,3 @@ ExternalProject_Add(
     -DJSON_MultipleHeaders=ON
     -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
 )
-
-# ADD_LIBRARY(nlohmann-json)
-# ADD_DEPENDENCIES(nlohmann-json extern_nlohmann_json)

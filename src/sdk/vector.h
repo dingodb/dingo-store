@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <map>
+#include <string>
 #include <vector>
 
 #include "sdk/status.h"
@@ -187,8 +188,8 @@ struct ScalarValue {
 struct VectorWithId {
   int64_t id;
   Vector vector;
-  //  TODO: scalar data and table data
   std::map<std::string, ScalarValue> scalar_data;
+  //  TODO: maybe support table data
 
   explicit VectorWithId() : id(0) {}
 
@@ -241,10 +242,10 @@ struct SearchParam {
   float radius{0.0f};
   FilterSource filter_source{kNoneFilterSource};
   FilterType filter_type{kNoneFilterType};
-  // TODO: coprocessorv2
-  std::vector<int64_t> vector_ids;  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
+  std::vector<int64_t> vector_ids;  // vector id array; filter_source == kVectorIdFilter enable vector_ids
   bool use_brute_force{false};      // use brute-force search
   std::map<SearchExtraParamType, int32_t> extra_params;  // The search method to use
+  std::string langchain_expr_json;                       // must json format, will convert to coprocessor
 
   explicit SearchParam() = default;
 
@@ -259,7 +260,8 @@ struct SearchParam {
         filter_type(other.filter_type),
         vector_ids(std::move(other.vector_ids)),
         use_brute_force(other.use_brute_force),
-        extra_params(std::move(other.extra_params)) {
+        extra_params(std::move(other.extra_params)),
+        langchain_expr_json(std::move(other.langchain_expr_json)) {
     other.topk = 0;
     other.with_vector_data = true;
     other.with_scalar_data = false;
@@ -283,6 +285,7 @@ struct SearchParam {
     vector_ids = std::move(other.vector_ids);
     use_brute_force = other.use_brute_force;
     extra_params = std::move(other.extra_params);
+    langchain_expr_json = std::move(other.langchain_expr_json);
 
     other.topk = 0;
     other.with_vector_data = true;
@@ -511,7 +514,8 @@ class VectorClient {
   Status GetIndexMetricsByIndexName(int64_t schema_id, const std::string& index_name, IndexMetricsResult& out_result);
 
   Status CountByIndexId(int64_t index_id, int64_t start_vector_id, int64_t end_vector_id, int64_t& out_count);
-  Status CountByIndexName(int64_t schema_id, const std::string& index_name, int64_t start_vector_id, int64_t end_vector_id, int64_t& out_count);
+  Status CountByIndexName(int64_t schema_id, const std::string& index_name, int64_t start_vector_id,
+                          int64_t end_vector_id, int64_t& out_count);
 
  private:
   friend class Client;
