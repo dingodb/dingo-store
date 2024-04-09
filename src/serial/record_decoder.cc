@@ -18,31 +18,17 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "counter.h"
 
 namespace dingodb {
 
 // TODO cast and decode function not good, optimize on 0.8.0 or later
 
-using CastAndDecodeOrSkipFuncPointer = void (*)(
-  const std::shared_ptr<BaseSchema>& schema, 
-  Buf* key_buf, 
-  Buf* value_buf, 
-  std::vector<std::any>& record,
-  int record_index, 
-  bool skip
-);
+using CastAndDecodeOrSkipFuncPointer = void (*)(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+                                                std::vector<std::any>& record, int record_index, bool skip);
 
 template <typename T>
-void CastAndDecodeOrSkip(
-    const std::shared_ptr<BaseSchema>& schema,
-    Buf* key_buf, 
-    Buf* value_buf,
-    std::vector<std::any>& record, 
-    int record_index, 
-    bool skip
-) {
-
+void CastAndDecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+                         std::vector<std::any>& record, int record_index, bool skip) {
   auto dingo_schema = std::dynamic_pointer_cast<DingoSchema<std::optional<T>>>(schema);
   if (skip) {
     if (schema->IsKey()) {
@@ -55,28 +41,27 @@ void CastAndDecodeOrSkip(
       record.at(record_index) = dingo_schema->DecodeKey(key_buf);
     } else {
       if (value_buf->IsEnd()) {
-	record.at(record_index) = std::optional<T>(std::nullopt);
+        record.at(record_index) = std::optional<T>(std::nullopt);
       } else {
-	record.at(record_index) = dingo_schema->DecodeValue(value_buf);
+        record.at(record_index) = dingo_schema->DecodeValue(value_buf);
       }
     }
   }
-
 }
 
 CastAndDecodeOrSkipFuncPointer cast_and_decode_or_skip_func_ptrs[] = {
-  CastAndDecodeOrSkip<bool>,
-  CastAndDecodeOrSkip<int32_t>,
-  CastAndDecodeOrSkip<float>,
-  CastAndDecodeOrSkip<int64_t>,
-  CastAndDecodeOrSkip<double>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::string>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<bool>>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<int32_t>>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<float>>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<int64_t>>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<double>>>,
-  CastAndDecodeOrSkip<std::shared_ptr<std::vector<std::string>>>,
+    CastAndDecodeOrSkip<bool>,
+    CastAndDecodeOrSkip<int32_t>,
+    CastAndDecodeOrSkip<float>,
+    CastAndDecodeOrSkip<int64_t>,
+    CastAndDecodeOrSkip<double>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::string>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<bool>>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<int32_t>>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<float>>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<int64_t>>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<double>>>,
+    CastAndDecodeOrSkip<std::shared_ptr<std::vector<std::string>>>,
 };
 
 RecordDecoder::RecordDecoder(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas,
@@ -113,24 +98,13 @@ bool RecordDecoder::CheckReverseTag(Buf* buf) const {
   return false;
 }
 
-bool RecordDecoder::CheckSchemaVersion(Buf* buf) const {
-  return buf->ReadInt() <= schema_version_;
+bool RecordDecoder::CheckSchemaVersion(Buf* buf) const { return buf->ReadInt() <= schema_version_; }
+
+void DecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+                  std::vector<std::any>& record, int record_index, bool skip) {
+  cast_and_decode_or_skip_func_ptrs[static_cast<int>(schema->GetType())](schema, key_buf, value_buf, record,
+                                                                         record_index, skip);
 }
-
-void DecodeOrSkip(
-    const std::shared_ptr<BaseSchema>& schema, 
-    Buf* key_buf, 
-    Buf* value_buf, 
-    std::vector<std::any>& record,
-    int record_index, 
-    bool skip
-) {
-  cast_and_decode_or_skip_func_ptrs[static_cast<int>(schema->GetType())](
-    schema, key_buf, value_buf, record, record_index, skip
-  );
-
-}
-
 
 int RecordDecoder::Decode(const std::string& key, const std::string& value, std::vector<std::any>& record) {
   Buf* key_buf = new Buf(key, this->le_);
@@ -202,13 +176,8 @@ int RecordDecoder::Decode(const pb::common::KeyValue& key_value, std::vector<std
   return Decode(key_value.key(), key_value.value(), record);
 }
 
-inline bool IsSkipOnly(
-    const std::vector<std::pair<int, int>>& indexed_mapping_index, 
-    int& n, 
-    int& m,
-    int& record_index
-) {
-
+inline bool IsSkipOnly(const std::vector<std::pair<int, int>>& indexed_mapping_index, int& n, int& m,
+                       int& record_index) {
   int first = indexed_mapping_index[n].first;
   int second = indexed_mapping_index[n].second;
   DINGO_LOG(DEBUG) << "(" << first << ", " << second << ", " << m << "," << n << ") ";
@@ -219,17 +188,10 @@ inline bool IsSkipOnly(
   } else {
     return true;
   }
-
 }
 
-
-int RecordDecoder::Decode(
-    const std::string& key, 
-    const std::string& value, 
-    const std::vector<int>& column_indexes,
-    std::vector<std::any>& record
-) {
-
+int RecordDecoder::Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
+                          std::vector<std::any>& record) {
   Buf key_buf(key, this->le_);
   Buf value_buf(value, this->le_);
   if (!CheckPrefix(&key_buf) || !CheckReverseTag(&key_buf) || !CheckSchemaVersion(&value_buf)) {
@@ -243,6 +205,7 @@ int RecordDecoder::Decode(
   std::vector<std::pair<int, int>> col_index_mapping;
 
   // index
+  col_index_mapping.reserve(column_indexes.size());
   for (int i = 0; i < column_indexes.size(); i++) {
     col_index_mapping.push_back(std::make_pair(column_indexes[i], i));
   }
@@ -251,21 +214,19 @@ int RecordDecoder::Decode(
   std::sort(col_index_mapping.begin(), col_index_mapping.end());
 
   // sort end indexed_mapping_index and mapping_index
-  DINGO_LOG(DEBUG) << "indexed_mapping_index: ";  
+  DINGO_LOG(DEBUG) << "indexed_mapping_index: ";
   for (auto p : col_index_mapping) {
     DINGO_LOG(DEBUG) << "(" << p.first << ", " << p.second << ") ";
   }
 
   int record_index = 0;
-  for (auto iter = schemas_->begin(); iter != schemas_->end(); ++iter) {
-
+  for (auto& bs : *schemas_) {
     if (column_indexes.size() == n) {
       return 0;
     }
-    const auto& bs = *iter;
     if (bs) {
-
-      DecodeOrSkip(bs, &key_buf, &value_buf, record, record_index, IsSkipOnly(col_index_mapping, n, m, record_index));
+      bool is_skip = IsSkipOnly(col_index_mapping, n, m, record_index);
+      DecodeOrSkip(bs, &key_buf, &value_buf, record, record_index, is_skip);
     }
   }
   return 0;
