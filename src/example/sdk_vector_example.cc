@@ -296,7 +296,7 @@ static void VectorQuey(bool use_index_name = false) {
     query = g_vector_client->BatchQueryByIndexId(g_index_id, param, result);
   }
 
-  DINGO_LOG(INFO) << "vector query:" << query.ToString();
+  DINGO_LOG(INFO) << "vector query: " << query.ToString();
   DINGO_LOG(INFO) << "vector query result:" << result.ToString();
   CHECK_EQ(result.vectors.size(), g_vector_ids.size());
 }
@@ -351,7 +351,7 @@ static void VectorScanQuery(bool use_index_name = false) {
       tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
     }
 
-    DINGO_LOG(INFO) << "vector scan query:" << tmp.ToString() << ", result:" << result.ToString();
+    DINGO_LOG(INFO) << "vector forward scan query: " << tmp.ToString() << ", result:" << result.ToString();
     if (tmp.ok()) {
       CHECK_EQ(result.vectors[0].id, g_vector_ids[0]);
       CHECK_EQ(result.vectors[1].id, g_vector_ids[1]);
@@ -374,10 +374,43 @@ static void VectorScanQuery(bool use_index_name = false) {
       tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
     }
 
-    DINGO_LOG(INFO) << "vector scan query:" << tmp.ToString() << ", result:" << result.ToString();
+    DINGO_LOG(INFO) << "vector backward scan query: " << tmp.ToString() << ", result:" << result.ToString();
     if (tmp.ok()) {
       CHECK_EQ(result.vectors[0].id, g_vector_ids[g_vector_ids.size() - 1]);
       CHECK_EQ(result.vectors[1].id, g_vector_ids[g_vector_ids.size() - 2]);
+    }
+  }
+
+  {
+    // forward with scalar filter
+    dingodb::sdk::ScanQueryParam param;
+    param.vector_id_start = g_vector_ids[0];
+    param.vector_id_end = g_vector_ids[g_vector_ids.size() - 1];
+    param.with_scalar_data = true;
+    param.use_scalar_filter = true;
+
+    int64_t filter_id = 5;
+    {
+      dingodb::sdk::ScalarValue scalar_value;
+      scalar_value.type = dingodb::sdk::ScalarFieldType::kInt64;
+
+      dingodb::sdk::ScalarField field;
+      field.long_data = filter_id;
+      scalar_value.fields.push_back(field);
+      param.scalar_data.insert(std::make_pair(g_scalar_col[0], scalar_value));
+    }
+
+    dingodb::sdk::ScanQueryResult result;
+    Status tmp;
+    if (use_index_name) {
+      tmp = g_vector_client->ScanQueryByIndexName(g_schema_id, g_index_name, param, result);
+    } else {
+      tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
+    }
+
+    DINGO_LOG(INFO) << "vector forward scan query with filter:" << tmp.ToString() << ", result:" << result.ToString();
+    if (tmp.ok()) {
+      CHECK_EQ(result.vectors[0].id, filter_id);
     }
   }
 }

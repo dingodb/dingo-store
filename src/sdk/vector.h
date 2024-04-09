@@ -391,9 +391,8 @@ struct ScanQueryParam {
   std::vector<std::string> selected_keys;
   bool with_table_data{false};  // Default false, if true, response without table data
 
-  // TODO: support use_scalar_filter
   bool use_scalar_filter{false};
-  // std::map<std::string, ScalarValue> scalar_data;
+  std::map<std::string, ScalarValue> scalar_data;
 
   explicit ScanQueryParam() = default;
 
@@ -406,7 +405,8 @@ struct ScanQueryParam {
         with_scalar_data(other.with_scalar_data),
         selected_keys(std::move(other.selected_keys)),
         with_table_data(other.with_table_data),
-        use_scalar_filter(other.use_scalar_filter) {}
+        use_scalar_filter(other.use_scalar_filter),
+        scalar_data(std::move(other.scalar_data)) {}
 
   ScanQueryParam& operator=(ScanQueryParam&& other) noexcept {
     if (this != &other) {
@@ -419,7 +419,7 @@ struct ScanQueryParam {
       selected_keys = std::move(other.selected_keys);
       with_table_data = other.with_table_data;
       use_scalar_filter = other.use_scalar_filter;
-      // You can add more fields here if you add more fields to the struct
+      scalar_data = std::move(other.scalar_data);
     }
     return *this;
   }
