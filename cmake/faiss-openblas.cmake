@@ -19,7 +19,20 @@ SET(FAISS_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/faiss)
 SET(FAISS_BINARY_DIR ${THIRD_PARTY_PATH}/build/faiss)
 SET(FAISS_INSTALL_DIR ${THIRD_PARTY_PATH}/install/faiss)
 SET(FAISS_INCLUDE_DIR "${FAISS_INSTALL_DIR}/include" CACHE PATH "faiss include directory." FORCE)
-SET(FAISS_LIBRARIES "${FAISS_INSTALL_DIR}/lib/libfaiss.a" CACHE FILEPATH "faiss library." FORCE)
+
+if(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx2")
+    SET(FAISS_OPT_LEVEL avx2)
+    SET(FAISS_LIBRARIES "${FAISS_INSTALL_DIR}/lib/libfaiss_avx2.a" CACHE FILEPATH "faiss library." FORCE)
+elseif(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx512")
+    SET(FAISS_OPT_LEVEL avx512)
+    SET(FAISS_LIBRARIES "${FAISS_INSTALL_DIR}/lib/libfaiss_avx512.a" CACHE FILEPATH "faiss library." FORCE)
+else()
+    SET(FAISS_OPT_LEVEL generic)
+    SET(FAISS_LIBRARIES "${FAISS_INSTALL_DIR}/lib/libfaiss.a" CACHE FILEPATH "faiss library." FORCE)
+endif()
+
+
+message(STATUS "faiss use ${FAISS_OPT_LEVEL} instruction set")
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/openblas")
 
@@ -42,6 +55,7 @@ ExternalProject_Add(
     -DCMAKE_PREFIX_PATH=${prefix_path}
     -DFAISS_ENABLE_GPU=OFF
     -DFAISS_ENABLE_PYTHON=OFF
+    -DFAISS_OPT_LEVEL=${FAISS_OPT_LEVEL}
     -DBLA_STATIC=ON
     -DBUILD_TESTING=OFF
     -DBUILD_SHARED_LIBS=OFF

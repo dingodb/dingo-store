@@ -50,6 +50,8 @@ option(BUILD_GOOGLE_SANITIZE "Enable google sanitize" OFF)
 option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(BUILD_PYTHON_SDK "Build python sdk" OFF)
+option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
+
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -105,6 +107,14 @@ endif()
 if(ENABLE_COVERAGE)
     message(STATUS "Enable coverage")
     add_compile_options(-fprofile-arcs -ftest-coverage)
+endif()
+
+if(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx2")
+    message(STATUS "Use avx2 instruction set")
+    add_compile_options(-mavx2)
+elseif(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx512")
+    message(STATUS "Use avx512 instruction set")
+    add_compile_options(-mavx512)
 endif()
 
 include(CheckCXXCompilerFlag)
