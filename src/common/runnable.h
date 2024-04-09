@@ -203,7 +203,15 @@ class SimpleWorkerSet {
   void Notify(WorkerEventType type);
 
  private:
+  bool IsDestroied();
+
   const std::string name_;
+
+  std::atomic<uint32_t> worker_no_generator_{0};
+
+  bool is_stop_{false};
+  std::atomic<uint32_t> stoped_count_{0};
+  std::atomic<bool> is_destroied_{false};
 
   bthread_mutex_t mutex_;
   bthread_cond_t cond_;

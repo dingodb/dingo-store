@@ -154,7 +154,7 @@ class Server {
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager();
   VectorIndexManagerPtr GetVectorIndexManager();
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl();
-  std::shared_ptr<AutoIncrementControl>& GetAutoIncrementControl();
+  std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl();
   std::shared_ptr<TsoControl> GetTsoControl();
   std::shared_ptr<KvControl> GetKvControl();
   void SetEndpoints(const std::vector<butil::EndPoint>& endpoints);

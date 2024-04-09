@@ -17,6 +17,8 @@
 #include <chrono>
 #include <exception>
 #include <string>
+#include <thread>
+#include <utility>
 
 #include "fmt/core.h"
 
@@ -30,8 +32,8 @@ ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num, std:
       stop_(false),
       total_task_count_metrics_(fmt::format("dingo_threadpool_{}_total_task_count", thread_name)),
       pending_task_count_metrics_(fmt::format("dingo_threadpool_{}_pending_task_count", thread_name)) {
-  for (size_t i = 0; i < thread_num; ++i)
-    workers_.emplace_back([this, i, init_thread] {
+  for (size_t i = 0; i < thread_num; ++i) {
+    std::thread th([this, i, init_thread] {
       pthread_setname_np(pthread_self(), (thread_name_ + ":" + std::to_string(i)).c_str());
       if (init_thread != nullptr) {
         init_thread();
@@ -73,19 +75,18 @@ ThreadPool::ThreadPool(const std::string &thread_name, uint32_t thread_num, std:
         this->DecPendingTaskCount();
       }
     });
-}
 
-ThreadPool::~ThreadPool() {
-  {
-    std::unique_lock<std::mutex> lock(task_mutex_);
-    stop_ = true;
-  }
+    // bind cpu core
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(i, &cpuset);
+    int rc = pthread_setaffinity_np(th.native_handle(), sizeof(cpu_set_t), &cpuset);
 
-  task_condition_.notify_all();
-  for (std::thread &worker : workers_) {
-    worker.join();
+    workers_.push_back(std::move(th));
   }
 }
+
+ThreadPool::~ThreadPool() { Destroy(); }
 
 ThreadPool::TaskPtr ThreadPool::ExecuteTask(Funcer func, void *arg, int priority) {
   if (stop_) {
@@ -107,7 +108,7 @@ ThreadPool::TaskPtr ThreadPool::ExecuteTask(Funcer func, void *arg, int priority
   IncTotalTaskCount();
   IncPendingTaskCount();
 
-  task_condition_.notify_all();
+  task_condition_.notify_one();
 
   return task;
 }
@@ -121,6 +122,27 @@ int64_t ThreadPool::PendingTaskCount() { return pending_task_count_metrics_.get_
 void ThreadPool::IncPendingTaskCount() { pending_task_count_metrics_ << 1; }
 
 void ThreadPool::DecPendingTaskCount() { pending_task_count_metrics_ << -1; }
+
+bool ThreadPool::IsDestroied() {
+  bool expect = false;
+  return !is_destroied_.compare_exchange_strong(expect, true);
+}
+
+void ThreadPool::Destroy() {
+  if (IsDestroied()) {
+    return;
+  }
+
+  {
+    std::unique_lock<std::mutex> lock(task_mutex_);
+    stop_ = true;
+  }
+
+  task_condition_.notify_all();
+  for (std::thread &worker : workers_) {
+    worker.join();
+  }
+}
 
 void ThreadPool::Task::Join() {
   if (cond != nullptr) {

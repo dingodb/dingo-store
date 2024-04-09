@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <string>
 
+#include "bthread/bthread.h"
 #include "butil/compiler_specific.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -308,23 +309,29 @@ SimpleWorkerSet::SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t 
 }
 
 SimpleWorkerSet::~SimpleWorkerSet() {
+  Destroy();
+
   bthread_cond_destroy(&cond_);
   bthread_mutex_destroy(&mutex_);
 }
 
 bool SimpleWorkerSet::Init() {
-  uint32_t i = 0;
-
-  auto worker_function = [this, &i]() {
+  auto worker_function = [this]() {
+    uint32_t worker_no = worker_no_generator_.fetch_add(1);
     if (use_pthread_) {
-      pthread_setname_np(pthread_self(), (name_ + ":" + std::to_string(i)).c_str());
+      pthread_setname_np(pthread_self(), (name_ + ":" + std::to_string(worker_no)).c_str());
     }
 
     if (!use_prior_) {
       while (true) {
         bthread_mutex_lock(&mutex_);
-        while (tasks_.empty()) {
+        while (!is_stop_ && tasks_.empty()) {
           bthread_cond_wait(&cond_, &mutex_);
+        }
+
+        if (is_stop_ && tasks_.empty()) {
+          bthread_mutex_unlock(&mutex_);
+          break;
         }
 
         // get task from task queue
@@ -336,7 +343,7 @@ bool SimpleWorkerSet::Init() {
 
         bthread_mutex_unlock(&mutex_);
 
-        if (BAIDU_UNLIKELY(task != nullptr)) {
+        if (BAIDU_LIKELY(task != nullptr)) {
           int64_t now_time_us = Helper::TimestampUs();
           queue_wait_metrics_ << now_time_us - task->CreateTimeUs();
 
@@ -350,8 +357,12 @@ bool SimpleWorkerSet::Init() {
     } else {
       while (true) {
         bthread_mutex_lock(&mutex_);
-        while (pending_task_count_.load(std::memory_order_relaxed) == 0) {
+        while (!is_stop_ && pending_task_count_.load(std::memory_order_relaxed) == 0) {
           bthread_cond_wait(&cond_, &mutex_);
+        }
+        if (is_stop_ && pending_task_count_.load(std::memory_order_relaxed) == 0) {
+          bthread_mutex_unlock(&mutex_);
+          break;
         }
 
         // get task from task queue
@@ -375,14 +386,16 @@ bool SimpleWorkerSet::Init() {
         }
       }
     }
+
+    stoped_count_.fetch_add(1);
   };
 
   if (use_pthread_) {
-    for (i = 0; i < worker_num_; ++i) {
+    for (int i = 0; i < worker_num_; ++i) {
       pthread_workers_.push_back(std::thread(worker_function));
     }
   } else {
-    for (i = 0; i < worker_num_; ++i) {
+    for (int i = 0; i < worker_num_; ++i) {
       bthread_workers_.push_back(Bthread(worker_function));
     }
   }
@@ -390,7 +403,28 @@ bool SimpleWorkerSet::Init() {
   return true;
 }
 
+bool SimpleWorkerSet::IsDestroied() {
+  bool expect = false;
+  return !is_destroied_.compare_exchange_strong(expect, true);
+}
+
 void SimpleWorkerSet::Destroy() {
+  // guarantee idempotent
+  if (IsDestroied()) {
+    return;
+  }
+
+  // stop worker thread/bthread
+  bthread_mutex_lock(&mutex_);
+  is_stop_ = true;
+  bthread_mutex_unlock(&mutex_);
+
+  while (stoped_count_.load() < worker_num_) {
+    bthread_cond_signal(&cond_);
+    bthread_usleep(100000);
+  }
+
+  // join thread/bthread
   if (use_pthread_) {
     for (auto& std_thread : pthread_workers_) {
       std_thread.join();
@@ -421,8 +455,10 @@ bool SimpleWorkerSet::Execute(TaskRunnablePtr task) {
   } else {
     prior_tasks_.push(task);
   }
-  bthread_cond_broadcast(&cond_);
+
   bthread_mutex_unlock(&mutex_);
+
+  bthread_cond_signal(&cond_);
 
   return true;
 }
