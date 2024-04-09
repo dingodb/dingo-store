@@ -183,7 +183,14 @@ void VectorScanQueryPartTask::FillVectorScanQueryRpcRequest(pb::index::VectorSca
 
   request->set_without_table_data(!scan_query_param_.with_table_data);
   request->set_use_scalar_filter(scan_query_param_.use_scalar_filter);
-  CHECK(!scan_query_param_.use_scalar_filter) << "not support scalar filter now";
+  if (scan_query_param_.use_scalar_filter) {
+    request->set_without_scalar_data(false);
+
+    for (const auto& [key, value] : scan_query_param_.scalar_data) {
+      request->mutable_scalar_for_filter()->mutable_scalar_data()->insert(
+          {key, ScalarValue2InternalScalarValuePB(value)});
+    }
+  }
 }
 
 void VectorScanQueryPartTask::VectorScanQueryRpcCallback(Status status, VectorScanQueryRpc* rpc) {
