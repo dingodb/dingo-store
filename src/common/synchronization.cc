@@ -42,15 +42,17 @@ void BthreadCond::Increase() {
 void BthreadCond::DecreaseSignal() {
   bthread_mutex_lock(&mutex_);
   --count_;
-  bthread_cond_signal(&cond_);
   bthread_mutex_unlock(&mutex_);
+
+  bthread_cond_signal(&cond_);
 }
 
 void BthreadCond::DecreaseBroadcast() {
   bthread_mutex_lock(&mutex_);
   --count_;
-  bthread_cond_broadcast(&cond_);
   bthread_mutex_unlock(&mutex_);
+
+  bthread_cond_broadcast(&cond_);
 }
 
 int BthreadCond::Wait(int cond) {

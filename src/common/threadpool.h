@@ -62,9 +62,15 @@ class ThreadPool {
   void IncPendingTaskCount();
   void DecPendingTaskCount();
 
+  void Destroy();
+
  private:
+  bool IsDestroied();
+
   std::string thread_name_;
+
   bool stop_;
+  std::atomic<bool> is_destroied_{false};
 
   std::vector<std::thread> workers_;
 

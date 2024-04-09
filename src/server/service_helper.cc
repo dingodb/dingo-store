@@ -29,7 +29,7 @@
 
 namespace dingodb {
 
-DEFINE_int64(service_helper_store_min_log_elapse, 100L * 1000L * 1000L, "min log elapse time");
+DEFINE_int64(service_helper_store_min_log_elapse, 1000L * 1000L * 1000L, "min log elapse time");
 DEFINE_int64(service_helper_coordinator_min_log_elapse, 100L * 1000L * 1000L, "min log elapse time");
 
 void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::string& errmsg) {

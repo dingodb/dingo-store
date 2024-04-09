@@ -918,7 +918,7 @@ std::shared_ptr<CoordinatorControl> Server::GetCoordinatorControl() {
   return coordinator_control_;
 }
 
-std::shared_ptr<AutoIncrementControl>& Server::GetAutoIncrementControl() {
+std::shared_ptr<AutoIncrementControl> Server::GetAutoIncrementControl() {
   assert(auto_increment_control_ != nullptr);
   return auto_increment_control_;
 }
