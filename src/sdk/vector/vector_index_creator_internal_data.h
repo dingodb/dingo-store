@@ -37,7 +37,6 @@ class VectorIndexCreator::Data {
         version(1),
         replica_num(3),
         index_type(kNoneIndexType),
-        auto_incr(false),
         wait(true) {}
 
   ~Data() = default;
@@ -86,9 +85,9 @@ class VectorIndexCreator::Data {
   std::optional<DiskAnnParam> diskann_param;
   std::optional<BruteForceParam> brute_force_param;
 
-  // TODO: Support
-  bool auto_incr;
+  bool auto_incr{false};
   std::optional<int64_t> auto_incr_start;
+
   bool wait;
 };
 
