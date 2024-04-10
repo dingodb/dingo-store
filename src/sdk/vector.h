@@ -128,6 +128,7 @@ struct Vector {
   int32_t dimension;
   ValueType value_type;
   std::vector<float> float_values;
+  // TODO: support
   std::vector<uint8_t> binary_values;
 
   explicit Vector() : value_type(kNoneValueType), dimension(0) {}
@@ -462,9 +463,9 @@ class VectorIndexCreator {
   // VectorIndexCreator& SetDiskAnnParam(DiskAnnParam& params);
   VectorIndexCreator& SetBruteForceParam(const BruteForceParam& params);
 
-  // VectorIndexCreator& SetAutoIncrement(bool auto_incr);
-
-  // VectorIndexCreator& SetAutoIncrementStart(int64_t start_id);
+  VectorIndexCreator& SetAutoIncrement(bool auto_incr);
+  // start_id should greater than 0, when set auto_increment is set to true
+  VectorIndexCreator& SetAutoIncrementStart(int64_t start_id);
 
   Status Create(int64_t& out_index_id);
 

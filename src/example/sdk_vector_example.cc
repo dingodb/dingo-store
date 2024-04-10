@@ -54,6 +54,8 @@ static void PrepareVectorIndex() {
                       .SetReplicaNum(3)
                       .SetRangePartitions(g_range_partition_seperator_ids)
                       .SetFlatParam(g_flat_param)
+                      .SetAutoIncrement(true)
+                      .SetAutoIncrementStart(1)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
   sleep(20);
