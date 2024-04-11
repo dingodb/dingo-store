@@ -46,7 +46,7 @@ DEFINE_int32(max_hnsw_nlinks_of_region, 4096, "max nlinks of region in HSNW");
 DEFINE_int64(hnsw_need_save_count, 10000, "hnsw need save count");
 DEFINE_uint32(hnsw_max_init_max_elements, 100000, "hnsw max init max elements");
 
-DEFINE_uint32(hnsw_max_elements_amplification_multiple, 12, "hnsw max elements amplification multiple");
+DEFINE_uint32(hnsw_max_elements_amplification_multiple, 1, "hnsw max elements amplification multiple");
 
 DECLARE_int64(vector_max_batch_count);
 
