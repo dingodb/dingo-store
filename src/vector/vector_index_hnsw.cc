@@ -18,6 +18,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -320,9 +321,11 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
     return butil::Status::OK();
   }
 
-  if (vector_with_ids[0].vector().float_values_size() != this->dimension_) {
-    return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%d",
-                         vector_with_ids[0].vector().float_values_size(), this->dimension_);
+  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
+    if (vector_with_ids[row].vector().float_values_size() != this->dimension_) {
+      return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%d",
+                           vector_with_ids[0].vector().float_values_size(), this->dimension_);
+    }
   }
 
   if (search_parameter.hnsw().efsearch() < 0 || search_parameter.hnsw().efsearch() > 1024) {
@@ -333,24 +336,11 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
 
   butil::Status ret;
 
-  std::unique_ptr<float[]> data;
-  try {
-    data.reset(new float[this->dimension_ * vector_with_ids.size()]);
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("upsert vector failed, error: {}", e.what());
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
-    ret = butil::Status(pb::error::Errno::EINTERNAL, s);
-    return ret;
-  }
+  std::unique_ptr<float[]> data = std::make_unique<float[]>(this->dimension_ * vector_with_ids.size());
 
   for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-    if (vector_with_ids[row].vector().float_values_size() != this->dimension_) {
-      return butil::Status(pb::error::Errno::EVECTOR_INVALID, "vector dimension is not match, input=%d, index=%d",
-                           vector_with_ids[row].vector().float_values_size(), this->dimension_);
-    }
-    for (size_t col = 0; col < this->dimension_; ++col) {
-      data.get()[row * this->dimension_ + col] = vector_with_ids[row].vector().float_values().at(col);
-    }
+    memcpy(data.get() + row * this->dimension_, vector_with_ids[row].vector().float_values().data(),
+           this->dimension_ * sizeof(float));
   }
 
   // Query the elements for themselves and measure recall

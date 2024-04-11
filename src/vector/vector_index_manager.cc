@@ -405,10 +405,7 @@ void LoadAsyncBuildVectorIndexTask::Run() {
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
-  int64_t applied_index = -1;
-  if (raft_meta != nullptr) {
-    applied_index = raft_meta->AppliedId();
-  }
+  int64_t applied_index = (raft_meta != nullptr) ? raft_meta->AppliedId() : -1; 
 
   if (region->Epoch().version() > 1 || applied_index > FLAGS_vector_pull_snapshot_min_log_gap) {
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
@@ -436,8 +433,7 @@ void LoadAsyncBuildVectorIndexTask::Run() {
 
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.loadasyncbuild][index_id({}_v{})][trace({})] load vector index failed, will try to do async "
-        "build, call "
-        "LaunchBuildVectorIndex error {} applied_index {} is_fast_build {} region_version {}",
+        "build, error {} applied_index {} is_fast_build {} region_version {}",
         vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, status.error_str(), applied_index,
         is_fast_build, region->Epoch().version());
 

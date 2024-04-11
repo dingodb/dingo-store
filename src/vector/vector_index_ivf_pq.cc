@@ -35,6 +35,7 @@
 #include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -69,13 +70,14 @@ VectorIndexIvfPq::~VectorIndexIvfPq() = default;
 
 butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                    bool is_upsert) {
-  if (vector_with_ids.empty()) {
-    return butil::Status();
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
   }
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_upsert_latency);
-
-  butil::Status status;
   {
     RWLockWriteGuard guard(&rw_lock_);
     status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
@@ -136,11 +138,15 @@ butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithI
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
   CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
   if (topk <= 0) return butil::Status::OK();
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_search_latency);
   RWLockReadGuard guard(&rw_lock_);
-  butil::Status status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
-                                                vector_with_ids, topk, filters, reconstruct, parameter, results);
+  status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
+                                  vector_with_ids, topk, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     return status;
   }
@@ -158,11 +164,17 @@ butil::Status VectorIndexIvfPq::RangeSearch(const std::vector<pb::common::Vector
                                             const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
+
   BvarLatencyGuard bvar_guard(&g_ivf_pq_range_search_latency);
   RWLockReadGuard guard(&rw_lock_);
-  butil::Status status =
-      InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch, false,
-                             vector_with_ids, radius, filters, reconstruct, parameter, results);
+
+  status = InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch,
+                                  false, vector_with_ids, radius, filters, reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     return status;
   }
