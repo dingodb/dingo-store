@@ -27,25 +27,26 @@ SERVER_NUM=${FLAGS_server_num}
 
 source $mydir/deploy_func.sh
 
-for ((i=1; i<=$SERVER_NUM; ++i)); do
-    if [ ${FLAGS_use_pgrep} -ne 0 ]; then
-        echo "use_pgrep > 0, use pgrep to get pid"
-        process_no=$(pgrep -f "${BASE_DIR}.*dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
 
-        if [ "${process_no}" != "" ]; then
-            echo "pid to kill: ${process_no}"
-            if [ ${FLAGS_force} -eq 0 ]
-            then
-                kill ${process_no}
-            else
-                kill -9 ${process_no}
-            fi
+if [ ${FLAGS_use_pgrep} -ne 0 ]; then
+    echo "use_pgrep > 0, use pgrep to get pid"
+    process_no=$(pgrep -f "${BASE_DIR}.*dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
+
+    if [ "${process_no}" != "" ]; then
+        echo "pid to kill: ${process_no}"
+        if [ ${FLAGS_force} -eq 0 ]
+        then
+            kill ${process_no}
         else
-            echo "not exist ${FLAGS_role} process"
+            kill -9 ${process_no}
         fi
     else
-        echo "use PID file to get pid"
+        echo "not exist ${FLAGS_role} process"
+    fi
+else
+    echo "use PID file to get pid"
 
+    for ((i=1; i<=$SERVER_NUM; ++i)); do
         program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
         pid_file=${program_dir}/log/pid
 
@@ -71,8 +72,7 @@ for ((i=1; i<=$SERVER_NUM; ++i)); do
         else
             echo "PID file not found: $pid_file"
         fi
-    fi
-
-done
+    done
+fi
 
 echo "Finish..."
