@@ -77,13 +77,15 @@ static bool CleanRaftDirectory(int64_t region_id, const std::string& raft_path, 
 static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
   std::string raft_meta_path = fmt::format("{}/{}/raft_meta/raft_meta", raft_path, region_id);
   if (!Helper::IsExistPath(raft_meta_path)) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft_meta file.", region_id);
+    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft_meta file, path: {}.", region_id,
+                                      raft_meta_path);
     return false;
   }
 
   std::string region_raft_log_path = fmt::format("{}/{}/log_meta", raft_log_path, region_id);
   if (!Helper::IsExistPath(region_raft_log_path)) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft log file.", region_id);
+    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft log file, path: {}.", region_id,
+                                      region_raft_log_path);
     return false;
   }
 

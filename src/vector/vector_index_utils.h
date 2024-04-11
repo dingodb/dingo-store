@@ -159,16 +159,15 @@ class VectorIndexUtils {
   static void NormalizeVectorForFaiss(float* x, int32_t d);
   static void NormalizeVectorForHnsw(const float* data, uint32_t dimension, float* norm_array);
 
-  static std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> CopyVectorId(const std::vector<int64_t>& delete_ids);
+  static butil::Status CheckVectorDimension(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                            int dimension);
 
-  static std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> CheckAndCopyVectorId(
-      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension);
+  static std::unique_ptr<faiss::idx_t[]> CastVectorId(const std::vector<int64_t>& delete_ids);
 
-  static std::pair<std::unique_ptr<float[]>, butil::Status> CopyVectorData(
-      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize);
+  static std::unique_ptr<faiss::idx_t[]> ExtractVectorId(const std::vector<pb::common::VectorWithId>& vector_with_ids);
 
-  static std::pair<std::unique_ptr<float[]>, butil::Status> CheckAndCopyVectorData(
-      const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize);
+  static std::unique_ptr<float[]> ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                     faiss::idx_t dimension, bool normalize);
 
   static butil::Status FillSearchResult(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
                                         const std::vector<faiss::Index::distance_t>& distances,

@@ -418,68 +418,41 @@ void VectorIndexUtils::NormalizeVectorForHnsw(const float* data, uint32_t dimens
   for (int i = 0; i < dimension; i++) norm_array[i] = data[i] * norm;
 }
 
-std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> VectorIndexUtils::CopyVectorId(
-    const std::vector<int64_t>& delete_ids) {
-  std::unique_ptr<faiss::idx_t[]> ids;
-  try {
-    ids = std::make_unique<faiss::idx_t[]>(delete_ids.size());  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
+butil::Status VectorIndexUtils::CheckVectorDimension(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                     int dimension) {
+  for (const auto& vector_with_id : vector_with_ids) {
+    if (vector_with_id.vector().float_values().size() != dimension) {
+      std::string s =
+          fmt::format("vector dimension not match, {} {}", vector_with_id.vector().float_values_size(), dimension);
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+    }
   }
 
+  return butil::Status::OK();
+}
+
+std::unique_ptr<faiss::idx_t[]> VectorIndexUtils::CastVectorId(const std::vector<int64_t>& delete_ids) {
+  std::unique_ptr<faiss::idx_t[]> ids = std::make_unique<faiss::idx_t[]>(delete_ids.size());
   for (size_t i = 0; i < delete_ids.size(); ++i) {
     ids.get()[i] = static_cast<faiss::idx_t>(delete_ids[i]);
   }
 
-  return {std::move(ids), butil::Status::OK()};
+  return std::move(ids);
 }
 
-std::pair<std::unique_ptr<faiss::idx_t[]>, butil::Status> VectorIndexUtils::CheckAndCopyVectorId(
-    const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension) {
-  // check
-  {
-    size_t i = 0;
-    for (const auto& vector_with_id : vector_with_ids) {
-      uint32_t input_dimension = vector_with_id.vector().float_values_size();
-      if (input_dimension != static_cast<size_t>(dimension)) {
-        std::string s = fmt::format("id.no : {}: float size : {} not equal to  dimension(create) : {}", i,
-                                    input_dimension, dimension);
-        DINGO_LOG(ERROR) << s;
-        return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
-      }
-      i++;
-    }
-  }
-
-  std::unique_ptr<faiss::idx_t[]> ids;
-  try {
-    ids = std::make_unique<faiss::idx_t[]>(vector_with_ids.size());  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for ids: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
-  }
-
+std::unique_ptr<faiss::idx_t[]> VectorIndexUtils::ExtractVectorId(
+    const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+  std::unique_ptr<faiss::idx_t[]> ids = std::make_unique<faiss::idx_t[]>(vector_with_ids.size());
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
     ids[i] = static_cast<faiss::idx_t>(vector_with_ids[i].id());
   }
 
-  return {std::move(ids), butil::Status::OK()};
+  return std::move(ids);
 }
 
-std::pair<std::unique_ptr<float[]>, butil::Status> VectorIndexUtils::CopyVectorData(
+std::unique_ptr<float[]> VectorIndexUtils::ExtractVectorValue(
     const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize) {
-  std::unique_ptr<float[]> vectors;
-  try {
-    vectors = std::make_unique<float[]>(vector_with_ids.size() *
-                                        dimension);  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
-  }
+  std::unique_ptr<float[]> vectors = std::make_unique<float[]>(vector_with_ids.size() * dimension);
 
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
     const auto& vector = vector_with_ids[i].vector().float_values();
@@ -489,41 +462,7 @@ std::pair<std::unique_ptr<float[]>, butil::Status> VectorIndexUtils::CopyVectorD
       VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension, dimension);
     }
   }
-  return {std::move(vectors), butil::Status::OK()};
-}
-
-std::pair<std::unique_ptr<float[]>, butil::Status> VectorIndexUtils::CheckAndCopyVectorData(
-    const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize) {
-  std::unique_ptr<float[]> vectors;
-
-  try {
-    vectors = std::make_unique<float[]>(vector_with_ids.size() *
-                                        dimension);  // do not modify reset method. this fast and safe.
-  } catch (std::bad_alloc& e) {
-    std::string s = fmt::format("Failed to allocate memory for vectors: {}", e.what());
-    DINGO_LOG(ERROR) << s;
-    return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
-  }
-
-  for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    if (vector_with_ids[i].vector().float_values_size() != dimension) {
-      std::string s = fmt::format(
-          "vector dimension is not equal to index dimension, vector id : {}, float_value_size: {}, index dimension: {}",
-          vector_with_ids[i].id(), vector_with_ids[i].vector().float_values_size(), dimension);
-
-      DINGO_LOG(ERROR) << s;
-      return {nullptr, butil::Status(pb::error::Errno::EVECTOR_INVALID, s)};
-    } else {
-      const auto& vector = vector_with_ids[i].vector().float_values();
-      memcpy(vectors.get() + i * dimension, vector.data(), dimension * sizeof(float));
-
-      if (normalize) {
-        VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension, dimension);
-      }
-    }
-  }
-
-  return {std::move(vectors), butil::Status::OK()};
+  return std::move(vectors);
 }
 
 butil::Status VectorIndexUtils::FillSearchResult(const std::vector<pb::common::VectorWithId>& vector_with_ids,

@@ -34,6 +34,7 @@
 #include "faiss/IndexFlat.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
+#include "faiss/impl/IDSelector.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -79,17 +80,8 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::Vec
     return butil::Status::OK();
   }
 
-  const auto& [ids, status_ids] = VectorIndexUtils::CheckAndCopyVectorId(vector_with_ids, dimension_);
-  if (!status_ids.ok()) {
-    DINGO_LOG(ERROR) << status_ids.error_cstr();
-    return status_ids;
-  }
-
-  const auto& [vectors, status] = VectorIndexUtils::CopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+  const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   RWLockWriteGuard guard(&rw_lock_);
 
@@ -98,10 +90,10 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::Vec
   }
 
   if (is_upsert) {
-    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+    faiss::IDSelectorBatch sel(vector_with_ids.size(), ids.get());
     index_->remove_ids(sel);
   }
-  index_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+  index_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
 
   return butil::Status::OK();
 }
@@ -138,15 +130,12 @@ butil::Status VectorIndexRawIvfPq::Delete(const std::vector<int64_t>& delete_ids
     return butil::Status::OK();
   }
 
-  const auto& [ids, status] = VectorIndexUtils::CopyVectorId(delete_ids);
-  if (!status.ok()) {
-    return status;
-  }
-
-  faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
+  const auto& ids = VectorIndexUtils::CastVectorId(delete_ids);
+  faiss::IDSelectorBatch sel(delete_ids.size(), ids.get());
 
   {
     RWLockWriteGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       return butil::Status::OK();
     }
@@ -175,10 +164,7 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
 
-  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    return status;
-  }
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   {
     RWLockReadGuard guard(&rw_lock_);
@@ -198,10 +184,10 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
     if (!filters.empty()) {
       auto ivf_pq_filter = filters.empty() ? nullptr : std::make_shared<RawIvfPqIDSelector>(filters);
       ivf_search_parameters.sel = ivf_pq_filter.get();
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+      index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
                      &ivf_search_parameters);
     } else {
-      index_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+      index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
                      &ivf_search_parameters);
     }
   }
@@ -222,11 +208,7 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
 
   int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
-  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+  const auto& vectors_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
@@ -260,10 +242,10 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
         auto ivf_pq_filter = filters.empty() ? nullptr : std::make_shared<RawIvfPqIDSelector>(filters);
         ivf_search_parameters.sel = ivf_pq_filter.get();
 
-        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+        index_->range_search(vector_with_ids.size(), vectors_values.get(), radius, range_search_result.get(),
                              &ivf_search_parameters);
       } else {
-        index_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+        index_->range_search(vector_with_ids.size(), vectors_values.get(), radius, range_search_result.get(),
                              &ivf_search_parameters);
       }
     } catch (std::exception& e) {

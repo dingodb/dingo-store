@@ -31,6 +31,7 @@
 #include "faiss/IndexIDMap.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
+#include "faiss/impl/IDSelector.h"
 #include "faiss/index_io.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -83,30 +84,19 @@ butil::Status VectorIndexFlat::AddOrUpsertWrapper(const std::vector<pb::common::
 
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            bool is_upsert) {
-  if (vector_with_ids.empty()) {
-    return butil::Status::OK();
-  }
+  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
 
-  const auto& [ids, status_ids] = VectorIndexUtils::CheckAndCopyVectorId(vector_with_ids, dimension_);
-  if (!status_ids.ok()) {
-    DINGO_LOG(ERROR) << status_ids.error_cstr();
-    return status_ids;
-  }
-
-  const auto& [vectors, status] = VectorIndexUtils::CopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+  const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   BvarLatencyGuard bvar_guard(&g_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
 
   if (is_upsert) {
-    faiss::IDSelectorArray sel(vector_with_ids.size(), ids.get());
+    faiss::IDSelectorBatch sel(vector_with_ids.size(), ids.get());
     index_id_map2_->remove_ids(sel);
   }
-  index_id_map2_->add_with_ids(vector_with_ids.size(), vectors.get(), ids.get());
+  index_id_map2_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
 
   return butil::Status::OK();
 }
@@ -124,17 +114,13 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
     return butil::Status::OK();
   }
 
-  const auto& [ids, status] = VectorIndexUtils::CopyVectorId(delete_ids);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
-
-  faiss::IDSelectorArray sel(delete_ids.size(), ids.get());
+  const auto& ids = VectorIndexUtils::CastVectorId(delete_ids);
+  faiss::IDSelectorBatch sel(delete_ids.size(), ids.get());
 
   {
     BvarLatencyGuard bvar_guard(&g_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
+
     auto remove_count = index_id_map2_->remove_ids(sel);
     if (0 == remove_count) {
       DINGO_LOG(WARNING) << fmt::format("[vector_index.flat][id({})] remove not found vector id.", Id());
@@ -157,10 +143,7 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
 
-  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    return status;
-  }
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   {
     BvarLatencyGuard bvar_guard(&g_flat_search_latency);
@@ -171,10 +154,10 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
       auto flat_filter = filters.empty() ? nullptr : std::make_shared<FlatIDSelector>(filters);
       faiss::SearchParameters flat_search_parameters;
       flat_search_parameters.sel = flat_filter.get();
-      index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data(),
+      index_id_map2_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
                              &flat_search_parameters);
     } else {
-      index_id_map2_->search(vector_with_ids.size(), vectors.get(), topk, distances.data(), labels.data());
+      index_id_map2_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data());
     }
   }
 
@@ -191,11 +174,7 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
   CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
 
-  const auto& [vectors, status] = VectorIndexUtils::CheckAndCopyVectorData(vector_with_ids, dimension_, normalize_);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
@@ -217,7 +196,7 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
         flat_filter = std::make_unique<FlatIDSelector>(filters);
         params->sel = flat_filter.get();
       }
-      index_id_map2_->range_search(vector_with_ids.size(), vectors.get(), radius, range_search_result.get(),
+      index_id_map2_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
                                    params.get());
     } catch (std::exception& e) {
       return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("range search exception, {}", e.what()));
