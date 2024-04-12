@@ -769,4 +769,87 @@ void DebugServiceImpl::TraceWorkQueue(google::protobuf::RpcController* controlle
   }
 }
 
+void DebugServiceImpl::AdjustThreadPoolSize(google::protobuf::RpcController* controller,
+                                            const ::dingodb::pb::debug::AdjustThreadPoolSizeRequest* request,
+                                            ::dingodb::pb::debug::AdjustThreadPoolSizeResponse* response,
+                                            ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+  if (thread_pool == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ETHREADPOOL_NOTFOUND,
+                            fmt::format("Not exist thread pool {}", request->name()));
+    return;
+  }
+
+  thread_pool->AdjustPoolSize(request->size());
+}
+
+void DebugServiceImpl::BindCore(google::protobuf::RpcController* controller,
+                                const ::dingodb::pb::debug::BindCoreRequest* request,
+                                ::dingodb::pb::debug::BindCoreResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+  if (thread_pool == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ETHREADPOOL_NOTFOUND,
+                            fmt::format("Not exist thread pool {}", request->thread_pool_name()));
+    return;
+  }
+
+  std::vector<uint32_t> threads = Helper::PbRepeatedToVector(request->threads());
+  std::vector<uint32_t> cores = Helper::PbRepeatedToVector(request->cores());
+
+  if (!thread_pool->BindCore(threads, cores)) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EBIND_CORE, "Bind thread to core failed");
+  }
+}
+
+void DebugServiceImpl::UnbindCore(google::protobuf::RpcController* controller,
+                                  const ::dingodb::pb::debug::UnbindCoreRequest* request,
+                                  ::dingodb::pb::debug::UnbindCoreResponse* response,
+                                  ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+  if (thread_pool == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ETHREADPOOL_NOTFOUND,
+                            fmt::format("Not exist thread pool {}", request->thread_pool_name()));
+    return;
+  }
+
+  if (!thread_pool->UnbindCore()) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EUNBIND_CORE, "Unbind thread to core failed");
+  }
+}
+
+void DebugServiceImpl::ShowAffinity(google::protobuf::RpcController* controller,
+                                    const ::dingodb::pb::debug::ShowAffinityRequest* request,
+                                    ::dingodb::pb::debug::ShowAffinityResponse* response,
+                                    ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto thread_pool = Server::GetInstance().GetVectorIndexThreadPool();
+  if (thread_pool == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ETHREADPOOL_NOTFOUND,
+                            fmt::format("Not exist thread pool {}", request->thread_pool_name()));
+    return;
+  }
+
+  auto pairs = thread_pool->GetAffinity();
+  for (auto& pair : pairs) {
+    auto* mut_pair = response->add_pairs();
+    mut_pair->set_thread_name(pair.first);
+    mut_pair->set_core(pair.second);
+  }
+}
+
 }  // namespace dingodb

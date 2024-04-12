@@ -31,9 +31,16 @@ namespace dingodb {
 
 class ThreadPool {
  public:
-  ThreadPool(const std::string &thread_name, uint32_t thread_num);
-  ThreadPool(const std::string &thread_name, uint32_t thread_num, std::function<void(void)> init_thread);
+  ThreadPool(const std::string &thread_name, uint32_t pool_size);
+  ThreadPool(const std::string &thread_name, uint32_t pool_size, std::function<void(void)> init_thread);
   ~ThreadPool();
+
+  struct ThreadEntry {
+    std::string name;
+    std::thread thread;
+    bool is_stop;
+  };
+  using ThreadEntryPtr = std::shared_ptr<ThreadEntry>;
 
   using Funcer = std::function<void(void *)>;
   // Thread task
@@ -55,6 +62,13 @@ class ThreadPool {
 
   TaskPtr ExecuteTask(Funcer func, void *arg, int priority = 0);
 
+  void AdjustPoolSize(uint32_t pool_size);
+  // bind core, thread[0] bind core[0]
+  bool BindCore(std::vector<uint32_t> threads, std::vector<uint32_t> cores);
+  bool UnbindCore();
+
+  std::vector<std::pair<std::string, uint32_t>> GetAffinity();
+
   uint64_t TotalTaskCount();
   void IncTotalTaskCount();
 
@@ -65,15 +79,26 @@ class ThreadPool {
   void Destroy();
 
  private:
+  // create a new thread
+  ThreadEntryPtr BootstrapThread(int thread_no);
+
+  void ShrinkThreadPool(uint32_t pool_size);
+  void ExpandTheadPool(uint32_t pool_size);
+
   bool IsDestroied();
 
+  // thread name prefix, format: xxx:{thread_no}
   std::string thread_name_;
+  // init thread after create thread
+  std::function<void(void)> init_thread_func_;
 
-  bool stop_;
   std::atomic<bool> is_destroied_{false};
 
-  std::vector<std::thread> workers_;
+  // protect workers
+  std::mutex mutex_;
+  std::vector<ThreadEntryPtr> workers_;
 
+  // protect tasks
   std::mutex task_mutex_;
   std::condition_variable task_condition_;
   std::priority_queue<TaskPtr, std::vector<TaskPtr>, Task> tasks_;

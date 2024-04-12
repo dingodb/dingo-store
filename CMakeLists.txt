@@ -114,7 +114,7 @@ if(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx2")
     add_compile_options(-mavx2)
 elseif(${VECTORIZATION_INSTRUCTION_SET} STREQUAL "avx512")
     message(STATUS "Use avx512 instruction set")
-    add_compile_options(-mavx512)
+    add_compile_options(-mavx512f)
 endif()
 
 include(CheckCXXCompilerFlag)
