@@ -2075,4 +2075,69 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
   }
 }
 
+int32_t Helper::GetCores() {
+  int32_t cores = sysconf(_SC_NPROCESSORS_ONLN);
+  CHECK(cores > 0) << "System not support cpu core count.";
+
+  return cores;
+}
+
+int64_t Helper::GetPid() {
+  pid_t pid = getpid();
+
+  return static_cast<int64_t>(pid);
+}
+
+std::vector<int64_t> Helper::GetThreadIds(int64_t pid) {
+  std::vector<int64_t> thread_ids;
+
+  const std::string path = fmt::format("/proc/{}/task", pid);
+  try {
+    if (std::filesystem::exists(path)) {
+      for (const auto& fe : std::filesystem::directory_iterator(path)) {
+        if (!fe.is_directory()) {
+          continue;
+        }
+
+        thread_ids.push_back(std::stoll(fe.path().filename().string()));
+      }
+    }
+  } catch (std::filesystem::filesystem_error const& ex) {
+    DINGO_LOG(ERROR) << fmt::format("get thread id failed, error: {}", ex.what());
+  }
+
+  return thread_ids;
+}
+
+std::vector<std::string> Helper::GetThreadNames(int64_t pid) {
+  auto thread_ids = GetThreadIds(pid);
+
+  std::vector<std::string> thread_names;
+  for (auto thread_id : thread_ids) {
+    const std::string comm_path = fmt::format("/proc/{}/task/{}/comm", pid, thread_id);
+    std::ifstream comm_file(comm_path);
+    if (comm_file.is_open()) {
+      std::string thread_name;
+      std::getline(comm_file, thread_name);
+      thread_names.push_back(thread_name);
+      comm_file.close();
+    }
+  }
+
+  return thread_names;
+}
+
+std::vector<std::string> Helper::GetThreadNames(int64_t pid, const std::string& filter_name) {
+  std::vector<std::string> thread_names = GetThreadNames(pid);
+
+  std::vector<std::string> filter_thread_names;
+  for (const auto& thread_name : thread_names) {
+    if (thread_name.find(filter_name) != std::string::npos) {
+      filter_thread_names.push_back(thread_name);
+    }
+  }
+
+  return filter_thread_names;
+}
+
 }  // namespace dingodb

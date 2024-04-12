@@ -24,6 +24,7 @@
 #include <thread>
 #include <vector>
 
+#include "common/helper.h"
 #include "common/threadpool.h"
 #include "fmt/core.h"
 #include "gtest/gtest.h"
@@ -159,35 +160,100 @@ TEST_F(ThreadPoolTest, Priority) {
   rs = pthread_attr_destroy(&attr);
 }
 
-TEST_F(ThreadPoolTest, ConditionVariable) {
-  GTEST_SKIP() << "Performence test, skip...";
-
-  dingodb::ThreadPool thread_pool("unit_test", 8);
-
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-
-  int64_t times = 20 * 1000 * 1000;
+void SubmitTasks(dingodb::ThreadPool &thread_pool, int64_t task_num) {
   std::vector<dingodb::ThreadPool::TaskPtr> tasks;
-  tasks.reserve(times);
-  for (int64_t i = 1; i <= times; ++i) {
+  tasks.reserve(task_num);
+  for (int64_t i = 1; i <= task_num; ++i) {
     tasks.push_back(thread_pool.ExecuteTask(
         [](void *) {
           // std::cout << "thread: " << std::this_thread::get_id() << std::endl;
-
-          // std::this_thread::sleep_for(std::chrono::milliseconds(2));
           int64_t mulple = 1;
           for (int i = 1; i < 100000; ++i) {
             mulple *= i;
           }
         },
         nullptr));
-
-    if (i % 100 == 0) {
-      // thread_pool.Notify();
-    }
   }
 
   for (auto &task : tasks) {
     task->Join();
   }
+}
+
+TEST_F(ThreadPoolTest, ConditionVariable) {
+  GTEST_SKIP() << "Performence test, skip...";
+
+  dingodb::ThreadPool thread_pool("unit_test_10", 8);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  SubmitTasks(thread_pool, 20 * 1000 * 1000);
+
+  thread_pool.Destroy();
+}
+
+TEST_F(ThreadPoolTest, AdjustPoolSize) {
+  const std::string thread_name = "unit_test_11";
+  int pool_size = 8;
+  dingodb::ThreadPool thread_pool(thread_name, pool_size);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  int64_t pid = dingodb::Helper::GetPid();
+  auto thread_names = dingodb::Helper::GetThreadNames(pid, thread_name);
+  ASSERT_EQ(pool_size, thread_names.size());
+
+  SubmitTasks(thread_pool, 100 * 1000);
+
+  pool_size = 4;
+  thread_pool.AdjustPoolSize(pool_size);
+  thread_names = dingodb::Helper::GetThreadNames(pid, thread_name);
+  ASSERT_EQ(pool_size, thread_names.size());
+
+  SubmitTasks(thread_pool, 100 * 1000);
+
+  pool_size = 12;
+  thread_pool.AdjustPoolSize(pool_size);
+  thread_names = dingodb::Helper::GetThreadNames(pid, thread_name);
+  ASSERT_EQ(pool_size, thread_names.size());
+
+  SubmitTasks(thread_pool, 100 * 1000);
+
+  thread_pool.Destroy();
+
+  thread_names = dingodb::Helper::GetThreadNames(pid, thread_name);
+  ASSERT_EQ(0, thread_names.size());
+}
+
+TEST_F(ThreadPoolTest, BindCore) {
+  const std::string thread_name = "unit_test_12";
+  int pool_size = 8;
+  dingodb::ThreadPool thread_pool(thread_name, pool_size);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  ASSERT_EQ(true, thread_pool.BindCore({0, 1, 2, 3}, {1, 1, 1, 1}));
+
+  auto pairs = thread_pool.GetAffinity();
+  for (auto &pair : pairs) {
+    std::cout << fmt::format("bind core: {} {}", pair.first, pair.second) << std::endl;
+    EXPECT_EQ(1, pair.second);
+  }
+
+  thread_pool.Destroy();
+}
+
+TEST_F(ThreadPoolTest, UnbindCore) {
+  const std::string thread_name = "unit_test_13";
+  int pool_size = 8;
+  dingodb::ThreadPool thread_pool(thread_name, pool_size);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  ASSERT_EQ(true, thread_pool.UnbindCore());
+
+  auto pairs = thread_pool.GetAffinity();
+  ASSERT_TRUE(pairs.empty());
+
+  thread_pool.Destroy();
 }
