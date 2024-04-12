@@ -734,6 +734,9 @@ TEST_F(TxnScanTest, Open) {
 }
 
 TEST_F(TxnScanTest, Scan) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());

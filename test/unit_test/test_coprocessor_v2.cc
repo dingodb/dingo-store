@@ -242,6 +242,10 @@ void CoprocessorTestV2::DeleteRange() {
 TEST_F(CoprocessorTestV2, KvDeleteRangeBefore) { DeleteRange(); }
 
 TEST_F(CoprocessorTestV2, Open) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
+
   butil::Status ok;
 
   // wrong  Coprocessor
@@ -880,6 +884,9 @@ TEST_F(CoprocessorTestV2, Prepare) {
 }
 
 TEST_F(CoprocessorTestV2, Execute) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());
@@ -922,6 +929,9 @@ TEST_F(CoprocessorTestV2, Execute) {
 }
 
 TEST_F(CoprocessorTestV2, ExecuteTxn) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());
@@ -980,6 +990,9 @@ TEST_F(CoprocessorTestV2, ExecuteTxn) {
 }
 
 TEST_F(CoprocessorTestV2, FilterKV) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
   // std::string my_min_key;
   // char my_max_key_char[] = {static_cast<char>(0xEF), static_cast<char>(0xEF), static_cast<char>(0xEF)};
@@ -1018,6 +1031,9 @@ TEST_F(CoprocessorTestV2, FilterKV) {
 }
 
 TEST_F(CoprocessorTestV2, FilterScalar) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   bool is_reserved = false;
@@ -1190,6 +1206,9 @@ TEST_F(CoprocessorTestV2, KvDeleteRange) { DeleteRange(); }
 
 // disorder
 TEST_F(CoprocessorTestV2, OpenDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   // ok
@@ -1340,6 +1359,9 @@ TEST_F(CoprocessorTestV2, OpenDisorder) {
 }
 
 TEST_F(CoprocessorTestV2, PrepareDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   int schema_version = 1;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
   long common_id = 1;  // NOLINT
@@ -1757,6 +1779,9 @@ TEST_F(CoprocessorTestV2, PrepareDisorder) {
 }
 
 TEST_F(CoprocessorTestV2, ExecuteDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());
@@ -1798,6 +1823,9 @@ TEST_F(CoprocessorTestV2, ExecuteDisorder) {
 }
 
 TEST_F(CoprocessorTestV2, ExecuteTxnDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());
@@ -1856,6 +1884,9 @@ TEST_F(CoprocessorTestV2, ExecuteTxnDisorder) {
 }
 
 TEST_F(CoprocessorTestV2, FilterKVDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   std::sort(keys.begin(), keys.end());
@@ -1891,6 +1922,9 @@ TEST_F(CoprocessorTestV2, FilterKVDisorder) {
 }
 
 TEST_F(CoprocessorTestV2, FilterScalarDisorder) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
 
   bool is_reserved = false;

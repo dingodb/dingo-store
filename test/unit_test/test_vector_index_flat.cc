@@ -66,7 +66,7 @@ class VectorIndexFlatTest : public testing::Test {
   static ThreadPoolPtr vector_index_thread_pool;
 };
 
-ThreadPoolPtr VectorIndexFlatTest::vector_index_thread_pool = nullptr;
+ThreadPoolPtr VectorIndexFlatTest::vector_index_thread_pool = std::make_shared<ThreadPool>("vector_index_flat", 4);
 
 TEST_F(VectorIndexFlatTest, Create) {
   static const pb::common::Range kRange;
