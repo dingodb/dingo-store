@@ -402,6 +402,9 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
 }
 
 TEST_F(VectorIndexReaderTest, Coprocessor) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   butil::Status ok;
   VectorReader vector_reader(engine->Reader());
   pb::common::Range region_range;

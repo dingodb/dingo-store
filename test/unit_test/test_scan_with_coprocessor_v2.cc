@@ -504,6 +504,9 @@ TEST_F(ScanWithCoprocessorV2, Prepare) {
 }
 
 TEST_F(ScanWithCoprocessorV2, scan) {
+#if !defined(TEST_COPROCESSOR_V2_MOCK)
+  GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
+#endif
   auto raw_rocks_engine = this->GetRawRocksEngine();
   int64_t scan_id = 1;
 

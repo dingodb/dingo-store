@@ -118,20 +118,20 @@ TEST_F(VectorIndexRecallFlatTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      std::cout << "[" << i << "]"
+      LOG(INFO) << "[" << i << "]"
                 << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
-          std::cout << ",";
+          LOG(INFO) << ",";
         }
-        std::cout << std::setw(10) << data_base[i * dimension + j];
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
       }
 
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]" << '\n';
     }
   }
 
-  std::cout << "Add Vector" << '\n';
+  LOG(INFO) << "Add Vector" << '\n';
 
   // add all data
   {
@@ -146,13 +146,13 @@ TEST_F(VectorIndexRecallFlatTest, Upsert) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
         vt_float.push_back(data_base[id * dimension + i]);
       }
-      std::cout << "[" << id << "]"
+      LOG(INFO) << "[" << id << "]"
                 << " [ ";
       for (size_t i = 0; i < vt_float.size(); i++) {
-        if (0 != i) std::cout << ",";
-        std::cout << std::setw(10) << vt_float[i];
+        if (0 != i) LOG(INFO) << ",";
+        LOG(INFO) << std::setw(10) << vt_float[i];
       }
-      std::cout << "]" << '\n';
+      LOG(INFO) << "]" << '\n';
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -180,7 +180,7 @@ TEST_F(VectorIndexRecallFlatTest, Search) {
       vector_with_id.mutable_vector()->add_float_values(value);
     }
 
-    std::cout << "id : " << (id + 1) << "\n";
+    LOG(INFO) << "id : " << (id + 1) << "\n";
     uint32_t topk = 3;
     std::vector<pb::index::VectorWithDistanceResult> results;
     std::vector<pb::common::VectorWithId> vector_with_ids;
@@ -196,9 +196,9 @@ TEST_F(VectorIndexRecallFlatTest, Search) {
         auto internal_id = result.vector_with_distances().at(0).vector_with_id().id();
         EXPECT_EQ(id + 1, internal_id);
       }
-      std::cout << result.DebugString();
+      LOG(INFO)  << result.DebugString();
     }
-    std::cout << "\n";
+    LOG(INFO)  << "\n";
 
     results.clear();
 
@@ -211,9 +211,9 @@ TEST_F(VectorIndexRecallFlatTest, Search) {
         auto internal_id = result.vector_with_distances().at(0).vector_with_id().id();
         EXPECT_EQ(id + 1, internal_id);
       }
-      std::cout << result.DebugString();
+      LOG(INFO)  << result.DebugString();
     }
-    std::cout << "\n";
+    LOG(INFO)  << "\n";
 #endif
     results.clear();
 
@@ -226,9 +226,9 @@ TEST_F(VectorIndexRecallFlatTest, Search) {
         auto internal_id = result.vector_with_distances().at(0).vector_with_id().id();
         EXPECT_EQ(id + 1, internal_id);
       }
-      // std::cout << result.DebugString();
+      // LOG(INFO)  << result.DebugString();
     }
-    std::cout << "\n";
+    LOG(INFO) << "\n";
 
     results.clear();
   }
