@@ -106,6 +106,7 @@ struct VectorAddDatum : public DatumAble {
     for (auto& vector : vectors) {
       vector_add_request->add_vectors()->Swap(&vector);
     }
+    vector_add_request->set_is_update(is_update);
 
     return request;
   };
@@ -114,6 +115,7 @@ struct VectorAddDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::VectorWithId> vectors;
+  bool is_update{false};
 };
 
 struct VectorDeleteDatum : public DatumAble {
@@ -378,10 +380,11 @@ class WriteDataBuilder {
 
   // VectorAddDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
-                                               const std::vector<pb::common::VectorWithId>& vectors) {
+                                               const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
     auto datum = std::make_shared<VectorAddDatum>();
     datum->cf_name = cf_name;
     datum->vectors = vectors;
+    datum->is_update = is_update;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

@@ -1113,7 +1113,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
         }
 
         auto start_time = Helper::TimestampNs();
-        auto status = vector_index_wrapper->Upsert(vector_with_ids);
+        auto status = request.is_update() ? vector_index_wrapper->Upsert(vector_with_ids)
+                                          : vector_index_wrapper->Add(vector_with_ids);
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
                                         vector_with_ids.size(), Helper::TimestampNs() - start_time);

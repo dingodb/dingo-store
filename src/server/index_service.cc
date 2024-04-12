@@ -472,7 +472,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
     vectors.push_back(vector);
   }
 
-  status = storage->VectorAdd(ctx, is_sync, vectors);
+  status = storage->VectorAdd(ctx, is_sync, vectors, request->is_update());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

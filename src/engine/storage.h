@@ -125,7 +125,7 @@ class Storage {
 
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
-                          const std::vector<pb::common::VectorWithId>& vectors);
+                          const std::vector<pb::common::VectorWithId>& vectors, bool is_update);
   butil::Status VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids);
 
   butil::Status VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
