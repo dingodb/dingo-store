@@ -385,6 +385,12 @@ class Helper {
                              const std::vector<int32_t>& min_widths,
                              const std::vector<std::vector<std::string>>& table_contents,
                              const std::vector<std::vector<std::string>>& table_urls);
+
+  static int32_t GetCores();
+  static int64_t GetPid();
+  static std::vector<int64_t> GetThreadIds(int64_t pid);
+  static std::vector<std::string> GetThreadNames(int64_t pid);
+  static std::vector<std::string> GetThreadNames(int64_t pid, const std::string& filter_name);
 };
 
 }  // namespace dingodb

@@ -18,6 +18,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 
@@ -1566,5 +1567,42 @@ TEST_F(HelperTest, StringToVector) {
     EXPECT_EQ(2, vec.size());
     EXPECT_FLOAT_EQ(0.1, vec[0]);
     EXPECT_FLOAT_EQ(0.2, vec[1]);
+  }
+}
+
+TEST_F(HelperTest, GetPid) { EXPECT_TRUE(dingodb::Helper::GetPid() > 0); }
+
+TEST_F(HelperTest, GetThreadIds) {
+  int64_t pid = dingodb::Helper::GetPid();
+  std::vector<int64_t> thread_ids = dingodb::Helper::GetThreadIds(pid);
+
+  EXPECT_TRUE(!thread_ids.empty());
+}
+
+TEST_F(HelperTest, GetThreadNames) {
+  int64_t pid = dingodb::Helper::GetPid();
+  std::vector<std::string> thread_names = dingodb::Helper::GetThreadNames(pid);
+
+  EXPECT_TRUE(!thread_names.empty());
+}
+
+TEST_F(HelperTest, GetThreadNamesWithFilter) {
+  int64_t pid = dingodb::Helper::GetPid();
+  {
+    std::vector<std::string> thread_names = dingodb::Helper::GetThreadNames(pid, "hello");
+
+    EXPECT_TRUE(thread_names.empty());
+  }
+
+  {
+    std::vector<std::string> thread_names = dingodb::Helper::GetThreadNames(pid, "dingodb_unit");
+
+    EXPECT_TRUE(!thread_names.empty());
+  }
+
+  {
+    std::vector<std::string> thread_names = dingodb::Helper::GetThreadNames(pid, "unit");
+
+    EXPECT_TRUE(!thread_names.empty());
   }
 }

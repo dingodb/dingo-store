@@ -314,6 +314,56 @@ message TraceWorkQueueResponse {
   repeated WorkerSetTrace worker_set_traces = 10;
 }
 
+message AdjustThreadPoolSizeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string name = 10;
+  uint32 size = 11;
+}
+
+message AdjustThreadPoolSizeResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message BindCoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+  repeated uint32 threads = 11;
+  repeated uint32 cores = 12;
+}
+
+message BindCoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UnbindCoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+}
+
+message UnbindCoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message ShowAffinityRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+}
+
+message ShowAffinityResponse {
+  message ThreadCorePair {
+    string thread_name = 1;
+    uint32 core = 2;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  repeated ThreadCorePair pairs = 10;
+}
+
 service DebugService {
   // region
   rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
@@ -337,6 +387,12 @@ service DebugService {
   rpc GetMemoryStats(GetMemoryStatsRequest) returns (GetMemoryStatsResponse);
   rpc ReleaseFreeMemory(ReleaseFreeMemoryRequest) returns (ReleaseFreeMemoryResponse);
 
-  // Work queue
+  // work queue
   rpc TraceWorkQueue(TraceWorkQueueRequest) returns (TraceWorkQueueResponse);
+
+  // adjust thread pool size
+  rpc AdjustThreadPoolSize(AdjustThreadPoolSizeRequest) returns (AdjustThreadPoolSizeResponse);
+  rpc BindCore(BindCoreRequest) returns (BindCoreResponse);
+  rpc UnbindCore(UnbindCoreRequest) returns (UnbindCoreResponse);
+  rpc ShowAffinity(ShowAffinityRequest) returns (ShowAffinityResponse);
 }
