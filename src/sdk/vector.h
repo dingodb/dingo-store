@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "sdk/status.h"
@@ -120,6 +121,33 @@ struct BruteForceParam {
   static VectorIndexType Type() { return VectorIndexType::kBruteForce; }
 };
 
+enum class ScalarFieldType : uint8_t {
+  kNone,
+  kBool,
+  kInt8,
+  kInt16,
+  kInt32,
+  kInt64,
+  kFloat32,
+  kDouble,
+  kString,
+  kBytes
+};
+
+struct VectorScalarColumnSchema {
+  std::string key;
+  ScalarFieldType type;
+  bool speed;
+
+  VectorScalarColumnSchema(std::string& key, ScalarFieldType type, bool speed = false)
+      : key(key), type(type), speed(speed) {}
+};
+
+// TODO: maybe use builder to build VectorScalarSchema
+struct VectorScalarSchema {
+  std::vector<VectorScalarColumnSchema> cols;
+};
+
 enum ValueType : uint8_t { kNoneValueType, kFloat, kUint8 };
 
 std::string ValueTypeToString(ValueType type);
@@ -156,19 +184,6 @@ struct Vector {
   uint32_t Size() const { return float_values.size() * 4 + binary_values.size() + 4; }
 
   std::string ToString() const;
-};
-
-enum class ScalarFieldType : uint8_t {
-  kNone,
-  kBool,
-  kInt8,
-  kInt16,
-  kInt32,
-  kInt64,
-  kFloat32,
-  kDouble,
-  kString,
-  kBytes
 };
 
 struct ScalarField {
@@ -466,6 +481,8 @@ class VectorIndexCreator {
   VectorIndexCreator& SetAutoIncrement(bool auto_incr);
   // start_id should greater than 0, when set auto_increment is set to true
   VectorIndexCreator& SetAutoIncrementStart(int64_t start_id);
+
+  VectorIndexCreator& SetScalarSchema(const VectorScalarSchema& schema);
 
   Status Create(int64_t& out_index_id);
 

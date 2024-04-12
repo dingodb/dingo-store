@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":RegionTest.*";
     default_run_case += ":StoreRpcControllerTest.*";
     default_run_case += ":ThreadPoolActuatorTest.*";
-    default_run_case += ":VectorCommonTest.*";
+    default_run_case += ":SDKVectorCommonTest.*";
     default_run_case += ":VectorIndexCacheKeyTest.*";
     default_run_case += ":VectorIndexTest.*";
     default_run_case += ":TxnBufferTest.*";

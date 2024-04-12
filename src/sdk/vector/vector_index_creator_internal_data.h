@@ -67,6 +67,11 @@ class VectorIndexCreator::Data {
     } else {
       CHECK(false) << "unsupported index type, " << index_type;
     }
+
+    if(schema.has_value()) {
+      VectorScalarSchema& s = schema.value();
+      FillScalarSchema(parameter->mutable_scalar_schema(), s);
+    }
   }
 
   const ClientStub& stub;
@@ -87,6 +92,8 @@ class VectorIndexCreator::Data {
 
   bool auto_incr{false};
   std::optional<int64_t> auto_incr_start;
+
+  std::optional<VectorScalarSchema> schema;
 
   bool wait;
 };

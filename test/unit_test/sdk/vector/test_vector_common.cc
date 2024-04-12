@@ -20,7 +20,7 @@
 namespace dingodb {
 namespace sdk {
 
-TEST(VectorCommonTest, TestMetricType2InternalMetricTypePB) {
+TEST(SDKVectorCommonTest, TestMetricType2InternalMetricTypePB) {
   EXPECT_EQ(MetricType2InternalMetricTypePB(MetricType::kL2), pb::common::MetricType::METRIC_TYPE_L2);
 
   EXPECT_EQ(MetricType2InternalMetricTypePB(MetricType::kInnerProduct),
@@ -29,7 +29,7 @@ TEST(VectorCommonTest, TestMetricType2InternalMetricTypePB) {
   EXPECT_EQ(MetricType2InternalMetricTypePB(MetricType::kCosine), pb::common::MetricType::METRIC_TYPE_COSINE);
 }
 
-TEST(VectorCommonTest, TestInternalMetricTypePB2MetricType) {
+TEST(SDKVectorCommonTest, TestInternalMetricTypePB2MetricType) {
   EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_NONE), MetricType::kNoneMetricType);
   EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_L2), MetricType::kL2);
   EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT),
@@ -37,7 +37,7 @@ TEST(VectorCommonTest, TestInternalMetricTypePB2MetricType) {
   EXPECT_EQ(InternalMetricTypePB2MetricType(pb::common::MetricType::METRIC_TYPE_COSINE), MetricType::kCosine);
 }
 
-TEST(VectorCommonTest, TestVectorIndexType2InternalVectorIndexTypePB) {
+TEST(SDKVectorCommonTest, TestVectorIndexType2InternalVectorIndexTypePB) {
   EXPECT_EQ(VectorIndexType2InternalVectorIndexTypePB(VectorIndexType::kNoneIndexType),
             pb::common::VECTOR_INDEX_TYPE_NONE);
 
@@ -57,7 +57,7 @@ TEST(VectorCommonTest, TestVectorIndexType2InternalVectorIndexTypePB) {
             pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE);
 }
 
-TEST(VectorCommonTest, TestInternalVectorIndexTypePB2VectorIndexType) {
+TEST(SDKVectorCommonTest, TestInternalVectorIndexTypePB2VectorIndexType) {
   EXPECT_EQ(InternalVectorIndexTypePB2VectorIndexType(pb::common::VECTOR_INDEX_TYPE_NONE),
             VectorIndexType::kNoneIndexType);
 
@@ -77,7 +77,7 @@ TEST(VectorCommonTest, TestInternalVectorIndexTypePB2VectorIndexType) {
             VectorIndexType::kBruteForce);
 }
 
-TEST(VectorCommonTest, TestFillFlatParmeter) {
+TEST(SDKVectorCommonTest, TestFillFlatParmeter) {
   pb::common::VectorIndexParameter parameter;
   FlatParam param{128, MetricType::kL2};
 
@@ -88,7 +88,7 @@ TEST(VectorCommonTest, TestFillFlatParmeter) {
   EXPECT_EQ(parameter.flat_parameter().metric_type(), MetricType2InternalMetricTypePB(param.metric_type));
 }
 
-TEST(VectorCommonTest, TestFillIvfFlatParmeter) {
+TEST(SDKVectorCommonTest, TestFillIvfFlatParmeter) {
   pb::common::VectorIndexParameter parameter;
   IvfFlatParam param{128, MetricType::kL2};
 
@@ -100,7 +100,7 @@ TEST(VectorCommonTest, TestFillIvfFlatParmeter) {
   EXPECT_EQ(parameter.ivf_flat_parameter().ncentroids(), param.ncentroids);
 }
 
-TEST(VectorCommonTest, TestFillIvfPqParmeter) {
+TEST(SDKVectorCommonTest, TestFillIvfPqParmeter) {
   pb::common::VectorIndexParameter parameter;
   IvfPqParam param{128, MetricType::kL2};
 
@@ -113,7 +113,7 @@ TEST(VectorCommonTest, TestFillIvfPqParmeter) {
   EXPECT_EQ(parameter.ivf_pq_parameter().nsubvector(), param.nsubvector);
 }
 
-TEST(VectorCommonTest, TestFillHnswParmeter) {
+TEST(SDKVectorCommonTest, TestFillHnswParmeter) {
   pb::common::VectorIndexParameter parameter;
   HnswParam param{128, MetricType::kL2, 200};
 
@@ -127,7 +127,7 @@ TEST(VectorCommonTest, TestFillHnswParmeter) {
   EXPECT_EQ(parameter.hnsw_parameter().max_elements(), param.max_elements);
 }
 
-TEST(VectorCommonTest, TestFillButeForceParmeter) {
+TEST(SDKVectorCommonTest, TestFillButeForceParmeter) {
   pb::common::VectorIndexParameter parameter;
   BruteForceParam param{128, MetricType::kL2};
 
@@ -138,7 +138,7 @@ TEST(VectorCommonTest, TestFillButeForceParmeter) {
   EXPECT_EQ(parameter.bruteforce_parameter().metric_type(), MetricType2InternalMetricTypePB(param.metric_type));
 }
 
-TEST(VectorCommonTest, TestFillRangePartitionRule) {
+TEST(SDKVectorCommonTest, TestFillRangePartitionRule) {
   pb::meta::PartitionRule partition_rule;
   std::vector<int64_t> seperator_ids = {10, 20, 30};
   std::vector<int64_t> index_and_part_ids = {1, 2, 3, 4, 5};
@@ -176,12 +176,12 @@ TEST(VectorCommonTest, TestFillRangePartitionRule) {
   }
 }
 
-TEST(VectorCommonTest, TestValueType2InternalValueTypePB) {
+TEST(SDKVectorCommonTest, TestValueType2InternalValueTypePB) {
   EXPECT_EQ(ValueType2InternalValueTypePB(ValueType::kFloat), pb::common::ValueType::FLOAT);
   EXPECT_EQ(ValueType2InternalValueTypePB(ValueType::kUint8), pb::common::ValueType::UINT8);
 }
 
-TEST(VectorCommonTest, TestFillearchFlatParamPB) {
+TEST(SDKVectorCommonTest, TestFillearchFlatParamPB) {
   SearchParam param;
   param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
 
@@ -191,7 +191,7 @@ TEST(VectorCommonTest, TestFillearchFlatParamPB) {
   EXPECT_EQ(pb.parallel_on_queries(), 1);
 }
 
-TEST(VectorCommonTest, TestFillsVectorWithIdPB) {
+TEST(SDKVectorCommonTest, TestFillsVectorWithIdPB) {
   VectorWithId vector_with_id;
   vector_with_id.id = 100;
   vector_with_id.vector.dimension = 2;
@@ -209,7 +209,7 @@ TEST(VectorCommonTest, TestFillsVectorWithIdPB) {
   EXPECT_EQ(pb.vector().float_values(1), 2.0);
 }
 
-TEST(VectorCommonTest, TestInternalVectorIdPB2VectorWithId) {
+TEST(SDKVectorCommonTest, TestInternalVectorIdPB2VectorWithId) {
   pb::common::VectorWithId pb;
   pb.set_id(100);
   auto* vector_pb = pb.mutable_vector();
@@ -228,7 +228,7 @@ TEST(VectorCommonTest, TestInternalVectorIdPB2VectorWithId) {
   EXPECT_EQ(vector_with_id.vector.float_values[1], 2.0);
 }
 
-TEST(VectorCommonTest, TestInternalVectorWithDistance2VectorWithDistance) {
+TEST(SDKVectorCommonTest, TestInternalVectorWithDistance2VectorWithDistance) {
   pb::common::VectorWithDistance pb;
   auto* vector_with_id_pb = pb.mutable_vector_with_id();
   vector_with_id_pb->set_id(100);
@@ -252,7 +252,7 @@ TEST(VectorCommonTest, TestInternalVectorWithDistance2VectorWithDistance) {
   EXPECT_EQ(vector_with_distance.metric_type, MetricType::kL2);
 }
 
-TEST(VectorCommonTest, InternalVectorIndexMetrics2IndexMetricsResult) {
+TEST(SDKVectorCommonTest, InternalVectorIndexMetrics2IndexMetricsResult) {
   pb::common::VectorIndexMetrics pb;
   pb.set_vector_index_type(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
   pb.set_current_count(100);
@@ -271,7 +271,7 @@ TEST(VectorCommonTest, InternalVectorIndexMetrics2IndexMetricsResult) {
   EXPECT_EQ(result.memory_bytes, 5000);
 }
 
-TEST(VectorCommonTest, TestFillSearchIvfFlatParamPB) {
+TEST(SDKVectorCommonTest, TestFillSearchIvfFlatParamPB) {
   SearchParam param;
   param.extra_params[SearchExtraParamType::kNprobe] = 10;
   param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
@@ -283,7 +283,7 @@ TEST(VectorCommonTest, TestFillSearchIvfFlatParamPB) {
   EXPECT_EQ(pb.parallel_on_queries(), 1);
 }
 
-TEST(VectorCommonTest, TestFillSearchIvfPqParamPB) {
+TEST(SDKVectorCommonTest, TestFillSearchIvfPqParamPB) {
   SearchParam param;
   param.extra_params[SearchExtraParamType::kNprobe] = 10;
   param.extra_params[SearchExtraParamType::kParallelOnQueries] = 1;
@@ -295,6 +295,32 @@ TEST(VectorCommonTest, TestFillSearchIvfPqParamPB) {
   EXPECT_EQ(pb.nprobe(), 10);
   EXPECT_EQ(pb.parallel_on_queries(), 1);
   EXPECT_EQ(pb.recall_num(), 5);
+}
+
+TEST(SDKVectorCommonTest, ScalarFieldType2InternalScalarFieldTypePB) {
+  EXPECT_EQ(pb::common::ScalarFieldType::NONE, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kNone));
+  EXPECT_EQ(pb::common::ScalarFieldType::BOOL, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kBool));
+  EXPECT_EQ(pb::common::ScalarFieldType::INT8, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt8));
+  EXPECT_EQ(pb::common::ScalarFieldType::INT16, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt16));
+  EXPECT_EQ(pb::common::ScalarFieldType::INT32, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt32));
+  EXPECT_EQ(pb::common::ScalarFieldType::INT64, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt64));
+  EXPECT_EQ(pb::common::ScalarFieldType::FLOAT32, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kFloat32));
+  EXPECT_EQ(pb::common::ScalarFieldType::DOUBLE, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kDouble));
+  EXPECT_EQ(pb::common::ScalarFieldType::STRING, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kString));
+  EXPECT_EQ(pb::common::ScalarFieldType::BYTES, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kBytes));
+}
+
+TEST(SDKVectorCommonTest, InternalScalarFieldTypePB2ScalarFieldType) {
+  EXPECT_EQ(ScalarFieldType::kNone, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::NONE));
+  EXPECT_EQ(ScalarFieldType::kBool, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::BOOL));
+  EXPECT_EQ(ScalarFieldType::kInt8, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT8));
+  EXPECT_EQ(ScalarFieldType::kInt16, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT16));
+  EXPECT_EQ(ScalarFieldType::kInt32, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT32));
+  EXPECT_EQ(ScalarFieldType::kInt64, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT64));
+  EXPECT_EQ(ScalarFieldType::kFloat32, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::FLOAT32));
+  EXPECT_EQ(ScalarFieldType::kDouble, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::DOUBLE));
+  EXPECT_EQ(ScalarFieldType::kString, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::STRING));
+  EXPECT_EQ(ScalarFieldType::kBytes, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::BYTES));
 }
 
 TEST(FillSearchHnswParamPBTest, TestFillSearchHnswParamPB) {
