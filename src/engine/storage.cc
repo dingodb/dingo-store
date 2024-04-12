@@ -337,12 +337,12 @@ butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t
 }
 
 butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
-                                 const std::vector<pb::common::VectorWithId>& vectors) {
+                                 const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
   if (is_sync) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors));
+    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
   }
 
-  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors),
+  return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
                              [](std::shared_ptr<Context> ctx, butil::Status status) {
                                if (!status.ok()) {
                                  Helper::SetPbMessageError(status, ctx->Response());

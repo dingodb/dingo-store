@@ -164,6 +164,7 @@ message RaftMetaRequest {
 message VectorAddRequest {
   string cf_name = 1;
   repeated dingodb.pb.common.VectorWithId vectors = 2;
+  bool is_update = 3;
 }
 
 message VectorAddResponse {}
