@@ -84,6 +84,11 @@ VectorIndexCreator& VectorIndexCreator::SetAutoIncrement(bool auto_incr) {
   return *this;
 }
 
+VectorIndexCreator& VectorIndexCreator::SetScalarSchema(const VectorScalarSchema& schema) {
+  data_->schema = schema;
+  return *this;
+}
+
 VectorIndexCreator& VectorIndexCreator::SetAutoIncrementStart(int64_t start_id) {
   data_->auto_incr = true;
   data_->auto_incr_start = start_id;

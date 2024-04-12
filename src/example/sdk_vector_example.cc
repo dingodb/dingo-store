@@ -49,6 +49,9 @@ static void PrepareVectorIndex() {
   CHECK_NOTNULL(creator);
   dingodb::ScopeGuard guard([&]() { delete creator; });
 
+  dingodb::sdk::VectorScalarSchema schema;
+  // NOTE: may be add more
+  schema.cols.push_back({g_scalar_col[0], dingodb::sdk::ScalarFieldType::kInt64, true});
   Status create = creator->SetSchemaId(g_schema_id)
                       .SetName(g_index_name)
                       .SetReplicaNum(3)
@@ -56,6 +59,7 @@ static void PrepareVectorIndex() {
                       .SetFlatParam(g_flat_param)
                       .SetAutoIncrement(true)
                       .SetAutoIncrementStart(1)
+                      .SetScalarSchema(schema)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
   sleep(20);
