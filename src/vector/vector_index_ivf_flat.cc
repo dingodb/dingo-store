@@ -73,7 +73,9 @@ VectorIndexIvfFlat::~VectorIndexIvfFlat() = default;
 
 butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                               bool is_upsert) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
   if (!status.ok()) {
     return status;
@@ -91,7 +93,7 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
 
   if (is_upsert) {
     faiss::IDSelectorBatch sel(vector_with_ids.size(), ids.get());
-    index_->remove_ids(sel);  // is_member
+    index_->remove_ids(sel);
   }
   index_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
 
@@ -136,6 +138,7 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       DINGO_LOG(WARNING) << fmt::format("[vector_index.ivf_flat][id({})] ivf_flat not train, train first.", Id());
       return butil::Status::OK();
@@ -156,7 +159,9 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
                                          const pb::common::VectorSearchParameter& parameter,
                                          std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
 
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   if (topk <= 0) return butil::Status::OK();
 
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
@@ -177,6 +182,7 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
@@ -220,7 +226,9 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
                                               const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                               bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                               std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
   if (!status.ok()) {
     return status;
@@ -242,6 +250,7 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
+
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
@@ -299,7 +308,9 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   // When calling glog,
   // the child process will hang.
   // Remove glog temporarily.
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   try {
     faiss::write_index(index_.get(), path.c_str());
@@ -313,7 +324,9 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_load_latency);
 
@@ -405,6 +418,7 @@ pb::common::MetricType VectorIndexIvfFlat::GetMetricType() { return this->metric
 
 butil::Status VectorIndexIvfFlat::GetCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
+
   if (IsTrainedImpl()) {
     count = index_->ntotal;
   } else {
@@ -441,20 +455,24 @@ bool VectorIndexIvfFlat::IsExceedsMaxElements() { return false; }
 
 butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
-  CHECK(data_size > 0) << "data size invalid";
-  CHECK(train_datas.size() % dimension_ == 0)
-      << fmt::format("dimension not match {} {}", train_datas.size(), dimension_);
+  if (data_size == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "data size invalid");
+  }
+  if (train_datas.size() % dimension_ != 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
+  }
 
   faiss::ClusteringParameters clustering_parameters;
   if (BAIDU_UNLIKELY(data_size < (clustering_parameters.min_points_per_centroid * nlist_))) {
-    std::string s = fmt::format("[vector_index.ivf_flat][id({})] train_datas size({}) not enough. suggest at least {}.",
-                                Id(), data_size, clustering_parameters.min_points_per_centroid * nlist_);
-    DINGO_LOG(WARNING) << s;
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.ivf_flat][id({})] train_datas size({}) not enough, suggest at least {}.", Id(), data_size,
+        clustering_parameters.min_points_per_centroid * nlist_);
   } else if (BAIDU_UNLIKELY(data_size >= clustering_parameters.min_points_per_centroid * nlist_ &&
                             data_size < clustering_parameters.max_points_per_centroid * nlist_)) {
-    std::string s = fmt::format("[vector_index.ivf_flat][id({})] train_datas size({}) not enough. suggest at least {}.",
-                                Id(), data_size, clustering_parameters.max_points_per_centroid * nlist_);
-    DINGO_LOG(WARNING) << s;
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.ivf_flat][id({})] train_datas size({}) not enough, suggest at least {}.", Id(), data_size,
+        clustering_parameters.max_points_per_centroid * nlist_);
   }
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_train_latency);
@@ -464,7 +482,7 @@ butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
     return butil::Status::OK();
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.ivf_flat][id({})] train size: {}", Id(), train_datas.size());
+  DINGO_LOG(INFO) << fmt::format("[vector_index.ivf_flat][id({})] train size: {}.", Id(), data_size);
 
   // critical code
   if (BAIDU_UNLIKELY(data_size < nlist_)) {
@@ -544,6 +562,7 @@ bool VectorIndexIvfFlat::NeedToRebuild() {
 
 bool VectorIndexIvfFlat::IsTrained() {
   RWLockReadGuard guard(&rw_lock_);
+
   return IsTrainedImpl();
 }
 

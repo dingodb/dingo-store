@@ -50,7 +50,7 @@ DEFINE_uint32(hnsw_max_elements_amplification_multiple, 1, "hnsw max elements am
 
 DECLARE_int64(vector_max_batch_count);
 
-DECLARE_uint32(vector_write_batch_size_per_task);
+DEFINE_uint32(hnsw_vector_write_batch_size_per_task, 16, "hnsw vector write batch size per task");
 DECLARE_uint32(vector_read_batch_size_per_task);
 DECLARE_uint32(parallel_log_threshold_time_ms);
 
@@ -196,16 +196,12 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
 
 butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority) {
   if (vector_with_ids.empty()) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.hnsw][id({})] upsert vector empty.", Id());
-    return butil::Status::OK();
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
   }
 
-  // check
-  uint32_t input_dimension = vector_with_ids[0].vector().float_values_size();
-  if (input_dimension != static_cast<size_t>(dimension_)) {
-    std::string s = fmt::format("dimension is invalid, expect({}) input({})", dimension_, input_dimension);
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
-    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
   }
 
   BvarLatencyGuard bvar_guard(&g_hnsw_upsert_latency);
@@ -224,14 +220,14 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
     }
 
     if (!normalize_) {
-      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
-                  [&](size_t row) {
+      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_hnsw_vector_write_batch_size_per_task,
+                  is_priority, [&](size_t row) {
                     this->hnsw_index_->addPoint((void*)vector_with_ids[row].vector().float_values().data(),
                                                 vector_with_ids[row].id(), false);
                   });
     } else {
-      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
-                  [&](size_t row) {
+      ParallelFor(thread_pool, Id(), 0, vector_with_ids.size(), FLAGS_hnsw_vector_write_batch_size_per_task,
+                  is_priority, [&](size_t row) {
                     // normalize vector
                     std::vector<float> norm_array(dimension_);
                     VectorIndexUtils::NormalizeVectorForHnsw(
@@ -265,7 +261,7 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 
   // Add data to index
   try {
-    ParallelFor(thread_pool, Id(), 0, delete_ids.size(), FLAGS_vector_write_batch_size_per_task, is_priority,
+    ParallelFor(thread_pool, Id(), 0, delete_ids.size(), FLAGS_hnsw_vector_write_batch_size_per_task, is_priority,
                 [&](size_t row) { hnsw_index_->markDelete(delete_ids[row]); });
   } catch (std::runtime_error& e) {
     std::string s = fmt::format("delete vector failed, error: {}", e.what());
@@ -279,6 +275,10 @@ butil::Status VectorIndexHnsw::Delete(const std::vector<int64_t>& delete_ids, bo
 bool VectorIndexHnsw::SupportSave() { return true; }
 
 butil::Status VectorIndexHnsw::Save(const std::string& path) {
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
+
   // Save need the caller to do LockWrite() and UnlockWrite()
   if (vector_index_type == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
     hnsw_index_->saveIndex(path);
@@ -289,6 +289,10 @@ butil::Status VectorIndexHnsw::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexHnsw::Load(const std::string& path) {
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
+
   BvarLatencyGuard bvar_guard(&g_hnsw_load_latency);
   // RWLockWriteGuard guard(&rw_lock_);
 
@@ -309,7 +313,9 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
                                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                       const pb::common::VectorSearchParameter& search_parameter,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
 
   if (topk <= 0) return butil::Status::OK();
 
@@ -317,21 +323,15 @@ butil::Status VectorIndexHnsw::Search(const std::vector<pb::common::VectorWithId
     return butil::Status(pb::error::Errno::EINTERNAL, "vector index type is not supported");
   }
 
-  if (vector_with_ids.empty()) {
-    return butil::Status::OK();
-  }
-
-  for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-    if (vector_with_ids[row].vector().float_values_size() != this->dimension_) {
-      return butil::Status(pb::error::Errno::EINTERNAL, "vector dimension is not match, input=%d, index=%d",
-                           vector_with_ids[0].vector().float_values_size(), this->dimension_);
-    }
-  }
-
   if (search_parameter.hnsw().efsearch() < 0 || search_parameter.hnsw().efsearch() > 1024) {
     std::string s = fmt::format("efsearch is illegal, {}, must between 0 and 1024", search_parameter.hnsw().efsearch());
     DINGO_LOG(ERROR) << fmt::format("[vector_index.hnsw][id({})] {}", Id(), s);
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
   }
 
   butil::Status ret;

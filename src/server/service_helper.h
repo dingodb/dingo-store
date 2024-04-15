@@ -32,8 +32,7 @@
 
 namespace dingodb {
 
-DECLARE_int64(service_helper_store_min_log_elapse);
-DECLARE_int64(service_helper_coordinator_min_log_elapse);
+DECLARE_int64(service_log_threshold_time_ns);
 
 class ServiceHelper {
  public:
@@ -201,7 +200,7 @@ void ServiceClosure<T, U>::Run() {
         response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
         request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_store_min_log_elapse)) {
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
@@ -234,7 +233,7 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
         response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
         request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_store_min_log_elapse)) {
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
@@ -299,7 +298,7 @@ void CoordinatorServiceClosure<T, U>::Run() {
         response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
         request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
   } else {
-    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_helper_coordinator_min_log_elapse)) {
+    if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,

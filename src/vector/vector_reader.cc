@@ -1720,14 +1720,14 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
         DINGO_LOG(FATAL) << "flat_index is nullptr";
       }
 
-      auto ret = flat_index->Add(vector_with_id_batch);
+      auto ret = flat_index->AddByParallel(vector_with_id_batch);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
                                         ret.error_str());
         return ret;
       }
 
-      ret = flat_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
+      ret = flat_index->SearchByParallel(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", ret.error_code(), ret.error_str());
         return ret;
@@ -1766,14 +1766,14 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
       DINGO_LOG(FATAL) << "flat_index is nullptr";
     }
 
-    auto ret = flat_index->Add(vector_with_id_batch);
+    auto ret = flat_index->AddByParallel(vector_with_id_batch);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
                                       ret.error_str());
       return ret;
     }
 
-    ret = flat_index->Search(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
+    ret = flat_index->SearchByParallel(vector_with_ids, topk, filters, reconstruct, parameter, results_batch);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Search vector index failed, error: {} {}", ret.error_code(), ret.error_str());
       return ret;
@@ -1891,14 +1891,14 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
         DINGO_LOG(FATAL) << "flat_index is nullptr";
       }
 
-      auto ret = flat_index->Add(vector_with_id_batch);
+      auto ret = flat_index->AddByParallel(vector_with_id_batch);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
                                         ret.error_str());
         return ret;
       }
 
-      ret = flat_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
+      ret = flat_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", ret.error_code(),
                                         ret.error_str());
@@ -1937,14 +1937,14 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
       DINGO_LOG(FATAL) << "flat_index is nullptr";
     }
 
-    auto ret = flat_index->Add(vector_with_id_batch);
+    auto ret = flat_index->AddByParallel(vector_with_id_batch);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("Add vector to flat index failed, error: {} {}", ret.error_code(),
                                       ret.error_str());
       return ret;
     }
 
-    ret = flat_index->RangeSearch(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
+    ret = flat_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results_batch);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("RangeSearch vector index failed, error: {} {}", ret.error_code(),
                                       ret.error_str());

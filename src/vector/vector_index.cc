@@ -36,7 +36,7 @@
 
 namespace dingodb {
 
-DEFINE_uint32(vector_write_batch_size_per_task, 16, "vector write batch size per task");
+DEFINE_uint32(ivf_vector_write_batch_size_per_task, 256, "ivf vector write batch size per task");
 DEFINE_uint32(vector_read_batch_size_per_task, 1, "vector read batch size per task");
 
 DEFINE_uint32(parallel_log_threshold_time_ms, 5000, "parallel log elapsed time");
@@ -55,10 +55,9 @@ static void SplitVectorWithId(const std::vector<pb::common::VectorWithId>& vecto
   }
 }
 
-template <typename Function>
+template <typename T, typename Function>
 butil::Status ParallelRun(ThreadPoolPtr thread_pool, int64_t vector_index_id,
-                          const std::vector<std::vector<pb::common::VectorWithId>>& vector_with_id_batchs,
-                          bool is_priority, Function fn) {
+                          const std::vector<std::vector<T>>& vector_with_id_batchs, bool is_priority, Function fn) {
   std::vector<butil::Status> statuses(vector_with_id_batchs.size());
 
   uint64_t start_time = Helper::TimestampMs();
@@ -142,7 +141,7 @@ butil::Status VectorIndex::AddByParallel(const std::vector<pb::common::VectorWit
   } else {
     // parallel in here
     std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
-    SplitVectorWithId(vector_with_ids, FLAGS_vector_write_batch_size_per_task, vector_with_id_batchs);
+    SplitVectorWithId(vector_with_ids, FLAGS_ivf_vector_write_batch_size_per_task, vector_with_id_batchs);
 
     return ParallelRun(thread_pool, Id(), vector_with_id_batchs, is_priority,
                        [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
@@ -163,7 +162,7 @@ butil::Status VectorIndex::UpsertByParallel(const std::vector<pb::common::Vector
   } else {
     // parallel in here
     std::vector<std::vector<pb::common::VectorWithId>> vector_with_id_batchs;
-    SplitVectorWithId(vector_with_ids, FLAGS_vector_write_batch_size_per_task, vector_with_id_batchs);
+    SplitVectorWithId(vector_with_ids, FLAGS_ivf_vector_write_batch_size_per_task, vector_with_id_batchs);
     return ParallelRun(thread_pool, Id(), vector_with_id_batchs, is_priority,
                        [&](const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t) -> butil::Status {
                          return Upsert(vector_with_ids);
@@ -172,6 +171,18 @@ butil::Status VectorIndex::UpsertByParallel(const std::vector<pb::common::Vector
 }
 
 butil::Status VectorIndex::Delete(const std::vector<int64_t>& delete_ids, bool) { return Delete(delete_ids); }
+
+butil::Status VectorIndex::DeleteByParallel(const std::vector<int64_t>& delete_ids, bool is_priority) {
+  if (VectorIndexType() == pb::common::VECTOR_INDEX_TYPE_HNSW) {
+    // parallel in inner
+    return Delete(delete_ids, is_priority);
+  } else {
+    std::vector<std::vector<int64_t>> vector_id_batchs = {delete_ids};
+    return ParallelRun(
+        thread_pool, Id(), vector_id_batchs, is_priority,
+        [&](const std::vector<int64_t>& vector_ids, uint32_t) -> butil::Status { return Delete(vector_ids); });
+  }
+}
 
 butil::Status VectorIndex::SearchByParallel(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
                                             const std::vector<std::shared_ptr<FilterFunctor>>& filters,
@@ -229,6 +240,24 @@ butil::Status VectorIndex::RangeSearchByParallel(
           return status;
         });
   }
+}
+
+butil::Status VectorIndex::TrainByParallel(std::vector<float>& train_datas) {
+  butil::Status status;
+
+  DINGO_LOG(INFO) << fmt::format("[vector_index.train][index_id({})] train ready, vector data size({}).", Id(),
+                                 train_datas.size());
+
+  uint64_t start_time = Helper::TimestampMs();
+  auto task = thread_pool->ExecuteTask([&](void*) { status = Train(train_datas); }, nullptr, 0);
+
+  task->Join();
+
+  int64_t elapsed_time = Helper::TimestampMs() - start_time;
+  DINGO_LOG(INFO) << fmt::format("[vector_index.train][index_id({})] train finish elapsed_time: {}ms", Id(),
+                                 elapsed_time);
+
+  return status;
 }
 
 butil::Status VectorIndex::Save(const std::string& /*path*/) {
@@ -812,7 +841,7 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
 
     status = vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
+      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range()), true);
       return status;
     }
 
@@ -859,7 +888,7 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
 
     status = vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      sibling_vector_index->Delete(FilterVectorId(vector_with_ids, sibling_vector_index->Range()));
+      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range()), true);
       return status;
     }
 
@@ -898,19 +927,20 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<int64_t>& delete_ids)
   // Exist sibling vector index, so need to separate delete vector.
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
-    auto status = sibling_vector_index->Delete(FilterVectorId(delete_ids, sibling_vector_index->Range()));
+    auto status =
+        sibling_vector_index->DeleteByParallel(FilterVectorId(delete_ids, sibling_vector_index->Range()), true);
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->Delete(FilterVectorId(delete_ids, vector_index->Range()));
+    status = vector_index->DeleteByParallel(FilterVectorId(delete_ids, vector_index->Range()), true);
     if (status.ok()) {
       write_key_count_ += delete_ids.size();
     }
     return status;
   }
 
-  auto status = vector_index->Delete(delete_ids);
+  auto status = vector_index->DeleteByParallel(delete_ids, true);
   if (status.ok()) {
     write_key_count_ += delete_ids.size();
   }
