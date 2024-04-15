@@ -37,10 +37,9 @@ class Aggregation {
   Aggregation(Aggregation&& rhs) = delete;
   Aggregation& operator=(Aggregation&& rhs) = delete;
 
-  butil::Status Open(
-      size_t start_aggregation_operators_index,
-      const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
-      const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators);
+  butil::Status Open(size_t start_aggregation_operators_index,
+                     const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
+                     const ::google::protobuf::RepeatedPtrField<pb::store::AggregationOperator>& aggregation_operators);
 
   butil::Status Execute(const std::vector<std::function<bool(const std::any&, std::any*)>>& aggregation_functions,
                         const std::vector<std::any>& group_by_operator_record);
