@@ -517,11 +517,11 @@ TEST_F(VectorIndexFlatTest, Add) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_flat_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_flat_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_flat_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // one but empty failed
@@ -724,11 +724,11 @@ TEST_F(VectorIndexFlatTest, Upsert) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_flat_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
     ok = vector_index_flat_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
     ok = vector_index_flat_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
   }
 
   // one but empty failed
