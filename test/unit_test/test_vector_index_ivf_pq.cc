@@ -626,11 +626,11 @@ TEST_F(VectorIndexIvfPqTest, TrainVectorWithId) {
   // invalid.  no data
   {
     ok = vector_index_ivf_pq_l2->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // invalid . not align.
@@ -725,11 +725,11 @@ TEST_F(VectorIndexIvfPqTest, Train) {
   {
     std::vector<float> vector_value;
     ok = vector_index_ivf_pq_l2->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // invalid . not align.
@@ -737,11 +737,11 @@ TEST_F(VectorIndexIvfPqTest, Train) {
     std::vector<float> data_base_not_align = data_base;
     data_base_not_align.resize(data_base.size() - 1);
     ok = vector_index_ivf_pq_l2->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // valid. data_base size < ncentroids . nlist = 1
@@ -804,11 +804,11 @@ TEST_F(VectorIndexIvfPqTest, Add) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // one but empty failed
@@ -960,11 +960,11 @@ TEST_F(VectorIndexIvfPqTest, Upsert) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_pq_l2->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // update all data
@@ -1308,7 +1308,7 @@ TEST_F(VectorIndexIvfPqTest, Load) {
   butil::Status ok;
 
   ok = vector_index_ivf_pq_l2->Load("");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   ok = vector_index_ivf_pq_l2->Load(kTempDataDirectory + "/ivf_pq_not_exist");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
@@ -1856,11 +1856,11 @@ TEST_F(VectorIndexIvfPqTest, AddForIvfPq) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // one but empty failed
@@ -1998,11 +1998,11 @@ TEST_F(VectorIndexIvfPqTest, UpsertForIvfPq) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_pq_l2->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_ip->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_pq_cosine->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // update all data
@@ -2283,7 +2283,7 @@ TEST_F(VectorIndexIvfPqTest, LoadForIvfPq) {
   butil::Status ok;
 
   ok = vector_index_ivf_pq_l2->Load("");
-  EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);
+  EXPECT_EQ(ok.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   ok = vector_index_ivf_pq_l2->Load(kTempDataDirectory + "/ivf_pq_not_exist");
   EXPECT_EQ(ok.error_code(), pb::error::Errno::EINTERNAL);

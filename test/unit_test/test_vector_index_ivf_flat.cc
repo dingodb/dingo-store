@@ -466,11 +466,11 @@ TEST_F(VectorIndexIvfFlatTest, TrainVectorWithId) {
   // invalid.  no data
   {
     ok = vector_index_ivf_flat_l2->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_ip->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_cosine->Train(std::vector<pb::common::VectorWithId>{});
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // invalid . not align.
@@ -588,11 +588,11 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
   {
     std::vector<float> vector_value;
     ok = vector_index_ivf_flat_l2->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_ip->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_cosine->Train(vector_value);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // invalid . not align.
@@ -600,11 +600,11 @@ TEST_F(VectorIndexIvfFlatTest, Train) {
     std::vector<float> data_base_not_align = data_base;
     data_base_not_align.resize(data_base.size() - 1);
     ok = vector_index_ivf_flat_l2->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_ip->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_cosine->Train(data_base_not_align);
-    EXPECT_EQ(ok.error_code(), pb::error::EINTERNAL);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // valid. data_base size < ncentroids . nlist = 1
@@ -667,11 +667,11 @@ TEST_F(VectorIndexIvfFlatTest, Add) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_flat_l2->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_ip->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_cosine->Add(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // one but empty failed
@@ -809,11 +809,11 @@ TEST_F(VectorIndexIvfFlatTest, Upsert) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     ok = vector_index_ivf_flat_l2->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_ip->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
     ok = vector_index_ivf_flat_cosine->Upsert(vector_with_ids);
-    EXPECT_EQ(ok.error_code(), pb::error::OK);
+    EXPECT_EQ(ok.error_code(), pb::error::EILLEGAL_PARAMTETERS);
   }
 
   // update all data
