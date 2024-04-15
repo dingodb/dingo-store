@@ -966,7 +966,7 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
     field->set_enable_speed_up(true);
 
-  field = scalar_parameter->add_fields();
+    field = scalar_parameter->add_fields();
     field->set_key("speedup_key_string");
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
     field->set_enable_speed_up(true);
@@ -996,12 +996,12 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
     field->set_enable_speed_up(false);
 
-  field = scalar_parameter->add_fields();
+    field = scalar_parameter->add_fields();
     field->set_key("key_double");
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
     field->set_enable_speed_up(false);
 
-  field = scalar_parameter->add_fields();
+    field = scalar_parameter->add_fields();
     field->set_key("key_string");
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
     field->set_enable_speed_up(false);

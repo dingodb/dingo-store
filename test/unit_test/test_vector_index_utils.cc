@@ -772,9 +772,9 @@ TEST_F(VectorIndexUtilsTest, IsNeedToScanKeySpeedUpCF2) {
   // key empty. error.
   {
     vector_scalar_data.Clear();
-    //vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
-    //vector_scalar_data.mutable_scalar_data()->insert({"key2", {}});
-    //vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
+    // vector_scalar_data.mutable_scalar_data()->insert({"key1", {}});
+    // vector_scalar_data.mutable_scalar_data()->insert({"key2", {}});
+    // vector_scalar_data.mutable_scalar_data()->insert({"key3", {}});
     vector_scalar_data.mutable_scalar_data()->insert({"", {}});
 
     ok = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_scalar_data, is_need);
