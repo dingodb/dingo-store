@@ -70,7 +70,9 @@ VectorIndexIvfPq::~VectorIndexIvfPq() = default;
 
 butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                    bool is_upsert) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
 
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
   if (!status.ok()) {
@@ -82,14 +84,11 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
     RWLockWriteGuard guard(&rw_lock_);
     status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
-  }
-
-  if (status.ok()) {
-    return status;
-  }
-
-  if (!status.ok() && pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code()) {
-    return status;
+    if (status.ok()) {
+      return status;
+    } else if (!status.ok() && pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code()) {
+      return status;
+    }
   }
 
   // train
@@ -117,11 +116,12 @@ butil::Status VectorIndexIvfPq::Add(const std::vector<pb::common::VectorWithId>&
 }
 
 butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
-  BvarLatencyGuard bvar_guard(&g_ivf_pq_delete_latency);
-  RWLockWriteGuard guard(&rw_lock_);
   if (delete_ids.empty()) {
     return butil::Status::OK();
   }
+
+  BvarLatencyGuard bvar_guard(&g_ivf_pq_delete_latency);
+  RWLockWriteGuard guard(&rw_lock_);
 
   butil::Status status =
       InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, false, delete_ids);
@@ -136,7 +136,9 @@ butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithI
                                        const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                        const pb::common::VectorSearchParameter& parameter,
                                        std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   if (topk <= 0) return butil::Status::OK();
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
   if (!status.ok()) {
@@ -164,7 +166,9 @@ butil::Status VectorIndexIvfPq::RangeSearch(const std::vector<pb::common::Vector
                                             const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                             bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                             std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
   if (!status.ok()) {
     return status;
@@ -212,7 +216,9 @@ butil::Status VectorIndexIvfPq::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexIvfPq::Load(const std::string& path) {
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   butil::Status status;
 
@@ -315,9 +321,13 @@ bool VectorIndexIvfPq::IsExceedsMaxElements() { return false; }
 
 butil::Status VectorIndexIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
-  CHECK(data_size > 0) << "data size invalid";
-  CHECK(train_datas.size() % dimension_ == 0)
-      << fmt::format("dimension not match {} {}", train_datas.size(), dimension_);
+  if (data_size == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "data size invalid");
+  }
+  if (train_datas.size() % dimension_ != 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
+  }
 
   faiss::ClusteringParameters clustering_parameters;
 

@@ -405,7 +405,7 @@ void LoadAsyncBuildVectorIndexTask::Run() {
   // Pull snapshot from peers.
   // New region don't pull snapshot, directly build.
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
-  int64_t applied_index = (raft_meta != nullptr) ? raft_meta->AppliedId() : -1; 
+  int64_t applied_index = (raft_meta != nullptr) ? raft_meta->AppliedId() : -1;
 
   if (region->Epoch().version() > 1 || applied_index > FLAGS_vector_pull_snapshot_min_log_gap) {
     auto snapshot_set = vector_index_wrapper_->SnapshotSet();
@@ -1019,7 +1019,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
       switch (request.cmd_type()) {
         case pb::raft::VECTOR_ADD: {
           if (!ids.empty()) {
-            vector_index->Delete(ids, false);
+            vector_index->DeleteByParallel(ids, false);
             ids.clear();
           }
 
@@ -1030,14 +1030,14 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
           }
 
           if (vectors.size() >= Constant::kBuildVectorIndexBatchSize) {
-            vector_index->Upsert(vectors, false);
+            vector_index->UpsertByParallel(vectors, false);
             vectors.clear();
           }
           break;
         }
         case pb::raft::VECTOR_DELETE: {
           if (!vectors.empty()) {
-            vector_index->Upsert(vectors, false);
+            vector_index->UpsertByParallel(vectors, false);
             vectors.clear();
           }
 
@@ -1047,7 +1047,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
             }
           }
           if (ids.size() >= Constant::kBuildVectorIndexBatchSize) {
-            vector_index->Delete(ids, false);
+            vector_index->DeleteByParallel(ids, false);
             ids.clear();
           }
           break;
@@ -1060,9 +1060,9 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     last_log_id = log_entry->index;
   }
   if (!vectors.empty()) {
-    vector_index->Upsert(vectors, false);
+    vector_index->UpsertByParallel(vectors, false);
   } else if (!ids.empty()) {
-    vector_index->Delete(ids, false);
+    vector_index->DeleteByParallel(ids, false);
   }
 
   if (last_log_id > vector_index->ApplyLogId()) {
@@ -1550,7 +1550,6 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
 butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index,
                                                 std::shared_ptr<Iterator> iter, const std::string& start_key,
                                                 [[maybe_unused]] const std::string& end_key) {
-  int64_t count = 0;
   std::vector<float> train_vectors;
   train_vectors.reserve(100000 * vector_index->GetDimension());  // todo opt
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
@@ -1558,15 +1557,14 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
-      std::string s =
-          fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.", vector.id());
-      DINGO_LOG(WARNING) << s;
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.",
+                                        vector_index->Id());
       continue;
     }
 
     if (vector.vector().float_values_size() <= 0) {
-      std::string s = fmt::format("[vector_index.build][index_id({})] vector values_size error.", vector.id());
-      DINGO_LOG(WARNING) << s;
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector values_size error.",
+                                        vector_index->Id());
       continue;
     }
 
@@ -1574,11 +1572,11 @@ butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vec
                          vector.vector().float_values().end());
   }
 
-  // if empty. ignore
   if (!train_vectors.empty()) {
-    auto status = vector_index->Train(train_vectors);
+    auto status = vector_index->TrainByParallel(train_vectors);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("Train failed, error: {}", status.error_str());
+      DINGO_LOG(ERROR) << fmt::format("[vector_index.build][index_id({})] train failed, error: {}", vector_index->Id(),
+                                      status.error_str());
       return status;
     }
   }
