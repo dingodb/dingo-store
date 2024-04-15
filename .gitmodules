@@ -54,13 +54,13 @@
 	url = https://github.com/ianlancetaylor/libbacktrace
 [submodule "contrib/hnswlib"]
 	path = contrib/hnswlib
-	url = https://github.com/dingo/hnswlib
+	url = https://github.com/dingodb/hnswlib
 [submodule "contrib/openblas"]
 	path = contrib/openblas
 	url = https://github.com/xianyi/OpenBLAS
 [submodule "contrib/faiss"]
 	path = contrib/faiss
-	url = https://github.com/dingo/faiss
+	url = https://github.com/dingodb/faiss
 [submodule "contrib/diskann"]
 	path = contrib/diskann
 	url = https://github.com/microsoft/DiskANN
