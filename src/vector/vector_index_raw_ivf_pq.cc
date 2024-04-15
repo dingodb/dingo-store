@@ -77,7 +77,11 @@ VectorIndexRawIvfPq::~VectorIndexRawIvfPq() {}
 butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                bool is_upsert) {
   if (vector_with_ids.empty()) {
-    return butil::Status::OK();
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
   }
 
   const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
@@ -154,8 +158,14 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
                                           const std::vector<std::shared_ptr<FilterFunctor>>& filters,
                                           bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                           std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   if (topk <= 0) return butil::Status::OK();
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
@@ -204,7 +214,13 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
                                                const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                                bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
                                                std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
@@ -274,7 +290,9 @@ butil::Status VectorIndexRawIvfPq::Save(const std::string& path) {
   // When calling glog,
   // the child process will hang.
   // Remove glog temporarily.
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   // The outside has been locked. Remove the locking operation here.s
   try {
@@ -289,7 +307,9 @@ butil::Status VectorIndexRawIvfPq::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   // The outside has been locked. Remove the locking operation here.
   faiss::Index* internal_raw_index = nullptr;
@@ -439,9 +459,13 @@ bool VectorIndexRawIvfPq::IsExceedsMaxElements() { return false; }
 
 butil::Status VectorIndexRawIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
-  CHECK(data_size > 0) << "data size invalid";
-  CHECK(train_datas.size() % dimension_ == 0)
-      << fmt::format("dimension not match {} {}", train_datas.size(), dimension_);
+  if (data_size == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "data size invalid");
+  }
+  if (train_datas.size() % dimension_ != 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("dimension not match {} {}", train_datas.size(), dimension_));
+  }
 
   RWLockWriteGuard guard(&rw_lock_);
 

@@ -518,8 +518,8 @@ butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
 butil::Status Writer::KvBatchPutAndDelete(
     const std::map<std::string, std::vector<pb::common::KeyValue>>& kv_puts_with_cf,
     const std::map<std::string, std::vector<std::string>>& kv_deletes_with_cf) {
-  DINGO_LOG(INFO) << fmt::format("[rocksdb] KvBatchPutAndDelete put kv size: {} delete kv size: {}",
-                                 kv_puts_with_cf.size(), kv_deletes_with_cf.size());
+  DINGO_LOG(DEBUG) << fmt::format("[rocksdb] KvBatchPutAndDelete put kv size: {} delete kv size: {}",
+                                  kv_puts_with_cf.size(), kv_deletes_with_cf.size());
 
   rocksdb::WriteBatch batch;
   for (const auto& [cf_name, kv_puts] : kv_puts_with_cf) {

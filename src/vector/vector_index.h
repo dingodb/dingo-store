@@ -100,6 +100,7 @@ class VectorIndex {
 
   virtual butil::Status Delete(const std::vector<int64_t>& delete_ids) = 0;
   virtual butil::Status Delete(const std::vector<int64_t>& delete_ids, bool is_priority);
+  virtual butil::Status DeleteByParallel(const std::vector<int64_t>& delete_ids, bool is_priority);
 
   virtual butil::Status Save(const std::string& path);
 
@@ -128,6 +129,7 @@ class VectorIndex {
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
   virtual butil::Status Train(std::vector<float>& train_datas) = 0;
+  virtual butil::Status TrainByParallel(std::vector<float>& train_datas);
   virtual butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) = 0;
   virtual bool NeedToRebuild() = 0;
   virtual bool NeedTrain() { return false; }

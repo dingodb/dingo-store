@@ -84,7 +84,13 @@ butil::Status VectorIndexFlat::AddOrUpsertWrapper(const std::vector<pb::common::
 
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            bool is_upsert) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
   const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
@@ -135,8 +141,14 @@ butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId
                                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool,
                                       const pb::common::VectorSearchParameter&,
                                       std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
   if (topk <= 0) return butil::Status::OK();
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   std::vector<faiss::Index::distance_t> distances;
   distances.resize(topk * vector_with_ids.size(), 0.0f);
@@ -172,7 +184,13 @@ butil::Status VectorIndexFlat::RangeSearch(const std::vector<pb::common::VectorW
                                            const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                            bool /*reconstruct*/, const pb::common::VectorSearchParameter& /*parameter*/,
                                            std::vector<pb::index::VectorWithDistanceResult>& results) {
-  CHECK(!vector_with_ids.empty()) << "vector_with_ids is empty";
+  if (vector_with_ids.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
+  }
+  auto status = VectorIndexUtils::CheckVectorDimension(vector_with_ids, dimension_);
+  if (!status.ok()) {
+    return status;
+  }
 
   const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
@@ -222,7 +240,9 @@ butil::Status VectorIndexFlat::Save(const std::string& path) {
   // When calling glog,
   // the child process will hang.
   // Remove glog temporarily.
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   // The outside has been locked. Remove the locking operation here.
   try {
@@ -237,7 +257,9 @@ butil::Status VectorIndexFlat::Save(const std::string& path) {
 }
 
 butil::Status VectorIndexFlat::Load(const std::string& path) {
-  CHECK(!path.empty()) << "path is empty";
+  if (path.empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
+  }
 
   BvarLatencyGuard bvar_guard(&g_flat_load_latency);
 

@@ -460,8 +460,8 @@ std::unique_ptr<float[]> VectorIndexUtils::ExtractVectorValue(
   std::unique_ptr<float[]> vectors = std::make_unique<float[]>(vector_with_ids.size() * dimension);
 
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    const auto& vector = vector_with_ids[i].vector().float_values();
-    memcpy(vectors.get() + i * dimension, vector.data(), dimension * sizeof(float));
+    const auto& vector_value = vector_with_ids[i].vector().float_values();
+    memcpy(vectors.get() + i * dimension, vector_value.data(), dimension * sizeof(float));
 
     if (normalize) {
       VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension, dimension);

@@ -559,6 +559,9 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   }
 
   if (!Helper::CreateDirectory(tmp_snapshot_path)) {
+    // unlock write
+    vector_index->UnlockWrite();
+
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.save_snapshot][index_id({})] Create tmp snapshot path failed, path: {}", vector_index_id,
         tmp_snapshot_path);
