@@ -88,12 +88,26 @@ namespace bdb {
 
 // we use visable char as prefix, so we can use it as a range upper bound and better for debug.
 std::unordered_map<std::string, char> BdbHelper::cf_name_to_id = {
-    {"default", '0'}, {"meta", '1'}, {"vector_scalar", '2'}, {"vector_table", '3'},
-    {"data", '4'},    {"lock", '5'}, {"write", '6'}};
+    {Constant::kStoreDataCF, '0'},              // default
+    {Constant::kStoreMetaCF, '1'},              // meta
+    {Constant::kVectorScalarCF, '2'},           // vector_scalar
+    {Constant::kVectorTableCF, '3'},            // vector_table
+    {Constant::kTxnDataCF, '4'},                // data
+    {Constant::kTxnLockCF, '5'},                // lock
+    {Constant::kTxnWriteCF, '6'},               // write
+    {Constant::kVectorScalarKeySpeedUpCF, '7'}  // vector_scalar_key_speed_up
+};
 
 std::unordered_map<char, std::string> BdbHelper::cf_id_to_name = {
-    {'0', "default"}, {'1', "meta"}, {'2', "vector_scalar"}, {'3', "vector_table"},
-    {'4', "data"},    {'5', "lock"}, {'6', "write"}};
+    {'0', Constant::kStoreDataCF},              // default
+    {'1', Constant::kStoreMetaCF},              // meta
+    {'2', Constant::kVectorScalarCF},           // vector_scalar
+    {'3', Constant::kVectorTableCF},            // vector_table
+    {'4', Constant::kTxnDataCF},                // data
+    {'5', Constant::kTxnLockCF},                // lock
+    {'6', Constant::kTxnWriteCF},               // write
+    {'7', Constant::kVectorScalarKeySpeedUpCF}  // vector_scalar_key_speed_up
+};
 
 static void DelayBeforeNextRetry(int32_t retry_count) {
   if (retry_count <= (FLAGS_bdb_max_retries / 3)) {
