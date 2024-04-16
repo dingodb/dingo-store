@@ -48,7 +48,7 @@ namespace dingodb {
 
 DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
 DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");
-DEFINE_bool(dingo_log_switch_scalar_speed_up_detail, true, "scalar speed up log");
+DEFINE_bool(dingo_log_switch_scalar_speed_up_detail, false, "scalar speed up log");
 
 bvar::LatencyRecorder g_bruteforce_search_latency("dingo_bruteforce_search_latency");
 bvar::LatencyRecorder g_bruteforce_range_search_latency("dingo_bruteforce_range_search_latency");

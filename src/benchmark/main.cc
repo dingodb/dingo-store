@@ -69,9 +69,9 @@ static std::string GetUsageMessage() {
   message += "\n  --vector_index_name vector index name, default()";
   message += "\n  --vector_search_arrange_data arrange data, default(true)";
   message += "\n  --vector_search_topk vector search flag topk, default(10)";
-  message += "\n  --vector_search_with_vector_data vector search flag with_vector_data, default(true)";
-  message += "\n  --vector_search_with_scalar_data vector search flag with_scalar_data, default(false)";
-  message += "\n  --vector_search_with_table_data vector search flag with_table_data, default(false)";
+  message += "\n  --with_vector_data vector search flag with_vector_data, default(true)";
+  message += "\n  --with_scalar_data vector search flag with_scalar_data, default(false)";
+  message += "\n  --with_table_data vector search flag with_table_data, default(false)";
   message += "\n  --vector_search_use_brute_force vector search flag use_brute_force, default(false)";
   message += "\n  --vector_search_enable_range_search vector search flag enable_range_search, default(false)";
   message += "\n  --vector_search_radius vector search flag radius, default(0.1)";

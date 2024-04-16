@@ -57,9 +57,9 @@ DEFINE_validator(txn_isolation_level, [](const char*, const std::string& value) 
 // vector search
 DECLARE_string(vector_dataset);
 DECLARE_uint32(vector_search_topk);
-DECLARE_bool(vector_search_with_vector_data);
-DECLARE_bool(vector_search_with_scalar_data);
-DECLARE_bool(vector_search_with_table_data);
+DECLARE_bool(with_vector_data);
+DECLARE_bool(with_scalar_data);
+DECLARE_bool(with_table_data);
 DECLARE_bool(vector_search_use_brute_force);
 DECLARE_bool(vector_search_enable_range_search);
 DECLARE_double(vector_search_radius);
@@ -140,6 +140,10 @@ static OperationBuilderMap support_operations = {
     {"searchvector",
      [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
        return std::make_shared<VectorSearchOperation>(client);
+     }},
+    {"queryvector",
+     [](std::shared_ptr<sdk::Client> client) -> OperationPtr {
+       return std::make_shared<VectorQueryOperation>(client);
      }},
 };
 
@@ -551,6 +555,31 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
       vector_client->SearchByIndexId(entry->index_id, search_param, vector_with_ids, result.vector_search_results);
   if (!result.status.IsOK()) {
     LOG(ERROR) << fmt::format("search vector failed, error: {}", result.status.ToString());
+  }
+
+  result.eplased_time = Helper::TimestampUs() - start_time;
+
+  delete vector_client;
+
+  return result;
+}
+
+Operation::Result BaseOperation::VectorBatchQuery(VectorIndexEntryPtr entry, const sdk::QueryParam& query_param) {
+  Operation::Result result;
+
+  result.write_bytes = query_param.vector_ids.size() * sizeof(int64_t);
+
+  int64_t start_time = Helper::TimestampUs();
+
+  sdk::VectorClient* vector_client = nullptr;
+  result.status = client->NewVectorClient(&vector_client);
+  if (!result.status.IsOK()) {
+    return result;
+  }
+
+  result.status = vector_client->BatchQueryByIndexId(entry->index_id, query_param, result.vector_query_result);
+  if (!result.status.IsOK()) {
+    LOG(ERROR) << fmt::format("query vector failed, error: {}", result.status.ToString());
   }
 
   result.eplased_time = Helper::TimestampUs() - start_time;
@@ -1096,9 +1125,9 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
   vector_with_ids.reserve(FLAGS_batch_size);
 
   sdk::SearchParam search_param;
-  search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
-  search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
-  search_param.with_table_data = FLAGS_vector_search_with_table_data;
+  search_param.with_vector_data = FLAGS_with_vector_data;
+  search_param.with_scalar_data = FLAGS_with_scalar_data;
+  search_param.with_table_data = FLAGS_with_table_data;
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
 
   if (FLAGS_vector_search_enable_range_search) {
@@ -1155,9 +1184,9 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   vector_with_ids.reserve(FLAGS_batch_size);
 
   sdk::SearchParam search_param;
-  search_param.with_vector_data = FLAGS_vector_search_with_vector_data;
-  search_param.with_scalar_data = FLAGS_vector_search_with_scalar_data;
-  search_param.with_table_data = FLAGS_vector_search_with_table_data;
+  search_param.with_vector_data = FLAGS_with_vector_data;
+  search_param.with_scalar_data = FLAGS_with_scalar_data;
+  search_param.with_table_data = FLAGS_with_table_data;
   search_param.use_brute_force = FLAGS_vector_search_use_brute_force;
   search_param.topk = FLAGS_vector_search_topk;
   search_param.extra_params.insert(std::make_pair(sdk::SearchExtraParamType::kEfSearch, FLAGS_vector_search_ef));
@@ -1216,6 +1245,59 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
   }
 
   return result;
+}
+
+Operation::Result VectorQueryOperation::Execute(VectorIndexEntryPtr entry) {
+  return FLAGS_vector_dataset.empty() ? ExecuteAutoData(entry) : ExecuteManualData(entry);
+}
+
+Operation::Result VectorQueryOperation::ExecuteAutoData(VectorIndexEntryPtr entry) {
+  std::vector<int64_t> vector_ids;
+  vector_ids.reserve(FLAGS_batch_size);
+
+  sdk::QueryParam query_param;
+  query_param.with_vector_data = FLAGS_with_vector_data;
+  query_param.with_scalar_data = FLAGS_with_scalar_data;
+  query_param.with_table_data = FLAGS_with_table_data;
+
+  if (FLAGS_batch_size <= 1) {
+    vector_ids.push_back(entry->GenId());
+  } else {
+    for (int i = 0; i < FLAGS_batch_size; ++i) {
+      vector_ids.push_back(entry->GenId());
+    }
+  }
+
+  query_param.vector_ids = vector_ids;
+
+  return VectorBatchQuery(entry, query_param);
+}
+
+Operation::Result VectorQueryOperation::ExecuteManualData(VectorIndexEntryPtr entry) {
+  std::vector<int64_t> vector_ids;
+  vector_ids.reserve(FLAGS_batch_size);
+
+  sdk::QueryParam query_param;
+  query_param.with_vector_data = FLAGS_with_vector_data;
+  query_param.with_scalar_data = FLAGS_with_scalar_data;
+  query_param.with_table_data = FLAGS_with_table_data;
+
+  auto offset = entry->GenId();
+  auto& all_test_entries = entry->test_entries;
+
+  if (FLAGS_batch_size <= 1) {
+    auto& test_entry = all_test_entries[offset % all_test_entries.size()];
+    vector_ids.push_back(test_entry->vector_with_id.id);
+  } else {
+    for (size_t i = offset; i < FLAGS_batch_size; ++i) {
+      auto& test_entry = all_test_entries[i % all_test_entries.size()];
+      vector_ids.push_back(test_entry->vector_with_id.id);
+    }
+  }
+
+  query_param.vector_ids = vector_ids;
+
+  return VectorBatchQuery(entry, query_param);
 }
 
 bool IsSupportBenchmarkType(const std::string& benchmark) {

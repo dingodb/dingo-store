@@ -49,6 +49,7 @@ class Operation {
 
     std::vector<uint32_t> recalls;
     std::vector<sdk::SearchResult> vector_search_results;
+    sdk::QueryResult vector_query_result;
   };
 
   // Do some ready work at arrange stage
@@ -99,6 +100,8 @@ class BaseOperation : public Operation {
   Result VectorPut(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids);
   Result VectorSearch(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids,
                       const sdk::SearchParam& search_param);
+
+  Result VectorBatchQuery(VectorIndexEntryPtr entry, const sdk::QueryParam& query_param);
 
   std::shared_ptr<sdk::Client> client;
   std::shared_ptr<dingodb::sdk::RawKV> raw_kv;
@@ -246,6 +249,18 @@ class VectorSearchOperation : public BaseOperation {
   bool ArrangeAutoData(VectorIndexEntryPtr entry);
   bool ArrangeManualData(VectorIndexEntryPtr entry, DatasetPtr dataset);
 
+  Result ExecuteAutoData(VectorIndexEntryPtr entry);
+  Result ExecuteManualData(VectorIndexEntryPtr entry);
+};
+
+class VectorQueryOperation : public VectorSearchOperation {
+ public:
+  VectorQueryOperation(std::shared_ptr<sdk::Client> client) : VectorSearchOperation(client) {}
+  ~VectorQueryOperation() override = default;
+
+  Result Execute(VectorIndexEntryPtr entry) override;
+
+ private:
   Result ExecuteAutoData(VectorIndexEntryPtr entry);
   Result ExecuteManualData(VectorIndexEntryPtr entry);
 };

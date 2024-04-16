@@ -98,9 +98,9 @@ DEFINE_uint32(vector_index_id, 0, "Vector index id");
 DEFINE_string(vector_index_name, "", "Vector index name");
 
 DEFINE_uint32(vector_search_topk, 10, "Vector search flag topk");
-DEFINE_bool(vector_search_with_vector_data, true, "Vector search flag with_vector_data");
-DEFINE_bool(vector_search_with_scalar_data, false, "Vector search flag with_scalar_data");
-DEFINE_bool(vector_search_with_table_data, false, "Vector search flag with_table_data");
+DEFINE_bool(with_vector_data, true, "Vector search flag with_vector_data");
+DEFINE_bool(with_scalar_data, false, "Vector search flag with_scalar_data");
+DEFINE_bool(with_table_data, false, "Vector search flag with_table_data");
 DEFINE_bool(vector_search_use_brute_force, false, "Vector search flag use_brute_force");
 DEFINE_bool(vector_search_enable_range_search, false, "Vector search flag enable_range_search");
 DEFINE_double(vector_search_radius, 0.1, "Vector search flag radius");
@@ -150,7 +150,7 @@ static bool IsTransactionBenchmark() {
 
 static bool IsVectorBenchmark() {
   return FLAGS_benchmark == "fillvectorseq" || FLAGS_benchmark == "fillvectorrandom" ||
-         FLAGS_benchmark == "searchvector";
+         FLAGS_benchmark == "searchvector" || FLAGS_benchmark == "queryvector";
 }
 
 Stats::Stats() {
@@ -884,15 +884,9 @@ void Environment::PrintParam() {
   std::cout << fmt::format("{:<34}: {:>32}", "ivf_nbits_per_idx", FLAGS_ivf_nbits_per_idx) << '\n';
 
   std::cout << fmt::format("{:<34}: {:>32}", "vector_search_topk", FLAGS_vector_search_topk) << '\n';
-  std::cout << fmt::format("{:<34}: {:>32}", "vector_search_with_vector_data",
-                           FLAGS_vector_search_with_vector_data ? "true" : "false")
-            << '\n';
-  std::cout << fmt::format("{:<34}: {:>32}", "vector_search_with_scalar_data",
-                           FLAGS_vector_search_with_scalar_data ? "true" : "false")
-            << '\n';
-  std::cout << fmt::format("{:<34}: {:>32}", "vector_search_with_table_data",
-                           FLAGS_vector_search_with_table_data ? "true" : "false")
-            << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "with_vector_data", FLAGS_with_vector_data ? "true" : "false") << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "with_scalar_data", FLAGS_with_scalar_data ? "true" : "false") << '\n';
+  std::cout << fmt::format("{:<34}: {:>32}", "with_table_data", FLAGS_with_table_data ? "true" : "false") << '\n';
   std::cout << fmt::format("{:<34}: {:>32}", "vector_search_use_brute_force",
                            FLAGS_vector_search_use_brute_force ? "true" : "false")
             << '\n';
