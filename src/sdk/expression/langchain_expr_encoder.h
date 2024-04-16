@@ -22,7 +22,7 @@
 #include "proto/common.pb.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/expression/langchain_expr_visitor.h"
-#include "sdk/expression/types.h"
+#include "sdk/types.h"
 
 namespace dingodb {
 namespace sdk {

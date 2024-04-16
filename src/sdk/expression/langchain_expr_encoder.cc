@@ -22,10 +22,9 @@
 #include "glog/logging.h"
 #include "sdk/common/param_config.h"
 #include "sdk/expression/coding.h"
-#include "sdk/expression/common.h"
 #include "sdk/expression/encodes.h"
 #include "sdk/expression/langchain_expr.h"
-#include "sdk/expression/types.h"
+#include "sdk/types_util.h"
 
 namespace dingodb {
 namespace sdk {
@@ -91,7 +90,7 @@ std::any LangChainExprEncoder::VisitOrOperatorExpr(OrOperatorExpr* expr, void* t
 }
 
 std::any LangChainExprEncoder::VisitNotOperatorExpr(NotOperatorExpr* expr, void* target) {
-  //  TODO: check
+  CHECK_EQ(expr->args.size(), 1);
   Visit(expr->args[0].get(), target);
   std::string* dst = static_cast<std::string*>(target);
   dst->append(sizeof(NOT), NOT);
@@ -101,14 +100,14 @@ std::any LangChainExprEncoder::VisitNotOperatorExpr(NotOperatorExpr* expr, void*
 
 Byte GetEncode(Type type) {
   switch (type) {
-    case STRING:
-      return TYPE_STRING;
-    case DOUBLE:
-      return TYPE_DOUBLE;
-    case BOOL:
+    case kBOOL:
       return TYPE_BOOL;
-    case INT64:
+    case kINT64:
       return TYPE_INT64;
+    case kDOUBLE:
+      return TYPE_DOUBLE;
+    case kSTRING:
+      return TYPE_STRING;
     default:
       CHECK(false) << "unknown type: " << static_cast<int>(type);
   }
@@ -244,21 +243,21 @@ static void Encode(int64_t value, std::string* dst) {
 std::any LangChainExprEncoder::VisitVal(Val* expr, void* target) {
   std::string* dst = static_cast<std::string*>(target);
   switch (expr->type) {
-    case STRING: {
-      std::string v = std::any_cast<TypeOf<STRING>>(expr->value);
+    case kSTRING: {
+      std::string v = std::any_cast<TypeOf<kSTRING>>(expr->value);
       Encode(v, dst);
       break;
     }
-    case DOUBLE: {
-      Encode(std::any_cast<TypeOf<DOUBLE>>(expr->value), dst);
+    case kDOUBLE: {
+      Encode(std::any_cast<TypeOf<kDOUBLE>>(expr->value), dst);
       break;
     }
-    case BOOL: {
-      Encode(std::any_cast<TypeOf<BOOL>>(expr->value), dst);
+    case kBOOL: {
+      Encode(std::any_cast<TypeOf<kBOOL>>(expr->value), dst);
       break;
     }
-    case INT64: {
-      Encode(std::any_cast<TypeOf<INT64>>(expr->value), dst);
+    case kINT64: {
+      Encode(std::any_cast<TypeOf<kINT64>>(expr->value), dst);
       break;
     }
     default:

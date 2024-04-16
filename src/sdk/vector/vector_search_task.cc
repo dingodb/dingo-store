@@ -59,7 +59,14 @@ Status VectorSearchTask::Init() {
     FillInternalSearchParams(&search_parameter_, vector_index_->GetVectorIndexType(), search_param_);
     if (!search_param_.langchain_expr_json.empty()) {
       std::shared_ptr<expression::LangchainExpr> expr;
-      DINGO_RETURN_NOT_OK(expression::LangchainExprFactory::CreateExpr(search_param_.langchain_expr_json, expr));
+
+      std::unique_ptr<expression::LangchainExprFactory> expr_factory;
+      if (vector_index_->HasScalarSchema()) {
+        expr_factory = std::make_unique<expression::SchemaLangchainExprFactory>(vector_index_->GetScalarSchema());
+      } else {
+        expr_factory = std::make_unique<expression::LangchainExprFactory>();
+      }
+      DINGO_RETURN_NOT_OK(expr_factory->CreateExpr(search_param_.langchain_expr_json, expr));
 
       expression::LangChainExprEncoder encoder;
       *(search_parameter_.mutable_vector_coprocessor()) = encoder.EncodeToCoprocessor(expr.get());

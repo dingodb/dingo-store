@@ -15,17 +15,22 @@
 #include "sdk/expression/langchain_expr_factory.h"
 
 #include <nlohmann/json.hpp>
+#include <utility>
 
+#include "fmt/core.h"
 #include "sdk/common/param_config.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/status.h"
+#include "sdk/types.h"
+#include "sdk/types_util.h"
 
 namespace dingodb {
 namespace sdk {
 namespace expression {
 
 namespace {
-Status CreateOperatorExpr(const nlohmann::json& j, std::shared_ptr<LangchainExpr>& expr) {
+Status CreateOperatorExpr(LangchainExprFactory* expr_factory, const nlohmann::json& j,
+                          std::shared_ptr<LangchainExpr>& expr) {
   std::shared_ptr<OperatorExpr> tmp;
 
   std::string operator_type = j.at("operator");
@@ -43,7 +48,7 @@ Status CreateOperatorExpr(const nlohmann::json& j, std::shared_ptr<LangchainExpr
     std::string json_str = arg.dump();
 
     std::shared_ptr<LangchainExpr> sub_expr;
-    DINGO_RETURN_NOT_OK(LangchainExprFactory::CreateExpr(json_str, sub_expr));
+    DINGO_RETURN_NOT_OK(expr_factory->CreateExpr(json_str, sub_expr));
     tmp->AddArgument(sub_expr);
   }
 
@@ -51,7 +56,8 @@ Status CreateOperatorExpr(const nlohmann::json& j, std::shared_ptr<LangchainExpr
   return Status::OK();
 }
 
-Status CreateComparatorExpr(const nlohmann::json& j, std::shared_ptr<LangchainExpr>& expr) {
+Status CreateComparatorExpr(LangchainExprFactory* expr_factory, const nlohmann::json& j,
+                            std::shared_ptr<LangchainExpr>& expr) {
   std::shared_ptr<ComparatorExpr> tmp;
 
   std::string comparator_type = j.at("comparator");
@@ -74,20 +80,40 @@ Status CreateComparatorExpr(const nlohmann::json& j, std::shared_ptr<LangchainEx
   std::string name = j.at("attribute");
 
   std::string value_type = j.at("value_type");
+  Type type;
   if (value_type == "STRING") {
-    tmp->var = std::make_shared<Var>(std::move(name), STRING);
-    tmp->val = std::make_shared<Val>(j.at("value").get<std::string>(), STRING);
+    type = kSTRING;
   } else if (value_type == "INT64") {
-    tmp->var = std::make_shared<Var>(std::move(name), INT64);
-    tmp->val = std::make_shared<Val>(j.at("value").get<int64_t>(), INT64);
+    type = kINT64;
   } else if (value_type == "DOUBLE") {
-    tmp->var = std::make_shared<Var>(std::move(name), DOUBLE);
-    tmp->val = std::make_shared<Val>(j.at("value").get<double>(), DOUBLE);
+    type = kDOUBLE;
   } else if (value_type == "BOOL") {
-    tmp->var = std::make_shared<Var>(std::move(name), BOOL);
-    tmp->val = std::make_shared<Val>(j.at("value").get<bool>(), BOOL);
+    type = kBOOL;
   } else {
     return Status::InvalidArgument("Unknown value type: " + value_type);
+  }
+
+  DINGO_RETURN_NOT_OK(expr_factory->MaybeRemapType(name, type));
+
+  switch (type) {
+    case kBOOL:
+      tmp->var = std::make_shared<Var>(name, kBOOL);
+      tmp->val = std::make_shared<Val>(name, kBOOL, j.at("value").get<TypeOf<kBOOL>>());
+      break;
+    case kINT64:
+      tmp->var = std::make_shared<Var>(name, kINT64);
+      tmp->val = std::make_shared<Val>(name, kINT64, j.at("value").get<TypeOf<kINT64>>());
+      break;
+    case kDOUBLE:
+      tmp->var = std::make_shared<Var>(name, kDOUBLE);
+      tmp->val = std::make_shared<Val>(name, kDOUBLE, j.at("value").get<TypeOf<kDOUBLE>>());
+      break;
+    case kSTRING:
+      tmp->var = std::make_shared<Var>(name, kSTRING);
+      tmp->val = std::make_shared<Val>(name, kSTRING, j.at("value").get<TypeOf<kSTRING>>());
+      break;
+    default:
+      CHECK(false) << "Unknown value type: " << value_type;
   }
 
   expr = std::move(tmp);
@@ -102,9 +128,9 @@ Status LangchainExprFactory::CreateExpr(const std::string& expr_json_str, std::s
   nlohmann::json j = nlohmann::json::parse(expr_json_str);
   std::string type = j.at("type");
   if (type == "operator") {
-    DINGO_RETURN_NOT_OK(CreateOperatorExpr(j, tmp));
+    DINGO_RETURN_NOT_OK(CreateOperatorExpr(this, j, tmp));
   } else if (type == "comparator") {
-    DINGO_RETURN_NOT_OK(CreateComparatorExpr(j, tmp));
+    DINGO_RETURN_NOT_OK(CreateComparatorExpr(this, j, tmp));
   } else {
     return Status::InvalidArgument("Unknown expression type: " + type);
   }
@@ -114,6 +140,41 @@ Status LangchainExprFactory::CreateExpr(const std::string& expr_json_str, std::s
   VLOG(kSdkVlogLevel) << "expr_json_str: " << expr_json_str << " expr: " << expr->ToString();
   return Status::OK();
 }
+
+Status LangchainExprFactory::MaybeRemapType(const std::string& name, Type& type) {
+  (void)name;
+  (void)type;
+  return Status::OK();
+}
+
+SchemaLangchainExprFactory::SchemaLangchainExprFactory(const pb::common::ScalarSchema& schema) {
+  for (const auto& schema_item : schema.fields()) {
+    CHECK(attribute_type_
+              .insert(std::make_pair(schema_item.key(), InternalScalarFieldTypePB2Type(schema_item.field_type())))
+              .second);
+  }
+}
+
+Status SchemaLangchainExprFactory::MaybeRemapType(const std::string& name, Type& type) {
+  auto iter = attribute_type_.find(name);
+  if (iter != attribute_type_.end()) {
+    Type schema_type = iter->second;
+    if (kTypeConversionMatrix[type][schema_type]) {
+      type = schema_type;
+    } else {
+      std::string err_msg = fmt::format("attribute: {}, type: {}, can't convert to schema type: {}", name,
+                                        TypeToString(type), TypeToString(schema_type));
+      DINGO_LOG(WARNING) << err_msg;
+      return Status::InvalidArgument(err_msg);
+    }
+  } else {
+    // TODO: if not found in schema, should we return not ok?
+    DINGO_LOG(INFO) << "attribute: " << name << " type:" << TypeToString(type) << " not found in schema";
+  }
+
+  return Status::OK();
+}
+
 }  // namespace expression
 
 }  // namespace sdk

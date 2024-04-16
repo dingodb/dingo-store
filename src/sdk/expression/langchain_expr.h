@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "sdk/expression/types.h"
+#include "sdk/types.h"
 
 namespace dingodb {
 namespace sdk {
@@ -176,9 +176,9 @@ class Var : public LangchainExpr {
   Type type;
 };
 
-class Val : public LangchainExpr {
+class Val : public Var {
  public:
-  Val(std::any value, Type type) : value(value), type(type) {}
+  Val(std::string name, Type type, std::any value) : Var(std::move(name), type), value(value) {}
 
   ~Val() override = default;
 
@@ -187,7 +187,6 @@ class Val : public LangchainExpr {
   std::string ToString() const override;
 
   std::any value;
-  Type type;
 };
 
 }  // namespace expression

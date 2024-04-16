@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "sdk/status.h"
+#include "sdk/types.h"
 
 namespace dingodb {
 namespace sdk {
@@ -121,26 +122,12 @@ struct BruteForceParam {
   static VectorIndexType Type() { return VectorIndexType::kBruteForce; }
 };
 
-enum class ScalarFieldType : uint8_t {
-  kNone,
-  kBool,
-  kInt8,
-  kInt16,
-  kInt32,
-  kInt64,
-  kFloat32,
-  kDouble,
-  kString,
-  kBytes
-};
-
 struct VectorScalarColumnSchema {
   std::string key;
-  ScalarFieldType type;
+  Type type;
   bool speed;
 
-  VectorScalarColumnSchema(std::string& key, ScalarFieldType type, bool speed = false)
-      : key(key), type(type), speed(speed) {}
+  VectorScalarColumnSchema(std::string& key, Type type, bool speed = false) : key(key), type(type), speed(speed) {}
 };
 
 // TODO: maybe use builder to build VectorScalarSchema
@@ -186,18 +173,16 @@ struct Vector {
   std::string ToString() const;
 };
 
+// TODO: maybe use std::variant, when swig support
 struct ScalarField {
   bool bool_data;
-  int32_t int_data;
   int64_t long_data;
-  float float_data;
   double double_data;
   std::string string_data;
-  std::string bytes_data;
 };
 
 struct ScalarValue {
-  ScalarFieldType type;
+  Type type;
   std::vector<ScalarField> fields;
 };
 

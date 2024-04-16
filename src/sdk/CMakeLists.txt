@@ -49,7 +49,6 @@ add_library(sdk
   expression/langchain_expr_encoder.cc
   expression/langchain_expr_factory.cc
   expression/langchain_expr.cc
-  expression/types.cc
   # TODO: use libary
   ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
   ${PROJECT_SOURCE_DIR}/src/common/role.cc
