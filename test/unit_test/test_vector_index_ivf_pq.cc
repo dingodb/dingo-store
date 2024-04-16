@@ -1890,11 +1890,11 @@ TEST_F(VectorIndexIvfPqTest, AddForIvfPq) {
 
     vector_with_ids.push_back(vector_with_id);
 
-    ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_l2->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_ip->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_pq_cosine->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_cosine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
@@ -1913,11 +1913,11 @@ TEST_F(VectorIndexIvfPqTest, AddForIvfPq) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    ok = vector_index_ivf_pq_l2->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_l2->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_pq_ip->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_ip->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-    ok = vector_index_ivf_pq_cosine->Add(vector_with_ids);
+    ok = vector_index_ivf_pq_cosine->Upsert(vector_with_ids);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
