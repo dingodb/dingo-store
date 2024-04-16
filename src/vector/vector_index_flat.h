@@ -121,6 +121,9 @@ class VectorIndexFlat : public VectorIndex {
       faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
       faiss::RangeSearchResult* result, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
 
+  template <typename T>
+  std::vector<faiss::idx_t> GetRepeatedIds(const T& ids, size_t size);
+
   // Dimension of the elements
   faiss::idx_t dimension_;
 

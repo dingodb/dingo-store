@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <future>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <thread>
@@ -49,6 +50,11 @@ bvar::LatencyRecorder g_flat_search_latency("dingo_flat_search_latency");
 bvar::LatencyRecorder g_flat_range_search_latency("dingo_flat_range_search_latency");
 bvar::LatencyRecorder g_flat_delete_latency("dingo_flat_delete_latency");
 bvar::LatencyRecorder g_flat_load_latency("dingo_flat_load_latency");
+
+template std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const std::unique_ptr<faiss::idx_t[]>& ids,
+                                                                   size_t size);
+
+template std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const std::vector<faiss::idx_t>& ids, size_t size);
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
@@ -83,7 +89,7 @@ butil::Status VectorIndexFlat::AddOrUpsertWrapper(const std::vector<pb::common::
 }
 
 butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                           bool is_upsert) {
+                                           bool /*is_upsert*/) {
   if (vector_with_ids.empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
   }
@@ -98,9 +104,14 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
   BvarLatencyGuard bvar_guard(&g_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
 
-  if (is_upsert) {
-    faiss::IDSelectorBatch sel(vector_with_ids.size(), ids.get());
-    index_id_map2_->remove_ids(sel);
+  // delete id exists.
+  if (!index_id_map2_->rev_map.empty()) {
+    std::vector<faiss::idx_t> internal_ids = GetRepeatedIds(ids, vector_with_ids.size());
+
+    if (!internal_ids.empty()) {
+      faiss::IDSelectorBatch sel(internal_ids.size(), internal_ids.data());
+      index_id_map2_->remove_ids(sel);
+    }
   }
   index_id_map2_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
 
@@ -121,20 +132,27 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
   }
 
   const auto& ids = VectorIndexUtils::CastVectorId(delete_ids);
-  faiss::IDSelectorBatch sel(delete_ids.size(), ids.get());
 
   {
     BvarLatencyGuard bvar_guard(&g_flat_delete_latency);
     RWLockWriteGuard guard(&rw_lock_);
 
-    auto remove_count = index_id_map2_->remove_ids(sel);
-    if (0 == remove_count) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.flat][id({})] remove not found vector id.", Id());
-      return butil::Status(pb::error::Errno::EVECTOR_INVALID, "remove not found vector id");
-    }
-  }
+    // delete id exists.
+    if (!index_id_map2_->rev_map.empty()) {
+      std::vector<faiss::idx_t> internal_ids = GetRepeatedIds(delete_ids, delete_ids.size());
 
-  return butil::Status::OK();
+      if (!internal_ids.empty()) {
+        faiss::IDSelectorBatch sel(internal_ids.size(), internal_ids.data());
+        auto remove_count = index_id_map2_->remove_ids(sel);
+        if (0 == remove_count) {
+          DINGO_LOG(WARNING) << fmt::format("[vector_index.flat][id({})] remove not found vector id.", Id());
+          return butil::Status(pb::error::Errno::EVECTOR_INVALID, "remove not found vector id");
+        }
+      }
+    }
+
+    return butil::Status::OK();
+  }
 }
 
 butil::Status VectorIndexFlat::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
@@ -416,6 +434,18 @@ void VectorIndexFlat::DoRangeSearch(faiss::idx_t n, const faiss::Index::componen
   for (faiss::idx_t i = 0; i < result->lims[result->nq]; i++) {
     result->labels[i] = result->labels[i] < 0 ? result->labels[i] : index_id_map2_->id_map[result->labels[i]];
   }
+}
+
+template <typename T>
+std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const T& ids, size_t size) {
+  std::vector<faiss::idx_t> internal_ids;
+  internal_ids.reserve(size);
+  for (int i = 0; i < size; i++) {
+    if (0 != index_id_map2_->rev_map.count(ids[i])) {
+      internal_ids.push_back(ids[i]);
+    }
+  }
+  return internal_ids;
 }
 
 }  // namespace dingodb
