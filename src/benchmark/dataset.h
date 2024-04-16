@@ -42,7 +42,6 @@ class Dataset {
 
   struct TestEntry {
     sdk::VectorWithId vector_with_id;
-    // std::vector<Neighbor> neighbors;
     std::unordered_map<int64_t, float> neighbors;
   };
   using TestEntryPtr = std::shared_ptr<TestEntry>;
