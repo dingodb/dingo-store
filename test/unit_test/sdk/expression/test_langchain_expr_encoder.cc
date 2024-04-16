@@ -32,6 +32,11 @@ class SDKLangChainExprEncoder : public ::testing::Test {
   std::shared_ptr<LangChainExprEncoder> encoder;
 };
 
+static Status CreateExpr(const std::string& json_str, std::shared_ptr<LangchainExpr>& expr) {
+  LangchainExprFactory expr_factory;
+  return expr_factory.CreateExpr(json_str, expr);
+}
+
 TEST_F(SDKLangChainExprEncoder, DoubleGt) {
   std::string json_str =
       R"({
@@ -44,7 +49,7 @@ TEST_F(SDKLangChainExprEncoder, DoubleGt) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -64,7 +69,7 @@ TEST_F(SDKLangChainExprEncoder, Int64Gt) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -84,7 +89,7 @@ TEST_F(SDKLangChainExprEncoder, StringEq) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -104,7 +109,7 @@ TEST_F(SDKLangChainExprEncoder, BoolEqFalse) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -124,7 +129,7 @@ TEST_F(SDKLangChainExprEncoder, BoolEqTrue) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -171,7 +176,7 @@ TEST_F(SDKLangChainExprEncoder, AndOperator) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -205,7 +210,7 @@ TEST_F(SDKLangChainExprEncoder, OrOperator) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -231,7 +236,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperator) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -270,7 +275,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperatorWithOperator) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
@@ -304,7 +309,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperatorWithNestedComparator) {
   )";
 
   std::shared_ptr<LangchainExpr> expr;
-  Status s = LangchainExprFactory::CreateExpr(json_str, expr);
+  Status s = CreateExpr(json_str, expr);
   EXPECT_TRUE(s.ok());
 
   std::string bytes = encoder->EncodeToFilter(expr.get());

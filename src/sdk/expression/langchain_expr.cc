@@ -16,8 +16,8 @@
 
 #include <cstdint>
 
+#include "glog/logging.h"
 #include "sdk/expression/langchain_expr_visitor.h"
-#include "sdk/expression/types.h"
 
 namespace dingodb {
 namespace sdk {
@@ -120,20 +120,22 @@ std::any Val::Accept(LangchainExprVisitor* visitor, void* target) { return visit
 std::string Val::ToString() const {
   std::ostringstream oss;
 
-  oss << "Val(Type: " << TypeToString(type);
+  oss << "Val(Type: " << TypeToString(type) << ", Name: " + name;
   switch (type) {
-    case STRING:
-      oss << ", Value: " << std::any_cast<TypeOf<STRING>>(value);
+    case kBOOL:
+      oss << ", Value: " << std::any_cast<TypeOf<kBOOL>>(value);
       break;
-    case DOUBLE:
-      oss << ", Value: " << std::any_cast<TypeOf<DOUBLE>>(value);
+    case kINT64:
+      oss << ", Value: " << std::any_cast<TypeOf<kINT64>>(value);
       break;
-    case BOOL:
-      oss << ", Value: " << std::any_cast<TypeOf<BOOL>>(value);
+    case kDOUBLE:
+      oss << ", Value: " << std::any_cast<TypeOf<kDOUBLE>>(value);
       break;
-    case INT64:
-      oss << ", Value: " << std::any_cast<TypeOf<INT64>>(value);
+    case kSTRING:
+      oss << ", Value: " << std::any_cast<TypeOf<kSTRING>>(value);
       break;
+    default:
+      CHECK(false) << "Unknown type: " << static_cast<int>(type);
   }
   oss << ")";
 

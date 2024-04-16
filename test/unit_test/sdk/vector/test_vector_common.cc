@@ -297,32 +297,6 @@ TEST(SDKVectorCommonTest, TestFillSearchIvfPqParamPB) {
   EXPECT_EQ(pb.recall_num(), 5);
 }
 
-TEST(SDKVectorCommonTest, ScalarFieldType2InternalScalarFieldTypePB) {
-  EXPECT_EQ(pb::common::ScalarFieldType::NONE, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kNone));
-  EXPECT_EQ(pb::common::ScalarFieldType::BOOL, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kBool));
-  EXPECT_EQ(pb::common::ScalarFieldType::INT8, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt8));
-  EXPECT_EQ(pb::common::ScalarFieldType::INT16, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt16));
-  EXPECT_EQ(pb::common::ScalarFieldType::INT32, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt32));
-  EXPECT_EQ(pb::common::ScalarFieldType::INT64, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kInt64));
-  EXPECT_EQ(pb::common::ScalarFieldType::FLOAT32, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kFloat32));
-  EXPECT_EQ(pb::common::ScalarFieldType::DOUBLE, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kDouble));
-  EXPECT_EQ(pb::common::ScalarFieldType::STRING, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kString));
-  EXPECT_EQ(pb::common::ScalarFieldType::BYTES, ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType::kBytes));
-}
-
-TEST(SDKVectorCommonTest, InternalScalarFieldTypePB2ScalarFieldType) {
-  EXPECT_EQ(ScalarFieldType::kNone, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::NONE));
-  EXPECT_EQ(ScalarFieldType::kBool, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::BOOL));
-  EXPECT_EQ(ScalarFieldType::kInt8, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT8));
-  EXPECT_EQ(ScalarFieldType::kInt16, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT16));
-  EXPECT_EQ(ScalarFieldType::kInt32, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT32));
-  EXPECT_EQ(ScalarFieldType::kInt64, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::INT64));
-  EXPECT_EQ(ScalarFieldType::kFloat32, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::FLOAT32));
-  EXPECT_EQ(ScalarFieldType::kDouble, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::DOUBLE));
-  EXPECT_EQ(ScalarFieldType::kString, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::STRING));
-  EXPECT_EQ(ScalarFieldType::kBytes, InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType::BYTES));
-}
-
 TEST(FillSearchHnswParamPBTest, TestFillSearchHnswParamPB) {
   SearchParam param;
   param.extra_params[SearchExtraParamType::kEfSearch] = 20;

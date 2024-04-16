@@ -22,6 +22,7 @@
 #include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/status.h"
+#include "sdk/types.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_get_index_metrics_task.h"
@@ -40,7 +41,10 @@ static int32_t g_dimension = 2;
 static dingodb::sdk::FlatParam g_flat_param(g_dimension, dingodb::sdk::MetricType::kL2);
 static std::vector<int64_t> g_vector_ids;
 static dingodb::sdk::VectorClient* g_vector_client;
-static std::vector<std::string> g_scalar_col{"id", "name"};
+
+static const dingodb::sdk::Type kDefaultType = dingodb::sdk::Type::kINT64;
+static std::vector<std::string> g_scalar_col{"id", "fake_id"};
+static std::vector<dingodb::sdk::Type> g_scalar_col_typ{kDefaultType, dingodb::sdk::Type::kDOUBLE};
 
 static void PrepareVectorIndex() {
   dingodb::sdk::VectorIndexCreator* creator;
@@ -51,7 +55,8 @@ static void PrepareVectorIndex() {
 
   dingodb::sdk::VectorScalarSchema schema;
   // NOTE: may be add more
-  schema.cols.push_back({g_scalar_col[0], dingodb::sdk::ScalarFieldType::kInt64, true});
+  schema.cols.push_back({g_scalar_col[0], g_scalar_col_typ[0], true});
+  schema.cols.push_back({g_scalar_col[1], g_scalar_col_typ[1], true});
   Status create = creator->SetSchemaId(g_schema_id)
                       .SetName(g_index_name)
                       .SetReplicaNum(3)
@@ -147,14 +152,26 @@ static void VectorAdd(bool use_index_name = false) {
 
     dingodb::sdk::VectorWithId tmp(id, std::move(tmp_vector));
     {
-      dingodb::sdk::ScalarValue scalar_value;
-      scalar_value.type = dingodb::sdk::ScalarFieldType::kInt64;
+      {
+        dingodb::sdk::ScalarValue scalar_value;
+        scalar_value.type = kDefaultType;
 
-      dingodb::sdk::ScalarField field;
-      field.long_data = id;
-      scalar_value.fields.push_back(field);
+        dingodb::sdk::ScalarField field;
+        field.long_data = id;
+        scalar_value.fields.push_back(field);
 
-      tmp.scalar_data.insert(std::make_pair(g_scalar_col[0], scalar_value));
+        tmp.scalar_data.insert(std::make_pair(g_scalar_col[0], scalar_value));
+      }
+      {
+        dingodb::sdk::ScalarValue scalar_value;
+        scalar_value.type = dingodb::sdk::kDOUBLE;
+
+        dingodb::sdk::ScalarField field;
+        field.double_data = id;
+        scalar_value.fields.push_back(field);
+
+        tmp.scalar_data.insert(std::make_pair(g_scalar_col[1], scalar_value));
+      }
     }
 
     vectors.push_back(std::move(tmp));
@@ -235,14 +252,15 @@ static void VectorSearchUseExpr(bool use_index_name = false) {
     init = init + 0.1;
   }
 
-  dingodb::sdk::SearchParam param;
   {
-    param.topk = 100;
-    param.with_scalar_data = true;
-    param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
+    dingodb::sdk::SearchParam param;
+    {
+      param.topk = 100;
+      param.with_scalar_data = true;
+      param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
 
-    std::string json_str =
-        R"({
+      std::string json_str =
+          R"({
       "type": "operator",
       "operator": "and",
       "arguments": [
@@ -264,28 +282,132 @@ static void VectorSearchUseExpr(bool use_index_name = false) {
     }
   )";
 
-    param.langchain_expr_json = json_str;
-  }
-
-  Status tmp;
-  std::vector<dingodb::sdk::SearchResult> result;
-  if (use_index_name) {
-    tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
-  } else {
-    tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
-  }
-
-  DINGO_LOG(INFO) << "vector search expr status: " << tmp.ToString();
-  for (const auto& r : result) {
-    DINGO_LOG(INFO) << "vector search expr result: " << r.ToString();
-  }
-
-  for (auto& search_result : result) {
-    for (auto& distance : search_result.vector_datas) {
-      const auto& vector_id = distance.vector_data.id;
-      CHECK_GE(vector_id, 5);
-      CHECK_LT(vector_id, 20);
+      param.langchain_expr_json = json_str;
     }
+
+    Status tmp;
+    std::vector<dingodb::sdk::SearchResult> result;
+    if (use_index_name) {
+      tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
+    } else {
+      tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
+    }
+
+    DINGO_LOG(INFO) << "vector search expr status: " << tmp.ToString();
+    for (const auto& r : result) {
+      DINGO_LOG(INFO) << "vector search expr result: " << r.ToString();
+    }
+
+    for (auto& search_result : result) {
+      for (auto& distance : search_result.vector_datas) {
+        const auto& vector_id = distance.vector_data.id;
+        CHECK_GE(vector_id, 5);
+        CHECK_LT(vector_id, 20);
+      }
+    }
+  }
+
+  {
+    // schema type convert
+    dingodb::sdk::SearchParam param;
+    {
+      param.topk = 100;
+      param.with_scalar_data = true;
+      param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
+
+      // fake_id schema type is double, int64 can convert to double
+      std::string json_str =
+          R"({
+      "type": "operator",
+      "operator": "and",
+      "arguments": [
+        {
+          "type": "comparator",
+          "comparator": "gte",
+          "attribute": "fake_id",
+          "value": 5,
+          "value_type": "INT64"
+        },
+        {
+          "type": "comparator",
+          "comparator": "lt",
+          "attribute": "fake_id",
+          "value": 20,
+          "value_type": "INT64"
+        }
+      ]
+    }
+  )";
+
+      param.langchain_expr_json = json_str;
+    }
+
+    Status tmp;
+    std::vector<dingodb::sdk::SearchResult> result;
+    if (use_index_name) {
+      tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
+    } else {
+      tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
+    }
+
+    DINGO_LOG(INFO) << "vector search expr with schema convert status: " << tmp.ToString();
+    for (const auto& r : result) {
+      DINGO_LOG(INFO) << "vector search expr with schema convert result: " << r.ToString();
+    }
+
+    for (auto& search_result : result) {
+      for (auto& distance : search_result.vector_datas) {
+        const auto& vector_id = distance.vector_data.id;
+        CHECK_GE(vector_id, 5);
+        CHECK_LT(vector_id, 20);
+      }
+    }
+  }
+  {
+    // schema type convert
+    dingodb::sdk::SearchParam param;
+    {
+      param.topk = 100;
+      param.with_scalar_data = true;
+      param.extra_params.insert(std::make_pair(dingodb::sdk::kParallelOnQueries, 10));
+
+      // id schema type is int64, double can't convert to int64
+      std::string json_str =
+          R"({
+      "type": "operator",
+      "operator": "and",
+      "arguments": [
+        {
+          "type": "comparator",
+          "comparator": "gte",
+          "attribute": "id",
+          "value": 5,
+          "value_type": "DOUBLE"
+        },
+        {
+          "type": "comparator",
+          "comparator": "lt",
+          "attribute": "id",
+          "value": 20,
+          "value_type": "DOUBLE"
+        }
+      ]
+    }
+  )";
+
+      param.langchain_expr_json = json_str;
+    }
+
+    Status tmp;
+    std::vector<dingodb::sdk::SearchResult> result;
+    if (use_index_name) {
+      tmp = g_vector_client->SearchByIndexName(g_schema_id, g_index_name, param, target_vectors, result);
+    } else {
+      tmp = g_vector_client->SearchByIndexId(g_index_id, param, target_vectors, result);
+    }
+
+    DINGO_LOG(INFO) << "vector search expr with schema can't convert status: " << tmp.ToString();
+    CHECK(!tmp.ok());
   }
 }
 
@@ -398,7 +520,7 @@ static void VectorScanQuery(bool use_index_name = false) {
     int64_t filter_id = 5;
     {
       dingodb::sdk::ScalarValue scalar_value;
-      scalar_value.type = dingodb::sdk::ScalarFieldType::kInt64;
+      scalar_value.type = kDefaultType;
 
       dingodb::sdk::ScalarField field;
       field.long_data = filter_id;

@@ -50,6 +50,11 @@ class VectorIndex {
 
   bool IsStale() { return stale_.load(std::memory_order_relaxed); }
 
+  bool HasScalarSchema() const;
+
+  // the caller must make sure the vector index is not destroyed and HasScalarSchema
+  const pb::common::ScalarSchema& GetScalarSchema() const;
+
   std::string ToString(bool verbose = false) const;
 
  private:

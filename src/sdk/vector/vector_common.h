@@ -20,6 +20,8 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
+#include "sdk/types.h"
+#include "sdk/types_util.h"
 #include "sdk/vector.h"
 #include "vector/codec.h"
 
@@ -97,60 +99,6 @@ static VectorIndexType InternalVectorIndexTypePB2VectorIndexType(pb::common::Vec
       return VectorIndexType::kBruteForce;
     default:
       CHECK(false) << "unsupported vector index type:" << pb::common::VectorIndexType_Name(type);
-  }
-}
-
-static pb::common::ScalarFieldType ScalarFieldType2InternalScalarFieldTypePB(ScalarFieldType type) {
-  switch (type) {
-    case ScalarFieldType::kNone:
-      return pb::common::ScalarFieldType::NONE;
-    case ScalarFieldType::kBool:
-      return pb::common::ScalarFieldType::BOOL;
-    case ScalarFieldType::kInt8:
-      return pb::common::ScalarFieldType::INT8;
-    case ScalarFieldType::kInt16:
-      return pb::common::ScalarFieldType::INT16;
-    case ScalarFieldType::kInt32:
-      return pb::common::ScalarFieldType::INT32;
-    case ScalarFieldType::kInt64:
-      return pb::common::ScalarFieldType::INT64;
-    case ScalarFieldType::kFloat32:
-      return pb::common::ScalarFieldType::FLOAT32;
-    case ScalarFieldType::kDouble:
-      return pb::common::ScalarFieldType::DOUBLE;
-    case ScalarFieldType::kString:
-      return pb::common::ScalarFieldType::STRING;
-    case ScalarFieldType::kBytes:
-      return pb::common::ScalarFieldType::BYTES;
-    default:
-      CHECK(false) << "unsupported scalar field type:" << static_cast<int>(type);
-  }
-}
-
-static ScalarFieldType InternalScalarFieldTypePB2ScalarFieldType(pb::common::ScalarFieldType type) {
-  switch (type) {
-    case pb::common::ScalarFieldType::NONE:
-      return ScalarFieldType::kNone;
-    case pb::common::ScalarFieldType::BOOL:
-      return ScalarFieldType::kBool;
-    case pb::common::ScalarFieldType::INT8:
-      return ScalarFieldType::kInt8;
-    case pb::common::ScalarFieldType::INT16:
-      return ScalarFieldType::kInt16;
-    case pb::common::ScalarFieldType::INT32:
-      return ScalarFieldType::kInt32;
-    case pb::common::ScalarFieldType::INT64:
-      return ScalarFieldType::kInt64;
-    case pb::common::ScalarFieldType::FLOAT32:
-      return ScalarFieldType::kFloat32;
-    case pb::common::ScalarFieldType::DOUBLE:
-      return ScalarFieldType::kDouble;
-    case pb::common::ScalarFieldType::STRING:
-      return ScalarFieldType::kString;
-    case pb::common::ScalarFieldType::BYTES:
-      return ScalarFieldType::kBytes;
-    default:
-      CHECK(false) << "unsupported scalar field type:" << pb::common::ScalarFieldType_Name(type);
   }
 }
 
@@ -235,44 +183,26 @@ static pb::common::ValueType ValueType2InternalValueTypePB(ValueType value_type)
 
 static pb::common::ScalarValue ScalarValue2InternalScalarValuePB(const sdk::ScalarValue& scalar_value) {
   pb::common::ScalarValue result;
-  result.set_field_type(ScalarFieldType2InternalScalarFieldTypePB(scalar_value.type));
+  result.set_field_type(Type2InternalScalarFieldTypePB(scalar_value.type));
 
-  if (scalar_value.type == sdk::ScalarFieldType::kBool) {
+  if (scalar_value.type == kBOOL) {
     for (const auto& field : scalar_value.fields) {
       result.add_fields()->set_bool_data(field.bool_data);
     }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kInt8) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_int_data(field.int_data);
-    }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kInt16) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_int_data(field.int_data);
-    }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kInt32) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_int_data(field.int_data);
-    }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kInt64) {
+  } else if (scalar_value.type == kINT64) {
     for (const auto& field : scalar_value.fields) {
       result.add_fields()->set_long_data(field.long_data);
     }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kFloat32) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_float_data(field.float_data);
-    }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kDouble) {
+  } else if (scalar_value.type == kDOUBLE) {
     for (const auto& field : scalar_value.fields) {
       result.add_fields()->set_double_data(field.double_data);
     }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kString) {
+  } else if (scalar_value.type == kSTRING) {
     for (const auto& field : scalar_value.fields) {
       result.add_fields()->set_string_data(field.string_data);
     }
-  } else if (scalar_value.type == sdk::ScalarFieldType::kBytes) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_bytes_data(field.bytes_data);
-    }
+  } else {
+    LOG(WARNING) << "unsupported scalar value type:" << scalar_value.type;
   }
 
   return result;
@@ -280,7 +210,7 @@ static pb::common::ScalarValue ScalarValue2InternalScalarValuePB(const sdk::Scal
 
 static void FillScalarSchemaItem(pb::common::ScalarSchemaItem* pb, const VectorScalarColumnSchema& schema) {
   pb->set_key(schema.key);
-  pb->set_field_type(ScalarFieldType2InternalScalarFieldTypePB(schema.type));
+  pb->set_field_type(Type2InternalScalarFieldTypePB(schema.type));
   pb->set_enable_speed_up(schema.speed);
 }
 

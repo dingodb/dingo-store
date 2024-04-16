@@ -27,9 +27,23 @@ namespace expression {
 class LangchainExprFactory {
  public:
   LangchainExprFactory() = default;
-  ~LangchainExprFactory() = default;
+  virtual ~LangchainExprFactory() = default;
 
-  static Status CreateExpr(const std::string& expr_json_str, std::shared_ptr<LangchainExpr>& expr);
+  Status CreateExpr(const std::string& expr_json_str, std::shared_ptr<LangchainExpr>& expr);
+
+  virtual Status MaybeRemapType(const std::string& name, Type& type);
+};
+
+class SchemaLangchainExprFactory : public LangchainExprFactory {
+ public:
+  SchemaLangchainExprFactory(const pb::common::ScalarSchema& schema);
+
+  ~SchemaLangchainExprFactory() override = default;
+
+  Status MaybeRemapType(const std::string& name, Type& type) override;
+
+ private:
+  std::unordered_map<std::string, Type> attribute_type_;
 };
 
 }  // namespace expression
