@@ -101,6 +101,11 @@ pb::common::RawEngine Region::GetRawEngineType() {
   return inner_region_.definition().raw_engine();
 }
 
+pb::common::StorageEngine Region::GetStoreEngineType() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().store_engine();
+}
+
 bool Region::IsTxn() {
   auto range = Range(true);
   return Helper::IsExecutorTxn(range.start_key()) || Helper::IsClientTxn(range.start_key());

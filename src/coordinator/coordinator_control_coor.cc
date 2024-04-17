@@ -1349,18 +1349,18 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
   // create region with split_from_region_id & store_ids
   if (is_shadow_create) {
     return CreateShadowRegion(split_from_region.definition().name(), split_from_region.region_type(),
-                              split_from_region.definition().raw_engine(), "", store_ids.size(), new_range,
-                              split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
-                              split_from_region.definition().index_id(), split_from_region.definition().part_id(),
-                              split_from_region.definition().tenant_id(),
+                              split_from_region.definition().raw_engine(), split_from_region.definition().store_engine(),
+                              "", store_ids.size(), new_range, split_from_region.definition().schema_id(),
+                              split_from_region.definition().table_id(),split_from_region.definition().index_id(), 
+                              split_from_region.definition().part_id(),split_from_region.definition().tenant_id(), 
                               split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                               new_region_id, meta_increment);
   } else {
     return CreateRegionFinal(split_from_region.definition().name(), split_from_region.region_type(),
-                             split_from_region.definition().raw_engine(), "", store_ids.size(), new_range,
-                             split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
-                             split_from_region.definition().index_id(), split_from_region.definition().part_id(),
-                             split_from_region.definition().tenant_id(),
+                             split_from_region.definition().raw_engine(), split_from_region.definition().store_engine(),
+                             "", store_ids.size(), new_range, split_from_region.definition().schema_id(),
+                             split_from_region.definition().table_id(), split_from_region.definition().index_id(),
+                             split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),             
                              split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                              new_region_id, store_operations, meta_increment);
   }
@@ -1390,7 +1390,8 @@ butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region
 
   // create region with split_from_region_id & store_ids
   std::vector<pb::coordinator::StoreOperation> store_operations;
-  return CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(), resource_tag,
+  return CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(), 
+                           split_from_region.definition().store_engine(), resource_tag,
                            store_ids.size(), region_range, split_from_region.definition().schema_id(),
                            split_from_region.definition().table_id(), split_from_region.definition().index_id(),
                            split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
@@ -1808,13 +1809,16 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
 }
 
 butil::Status CoordinatorControl::CreateShadowRegion(
-    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
-    const std::string& resource_tag, int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-    int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
-    const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids, int64_t split_from_region_id,
+    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine, 
+    pb::common::StorageEngine store_engine, const std::string& resource_tag, int32_t replica_num, 
+    pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, 
+    int64_t part_id, int64_t tenant_id, const pb::common::IndexParameter& index_parameter, 
+    std::vector<int64_t>& store_ids, int64_t split_from_region_id,
     int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateShadowRegion replica_num=" << replica_num << ", region_name=" << region_name
-                  << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
+                  << ", region_type=" << pb::common::RegionType_Name(region_type)
+                   <<", region_store_engine"<<pb::common::StorageEngine_Name(store_engine)
+                  << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
                   << ", part_id=" << part_id << ", tenant_id=" << tenant_id
@@ -1934,6 +1938,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
   region_definition->set_part_id(part_id);
   region_definition->set_part_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
+  region_definition->set_store_engine(store_engine);
   if (new_index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_NONE) {
     *(region_definition->mutable_index_parameter()) = new_index_parameter;
   }
@@ -1970,12 +1975,13 @@ butil::Status CoordinatorControl::CreateShadowRegion(
 
 butil::Status CoordinatorControl::CreateRegionFinal(
     const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
-    const std::string& resource_tag, int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+    pb::common::StorageEngine store_engine, const std::string& resource_tag, 
+    int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
     int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
     const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids, int64_t split_from_region_id,
     int64_t& new_region_id, std::vector<pb::coordinator::StoreOperation>& store_operations,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
+  DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name << ", store_engine="<<pb::common::StorageEngine_Name(store_engine)
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
@@ -2080,6 +2086,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(
   region_definition->set_part_id(part_id);
   region_definition->set_tenant_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
+  region_definition->set_store_engine(store_engine);
   *(region_definition->mutable_index_parameter()) = new_index_parameter;
 
   // set region range in region definition, this is provided by sdk
@@ -4119,6 +4126,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       need_update_region_metrics = true;
     };
 
+    if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE ){
+      region_metrics_is_not_leader = false;
+    }
+
     if (region_metrics_is_not_leader) {
       if ((!need_update_region_definition) && region_to_update.state() != pb::common::RegionState::REGION_DELETE &&
           region_to_update.state() != pb::common::RegionState::REGION_DELETING &&
@@ -4226,7 +4237,10 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id() << " last_update_timestamp = "
                        << region_metrics_to_update.region_status().last_update_timestamp()
                        << " now = " << butil::gettimeofday_ms();
-      continue;
+      if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE ){
+        continue;
+      }
+      
     }
 
     if (need_update_region_definition || need_update_region_state) {

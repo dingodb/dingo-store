@@ -35,10 +35,12 @@
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
 #include "engine/rocks_raw_engine.h"
+#include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
+#include "engine/rocks_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -243,7 +245,6 @@ bool Server::InitEngine() {
 
     // init raft_meta_engine
     raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
-
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
 
@@ -292,11 +293,20 @@ bool Server::InitEngine() {
     tso_control_->SetKvEngine(raft_engine_);
 
   } else {
+    auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
+    rocks_engine_ = std::make_shared<RocksEngine>(raw_rocks_engine, raw_bdb_engine, listener_factory->Build());
+    if (!rocks_engine_->Init(config)) {
+      DINGO_LOG(ERROR) << "Init RocksEngine failed with Config[" << config->ToString() << "]";
+      return false;
+    }  
+    DINGO_LOG(INFO) << "Init rocks_engine";
+
     raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
+    DINGO_LOG(INFO) << "Init raft_store_engine";
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;
-    }
+    }    
   }
 
   return true;
@@ -374,7 +384,7 @@ bool Server::InitLogStorageManager() {
 }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(raft_engine_);
+  storage_ = std::make_shared<Storage>(raft_engine_, rocks_engine_);
   return true;
 }
 
@@ -709,10 +719,15 @@ bool Server::InitPreSplitChecker() {
 }
 
 bool Server::Recover() {
-  if (GetRole() == pb::common::STORE) {
+  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
     // Recover engine state.
     if (!raft_engine_->Recover()) {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
+      return false;
+    }
+
+    if (!rocks_engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << rocks_engine_->GetName();
       return false;
     }
 
@@ -720,19 +735,7 @@ bool Server::Recover() {
       DINGO_LOG(ERROR) << "Recover region controller failed";
       return false;
     }
-  } else if (GetRole() == pb::common::INDEX) {
-    // Recover engine state.
-    if (!raft_engine_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
-      return false;
-    }
-
-    if (!region_controller_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover region controller failed";
-      return false;
-    }
-  }
-
+  } 
   return true;
 }
 
@@ -855,6 +858,7 @@ std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
   return nullptr;
 }
 
+
 std::shared_ptr<MetaReader> Server::GetMetaReader() {
   assert(meta_reader_ != nullptr);
   return meta_reader_;
@@ -873,6 +877,11 @@ std::shared_ptr<LogStorageManager> Server::GetLogStorageManager() {
 std::shared_ptr<Storage> Server::GetStorage() {
   assert(storage_ != nullptr);
   return storage_;
+}
+
+std::shared_ptr<Storage> Server::GetRocksStorage() {
+  assert(rocks_storage_ != nullptr);
+  return rocks_storage_;
 }
 
 std::shared_ptr<StoreMetaManager> Server::GetStoreMetaManager() {

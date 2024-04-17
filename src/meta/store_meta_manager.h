@@ -66,6 +66,7 @@ class Region {
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
   pb::common::RawEngine GetRawEngineType();
+  pb::common::StorageEngine GetStoreEngineType();
 
   bool IsTxn();
   bool IsExecutorTxn();

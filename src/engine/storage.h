@@ -31,11 +31,13 @@ namespace dingodb {
 
 class Storage {
  public:
-  Storage(std::shared_ptr<Engine> engine);
+  Storage(std::shared_ptr<Engine> engine, std::shared_ptr<Engine> rocks_engine);
   ~Storage() = default;
 
   std::shared_ptr<Engine> GetEngine();
+  std::shared_ptr<Engine> GetEngine(pb::common::StorageEngine store_engine_type);
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
+ 
 
   static Snapshot* GetSnapshot();
   void ReleaseSnapshot();
@@ -153,7 +155,9 @@ class Storage {
                                        int64_t& search_time_us);
 
   butil::Status ValidateLeader(int64_t region_id);
+  butil::Status ValidateLeader(store::RegionPtr region);
   bool IsLeader(int64_t region_id);
+  bool IsLeader(store::RegionPtr region);
 
   butil::Status PrepareMerge(std::shared_ptr<Context> ctx, int64_t job_id,
                              const pb::common::RegionDefinition& region_definition, int64_t min_applied_log_id);
@@ -163,6 +167,7 @@ class Storage {
 
  private:
   std::shared_ptr<Engine> engine_;
+  std::shared_ptr<Engine> rocks_engine_;
 };
 
 using StoragePtr = std::shared_ptr<Storage>;

@@ -58,9 +58,11 @@ DECLARE_int64(tso_new_logical);
 
 DECLARE_int64(tenant_id);
 DECLARE_bool(with_scalar_schema);
+DECLARE_bool(enable_rocks_engine);
 
 DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
+
 
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -433,7 +435,11 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   if (FLAGS_replica > 0) {
     table_definition->set_replica(FLAGS_replica);
   }
-
+  if (FLAGS_enable_rocks_engine){
+    table_definition->set_store_engine(::dingodb::pb::common::StorageEngine::STORE_ENG_MONO_STORE);
+  }else{
+    table_definition->set_store_engine(::dingodb::pb::common::StorageEngine::STORE_ENG_RAFT_STORE);
+  }
   // repeated ColumnDefinition columns = 2;
   for (int i = 0; i < 3; i++) {
     auto* column = table_definition->add_columns();

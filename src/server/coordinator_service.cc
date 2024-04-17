@@ -1188,6 +1188,8 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   int64_t replica_num = request->replica_num();
   const pb::common::Range &range = request->range();
   pb::common::RawEngine raw_engine = request->raw_engine();
+  pb::common::StorageEngine store_engine = request->store_engine();
+  coordinator_control->GetStoreEngine(store_engine);
   int64_t schema_id = request->schema_id();
   int64_t table_id = request->table_id();
   int64_t index_id = request->index_id();
@@ -1221,16 +1223,16 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       store_ids.push_back(id);
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, range,
-                                                 schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag, replica_num,
+                                                 range, schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
                                                  store_ids, 0, new_region_id, store_operations, meta_increment);
   } else {
     // store_ids is empty, will auto select store
     std::vector<int64_t> store_ids;
     std::vector<pb::coordinator::StoreOperation> store_operations;
 
-    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, resource_tag, replica_num, range,
-                                                 schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag, replica_num,
+                                                 range, schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
                                                  store_ids, 0, new_region_id, store_operations, meta_increment);
   }
 

@@ -38,6 +38,7 @@ struct SmApplyEvent : public Event {
   std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd;
   int64_t term_id;
   int64_t log_id;
+  std::shared_ptr<Context> ctx;
 };
 
 class SmApplyEventListener : public EventListener {

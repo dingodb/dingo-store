@@ -3904,7 +3904,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
   for (auto &region_ptr : region_ptrs) {
     butil::Status status;
-    status = storage->ValidateLeader(region_ptr->Id());
+    status = storage->ValidateLeader(region_ptr);
 
     if (status.ok()) {
       // if (region_ptr->LeaderId() == self_id) {
@@ -3931,7 +3931,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   // We will not use a snapshot globally because it will affect other region compaction.
   for (const auto &region_ptr : leader_region_ptrs) {
     butil::Status status;
-    status = storage->ValidateLeader(region_ptr->Id());
+    status = storage->ValidateLeader(region_ptr);
     if (!status.ok()) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
           "region_id : {} is not leader yet. start_key : {} end_key : {}. ignore.", region_ptr->Id(),

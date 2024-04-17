@@ -100,6 +100,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
       int64_t region_id{};
 
       pb::common::RawEngine raw_engine_type{pb::common::RAW_ENG_ROCKSDB};
+      pb::common::StorageEngine store_engine_type{pb::common::STORE_ENG_RAFT_STORE};
 
       pb::common::Range region_range;
 

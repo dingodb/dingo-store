@@ -48,7 +48,7 @@ DEFINE_int64(max_table_count, 10000, "max table num of dingo");
 DEFINE_int64(max_index_count, 10000, "max index num of dingo");
 DEFINE_int64(max_tenant_count, 1024, "max tenant num of dingo");
 DEFINE_uint32(default_replica_num, 3, "default replica number");
-
+DEFINE_bool(enable_lite, false, "enable lite");
 butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                             pb::meta::EntityType entity_type,
                                                             pb::coordinator_internal::MetaIncrement& meta_increment,
@@ -703,6 +703,9 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     return ret2;
   }
 
+  pb::common::StorageEngine region_store_engine_type = table_definition.store_engine();
+  GetStoreEngine(region_store_engine_type);
+
   // this is just a null parameter
   pb::common::IndexParameter index_parameter;
 
@@ -725,7 +728,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type, "", replica,
+    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type, region_store_engine_type, "", replica,
                                  new_part_range, schema_id, new_table_id, 0, new_part_id, tenant_id, index_parameter,
                                  store_ids, 0, new_region_id, store_operations, meta_increment);
     if (!ret.ok()) {
@@ -1159,6 +1162,9 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     return ret2;
   }
 
+  pb::common::StorageEngine region_store_engine_type = table_definition.store_engine();
+  GetStoreEngine(region_store_engine_type);
+
   std::vector<int64_t> store_ids;
   auto ret4 = GetCreateRegionStoreIds(pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
                                       table_definition.index_parameter(), store_ids);
@@ -1177,8 +1183,8 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
-                                 new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
+    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type, region_store_engine_type,
+                                 "", replica, new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
                                  table_definition.index_parameter(), store_ids, 0, new_region_id, store_operations,
                                  meta_increment);
     if (!ret.ok()) {
@@ -3194,6 +3200,12 @@ butil::Status CoordinatorControl::TranslateEngineToRawEngine(const pb::common::E
   }
 
   return butil::Status::OK();
+}
+
+void CoordinatorControl::GetStoreEngine(pb::common::StorageEngine &store_engine){
+  if (FLAGS_enable_lite){
+    store_engine = pb::common::StorageEngine::STORE_ENG_MONO_STORE;
+  }
 }
 
 butil::Status CoordinatorControl::GetRegionsByTableInternal(
