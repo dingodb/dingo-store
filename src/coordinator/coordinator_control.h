@@ -232,6 +232,9 @@ class CoordinatorControl : public MetaControl {
   // translate Engine to RawEngine for CreateRegion
   static butil::Status TranslateEngineToRawEngine(const pb::common::Engine &engine, pb::common::RawEngine &raw_engine);
 
+  // Get StoreEngine for CreateRegion
+  static void GetStoreEngine(pb::common::StorageEngine &store_engine);
+
   // create region ids
   butil::Status CreateRegionId(uint32_t count, std::vector<int64_t> &region_ids,
                                pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -250,17 +253,19 @@ class CoordinatorControl : public MetaControl {
   butil::Status CheckRegionPrefix(const std::string &start_key, const std::string &end_key);
 
   butil::Status CreateShadowRegion(const std::string &region_name, pb::common::RegionType region_type,
-                                   pb::common::RawEngine raw_engine, const std::string &resource_tag,
-                                   int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
+                                   pb::common::RawEngine raw_engine, pb::common::StorageEngine store_engine, 
+                                   const std::string &resource_tag, int32_t replica_num, 
+                                   pb::common::Range region_range, int64_t schema_id,
                                    int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
                                    const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                    int64_t split_from_region_id, int64_t &new_region_id,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
 
   butil::Status CreateRegionFinal(const std::string &region_name, pb::common::RegionType region_type,
-                                  pb::common::RawEngine raw_engine, const std::string &resource_tag,
-                                  int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-                                  int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
+                                  pb::common::RawEngine raw_engine, pb::common::StorageEngine store_engine, 
+                                  const std::string &resource_tag, int32_t replica_num, 
+                                  pb::common::Range region_range, int64_t schema_id,int64_t table_id, 
+                                  int64_t index_id, int64_t part_id, int64_t tenant_id,
                                   const pb::common::IndexParameter &index_parameter, std::vector<int64_t> &store_ids,
                                   int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,

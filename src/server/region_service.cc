@@ -163,6 +163,7 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("INDEX_ID");
   table_header.push_back("PART_ID");
   table_header.push_back("ENGINE");
+  table_header.push_back("STORE_ENGINE");
   table_header.push_back("CREATE_TIME");
   table_header.push_back("UPDATE_TIME");
   table_header.push_back("REGION_ID");
@@ -211,6 +212,7 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // INDEX_ID
   min_widths.push_back(10);  // PART_ID
   min_widths.push_back(10);  // ENGINE
+  min_widths.push_back(10);  // STOREENGINE
   min_widths.push_back(20);  // CREATE_TIME
   min_widths.push_back(20);  // UPDATE_TIME
   min_widths.push_back(10);  // REGION_ID
@@ -265,9 +267,13 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
     line.push_back(pb::common::RegionState_Name(region.state()));  // REGION_STATE
     url_line.push_back(std::string());
-
-    line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));  // BRAFT_STATUS
-    url_line.push_back(std::string());
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+      line.push_back("N/A");  // BRAFT_STATUS
+      url_line.push_back(std::string());
+    }else{
+      line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));  // BRAFT_STATUS
+      url_line.push_back(std::string());
+    }
 
     line.push_back(pb::common::ReplicaStatus_Name(region.status().replica_status()));  // REPLICA_STATUS
     url_line.push_back(std::string());
@@ -311,6 +317,9 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     line.push_back(pb::common::RawEngine_Name(region.definition().raw_engine()));  // ENGINE
     url_line.push_back(std::string());
 
+    line.push_back(pb::common::StorageEngine_Name(region.definition().store_engine()));  // STORE_ENGINE
+    url_line.push_back(std::string());
+
     line.push_back(Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME
     url_line.push_back(std::string());
 
@@ -321,41 +330,77 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     line.push_back(std::to_string(region.id()));  // REGION_ID
     url_line.push_back(std::string("/region/"));
 
-    line.push_back(pb::common::RaftNodeState_Name(region.metrics().braft_status().raft_state()));  // RAFT_STATE
-    url_line.push_back(std::string());
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+      line.push_back("N/A");  // RAFT_STATE
+      url_line.push_back(std::string());
+    }else{
+      line.push_back(pb::common::RaftNodeState_Name(region.metrics().braft_status().raft_state()));  // RAFT_STATE
+      url_line.push_back(std::string());
+    }
 
     line.push_back(std::to_string(region.metrics().braft_status().readonly()));  // READONLY
     url_line.push_back(std::string());
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+      line.push_back("N/A");  // TERM
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().term()));  // TERM
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // APPLIED_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().known_applied_index()));  // APPLIED_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // COMITTED_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().committed_index()));  // COMITTED_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // FIRST_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().first_index()));  // FIRST_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // LAST_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().last_index()));  // LAST_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // DISK_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().disk_index()));  // DISK_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // PENDING_INDEX
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().pending_index()));  // PENDING_INDEX
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // PENDING_QUEUE_SIZE
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().pending_queue_size()));  // PENDING_QUEUE_SIZE
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // STABLE_FOLLOWERS
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().stable_followers().size()));  // STABLE_FOLLOWERS
-    url_line.push_back(std::string());
+      line.push_back("N/A");  // UNSTABLE_FOLLOWERS
+      url_line.push_back(std::string());
+    }else{
+      line.push_back(std::to_string(region.metrics().braft_status().term()));  // TERM
+      url_line.push_back(std::string());
 
-    line.push_back(std::to_string(region.metrics().braft_status().unstable_followers().size()));  // UNSTABLE_FOLLOWERS
-    url_line.push_back(std::string());
+      line.push_back(std::to_string(region.metrics().braft_status().known_applied_index()));  // APPLIED_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().committed_index()));  // COMITTED_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().first_index()));  // FIRST_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().last_index()));  // LAST_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().disk_index()));  // DISK_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().pending_index()));  // PENDING_INDEX
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().pending_queue_size()));  // PENDING_QUEUE_SIZE
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().stable_followers().size()));  // STABLE_FOLLOWERS
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().braft_status().unstable_followers().size()));  // UNSTABLE_FOLLOWERS
+      url_line.push_back(std::string());
+    }
 
     line.push_back(std::to_string(region.id()));  // REGION_ID
     url_line.push_back(std::string("/region/"));

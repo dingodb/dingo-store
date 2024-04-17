@@ -800,6 +800,7 @@ message CreateRegionRequest {
   int64 replica_num = 4;
   dingodb.pb.common.Range range = 5;
   dingodb.pb.common.RawEngine raw_engine = 6;
+  dingodb.pb.common.StorageEngine store_engine = 7; //optional if set, will create a store engine with this type, this is type is default raft store engine
   int64 schema_id = 11;  // optional
   int64 table_id = 12;   // optional
   int64 index_id = 13;   // optional, if region_type is INDEX, this field is required

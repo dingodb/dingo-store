@@ -151,7 +151,8 @@ message TableDefinition {
   PartitionRule table_partition = 20;
   uint32 replica = 21;
   dingodb.pb.common.Engine engine = 22;
-
+  dingodb.pb.common.StorageEngine store_engine = 23;
+  
   repeated ColumnDefinition columns = 30;
 
   map<string, string> properties = 40;

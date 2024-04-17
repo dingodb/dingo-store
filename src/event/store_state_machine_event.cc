@@ -36,9 +36,14 @@ namespace dingodb {
 int SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmApplyEvent>(event);
 
-  // Dispatch
-  auto* done = dynamic_cast<BaseClosure*>(the_event->done);
-  auto ctx = done ? done->GetCtx() : nullptr;
+  // Dispatch 
+  std::shared_ptr<Context> ctx;
+  if (the_event->ctx != nullptr){
+    ctx = the_event->ctx;
+  }else{
+    auto* done = dynamic_cast<BaseClosure*>(the_event->done);
+    ctx = done ? done->GetCtx() : nullptr;
+  }
   for (const auto& req : the_event->raft_cmd->requests()) {
     auto handler = handler_collection_->GetHandler(static_cast<HandlerType>(req.cmd_type()));
     if (handler) {

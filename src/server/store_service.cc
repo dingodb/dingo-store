@@ -56,6 +56,7 @@ static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 StoreServiceImpl::StoreServiceImpl() = default;
 
+
 bool StoreServiceImpl::IsRaftApplyPendingExceed() {
   if (BAIDU_UNLIKELY(raft_apply_worker_set_ != nullptr && FLAGS_raft_apply_worker_max_pending_num > 0 &&
                      raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
@@ -116,6 +117,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
@@ -143,8 +145,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoKvGet(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoKvGet(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -207,6 +208,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -231,10 +233,8 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
   if (!FLAGS_enable_async_store_operation) {
     return DoKvBatchGet(storage_, controller, request, response, svr_done);
   }
-
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoKvBatchGet(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoKvBatchGet(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -318,6 +318,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -343,8 +344,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoKvPut(storage, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoKvPut(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -435,6 +435,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
@@ -462,9 +463,8 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvBatchPut(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoKvBatchPut(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -549,6 +549,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
@@ -579,9 +580,8 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvPutIfAbsent(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoKvPutIfAbsent(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -672,6 +672,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -706,9 +707,8 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoKvBatchPutIfAbsent(storage, controller, request, response, svr_done, true); });
+      [=]() { DoKvBatchPutIfAbsent(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -794,6 +794,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
@@ -821,9 +822,8 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvBatchDelete(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoKvBatchDelete(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -889,6 +889,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
   status = storage->KvDeleteRange(ctx, correction_range);
@@ -912,9 +913,8 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvDeleteRange(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoKvDeleteRange(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -994,6 +994,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
@@ -1021,9 +1022,8 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoKvCompareAndSet(storage, controller, request, response, svr_done, true); });
+      [=]() { DoKvCompareAndSet(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1115,6 +1115,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchCompareAndSetRequest*>(request);
 
@@ -1151,9 +1152,8 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoKvBatchCompareAndSet(storage, controller, request, response, svr_done, true); });
+      [=]() { DoKvBatchCompareAndSet(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1219,6 +1219,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
@@ -1251,8 +1252,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoKvScanBegin(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoKvScanBegin(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1309,6 +1309,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   bool has_more = false;
@@ -1336,9 +1337,8 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvScanContinue(storage, controller, request, response, svr_done); });
+      std::make_shared<ServiceTask>([=]() { DoKvScanContinue(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1391,6 +1391,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->KvScanRelease(ctx, request->scan_id());
   if (!status.ok()) {
@@ -1409,9 +1410,8 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvScanRelease(storage, controller, request, response, svr_done); });
+      std::make_shared<ServiceTask>([=]() { DoKvScanRelease(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1502,6 +1502,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
@@ -1534,9 +1535,8 @@ void StoreServiceImpl::KvScanBeginV2(google::protobuf::RpcController* controller
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvScanBeginV2(storage, controller, request, response, svr_done); });
+      std::make_shared<ServiceTask>([=]() { DoKvScanBeginV2(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1594,6 +1594,7 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   bool has_more = false;
@@ -1623,9 +1624,8 @@ void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* contr
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvScanContinueV2(storage, controller, request, response, svr_done); });
+      std::make_shared<ServiceTask>([=]() { DoKvScanContinueV2(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1679,6 +1679,7 @@ void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetCfName(Constant::kStoreDataCF);
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->KvScanReleaseV2(ctx, request->scan_id());
   if (!status.ok()) {
@@ -1697,9 +1698,9 @@ void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* contro
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
+
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoKvScanReleaseV2(storage, controller, request, response, svr_done); });
+      std::make_shared<ServiceTask>([=]() { DoKvScanReleaseV2(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1738,6 +1739,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::TxnGetRequest*>(request);
@@ -1768,8 +1770,7 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGet(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1836,6 +1837,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1873,8 +1875,7 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScan(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1996,6 +1997,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
@@ -2026,9 +2028,8 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnPessimisticLock(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2135,6 +2136,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnPessimisticRollback(ctx, request->start_ts(), request->for_update_ts(),
                                            Helper::PbRepeatedToVector(request->keys()));
@@ -2159,9 +2161,8 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnPessimisticRollback(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2275,6 +2276,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::store::Mutation> mutations;
   for (const auto& mutation : request->mutations()) {
@@ -2320,9 +2322,8 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnPrewrite(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoTxnPrewrite(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2424,6 +2425,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -2453,9 +2455,8 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnCommit(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoTxnCommit(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2554,6 +2555,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
                                       request->current_ts());
@@ -2578,9 +2580,8 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnCheckTxnStatus(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2661,6 +2662,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -2690,9 +2692,8 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnResolveLock(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnResolveLock(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2762,6 +2763,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -2797,8 +2799,7 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnBatchGet(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2896,6 +2897,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -2925,9 +2927,8 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnBatchRollback(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnBatchRollback(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -3010,6 +3011,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::LockInfo> locks;
@@ -3045,8 +3047,7 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -3142,6 +3143,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
   if (!status.ok()) {
@@ -3165,9 +3167,8 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnHeartBeat(storage, controller, request, response, svr_done, true); });
+      std::make_shared<ServiceTask>([=]() { DoTxnHeartBeat(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -3225,6 +3226,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnGc(ctx, request->safe_point_ts());
   if (!status.ok()) {
@@ -3246,8 +3248,7 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGc(storage, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGc(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -3321,6 +3322,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
   if (!status.ok()) {
@@ -3343,9 +3345,8 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   }
 
   // Run in queue.
-  StoragePtr storage = storage_;
   auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnDeleteRange(storage, controller, request, response, svr_done, true); });
+      [=]() { DoTxnDeleteRange(storage_, controller, request, response, svr_done, true); });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -3415,6 +3416,7 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::TxnWriteKey> txn_write_keys;
@@ -3457,8 +3459,7 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  StoragePtr storage = storage_;
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnDump(storage, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([=]() { DoTxnDump(storage_, controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);

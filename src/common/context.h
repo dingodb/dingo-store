@@ -92,6 +92,9 @@ class Context {
   void SetRawEngineType(pb::common::RawEngine raw_engine_type) { raw_engine_type_ = raw_engine_type; }
   pb::common::RawEngine RawEngineType() { return raw_engine_type_; }
 
+  void SetStoreEngineType(pb::common::StorageEngine store_engine_type) { store_engine_type_ = store_engine_type; }
+  pb::common::StorageEngine StoreEngineType() { return store_engine_type_; }
+
   Context& SetCfName(const std::string& cf_name) {
     cf_name_ = cf_name;
     return *this;
@@ -131,6 +134,8 @@ class Context {
   int64_t region_id_{0};
   // RawEngine type
   pb::common::RawEngine raw_engine_type_{pb::common::RAW_ENG_ROCKSDB};
+  // StorageEngine type
+  pb::common::StorageEngine store_engine_type_{pb::common::STORE_ENG_RAFT_STORE};
   // Column family name
   std::string cf_name_{};
   // Region epoch

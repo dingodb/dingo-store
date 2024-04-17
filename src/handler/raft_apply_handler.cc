@@ -1088,9 +1088,11 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   auto vector_index_wrapper = region->VectorIndexWrapper();
   int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
+
   if (is_ready) {
     // Check if the log_id is greater than the ApplyLogIndex of the vector index
-    if (log_id > vector_index_wrapper->ApplyLogId()) {
+    if (log_id > vector_index_wrapper->ApplyLogId() || 
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
       try {
         // Build vector_with_ids
         std::vector<pb::common::VectorWithId> vector_with_ids;
@@ -1109,8 +1111,10 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
                                         vector_with_ids.size(), Helper::TimestampNs() - start_time);
-        if (status.ok()) {
-          vector_index_wrapper->SetApplyLogId(log_id);
+        if (status.ok() ) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+            vector_index_wrapper->SetApplyLogId(log_id);    
+          }   
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
                                             vector_index_id, vector_with_ids.size(), Helper::PrintStatus(status));
@@ -1232,13 +1236,16 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
   if (is_ready && !delete_ids.empty()) {
-    if (log_id > vector_index_wrapper->ApplyLogId()) {
+    if (log_id > vector_index_wrapper->ApplyLogId() ||
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE ) {
       try {
         auto start_time = Helper::TimestampNs();
         auto status = vector_index_wrapper->Delete(delete_ids);
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
-          vector_index_wrapper->SetApplyLogId(log_id);
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+            vector_index_wrapper->SetApplyLogId(log_id);
+          }         
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
                                             vector_index_id, delete_ids.size(), Helper::PrintStatus(status));

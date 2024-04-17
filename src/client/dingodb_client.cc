@@ -201,6 +201,8 @@ DEFINE_bool(get_all_tenant, false, "get all tenant");
 // scalar key speed up
 DEFINE_bool(with_scalar_schema, false, "create vector index with scalar schema");
 
+DEFINE_bool(enable_rocks_engine, false, "create table with rocks engine");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -345,6 +347,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
       std::string value = FLAGS_value.empty() ? client::Helper::GenRandomString(256) : FLAGS_value;
+      DINGO_LOG(INFO) << "value:"<<value;
       client::SendKvPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key), value);
     } else if (method == "KvBatchPut") {
       client::SendKvBatchPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix), FLAGS_count);
