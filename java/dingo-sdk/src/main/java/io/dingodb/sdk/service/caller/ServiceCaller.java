@@ -3,6 +3,7 @@ package io.dingodb.sdk.service.caller;
 import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
+import io.dingodb.sdk.service.JsonMessageUtils;
 import io.dingodb.sdk.service.Caller;
 import io.dingodb.sdk.service.ChannelProvider;
 import io.dingodb.sdk.service.Service;
@@ -162,6 +163,7 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
             throw exception;
         } else {
             handler.onNonConnection(request, options, traceId);
+            log.error(JsonMessageUtils.toJson(name, traceId, request, null, options));
             throw new ExhaustedRetryException(
                 "Exec [" + traceId + "] [" + name + "] error, " + "transform leader attempts exhausted."
             );
