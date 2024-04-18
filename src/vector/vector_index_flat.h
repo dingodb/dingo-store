@@ -122,7 +122,7 @@ class VectorIndexFlat : public VectorIndex {
       faiss::RangeSearchResult* result, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
 
   template <typename T>
-  std::vector<faiss::idx_t> GetRepeatedIds(const T& ids, size_t size);
+  std::vector<faiss::idx_t> GetExistVectorIds(const T& ids, size_t size);
 
   // Dimension of the elements
   faiss::idx_t dimension_;
