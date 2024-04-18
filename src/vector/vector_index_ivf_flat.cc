@@ -315,9 +315,7 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   try {
     faiss::write_index(index_.get(), path.c_str());
   } catch (std::exception& e) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.ivf_flat][id({})] write index failed, exception: {} path: {}", Id(),
-                                    e.what(), path);
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: ", e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: {}", e.what()));
   }
 
   return butil::Status();

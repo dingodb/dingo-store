@@ -238,8 +238,7 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
     RWLockReadGuard guard(&rw_lock_);
 
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-      std::string s = fmt::format("raw ivf pq not train. train first. ignored");
-      DINGO_LOG(WARNING) << s;
+      DINGO_LOG(WARNING) << fmt::format("raw ivf pq not train. train first. ignored");
 
       for (size_t row = 0; row < vector_with_ids.size(); ++row) {
         auto& result = results.emplace_back();
@@ -298,9 +297,7 @@ butil::Status VectorIndexRawIvfPq::Save(const std::string& path) {
   try {
     faiss::write_index(index_.get(), path.c_str());
   } catch (std::exception& e) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.raw_ivf_pq][id({})] write index failed, exception: {} path: {}",
-                                    Id(), e.what(), path);
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: ", e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: {}", e.what()));
   }
 
   return butil::Status();
@@ -318,7 +315,7 @@ butil::Status VectorIndexRawIvfPq::Load(const std::string& path) {
 
   } catch (std::exception& e) {
     delete internal_raw_index;
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {}", path, e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {} {}", path, e.what()));
   }
 
   faiss::IndexIVFPQ* internal_index = dynamic_cast<faiss::IndexIVFPQ*>(internal_raw_index);
@@ -578,7 +575,6 @@ bool VectorIndexRawIvfPq::IsTrainedImpl() {
                         ? index_->is_trained
                         : false;
 
-  DINGO_LOG(DEBUG) << fmt::format("[vector_index.raw_ivf_pq][id({})] is train {}", Id(), is_trained);
   return is_trained;
 }
 

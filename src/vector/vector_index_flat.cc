@@ -51,10 +51,11 @@ bvar::LatencyRecorder g_flat_range_search_latency("dingo_flat_range_search_laten
 bvar::LatencyRecorder g_flat_delete_latency("dingo_flat_delete_latency");
 bvar::LatencyRecorder g_flat_load_latency("dingo_flat_load_latency");
 
-template std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const std::unique_ptr<faiss::idx_t[]>& ids,
-                                                                   size_t size);
+template std::vector<faiss::idx_t> VectorIndexFlat::GetExistVectorIds(const std::unique_ptr<faiss::idx_t[]>& ids,
+                                                                      size_t size);
 
-template std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const std::vector<faiss::idx_t>& ids, size_t size);
+template std::vector<faiss::idx_t> VectorIndexFlat::GetExistVectorIds(const std::vector<faiss::idx_t>& ids,
+                                                                      size_t size);
 
 VectorIndexFlat::VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
@@ -106,7 +107,7 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
 
   // delete id exists.
   if (!index_id_map2_->rev_map.empty()) {
-    std::vector<faiss::idx_t> internal_ids = GetRepeatedIds(ids, vector_with_ids.size());
+    std::vector<faiss::idx_t> internal_ids = GetExistVectorIds(ids, vector_with_ids.size());
 
     if (!internal_ids.empty()) {
       faiss::IDSelectorBatch sel(internal_ids.size(), internal_ids.data());
@@ -139,7 +140,7 @@ butil::Status VectorIndexFlat::Delete(const std::vector<int64_t>& delete_ids) {
 
     // delete id exists.
     if (!index_id_map2_->rev_map.empty()) {
-      std::vector<faiss::idx_t> internal_ids = GetRepeatedIds(delete_ids, delete_ids.size());
+      std::vector<faiss::idx_t> internal_ids = GetExistVectorIds(delete_ids, delete_ids.size());
 
       if (!internal_ids.empty()) {
         faiss::IDSelectorBatch sel(internal_ids.size(), internal_ids.data());
@@ -266,9 +267,7 @@ butil::Status VectorIndexFlat::Save(const std::string& path) {
   try {
     faiss::write_index(index_id_map2_.get(), path.c_str());
   } catch (std::exception& e) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.flat][id({})] write index failed, exception: {} path: {}", Id(),
-                                    e.what(), path);
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: ", e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: {}", e.what()));
   }
 
   return butil::Status();
@@ -287,7 +286,7 @@ butil::Status VectorIndexFlat::Load(const std::string& path) {
     internal_raw_index = faiss::read_index(path.c_str(), 0);
   } catch (std::exception& e) {
     delete internal_raw_index;
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {}", path, e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {} {}", path, e.what()));
   }
 
   faiss::IndexIDMap2* internal_index = dynamic_cast<faiss::IndexIDMap2*>(internal_raw_index);
@@ -437,7 +436,7 @@ void VectorIndexFlat::DoRangeSearch(faiss::idx_t n, const faiss::Index::componen
 }
 
 template <typename T>
-std::vector<faiss::idx_t> VectorIndexFlat::GetRepeatedIds(const T& ids, size_t size) {
+std::vector<faiss::idx_t> VectorIndexFlat::GetExistVectorIds(const T& ids, size_t size) {
   std::vector<faiss::idx_t> internal_ids;
   internal_ids.reserve(size);
   for (int i = 0; i < size; i++) {

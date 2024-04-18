@@ -521,8 +521,6 @@ bool VectorIndexIvfPq::IsTrainedImpl() {
       is_trained = false;
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("[vector_index.ivf_pq][id({})] is train {}", Id(), is_trained);
-
   return is_trained;
 }
 
