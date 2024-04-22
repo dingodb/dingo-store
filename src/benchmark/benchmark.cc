@@ -23,6 +23,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "benchmark/color.h"
@@ -117,6 +118,8 @@ DECLARE_uint32(value_size);
 DECLARE_uint32(batch_size);
 DECLARE_bool(is_pessimistic_txn);
 DECLARE_string(txn_isolation_level);
+
+DECLARE_string(filter_field);
 
 namespace dingodb {
 namespace benchmark {
@@ -568,6 +571,34 @@ sdk::BruteForceParam GenBruteForceParam() {
   return param;
 }
 
+static bool IsDigitString(const std::string& str) {
+  for (const auto& c : str) {
+    if (!std::isdigit(c)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// parse format: field1:int,field2:string
+static std::vector<std::vector<std::string>> ParseFilterField(const std::string& value) {
+  std::vector<std::vector<std::string>> result;
+
+  std::vector<std::string> parts;
+  Helper::SplitString(value, ',', parts);
+
+  for (auto& part : parts) {
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(part, ':', sub_parts);
+    if (sub_parts.size() == 2) {
+      result.push_back(sub_parts);
+    }
+  }
+
+  return result;
+}
+
 int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string& vector_index_type) {
   sdk::VectorIndexCreator* creator = nullptr;
   auto status = client_->NewVectorIndexCreator(&creator);
@@ -597,6 +628,29 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
   } else {
     LOG(ERROR) << fmt::format("Not support vector index type {}", vector_index_type);
     return 0;
+  }
+
+  if (!FLAGS_filter_field.empty()) {
+    sdk::VectorScalarSchema scalar_schema;
+    auto filter_fields = ParseFilterField(FLAGS_filter_field);
+    for (auto& filter_field : filter_fields) {
+      const auto& field_name = filter_field[0];
+      const std::string& filed_type = filter_field[1];
+
+      if (filed_type == "int" || filed_type == "int32" || filed_type == "int64" || filed_type == "uint" ||
+          filed_type == "uint32" || filed_type == "uint64") {
+        sdk::VectorScalarColumnSchema column_schema(field_name, sdk::Type::kINT64, true);
+        scalar_schema.cols.push_back(column_schema);
+
+      } else if (filed_type == "string") {
+        sdk::VectorScalarColumnSchema column_schema(field_name, sdk::Type::kSTRING, true);
+        scalar_schema.cols.push_back(column_schema);
+      }
+    }
+
+    if (!scalar_schema.cols.empty()) {
+      creator->SetScalarSchema(scalar_schema);
+    }
   }
 
   status = creator->Create(vector_index_id);

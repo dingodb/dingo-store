@@ -334,7 +334,7 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
 
   } catch (std::exception& e) {
     delete internal_raw_index;
-    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {}", path, e.what()));
+    return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {} {}", path, e.what()));
   }
 
   faiss::IndexIVFFlat* internal_index = dynamic_cast<faiss::IndexIVFFlat*>(internal_raw_index);
