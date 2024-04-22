@@ -127,7 +127,8 @@ struct VectorScalarColumnSchema {
   Type type;
   bool speed;
 
-  VectorScalarColumnSchema(std::string& key, Type type, bool speed = false) : key(key), type(type), speed(speed) {}
+  VectorScalarColumnSchema(const std::string& key, Type type, bool speed = false)
+      : key(key), type(type), speed(speed) {}
 };
 
 // TODO: maybe use builder to build VectorScalarSchema

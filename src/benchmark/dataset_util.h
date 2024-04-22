@@ -30,6 +30,7 @@ class DatasetUtils {
   // make statistics distribution
   static void GetStatisticsDistribution(const std::string& dataset_name, const std::string& train_dataset_dirpath,
                                         const std::string& field, const std::string& out_filepath);
+  static void AddFieldForDataset(const std::string& dataset_dirpath);
   // split dataset for generate test dataset
   static void SplitDataset(const std::string& filepath, uint32_t data_num);
   // generate test dataset neighbors

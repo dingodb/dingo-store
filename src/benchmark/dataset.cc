@@ -638,6 +638,16 @@ bool Wikipedia2212Dataset::ParseTrainData(const rapidjson::Value& obj, sdk::Vect
     scalar_value.fields.push_back(field);
     vector_with_id.scalar_data["text"] = scalar_value;
   }
+  {
+    if (item.HasMember("filter_id")) {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::Type::kINT64;
+      sdk::ScalarField field;
+      field.long_data = item["filter_id"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["filter_id"] = scalar_value;
+    }
+  }
 
   return true;
 }
@@ -795,6 +805,17 @@ bool BeirBioasqDataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorW
     vector_with_id.scalar_data["text"] = scalar_value;
   }
 
+  {
+    if (item.HasMember("filter_id")) {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::Type::kINT64;
+      sdk::ScalarField field;
+      field.long_data = item["filter_id"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["filter_id"] = scalar_value;
+    }
+  }
+
   return true;
 }
 
@@ -939,6 +960,17 @@ bool MiraclDataset::ParseTrainData(const rapidjson::Value& obj, sdk::VectorWithI
     field.string_data = item["text"].GetString();
     scalar_value.fields.push_back(field);
     vector_with_id.scalar_data["text"] = scalar_value;
+  }
+
+  {
+    if (item.HasMember("filter_id")) {
+      sdk::ScalarValue scalar_value;
+      scalar_value.type = sdk::Type::kINT64;
+      sdk::ScalarField field;
+      field.long_data = item["filter_id"].GetInt64();
+      scalar_value.fields.push_back(field);
+      vector_with_id.scalar_data["filter_id"] = scalar_value;
+    }
   }
 
   return true;

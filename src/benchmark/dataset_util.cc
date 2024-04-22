@@ -14,6 +14,7 @@
 
 #include "benchmark/dataset_util.h"
 
+#include <atomic>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +22,7 @@
 #include <fstream>
 #include <iostream>
 #include <string>
+#include <thread>
 
 #include "common/helper.h"
 #include "common/logging.h"
@@ -36,13 +38,13 @@ DECLARE_string(vector_dataset);
 DECLARE_uint32(vector_dimension);
 
 DEFINE_string(sub_command, "", "sub command");
-DEFINE_string(filter_field, "", "filter field");
-DEFINE_string(filter_field_value, "", "filter field value");
-DEFINE_bool(filter_field_reverse, false, "reverse filter field");
+DEFINE_string(filter_field, "", "filter field, format: field1:int,field2:string or field1:int:1,field2:string:hello");
 
 DEFINE_string(test_dataset_filepath, "", "test dataset filepath");
 
 DEFINE_uint32(split_num, 1000, "spilt num");
+
+DECLARE_uint32(concurrency);
 
 namespace dingodb {
 namespace benchmark {
@@ -128,6 +130,24 @@ struct VectorEntry {
   }
 };
 
+// parse format: field1:int:1,field2:string:hello
+static std::vector<std::vector<std::string>> ParseFilterField(const std::string& value) {
+  std::vector<std::vector<std::string>> result;
+
+  std::vector<std::string> parts;
+  Helper::SplitString(value, ',', parts);
+
+  for (auto& part : parts) {
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(part, ':', sub_parts);
+    if (sub_parts.size() == 3) {
+      result.push_back(sub_parts);
+    }
+  }
+
+  return result;
+}
+
 static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, std::vector<VectorEntry>& test_entries,
                                     const std::string& out_filepath) {
   rapidjson::Document out_doc;
@@ -156,12 +176,20 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
 
     if (!FLAGS_filter_field.empty()) {
       rapidjson::Value obj(rapidjson::kObjectType);
-      if (IsDigitString(FLAGS_filter_field_value)) {
-        int64_t v = std::strtoll(FLAGS_filter_field_value.c_str(), nullptr, 10);
-        obj.AddMember(rapidjson::StringRef(FLAGS_filter_field.c_str()), v, allocator);
-      } else {
-        obj.AddMember(rapidjson::StringRef(FLAGS_filter_field.c_str()),
-                      rapidjson::StringRef(FLAGS_filter_field_value.c_str()), allocator);
+      auto filter_fields = ParseFilterField(FLAGS_filter_field);
+      for (auto& filter_field : filter_fields) {
+        const auto& field_name = filter_field[0];
+        const auto& field_type = filter_field[1];
+        const auto& field_value = filter_field[2];
+
+        if (field_type == "int" || field_type == "int32" || field_type == "int64" || field_type == "uint" ||
+            field_type == "uint32" || field_type == "uint64") {
+          int64_t v = std::strtoll(field_value.c_str(), nullptr, 10);
+          obj.AddMember(rapidjson::StringRef(field_name.c_str()), v, allocator);
+
+        } else if (field_type == "string") {
+          obj.AddMember(rapidjson::StringRef(field_name.c_str()), rapidjson::StringRef(field_value.c_str()), allocator);
+        }
       }
       out_obj.AddMember("filter", obj, allocator);
     }
@@ -175,36 +203,73 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
   dingodb::Helper::SaveFile(out_filepath, str_buf.GetString());
 }
 
+// parse format: field1:int:1:eq,field2:string:hello:ge
+// op: eq(==)/ne(!=)/lt(<)/le(<=)/gt(>)/ge(>=)
+static std::vector<std::vector<std::string>> ParseFilterFieldV2(const std::string& value) {
+  std::vector<std::vector<std::string>> result;
+
+  std::vector<std::string> parts;
+  Helper::SplitString(value, ',', parts);
+
+  for (auto& part : parts) {
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(part, ':', sub_parts);
+    if (sub_parts.size() == 4) {
+      result.push_back(sub_parts);
+    }
+  }
+
+  return result;
+}
+
 static bool FilterValue(const rapidjson::Value& obj) {
   if (FLAGS_filter_field.empty()) {
     return false;
   }
-  if (obj[FLAGS_filter_field.c_str()].IsString()) {
-    if (FLAGS_filter_field_reverse) {
-      if (obj[FLAGS_filter_field.c_str()].GetString() != FLAGS_filter_field_value) {
-        LOG(INFO) << fmt::format("filter value reverse: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
-                                 FLAGS_filter_field_value);
-        return true;
-      }
-    } else {
-      if (obj[FLAGS_filter_field.c_str()].GetString() == FLAGS_filter_field_value) {
-        LOG(INFO) << fmt::format("filter value: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
-                                 FLAGS_filter_field_value);
-        return true;
-      }
+
+  auto filter_fields = ParseFilterFieldV2(FLAGS_filter_field);
+  for (const auto& filter_field : filter_fields) {
+    const auto& field_name = filter_field[0];
+    const auto& field_type = filter_field[1];
+    const auto& field_value = filter_field[2];
+    const auto& op = filter_field[3];
+
+    if (!obj.HasMember(field_name.c_str())) {
+      continue;
     }
-  } else if (obj[FLAGS_filter_field.c_str()].IsInt64()) {
-    if (FLAGS_filter_field_reverse) {
-      if (fmt::format("{}", obj[FLAGS_filter_field.c_str()].GetInt64()) != FLAGS_filter_field_value) {
-        LOG(INFO) << fmt::format("filter value reverse: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
-                                 FLAGS_filter_field_value);
-        return true;
+
+    if (obj[field_name.c_str()].IsString()) {
+      std::string value = obj[FLAGS_filter_field.c_str()].GetString();
+
+      if (op == "eq") {
+        return value == field_value;
+      } else if (op == "ne") {
+        return value != field_value;
+      } else if (op == "lt") {
+        return value < field_value;
+      } else if (op == "le") {
+        return value <= field_value;
+      } else if (op == "gt") {
+        return value > field_value;
+      } else if (op == "ge") {
+        return value >= field_value;
       }
-    } else {
-      if (fmt::format("{}", obj[FLAGS_filter_field.c_str()].GetInt64()) == FLAGS_filter_field_value) {
-        LOG(INFO) << fmt::format("filter value: {} {}", obj[FLAGS_filter_field.c_str()].GetInt64(),
-                                 FLAGS_filter_field_value);
-        return true;
+
+    } else if (obj[field_name.c_str()].IsInt64()) {
+      int64_t value = obj[FLAGS_filter_field.c_str()].GetInt64();
+      int64_t in_value = std::strtoll(field_value.c_str(), nullptr, 10);
+      if (op == "eq") {
+        return value == in_value;
+      } else if (op == "ne") {
+        return value != in_value;
+      } else if (op == "lt") {
+        return value < in_value;
+      } else if (op == "le") {
+        return value <= in_value;
+      } else if (op == "gt") {
+        return value > in_value;
+      } else if (op == "ge") {
+        return value >= in_value;
       }
     }
   }
@@ -235,7 +300,7 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
   std::vector<VectorEntry> test_entries;
 
   // bootstrap thread pool
-  dingodb::ThreadPool thread_pool("distance", 8);
+  dingodb::ThreadPool thread_pool("distance", FLAGS_concurrency);
 
   // load test data
   auto test_doc = std::make_shared<rapidjson::Document>();
@@ -438,6 +503,67 @@ void DatasetUtils::GetStatisticsDistribution(const std::string& dataset_name, co
   }
 }
 
+void AddFieldForOneFile(const std::string& filepath) {
+  std::ifstream ifs(filepath);
+  rapidjson::IStreamWrapper isw(ifs);
+  rapidjson::Document doc;
+  doc.ParseStream(isw);
+  if (doc.HasParseError()) {
+    DINGO_LOG(ERROR) << fmt::format("parse json file {} failed, error: {}", filepath,
+                                    static_cast<int>(doc.GetParseError()));
+    return;
+  }
+
+  rapidjson::Document out_doc;
+  out_doc.SetArray();
+  rapidjson::Document::AllocatorType& out_allocator = out_doc.GetAllocator();
+
+  const auto& array = doc.GetArray();
+  std::cout << fmt::format("filepath: {} count: {}", filepath, array.Size()) << std::endl;
+
+  for (int i = 0; i < array.Size(); ++i) {
+    auto item = array[i].GetObject();
+    item.AddMember("filter_id", Helper::GenerateRealRandomInteger(1, 100000000), out_allocator);
+    out_doc.PushBack(item, out_allocator);
+  }
+
+  rapidjson::StringBuffer str_buf;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(str_buf);
+  out_doc.Accept(writer);
+  dingodb::Helper::SaveFile(filepath + ".extend", str_buf.GetString());
+  out_doc.Clear();
+  doc.Clear();
+}
+
+void DatasetUtils::AddFieldForDataset(const std::string& dataset_dirpath) {
+  std::vector<std::string> train_filepaths;
+  auto train_filenames = dingodb::Helper::TraverseDirectory(dataset_dirpath, std::string("train"));
+  train_filepaths.reserve(train_filenames.size());
+  for (auto& filelname : train_filenames) {
+    train_filepaths.push_back(fmt::format("{}/{}", dataset_dirpath, filelname));
+  }
+  std::cout << fmt::format("file count: {}", train_filepaths.size()) << std::endl;
+  if (train_filepaths.empty()) {
+    return;
+  }
+
+  std::atomic<int> offset = 0;
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_concurrency);
+  for (int i = 0; i < FLAGS_concurrency; ++i) {
+    threads.emplace_back([&train_filepaths, &offset] {
+      for (int i = offset.fetch_add(1); i < train_filepaths.size(); i = offset.fetch_add(1)) {
+        auto& train_filepath = train_filepaths[i];
+        AddFieldForOneFile(train_filepath);
+      }
+    });
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
+
 void DatasetUtils::SplitDataset(const std::string& filepath, uint32_t data_num) {
   std::ifstream ifs(filepath);
   rapidjson::IStreamWrapper isw(ifs);
@@ -506,6 +632,9 @@ void DatasetUtils::Main() {
   if (FLAGS_sub_command == "distribution") {
     std::string distribution_filepath = fmt::format("{}/distribution.json", FLAGS_vector_dataset);
     GetStatisticsDistribution(GetDatasetName(), FLAGS_vector_dataset, FLAGS_filter_field, distribution_filepath);
+
+  } else if (FLAGS_sub_command == "add_filed") {
+    AddFieldForDataset(FLAGS_vector_dataset);
 
   } else if (FLAGS_sub_command == "split_dataset") {
     SplitDataset(FLAGS_vector_dataset, FLAGS_split_num);
