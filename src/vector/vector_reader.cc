@@ -53,6 +53,8 @@ DEFINE_bool(dingo_log_switch_scalar_speed_up_detail, false, "scalar speed up log
 bvar::LatencyRecorder g_bruteforce_search_latency("dingo_bruteforce_search_latency");
 bvar::LatencyRecorder g_bruteforce_range_search_latency("dingo_bruteforce_range_search_latency");
 
+DECLARE_bool(dingo_log_switch_coprocessor_scalar_detail);
+
 butil::Status VectorReader::QueryVectorWithId(const pb::common::Range& region_range, int64_t partition_id,
                                               int64_t vector_id, bool with_vector_data,
                                               pb::common::VectorWithId& vector_with_id) {
@@ -1002,7 +1004,9 @@ bool VectorReader::ScalarCompareWithCoprocessorCore(
   bool is_reverse = false;
   butil::Status status = scalar_coprocessor->Filter(internal_vector_scalar, is_reverse);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << "scalar coprocessor::Filter failed " << status.error_cstr();
+    if (FLAGS_dingo_log_switch_coprocessor_scalar_detail) {
+      DINGO_LOG(ERROR) << "scalar coprocessor::Filter failed " << status.error_cstr();
+    }
     return false;
   }
   return is_reverse;
