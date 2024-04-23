@@ -112,15 +112,6 @@ class VectorIndexFlat : public VectorIndex {
   bool NeedToSave(int64_t last_save_log_behind) override;
 
  private:
-  [[deprecated("faiss fix bug. never use.")]] void SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x,
-                                                                   faiss::idx_t k, faiss::Index::distance_t* distances,
-                                                                   faiss::idx_t* labels,
-                                                                   std::shared_ptr<FlatIDSelector> filters);
-
-  [[deprecated("faiss add feature. never use.")]] void DoRangeSearch(
-      faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
-      faiss::RangeSearchResult* result, std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters);
-
   template <typename T>
   std::vector<faiss::idx_t> GetExistVectorIds(const T& ids, size_t size);
 

@@ -895,11 +895,6 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
   return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
 }
 
-butil::Status VectorIndexUtils::ValidateScalarIndexParameter(
-    const pb::common::ScalarIndexParameter& /*scalar_index_parameter*/) {
-  return butil::Status::OK();
-}
-
 butil::Status VectorIndexUtils::ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema) {
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
       << fmt::format("scalar_schema : {}", scalar_schema.DebugString());
@@ -982,24 +977,6 @@ butil::Status VectorIndexUtils::ValidateVectorScalarData(const pb::common::Scala
       }
     }
   }
-  return butil::Status::OK();
-}
-
-butil::Status VectorIndexUtils::SplitVectorScalarData(
-    const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
-    std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs,  // NOLINT
-    pb::common::VectorScalardata& other_vector_scalar_data) {
-  other_vector_scalar_data = vector_scalar_data;
-  for (const auto& field : scalar_schema.fields()) {
-    if (field.enable_speed_up()) {
-      const std::string& key = field.key();
-      auto iter = other_vector_scalar_data.scalar_data().find(key);
-      if (iter != other_vector_scalar_data.scalar_data().end()) {
-        scalar_key_value_pairs.push_back({iter->first, iter->second});
-      }
-    }
-  }
-
   return butil::Status::OK();
 }
 
