@@ -284,7 +284,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
 
   auto scalar_schema = region->ScalarSchema();
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      << fmt::format("vector search. scalar_schema : {}", scalar_schema.DebugString());
+      << fmt::format("vector search. scalar_schema : {}", scalar_schema.ShortDebugString());
   if (0 != scalar_schema.fields_size()) {
     ctx->scalar_schema = scalar_schema;
   }
@@ -420,7 +420,7 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
   auto scalar_schema = region->ScalarSchema();
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      << fmt::format("validate vector add request. scalar_schema : {}", scalar_schema.DebugString());
+      << fmt::format("validate vector add request. scalar_schema : {}", scalar_schema.ShortDebugString());
 
   std::vector<int64_t> vector_ids;
   for (const auto& vector : request->vectors()) {
@@ -1585,7 +1585,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
 
       auto scalar_schema = region->ScalarSchema();
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-          << fmt::format("vector txn pre write. scalar_schema : {}", scalar_schema.DebugString());
+          << fmt::format("vector txn pre write. scalar_schema : {}", scalar_schema.ShortDebugString());
       if (0 != scalar_schema.fields_size()) {
         status = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector.scalar_data());
         if (!status.ok()) {

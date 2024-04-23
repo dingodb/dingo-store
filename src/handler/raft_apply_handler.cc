@@ -1029,16 +1029,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     {
       std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
       pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-          << fmt::format("vector add. scalar_schema : {}", scalar_schema.DebugString());
       VectorIndexUtils::SplitVectorScalarData(scalar_schema, vector.scalar_data(), scalar_key_value_pairs);
-      if (FLAGS_dingo_log_switch_scalar_speed_up_detail) {
-        std::string scalar_key_string;
-        for (const auto &[internal_scalar_key, _] : scalar_key_value_pairs) {
-          scalar_key_string += (internal_scalar_key + " ");
-        }
-        DINGO_LOG(INFO) << fmt::format("scalar_key : {}", scalar_key_string);
-      }
 
       for (const auto &[key, scalar_value] : scalar_key_value_pairs) {
         pb::common::KeyValue kv;
@@ -1187,9 +1178,6 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
 
       key_states[i] = true;
       delete_ids.push_back(request.ids(i));
-
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-          << fmt::format("vector delete. scalar_schema : {}", scalar_schema.DebugString());
 
       for (const auto &field : scalar_schema.fields()) {
         if (field.enable_speed_up()) {

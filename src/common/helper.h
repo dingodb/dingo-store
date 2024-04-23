@@ -379,6 +379,17 @@ class Helper {
 
   static std::vector<float> StringToVector(const std::string& str);
 
+  template <typename T>
+  static std::string SetToString(const std::set<T>& set) {
+    std::stringstream ss;
+    size_t i = 0;
+    for (auto& elem : set) {
+      if (i++ != 0) ss << ", ";
+      ss << elem;
+    }
+    return ss.str();
+  }
+
   static bool SaveFile(const std::string& filepath, const std::string& data);
 
   static void PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,

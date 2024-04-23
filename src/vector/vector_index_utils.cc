@@ -897,7 +897,7 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
 
 butil::Status VectorIndexUtils::ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema) {
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      << fmt::format("scalar_schema : {}", scalar_schema.DebugString());
+      << fmt::format("scalar_schema : {}", scalar_schema.ShortDebugString());
   std::set<std::string> keys;
   for (const auto& field : scalar_schema.fields()) {
     const std::string& key = field.key();
