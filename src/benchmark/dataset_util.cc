@@ -131,7 +131,7 @@ struct VectorEntry {
 };
 
 // parse format: field1:int:1,field2:string:hello
-static std::vector<std::vector<std::string>> ParseFilterField(const std::string& value) {
+static std::vector<std::vector<std::string>> ParseFilterFieldV1(const std::string& value) {
   std::vector<std::vector<std::string>> result;
 
   std::vector<std::string> parts;
@@ -140,7 +140,7 @@ static std::vector<std::vector<std::string>> ParseFilterField(const std::string&
   for (auto& part : parts) {
     std::vector<std::string> sub_parts;
     Helper::SplitString(part, ':', sub_parts);
-    if (sub_parts.size() == 3) {
+    if (sub_parts.size() >= 3) {
       result.push_back(sub_parts);
     }
   }
@@ -175,23 +175,7 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
     out_obj.AddMember("neighbors", neighbors, allocator);
 
     if (!FLAGS_filter_field.empty()) {
-      rapidjson::Value obj(rapidjson::kObjectType);
-      auto filter_fields = ParseFilterField(FLAGS_filter_field);
-      for (auto& filter_field : filter_fields) {
-        const auto& field_name = filter_field[0];
-        const auto& field_type = filter_field[1];
-        const auto& field_value = filter_field[2];
-
-        if (field_type == "int" || field_type == "int32" || field_type == "int64" || field_type == "uint" ||
-            field_type == "uint32" || field_type == "uint64") {
-          int64_t v = std::strtoll(field_value.c_str(), nullptr, 10);
-          obj.AddMember(rapidjson::StringRef(field_name.c_str()), v, allocator);
-
-        } else if (field_type == "string") {
-          obj.AddMember(rapidjson::StringRef(field_name.c_str()), rapidjson::StringRef(field_value.c_str()), allocator);
-        }
-      }
-      out_obj.AddMember("filter", obj, allocator);
+      out_obj.AddMember("filter", rapidjson::StringRef(FLAGS_filter_field.c_str()), allocator);
     }
 
     out_doc.PushBack(out_obj, allocator);
@@ -204,7 +188,7 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
 }
 
 // parse format: field1:int:1:eq,field2:string:hello:ge
-// op: eq(==)/ne(!=)/lt(<)/le(<=)/gt(>)/ge(>=)
+// op: eq(==)/ne(!=)/lt(<)/lte(<=)/gt(>)/gte(>=)
 static std::vector<std::vector<std::string>> ParseFilterFieldV2(const std::string& value) {
   std::vector<std::vector<std::string>> result;
 
@@ -239,37 +223,37 @@ static bool FilterValue(const rapidjson::Value& obj) {
     }
 
     if (obj[field_name.c_str()].IsString()) {
-      std::string value = obj[FLAGS_filter_field.c_str()].GetString();
+      std::string value = obj[field_name.c_str()].GetString();
 
       if (op == "eq") {
-        return value == field_value;
+        return !(value == field_value);
       } else if (op == "ne") {
-        return value != field_value;
+        return !(value != field_value);
       } else if (op == "lt") {
-        return value < field_value;
-      } else if (op == "le") {
-        return value <= field_value;
+        return !(value < field_value);
+      } else if (op == "lte") {
+        return !(value <= field_value);
       } else if (op == "gt") {
-        return value > field_value;
-      } else if (op == "ge") {
-        return value >= field_value;
+        return !(value > field_value);
+      } else if (op == "gte") {
+        return !(value >= field_value);
       }
 
     } else if (obj[field_name.c_str()].IsInt64()) {
-      int64_t value = obj[FLAGS_filter_field.c_str()].GetInt64();
+      int64_t value = obj[field_name.c_str()].GetInt64();
       int64_t in_value = std::strtoll(field_value.c_str(), nullptr, 10);
       if (op == "eq") {
-        return value == in_value;
+        return !(value == in_value);
       } else if (op == "ne") {
-        return value != in_value;
+        return !(value != in_value);
       } else if (op == "lt") {
-        return value < in_value;
-      } else if (op == "le") {
-        return value <= in_value;
+        return !(value < in_value);
+      } else if (op == "lte") {
+        return !(value <= in_value);
       } else if (op == "gt") {
-        return value > in_value;
-      } else if (op == "ge") {
-        return value >= in_value;
+        return !(value > in_value);
+      } else if (op == "gte") {
+        return !(value >= in_value);
       }
     }
   }
@@ -331,6 +315,9 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
     std::cout << fmt::format("test data count: {}", test_entries.size()) << std::endl;
   }
 
+  int64_t tatal_count = 0;
+  int64_t filter_count = 0;
+
   // load train data
   {
     std::vector<std::string> train_filepaths;
@@ -375,7 +362,9 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
         CHECK(entry->emb.size() == FLAGS_vector_dimension)
             << fmt::format("dataset dimension({}) is not uniformity.", entry->emb.size());
 
-        if (!FLAGS_filter_field.empty() && FilterValue(item)) {
+        ++tatal_count;
+        if (FilterValue(item)) {
+          ++filter_count;
           continue;
         }
 
@@ -400,6 +389,10 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
   while (thread_pool.PendingTaskCount() > 1) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
+
+  std::cout << fmt::format("tatal_count: {} filter_count: {} ratio: {:.2f}%", tatal_count, filter_count,
+                           static_cast<double>(filter_count * 100) / tatal_count)
+            << std::endl;
 
   // handle result
   SaveTestDatasetNeighbor(test_doc, test_entries, out_filepath);

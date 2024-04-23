@@ -3371,7 +3371,7 @@ void TestBatchPutGet(int64_t region_id, int thread_num, int req_num, const std::
     param->req_num = req_num;
     param->region_id = region_id;
     param->thread_no = i;
-    param->prefix = prefix;
+    param->prefix = dingodb::Helper::HexToString(prefix);
 
     if (bthread_start_background(
             &tids[i], nullptr,

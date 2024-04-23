@@ -591,7 +591,7 @@ static std::vector<std::vector<std::string>> ParseFilterField(const std::string&
   for (auto& part : parts) {
     std::vector<std::string> sub_parts;
     Helper::SplitString(part, ':', sub_parts);
-    if (sub_parts.size() == 2) {
+    if (sub_parts.size() >= 2) {
       result.push_back(sub_parts);
     }
   }

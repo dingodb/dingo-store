@@ -338,7 +338,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       // Kev/Value operation
     } else if (method == "KvGet") {
       std::string value;
-      client::SendKvGet(FLAGS_region_id, FLAGS_key, value);
+      client::SendKvGet(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key), value);
+      DINGO_LOG(INFO) << "value: " << value;
     } else if (method == "KvBatchGet") {
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
