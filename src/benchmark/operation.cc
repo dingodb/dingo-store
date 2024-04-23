@@ -29,6 +29,7 @@
 #include "benchmark/benchmark.h"
 #include "benchmark/dataset.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "gflags/gflags_declare.h"
@@ -86,6 +87,8 @@ DEFINE_uint32(vector_put_batch_size, 512, "Vector put batch size");
 DEFINE_uint32(vector_arrange_concurrency, 10, "Vector arrange put concurrency");
 
 DEFINE_bool(vector_search_arrange_data, true, "Arrange data for search");
+
+DEFINE_bool(use_coprocessor, false, "Vector search use coprocessor");
 
 namespace dingodb {
 namespace benchmark {
@@ -560,6 +563,9 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
   result.eplased_time = Helper::TimestampUs() - start_time;
 
   delete vector_client;
+
+  LOG(INFO) << fmt::format("result size: {} {}", result.vector_search_results.size(),
+                           result.vector_search_results[0].vector_datas.size());
 
   return result;
 }
@@ -1214,6 +1220,12 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
 
   auto offset = entry->GenId();
   auto& all_test_entries = entry->test_entries;
+
+  // scalar filter
+  if (FLAGS_use_coprocessor && !all_test_entries[0]->filter_json.empty()) {
+    search_param.langchain_expr_json = all_test_entries[0]->filter_json;
+    DINGO_LOG(INFO) << "langchain_expr_json: " << search_param.langchain_expr_json;
+  }
 
   std::vector<Dataset::TestEntryPtr> batch_test_entries;
   if (FLAGS_batch_size <= 1) {

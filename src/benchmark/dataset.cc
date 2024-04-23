@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
 #include <fstream>
@@ -652,6 +653,108 @@ bool Wikipedia2212Dataset::ParseTrainData(const rapidjson::Value& obj, sdk::Vect
   return true;
 }
 
+// parse format: field1:int:1:eq,field2:string:hello:ge
+// op: eq(==)/ne(!=)/lt(<)/lte(<=)/gt(>)/gte(>=)
+static std::vector<std::vector<std::string>> ParseFilterFieldV2(const std::string& value) {
+  std::vector<std::vector<std::string>> result;
+
+  std::vector<std::string> parts;
+  Helper::SplitString(value, ',', parts);
+
+  for (auto& part : parts) {
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(part, ':', sub_parts);
+    if (sub_parts.size() == 4) {
+      result.push_back(sub_parts);
+    }
+  }
+
+  return result;
+}
+
+std::string GenFilterJson(const std::string& filter_content) {
+  auto filter_fields = ParseFilterFieldV2(filter_content);
+
+  rapidjson::Document out_doc;
+  out_doc.SetObject();
+  rapidjson::Document::AllocatorType& allocator = out_doc.GetAllocator();
+
+  if (filter_fields.size() == 1) {
+    auto& filter_field = filter_fields[0];
+    const auto& field_name = filter_field[0];
+    const auto& field_type = filter_field[1];
+    const auto& field_value = filter_field[2];
+    const auto& op = filter_field[3];
+
+    out_doc.AddMember(rapidjson::StringRef("type"), rapidjson::StringRef("comparator"), allocator);
+    out_doc.AddMember(rapidjson::StringRef("comparator"), rapidjson::StringRef(op.c_str()), allocator);
+    out_doc.AddMember(rapidjson::StringRef("attribute"), rapidjson::StringRef(field_name.c_str()), allocator);
+
+    if (field_type == "int" || field_type == "int32" || field_type == "int64" || field_type == "uint" ||
+        field_type == "uint32" || field_type == "uint64") {
+      out_doc.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("INT64"), allocator);
+
+      int64_t value = std::strtoll(field_value.c_str(), nullptr, 10);
+      out_doc.AddMember(rapidjson::StringRef("value"), value, allocator);
+
+    } else if (field_type == "float" || field_type == "double") {
+      out_doc.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("DOUBLE"), allocator);
+      double value = std::strtod(field_value.c_str(), nullptr);
+      out_doc.AddMember(rapidjson::StringRef("value"), value, allocator);
+
+    } else {
+      out_doc.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("STRING"), allocator);
+      out_doc.AddMember(rapidjson::StringRef("value"), rapidjson::StringRef(field_value.c_str()), allocator);
+    }
+
+  } else {
+    out_doc.AddMember(rapidjson::StringRef("type"), rapidjson::StringRef("operator"), allocator);
+    out_doc.AddMember(rapidjson::StringRef("operator"), rapidjson::StringRef("and"), allocator);
+
+    rapidjson::Value arguments(rapidjson::kArrayType);
+
+    for (auto& filter_field : filter_fields) {
+      const auto& field_name = filter_field[0];
+      const auto& field_type = filter_field[1];
+      const auto& field_value = filter_field[2];
+      const auto& op = filter_field[3];
+
+      rapidjson::Value argument(rapidjson::kObjectType);
+
+      argument.AddMember(rapidjson::StringRef("type"), rapidjson::StringRef("comparator"), allocator);
+      argument.AddMember(rapidjson::StringRef("comparator"), rapidjson::StringRef(op.c_str()), allocator);
+      argument.AddMember(rapidjson::StringRef("attribute"), rapidjson::StringRef(field_name.c_str()), allocator);
+
+      if (field_type == "int" || field_type == "int32" || field_type == "int64" || field_type == "uint" ||
+          field_type == "uint32" || field_type == "uint64") {
+        argument.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("INT64"), allocator);
+
+        int64_t value = std::strtoll(field_value.c_str(), nullptr, 10);
+        argument.AddMember(rapidjson::StringRef("value"), value, allocator);
+
+      } else if (field_type == "float" || field_type == "double") {
+        argument.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("DOUBLE"), allocator);
+        double value = std::strtod(field_value.c_str(), nullptr);
+        argument.AddMember(rapidjson::StringRef("value"), value, allocator);
+
+      } else {
+        argument.AddMember(rapidjson::StringRef("value_type"), rapidjson::StringRef("STRING"), allocator);
+        argument.AddMember(rapidjson::StringRef("value"), rapidjson::StringRef(field_value.c_str()), allocator);
+      }
+
+      arguments.PushBack(argument, allocator);
+    }
+
+    out_doc.AddMember(rapidjson::StringRef("arguments"), arguments, allocator);
+  }
+
+  rapidjson::StringBuffer str_buf;
+  rapidjson::Writer<rapidjson::StringBuffer> writer(str_buf);
+  out_doc.Accept(writer);
+
+  return str_buf.GetString();
+}
+
 Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value& obj) const {
   const auto& item = obj.GetObject();
 
@@ -719,30 +822,15 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
         vector_with_id.scalar_data["wiki_id"] = scalar_value;
       }
     }
-  } else {
-    if (item.HasMember("filter")) {
-      for (const auto& m : item["filter"].GetObject()) {
-        if (m.value.IsString()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kSTRING;
-          sdk::ScalarField field;
-          field.string_data = m.value.GetString();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        } else if (m.value.IsInt64()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kINT64;
-          sdk::ScalarField field;
-          field.long_data = m.value.GetInt64();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        }
-      }
-    }
   }
 
   Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
   entry->vector_with_id = vector_with_id;
+
+  if (item.HasMember("filter")) {
+    std::string filter_value = item["filter"].GetString();
+    entry->filter_json = GenFilterJson(filter_value);
+  }
 
   const auto& neighbors = item["neighbors"].GetArray();
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
