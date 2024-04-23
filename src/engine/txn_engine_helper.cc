@@ -1564,11 +1564,12 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
     }
 
     if (!lock_info.primary_lock().empty()) {
-      if (lock_info.for_update_ts() == 0) {
-        // this is a optimistic lock, return lock_info
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
-                         << ", key: " << Helper::StringToHex(key)
-                         << " is locked by optimistic lock, lock_info: " << lock_info.ShortDebugString();
+      if (lock_info.lock_type() != pb::store::Op::Lock) {
+        // this is a optimistic lock or pessimistic lock in prewrite stage, return lock_info
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
+                           << ", key: " << Helper::StringToHex(key)
+                           << " is locked by optimistic lock or pessimistic lock in prewrite stage, lock_info: "
+                           << lock_info.ShortDebugString();
         // return lock_info
         *response->add_txn_result()->mutable_locked() = lock_info;
         continue;
