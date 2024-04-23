@@ -385,22 +385,6 @@ butil::Status VectorIndexFlat::GetMemorySize(int64_t& memory_size) {
 
 bool VectorIndexFlat::IsExceedsMaxElements() { return false; }
 
-void VectorIndexFlat::SearchWithParam(faiss::idx_t n, const faiss::Index::component_t* x, faiss::idx_t k,
-                                      faiss::Index::distance_t* distances, faiss::idx_t* labels,
-                                      std::shared_ptr<FlatIDSelector> filters) {
-  faiss::SearchParameters param;
-  param.sel = filters.get();
-  raw_index_->search(n, x, k, distances, labels, &param);
-  faiss::idx_t* li = labels;
-  // TODO: running by regular user may cause abort exception below
-  // libgomp: Thread creation failed: Resource temporarily unavailable
-  // please run by root, or adjust ulimit for regular user, then you can increase FLAGS_omp_num_threads
-#pragma omp parallel for
-  for (faiss::idx_t i = 0; i < n * k; ++i) {
-    li[i] = li[i] < 0 ? li[i] : index_id_map2_->id_map[li[i]];
-  }
-}
-
 bool VectorIndexFlat::NeedToSave(int64_t last_save_log_behind) {
   RWLockReadGuard guard(&rw_lock_);
 
@@ -419,21 +403,7 @@ bool VectorIndexFlat::NeedToSave(int64_t last_save_log_behind) {
   return false;
 }
 
-void VectorIndexFlat::DoRangeSearch(faiss::idx_t n, const faiss::Index::component_t* x, faiss::Index::distance_t radius,
-                                    faiss::RangeSearchResult* result,
-                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) {
-  faiss::SearchParameters flat_search_parameters;
-  auto flat_filter = std::make_shared<FlatIDSelector>(filters);
-  auto flat_filter_wrapper = std::make_shared<faiss::IDSelectorTranslated>(index_id_map2_->id_map, flat_filter.get());
-  flat_search_parameters.sel = flat_filter_wrapper.get();
 
-  index_id_map2_->index->range_search(n, x, radius, result, &flat_search_parameters);
-
-#pragma omp parallel for
-  for (faiss::idx_t i = 0; i < result->lims[result->nq]; i++) {
-    result->labels[i] = result->labels[i] < 0 ? result->labels[i] : index_id_map2_->id_map[result->labels[i]];
-  }
-}
 
 template <typename T>
 std::vector<faiss::idx_t> VectorIndexFlat::GetExistVectorIds(const T& ids, size_t size) {

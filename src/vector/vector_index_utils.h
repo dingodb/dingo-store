@@ -183,18 +183,10 @@ class VectorIndexUtils {
                                                               const pb::common::VectorIndexParameter& target);
   static butil::Status ValidateVectorIndexParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
 
-  [[deprecated("Use another function with the same name")]] static butil::Status ValidateScalarIndexParameter(
-      const pb::common::ScalarIndexParameter& scalar_index_parameter);
-
   static butil::Status ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema);
 
   static butil::Status ValidateVectorScalarData(const pb::common::ScalarSchema& scalar_schema,
                                                 const pb::common::VectorScalardata& vector_scalar_data);
-
-  [[deprecated("Use another function with the same name")]] static butil::Status SplitVectorScalarData(
-      const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
-      std::vector<std::pair<std::string, pb::common::ScalarValue>>& scalar_key_value_pairs,  // NOLINT
-      pb::common::VectorScalardata& other_vector_scalar_data);                               // NOLINT
 
   static butil::Status SplitVectorScalarData(
       const pb::common::ScalarSchema& scalar_schema, const pb::common::VectorScalardata& vector_scalar_data,
