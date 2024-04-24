@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -27,7 +28,11 @@
 #include "common/helper.h"
 #include "common/threadpool.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "gtest/gtest.h"
+
+DEFINE_int64(test_task_num, 5000000, "task num");
+DEFINE_int32(test_thread_num, 4, "thread num");
 
 class ThreadPoolTest : public testing::Test {
  protected:
@@ -160,19 +165,19 @@ TEST_F(ThreadPoolTest, Priority) {
   rs = pthread_attr_destroy(&attr);
 }
 
+void WorkLoad() {
+  int64_t mulple = dingodb::Helper::GenerateRandomInteger(1, 1000);
+  for (int i = 1; i < 10000000; ++i) {
+    mulple *= i;
+    mulple /= 2;
+  }
+}
+
 void SubmitTasks(dingodb::ThreadPool &thread_pool, int64_t task_num) {
   std::vector<dingodb::ThreadPool::TaskPtr> tasks;
   tasks.reserve(task_num);
   for (int64_t i = 1; i <= task_num; ++i) {
-    tasks.push_back(thread_pool.ExecuteTask(
-        [](void *) {
-          // std::cout << "thread: " << std::this_thread::get_id() << std::endl;
-          int64_t mulple = 1;
-          for (int i = 1; i < 100000; ++i) {
-            mulple *= i;
-          }
-        },
-        nullptr));
+    tasks.push_back(thread_pool.ExecuteTask([](void *) { WorkLoad(); }, nullptr));
   }
 
   for (auto &task : tasks) {
@@ -256,4 +261,145 @@ TEST_F(ThreadPoolTest, UnbindCore) {
   ASSERT_TRUE(pairs.empty());
 
   thread_pool.Destroy();
+}
+
+TEST_F(ThreadPoolTest, Performence) {
+  GTEST_SKIP() << "Performence test, skip...";
+
+  dingodb::ThreadPool thread_pool("unit_test_14", FLAGS_test_thread_num);
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  SubmitTasks(thread_pool, FLAGS_test_task_num);
+
+  thread_pool.Destroy();
+}
+
+TEST_F(ThreadPoolTest, PureThread) {
+   GTEST_SKIP() << "Performence test, skip...";
+
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_test_thread_num);
+  for (int i = 0; i < FLAGS_test_thread_num; ++i) {
+    threads.emplace_back([i] {
+      for (int64_t i = 0; i < FLAGS_test_task_num; ++i) {
+        WorkLoad();
+      }
+    });
+  }
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(ThreadPoolTest, PureThreadTask) {
+   GTEST_SKIP() << "Performence test, skip...";
+
+  std::vector<dingodb::ThreadPool::TaskPtr> tasks;
+  tasks.reserve(FLAGS_test_task_num);
+  for (int64_t i = 0; i < FLAGS_test_task_num; ++i) {
+    auto task = std::make_shared<dingodb::ThreadPool::Task>();
+    task->priority = 1;
+    task->func = [](void *) { WorkLoad(); };
+    task->arg = nullptr;
+    tasks.push_back(task);
+  }
+
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_test_thread_num);
+  for (int i = 0; i < FLAGS_test_thread_num; ++i) {
+    threads.emplace_back([i, &tasks] {
+      for (auto &task : tasks) {
+        task->func(nullptr);
+      }
+    });
+  }
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(ThreadPoolTest, PureThreadTaskMutex) {
+   GTEST_SKIP() << "Performence test, skip...";
+
+  std::vector<dingodb::ThreadPool::TaskPtr> tasks;
+  tasks.reserve(FLAGS_test_task_num);
+  for (int64_t i = 0; i < FLAGS_test_task_num; ++i) {
+    auto task = std::make_shared<dingodb::ThreadPool::Task>();
+    task->priority = 1;
+    task->func = [](void *) { WorkLoad(); };
+    task->arg = nullptr;
+    tasks.push_back(task);
+  }
+
+  std::mutex task_mutex;
+  int64_t count = 0;
+
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_test_thread_num);
+  for (int i = 0; i < FLAGS_test_thread_num; ++i) {
+    threads.emplace_back([i, &tasks, &task_mutex, &count] {
+      for (auto &task : tasks) {
+        {
+          std::unique_lock<std::mutex> lock(task_mutex);
+          ++count;
+        }
+        task->func(nullptr);
+      }
+    });
+  }
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+
+  std::cout << "count: " << count << std::endl;
+}
+
+TEST_F(ThreadPoolTest, PureThreadTaskMutexCond) {
+   GTEST_SKIP() << "Performence test, skip...";
+
+  std::vector<dingodb::ThreadPool::TaskPtr> tasks;
+  tasks.reserve(FLAGS_test_task_num);
+  for (int64_t i = 0; i < FLAGS_test_task_num; ++i) {
+    auto task = std::make_shared<dingodb::ThreadPool::Task>();
+    task->priority = 1;
+    task->func = [](void *) { WorkLoad(); };
+    task->arg = nullptr;
+    tasks.push_back(task);
+  }
+
+  std::mutex task_mutex;
+  std::condition_variable task_condition;
+  int64_t count = 0;
+  bool is_stop = false;
+
+  std::vector<std::thread> threads;
+  threads.reserve(FLAGS_test_thread_num);
+  for (int i = 0; i < FLAGS_test_thread_num; ++i) {
+    threads.emplace_back([i, &tasks, &task_mutex, &task_condition, &is_stop, &count] {
+      for (auto &task : tasks) {
+        {
+          std::unique_lock<std::mutex> lock(task_mutex);
+          task_condition.wait(lock, [&tasks, &is_stop] { return is_stop || !tasks.empty(); });
+          ++count;
+        }
+        task->func(nullptr);
+      }
+    });
+  }
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  for (int64_t i = 0; i < FLAGS_test_task_num * FLAGS_test_thread_num; ++i) {
+    task_condition.notify_one();
+  }
+
+  for (auto &thread : threads) {
+    thread.join();
+  }
+
+  std::cout << "count: " << count << std::endl;
 }
