@@ -14,6 +14,7 @@
 
 #include <cstdint>
 
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "sdk/status.h"
@@ -79,19 +80,15 @@ VectorIndexCreator& VectorIndexCreator::SetBruteForceParam(const BruteForceParam
   return *this;
 }
 
-VectorIndexCreator& VectorIndexCreator::SetAutoIncrement(bool auto_incr) {
-  data_->auto_incr = auto_incr;
-  return *this;
-}
-
 VectorIndexCreator& VectorIndexCreator::SetScalarSchema(const VectorScalarSchema& schema) {
   data_->schema = schema;
   return *this;
 }
 
 VectorIndexCreator& VectorIndexCreator::SetAutoIncrementStart(int64_t start_id) {
-  data_->auto_incr = true;
-  data_->auto_incr_start = start_id;
+  if (start_id > 0) {
+    data_->auto_incr_start = start_id;
+  }
   return *this;
 }
 
@@ -139,12 +136,11 @@ Status VectorIndexCreator::Create(int64_t& out_index_id) {
   auto* index_definition_pb = request.mutable_index_definition();
   index_definition_pb->set_name(data_->index_name);
   index_definition_pb->set_replica(data_->replica_num);
-  index_definition_pb->set_with_auto_incrment(data_->auto_incr);
-  if (data_->auto_incr && data_->auto_incr_start.has_value()) {
+
+  if (data_->auto_incr_start.has_value()) {
+    index_definition_pb->set_with_auto_incrment(true);
     int64_t start = data_->auto_incr_start.value();
-    if (start <= 0) {
-      return Status::InvalidArgument("auto_increment_start must greater 0");
-    }
+    CHECK_GT(start, 0);
     index_definition_pb->set_auto_increment(start);
   }
 

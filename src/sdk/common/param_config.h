@@ -21,8 +21,17 @@
 
 // TODO: make params in this file use glfags
 
+// sdk config
 const int64_t kSdkVlogLevel = 60;
+DECLARE_int64(actuator_thread_num);
 
+// coordinator config
+const int64_t kPrefetchRegionCount = 3;
+DECLARE_int64(coordinator_interaction_delay_ms);
+DECLARE_int64(coordinator_interaction_max_retry);
+DECLARE_int64(auto_incre_req_count);
+
+// store config
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
 DECLARE_int64(rpc_channel_timeout_ms);
 DECLARE_int64(rpc_channel_connect_timeout_ms);
@@ -40,13 +49,6 @@ DECLARE_int64(scan_batch_size);
 const int64_t kMinScanBatchSize = 1;
 const int64_t kMaxScanBatchSize = 100;
 // end: use for region scanner
-
-const int64_t kPrefetchRegionCount = 3;
-
-DECLARE_int64(coordinator_interaction_delay_ms);
-DECLARE_int64(coordinator_interaction_max_retry);
-
-DECLARE_int64(actuator_thread_num);
 
 DECLARE_int64(raw_kv_delay_ms);
 DECLARE_int64(raw_kv_max_retry);

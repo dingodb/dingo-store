@@ -35,7 +35,7 @@ class VectorIndexCache {
   VectorIndexCache(const VectorIndexCache&) = delete;
   const VectorIndexCache& operator=(const VectorIndexCache&) = delete;
 
-  explicit VectorIndexCache(CoordinatorProxy& coordinator_proxy);
+  explicit VectorIndexCache(const ClientStub& stub);
 
   ~VectorIndexCache() = default;
 
@@ -59,7 +59,7 @@ class VectorIndexCache {
   template <class VectorIndexResponse>
   static bool CheckIndexResponse(const VectorIndexResponse& response);
 
-  CoordinatorProxy& coordinator_proxy_;
+  const ClientStub& stub_;
   mutable std::shared_mutex rw_lock_;
   std::unordered_map<VectorIndexCacheKey, int64_t> index_key_to_id_;
   std::unordered_map<int64_t, std::shared_ptr<VectorIndex>> id_to_index_;

@@ -19,6 +19,7 @@
 
 #include "glog/logging.h"
 #include "sdk/admin_tool.h"
+#include "sdk/auto_increment_manager.h"
 #include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
@@ -83,6 +84,11 @@ class ClientStub {
     return vector_index_cache_;
   }
 
+  virtual std::shared_ptr<AutoIncrementerManager> GetAutoIncrementerManager() const {
+    DCHECK_NOTNULL(auto_increment_manager_.get());
+    return auto_increment_manager_;
+  }
+
  private:
   // TODO: use unique ptr
   std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
@@ -94,6 +100,7 @@ class ClientStub {
   std::shared_ptr<TxnLockResolver> txn_lock_resolver_;
   std::shared_ptr<Actuator> actuator_;
   std::shared_ptr<VectorIndexCache> vector_index_cache_;
+  std::shared_ptr<AutoIncrementerManager> auto_increment_manager_;
 };
 
 }  // namespace sdk

@@ -24,7 +24,7 @@
 namespace dingodb {
 namespace sdk {
 
-class VectorIndexTest : public testing::Test {
+class SDKVectorIndexTest : public testing::Test {
  protected:
   void SetUp() override { InitVectorIndex(); }
 
@@ -56,7 +56,7 @@ class VectorIndexTest : public testing::Test {
   }
 };
 
-TEST_F(VectorIndexTest, TestInit) {
+TEST_F(SDKVectorIndexTest, TestInit) {
   EXPECT_NE(vector_index, nullptr);
 
   EXPECT_EQ(vector_index->GetId(), index_id);
@@ -66,7 +66,7 @@ TEST_F(VectorIndexTest, TestInit) {
   EXPECT_EQ(vector_index->GetVectorIndexType(), VectorIndexType::kFlat);
 }
 
-TEST_F(VectorIndexTest, TestGetPartitionId) {
+TEST_F(SDKVectorIndexTest, TestGetPartitionId) {
   EXPECT_EQ(vector_index->GetPartitionId(1), index_and_part_ids[1]);
   EXPECT_EQ(vector_index->GetPartitionId(4), index_and_part_ids[1]);
   EXPECT_EQ(vector_index->GetPartitionId(5), index_and_part_ids[2]);

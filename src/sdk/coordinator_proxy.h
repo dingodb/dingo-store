@@ -48,6 +48,9 @@ class CoordinatorProxy {
                              pb::coordinator::ScanRegionsResponse& response);
 
   // Meta Service
+  virtual Status GenerateAutoIncrement(const pb::meta::GenerateAutoIncrementRequest& request,
+                                       pb::meta::GenerateAutoIncrementResponse& response);
+
   virtual Status TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response);
 
   virtual Status CreateIndex(const pb::meta::CreateIndexRequest& request, pb::meta::CreateIndexResponse& response);

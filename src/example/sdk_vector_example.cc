@@ -62,8 +62,6 @@ static void PrepareVectorIndex() {
                       .SetReplicaNum(3)
                       .SetRangePartitions(g_range_partition_seperator_ids)
                       .SetFlatParam(g_flat_param)
-                      .SetAutoIncrement(true)
-                      .SetAutoIncrementStart(1)
                       .SetScalarSchema(schema)
                       .Create(g_index_id);
   DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
@@ -85,51 +83,6 @@ void PostClean(bool use_index_name = false) {
   DINGO_LOG(INFO) << "drop index status: " << tmp.ToString() << ", index_id:" << g_index_id;
   delete g_vector_client;
   g_vector_ids.clear();
-}
-
-// TODO: remove
-static void VectorIndexCacheSearch() {
-  auto coordinator_proxy = std::make_shared<dingodb::sdk::CoordinatorProxy>();
-  Status open = coordinator_proxy->Open(FLAGS_coordinator_url);
-  CHECK(open.ok()) << "Fail to open coordinator_proxy, please check parameter --url=" << FLAGS_coordinator_url;
-
-  dingodb::sdk::VectorIndexCache cache(*coordinator_proxy);
-  {
-    std::shared_ptr<dingodb::sdk::VectorIndex> index;
-    Status got = cache.GetVectorIndexById(g_index_id, index);
-    CHECK(got.ok()) << "Fail to get vector index, index_id:" << g_index_id << ", status:" << got.ToString();
-    CHECK(index.get() != nullptr);
-    CHECK_EQ(index->GetId(), g_index_id);
-    CHECK_EQ(index->GetName(), g_index_name);
-  }
-
-  {
-    std::shared_ptr<dingodb::sdk::VectorIndex> index;
-    Status got = cache.GetVectorIndexByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index);
-    CHECK(got.ok()) << "Fail to get vector index, index_name:" << g_index_name << ", status:" << got.ToString();
-    CHECK(index.get() != nullptr);
-    CHECK_EQ(index->GetId(), g_index_id);
-    CHECK_EQ(index->GetName(), g_index_name);
-  }
-
-  {
-    int64_t index_id{0};
-    Status got = cache.GetIndexIdByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index_id);
-    CHECK(got.ok()) << "Fail to get index_id, index_name" << g_index_name << ", status:" << got.ToString();
-    CHECK_EQ(index_id, g_index_id);
-  }
-
-  {
-    cache.RemoveVectorIndexById(g_index_id);
-    {
-      std::shared_ptr<dingodb::sdk::VectorIndex> index;
-      Status got = cache.GetVectorIndexByKey(dingodb::sdk::EncodeVectorIndexCacheKey(g_schema_id, g_index_name), index);
-      CHECK(got.ok()) << "Fail to get vector index, index_name:" << g_index_name << ", status:" << got.ToString();
-      CHECK(index.get() != nullptr);
-      CHECK_EQ(index->GetId(), g_index_id);
-      CHECK_EQ(index->GetName(), g_index_name);
-    }
-  }
 }
 
 static void PrepareVectorClient() {
@@ -627,6 +580,59 @@ static void VectorDelete(bool use_index_name = false) {
   }
 }
 
+static void VectorAddWithAutoId(int64_t start_id) {
+  std::vector<int64_t> vector_ids;
+  Status add;
+  {
+    std::vector<dingodb::sdk::VectorWithId> vectors;
+
+    float delta = 0.1;
+    int64_t count = 5;
+    for (auto id = start_id; id < start_id + count; id++) {
+      dingodb::sdk::Vector tmp_vector{dingodb::sdk::ValueType::kFloat, g_dimension};
+      tmp_vector.float_values.push_back(1.0 + delta);
+      tmp_vector.float_values.push_back(2.0 + delta);
+
+      dingodb::sdk::VectorWithId tmp(0, std::move(tmp_vector));
+      vectors.push_back(std::move(tmp));
+
+      vector_ids.push_back(id);
+
+      delta++;
+    }
+
+    add = g_vector_client->AddByIndexId(g_index_id, vectors, false, false);
+
+    DINGO_LOG(INFO) << "vector add:" << add.ToString();
+  }
+
+  {
+    dingodb::sdk::ScanQueryParam param;
+    param.vector_id_start = 1;
+    param.vector_id_end = 100;
+    param.max_scan_count = 100;
+
+    dingodb::sdk::ScanQueryResult result;
+    Status tmp = g_vector_client->ScanQueryByIndexId(g_index_id, param, result);
+
+    DINGO_LOG(INFO) << "vector forward scan query: " << tmp.ToString() << ", result:" << result.ToString();
+    if (tmp.ok()) {
+      std::vector<int64_t> target_ids;
+      target_ids.reserve(result.vectors.size());
+      for (auto& vector : result.vectors) {
+        target_ids.push_back(vector.id);
+      }
+
+      if (add.ok()) {
+        // sort vecotor_ids and target_ids, and check equal
+        std::sort(vector_ids.begin(), vector_ids.end());
+        std::sort(target_ids.begin(), target_ids.end());
+        CHECK(std::equal(vector_ids.begin(), vector_ids.end(), target_ids.begin(), target_ids.end()));
+      }
+    }
+  }
+}
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = true;
@@ -653,7 +659,6 @@ int main(int argc, char* argv[]) {
 
   {
     PrepareVectorIndex();
-    VectorIndexCacheSearch();
     PrepareVectorClient();
 
     VectorAdd();
@@ -685,6 +690,32 @@ int main(int argc, char* argv[]) {
     VectorDelete(true);
     VectorSearch(true);
 
+    PostClean(true);
+  }
+
+  {
+    int64_t start_id = 1;
+
+    {
+      dingodb::sdk::VectorIndexCreator* creator;
+      Status built = g_client->NewVectorIndexCreator(&creator);
+      CHECK(built.IsOK()) << "dingo creator build fail:" << built.ToString();
+      CHECK_NOTNULL(creator);
+      dingodb::ScopeGuard guard([&]() { delete creator; });
+
+      Status create = creator->SetSchemaId(g_schema_id)
+                          .SetName(g_index_name)
+                          .SetReplicaNum(3)
+                          .SetRangePartitions(g_range_partition_seperator_ids)
+                          .SetFlatParam(g_flat_param)
+                          .SetAutoIncrementStart(start_id)
+                          .Create(g_index_id);
+      DINGO_LOG(INFO) << "Create index status: " << create.ToString() << ", index_id:" << g_index_id;
+      sleep(20);
+    }
+
+    PrepareVectorClient();
+    VectorAddWithAutoId(start_id);
     PostClean(true);
   }
 }

@@ -30,7 +30,7 @@ namespace sdk {
 
 class VectorAddTask : public VectorTask {
  public:
-  VectorAddTask(const ClientStub& stub, int64_t index_id, const std::vector<VectorWithId>& vectors,
+  VectorAddTask(const ClientStub& stub, int64_t index_id, std::vector<VectorWithId>& vectors,
                 bool replace_deleted = false, bool is_update = false)
       : VectorTask(stub),
         index_id_(index_id),
@@ -49,7 +49,7 @@ class VectorAddTask : public VectorTask {
   void VectorAddRpcCallback(const Status& status, VectorAddRpc* rpc);
 
   const int64_t index_id_;
-  const std::vector<VectorWithId>& vectors_;
+  std::vector<VectorWithId>& vectors_;
   const bool replace_deleted_;
   const bool is_update_;
 

@@ -15,8 +15,8 @@
 #ifndef DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
 #define DINGODB_SDK_TEST_MOCK_COORDINATOR_PROXY_H_
 
-#include "sdk/coordinator_proxy.h"
 #include "gmock/gmock.h"
+#include "sdk/coordinator_proxy.h"
 
 namespace dingodb {
 namespace sdk {
@@ -43,6 +43,11 @@ class MockCoordinatorProxy final : public CoordinatorProxy {
 
   MOCK_METHOD(Status, ScanRegions,
               (const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response),
+              (override));
+
+  MOCK_METHOD(Status, GenerateAutoIncrement,
+              (const pb::meta::GenerateAutoIncrementRequest& request,
+               pb::meta::GenerateAutoIncrementResponse& response),
               (override));
 
   MOCK_METHOD(Status, TsoService, (const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response), (override));

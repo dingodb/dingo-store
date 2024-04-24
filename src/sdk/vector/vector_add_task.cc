@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "glog/logging.h"
+#include "sdk/auto_increment_manager.h"
 #include "sdk/common/common.h"
 #include "sdk/status.h"
 #include "sdk/vector/index_service_rpc.h"
@@ -29,10 +30,27 @@ namespace dingodb {
 namespace sdk {
 
 Status VectorAddTask::Init() {
+  if (vectors_.empty()) {
+    return Status::InvalidArgument("vectors is empty, no need add vector");
+  }
+
   std::shared_ptr<VectorIndex> tmp;
   DINGO_RETURN_NOT_OK(stub.GetVectorIndexCache()->GetVectorIndexById(index_id_, tmp));
   DCHECK_NOTNULL(tmp);
   vector_index_ = std::move(tmp);
+
+  if (vector_index_->HasAutoIncrement()) {
+    auto incrementer = stub.GetAutoIncrementerManager()->GetOrCreateIndexIncrementer(vector_index_);
+    std::vector<int64_t> ids;
+    int64_t id_count = vectors_.size();
+    ids.reserve(id_count);
+    DINGO_RETURN_NOT_OK(incrementer->GetNextIds(ids, id_count));
+    CHECK_EQ(ids.size(), id_count);
+
+    for (auto i = 0; i < id_count; i++) {
+      vectors_[i].id = ids[i];
+    }
+  }
 
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   vector_id_to_idx_.clear();

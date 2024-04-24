@@ -24,11 +24,12 @@
 #include "proto/meta.pb.h"
 #include "sdk/status.h"
 #include "sdk/vector/vector_common.h"
+#include "sdk/client_stub.h"
 
 namespace dingodb {
 namespace sdk {
 
-VectorIndexCache::VectorIndexCache(CoordinatorProxy& coordinator_proxy) : coordinator_proxy_(coordinator_proxy) {}
+VectorIndexCache::VectorIndexCache(const ClientStub& stub) : stub_(stub) {}
 
 Status VectorIndexCache::GetIndexIdByKey(const VectorIndexCacheKey& index_key, int64_t& index_id) {
   {
@@ -84,6 +85,7 @@ void VectorIndexCache::RemoveVectorIndexById(int64_t index_id) {
     auto name_iter = index_key_to_id_.find(GetVectorIndexCacheKey(*vector_index));
     CHECK(name_iter != index_key_to_id_.end());
 
+    id_iter->second->MarkStale();
     id_to_index_.erase(id_iter);
     index_key_to_id_.erase(name_iter);
   }
@@ -97,6 +99,7 @@ void VectorIndexCache::RemoveVectorIndexByKey(const VectorIndexCacheKey& index_k
     auto id_iter = id_to_index_.find(name_iter->second);
     CHECK(id_iter != id_to_index_.end());
 
+    id_iter->second->MarkStale();
     id_to_index_.erase(id_iter);
     index_key_to_id_.erase(name_iter);
   }
@@ -117,7 +120,7 @@ Status VectorIndexCache::SlowGetVectorIndexByKey(const VectorIndexCacheKey& inde
   schema->set_entity_id(schema_id);
   request.set_index_name(index_name);
 
-  DINGO_RETURN_NOT_OK(coordinator_proxy_.GetIndexByName(request, response));
+  DINGO_RETURN_NOT_OK(stub_.GetCoordinatorProxy()->GetIndexByName(request, response));
 
   if (CheckIndexResponse(response)) {
     return ProcessIndexDefinitionWithId(response.index_definition_with_id(), out_vector_index);
@@ -133,7 +136,7 @@ Status VectorIndexCache::SlowGetVectorIndexById(int64_t index_id, std::shared_pt
   index_id_pb->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
   index_id_pb->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_id_pb->set_entity_id(index_id);
-  DINGO_RETURN_NOT_OK(coordinator_proxy_.GetIndexById(request, response));
+  DINGO_RETURN_NOT_OK(stub_.GetCoordinatorProxy()->GetIndexById(request, response));
 
   if (CheckIndexResponse(response)) {
     return ProcessIndexDefinitionWithId(response.index_definition_with_id(), out_vector_index);

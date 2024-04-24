@@ -15,6 +15,14 @@
 
 #include "sdk/common/param_config.h"
 
+// sdk config
+DEFINE_int64(actuator_thread_num, 8, "actuator thread num");
+
+// coordinator config
+DEFINE_int64(coordinator_interaction_delay_ms, 200, "coordinator interaction delay ms");
+DEFINE_int64(coordinator_interaction_max_retry, 300, "coordinator interaction max retry");
+DEFINE_int64(auto_incre_req_count, 1000, "raw kv max retry times");
+
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
 DEFINE_int64(rpc_channel_timeout_ms, 500000, "rpc channel timeout ms");
 DEFINE_int64(rpc_channel_connect_timeout_ms, 3000, "rpc channel connect timeout ms");
@@ -27,13 +35,8 @@ DEFINE_int64(store_rpc_retry_delay_ms, 1000, "store rpc retry delay ms");
 
 DEFINE_int64(scan_batch_size, 10, "scan batch size, use for region scanner");
 
-DEFINE_int64(coordinator_interaction_delay_ms, 200, "coordinator interaction delay ms");
-DEFINE_int64(coordinator_interaction_max_retry, 300, "coordinator interaction max retry");
-
 DEFINE_int64(txn_op_delay_ms, 200, "txn op delay ms");
 DEFINE_int64(txn_op_max_retry, 2, "txn op max retry times");
-
-DEFINE_int64(actuator_thread_num, 8, "actuator thread num");
 
 DEFINE_int64(raw_kv_delay_ms, 200, "raw kv backoff delay ms");
 DEFINE_int64(raw_kv_max_retry, 5, "raw kv max retry times");

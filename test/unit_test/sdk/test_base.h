@@ -25,12 +25,15 @@
 #include "mock_region_scanner.h"
 #include "mock_rpc_interaction.h"
 #include "sdk/admin_tool.h"
+#include "sdk/auto_increment_manager.h"
 #include "sdk/client.h"
 #include "sdk/client_internal_data.h"
 #include "sdk/meta_cache.h"
 #include "sdk/transaction/txn_impl.h"
 #include "sdk/utils/actuator.h"
 #include "sdk/utils/thread_pool_actuator.h"
+#include "sdk/vector.h"
+#include "sdk/vector/vector_index_cache.h"
 #include "test_common.h"
 #include "transaction/mock_txn_lock_resolver.h"
 
@@ -76,6 +79,14 @@ class TestBase : public ::testing::Test {
     ON_CALL(*stub, GetActuator).WillByDefault(testing::Return(actuator));
     EXPECT_CALL(*stub, GetActuator).Times(testing::AnyNumber());
 
+    index_cache = std::make_shared<VectorIndexCache>(*stub);
+    ON_CALL(*stub, GetVectorIndexCache).WillByDefault(testing::Return(index_cache));
+    EXPECT_CALL(*stub, GetVectorIndexCache).Times(testing::AnyNumber());
+
+    auto_increment_manager = std::make_shared<AutoIncrementerManager>(*stub);
+    ON_CALL(*stub, GetAutoIncrementerManager).WillByDefault(testing::Return(auto_increment_manager));
+    EXPECT_CALL(*stub, GetAutoIncrementerManager).Times(testing::AnyNumber());
+
     client = new Client();
     client->data_->stub = std::move(tmp);
   }
@@ -102,6 +113,8 @@ class TestBase : public ::testing::Test {
   std::shared_ptr<AdminTool> admin_tool;
   std::shared_ptr<MockTxnLockResolver> txn_lock_resolver;
   std::shared_ptr<Actuator> actuator;
+  std::shared_ptr<VectorIndexCache> index_cache;
+  std::shared_ptr<AutoIncrementerManager> auto_increment_manager;
 
   // client own stub
   MockClientStub* stub;

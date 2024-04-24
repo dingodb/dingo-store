@@ -1,6 +1,7 @@
 
 add_library(sdk
   admin_tool.cc
+  auto_increment_manager.cc
   client_stub.cc
   client.cc
   coordinator_proxy.cc
