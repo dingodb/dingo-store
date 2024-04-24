@@ -90,6 +90,8 @@ DEFINE_bool(vector_search_arrange_data, true, "Arrange data for search");
 
 DEFINE_bool(use_coprocessor, false, "Vector search use coprocessor");
 
+DEFINE_uint32(vector_search_filter_vector_id_num, 10000, "Vector search filter vector id num");
+
 namespace dingodb {
 namespace benchmark {
 
@@ -1162,6 +1164,13 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
     search_param.filter_source = sdk::FilterSource::kNoneFilterSource;
   }
 
+  // vector id filter
+  if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter) {
+    for (int i = 0; i < FLAGS_vector_search_filter_vector_id_num; ++i) {
+      search_param.vector_ids.push_back(Helper::GenerateRealRandomInteger(1, 10000000));
+    }
+  }
+
   if (FLAGS_batch_size <= 1) {
     vector_with_ids.push_back(GenVectorWithId(0));
   } else {
@@ -1232,11 +1241,23 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     auto& test_entry = all_test_entries[offset % all_test_entries.size()];
     vector_with_ids.push_back(test_entry->vector_with_id);
     batch_test_entries.push_back(test_entry);
+
+    // vector id filter
+    if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
+      search_param.vector_ids = test_entry->filter_vector_ids;
+    }
+
   } else {
     for (size_t i = offset; i < FLAGS_batch_size; ++i) {
       auto& test_entry = all_test_entries[i % all_test_entries.size()];
       vector_with_ids.push_back(test_entry->vector_with_id);
       batch_test_entries.push_back(test_entry);
+    }
+
+    // vector id filter, use first entry.
+    auto& test_entry = all_test_entries[offset % all_test_entries.size()];
+    if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
+      search_param.vector_ids = test_entry->filter_vector_ids;
     }
   }
 
