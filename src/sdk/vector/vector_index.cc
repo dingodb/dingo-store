@@ -32,6 +32,8 @@ VectorIndex::VectorIndex(pb::meta::IndexDefinitionWithId index_def_with_id)
     : id_(index_def_with_id.index_id().entity_id()),
       schema_id_(index_def_with_id.index_id().parent_entity_id()),
       name_(index_def_with_id.index_definition().name()),
+      has_auto_increment_(index_def_with_id.index_definition().with_auto_incrment()),
+      increment_start_id_(index_def_with_id.index_definition().auto_increment()),
       index_def_with_id_(std::move(index_def_with_id)) {
   CHECK_GT(index_def_with_id_.index_definition().index_partition().partitions_size(), 0);
   for (const auto& partition : index_def_with_id_.index_definition().index_partition().partitions()) {

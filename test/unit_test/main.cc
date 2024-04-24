@@ -115,8 +115,9 @@ int main(int argc, char* argv[]) {
     default_run_case += ":StoreRpcControllerTest.*";
     default_run_case += ":ThreadPoolActuatorTest.*";
     default_run_case += ":SDKVectorCommonTest.*";
-    default_run_case += ":VectorIndexCacheKeyTest.*";
-    default_run_case += ":VectorIndexTest.*";
+    default_run_case += ":SDKVectorIndexCacheKeyTest.*";
+    default_run_case += ":SDKVectorIndexCacheTest.*";
+    default_run_case += ":SDKVectorIndexTest.*";
     default_run_case += ":TxnBufferTest.*";
     default_run_case += ":TxnImplTest.*";
     default_run_case += ":TxnLockResolverTest.*";
@@ -124,6 +125,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":RawKVTest.*";
     default_run_case += ":SDKBytesHexConvert.*";
     default_run_case += ":SDKLangChainExprEncoder.*";
+    default_run_case += ":SDKAutoInrementerTest.*";
 
     testing::GTEST_FLAG(filter) = default_run_case;
   }

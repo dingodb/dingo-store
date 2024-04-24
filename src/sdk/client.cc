@@ -137,6 +137,7 @@ Status Client::GetIndexId(int64_t schema_id, const std::string& index_name, int6
 
 Status Client::DropIndex(int64_t index_id) {
   data_->stub->GetVectorIndexCache()->RemoveVectorIndexById(index_id);
+  data_->stub->GetAutoIncrementerManager()->RemoveIndexIncrementerById(index_id);
   return data_->stub->GetAdminTool()->DropIndex(index_id);
 }
 

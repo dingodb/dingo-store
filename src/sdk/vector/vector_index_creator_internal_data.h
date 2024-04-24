@@ -90,7 +90,6 @@ class VectorIndexCreator::Data {
   std::optional<DiskAnnParam> diskann_param;
   std::optional<BruteForceParam> brute_force_param;
 
-  bool auto_incr{false};
   std::optional<int64_t> auto_incr_start;
 
   std::optional<VectorScalarSchema> schema;

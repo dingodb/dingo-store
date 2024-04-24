@@ -505,7 +505,7 @@ static bool IsMonotoneIncreasing(const std::vector<sdk::VectorWithId>& vector_wi
 }
 
 Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
-                                           const std::vector<sdk::VectorWithId>& vector_with_ids) {
+                                           std::vector<sdk::VectorWithId>& vector_with_ids) {
   Operation::Result result;
 
   IsMonotoneIncreasing(vector_with_ids);

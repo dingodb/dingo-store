@@ -27,7 +27,10 @@ namespace dingodb {
 namespace sdk {
 
 ClientStub::ClientStub()
-    : coordinator_proxy_(nullptr), raw_kv_region_scanner_factory_(nullptr), meta_cache_(nullptr), admin_tool_(nullptr) {}
+    : coordinator_proxy_(nullptr),
+      raw_kv_region_scanner_factory_(nullptr),
+      meta_cache_(nullptr),
+      admin_tool_(nullptr) {}
 
 ClientStub::~ClientStub() = default;
 
@@ -54,7 +57,9 @@ Status ClientStub::Open(std::string naming_service_url) {
   actuator_.reset(new ThreadPoolActuator());
   actuator_->Start(FLAGS_actuator_thread_num);
 
-  vector_index_cache_.reset(new VectorIndexCache(*coordinator_proxy_));
+  vector_index_cache_.reset(new VectorIndexCache(*this));
+
+  auto_increment_manager_.reset(new AutoIncrementerManager(*this));
 
   return Status::OK();
 }

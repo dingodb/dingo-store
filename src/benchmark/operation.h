@@ -97,7 +97,7 @@ class BaseOperation : public Operation {
   Result KvTxnGet(const std::vector<std::string>& keys);
   Result KvTxnBatchGet(const std::vector<std::vector<std::string>>& keys);
 
-  Result VectorPut(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids);
+  Result VectorPut(VectorIndexEntryPtr entry, std::vector<sdk::VectorWithId>& vector_with_ids);
   Result VectorSearch(VectorIndexEntryPtr entry, const std::vector<sdk::VectorWithId>& vector_with_ids,
                       const sdk::SearchParam& search_param);
 

@@ -463,8 +463,7 @@ class VectorIndexCreator {
   // VectorIndexCreator& SetDiskAnnParam(DiskAnnParam& params);
   VectorIndexCreator& SetBruteForceParam(const BruteForceParam& params);
 
-  VectorIndexCreator& SetAutoIncrement(bool auto_incr);
-  // start_id should greater than 0, when set auto_increment is set to true
+  // when start_id greater than 0, index is enable auto_increment
   VectorIndexCreator& SetAutoIncrementStart(int64_t start_id);
 
   VectorIndexCreator& SetScalarSchema(const VectorScalarSchema& schema);
@@ -487,9 +486,9 @@ class VectorClient {
 
   ~VectorClient() = default;
 
-  Status AddByIndexId(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted = false,
+  Status AddByIndexId(int64_t index_id, std::vector<VectorWithId>& vectors, bool replace_deleted = false,
                       bool is_update = false);
-  Status AddByIndexName(int64_t schema_id, const std::string& index_name, const std::vector<VectorWithId>& vectors,
+  Status AddByIndexName(int64_t schema_id, const std::string& index_name, std::vector<VectorWithId>& vectors,
                         bool replace_deleted = false, bool is_update = false);
 
   Status SearchByIndexId(int64_t index_id, const SearchParam& search_param,

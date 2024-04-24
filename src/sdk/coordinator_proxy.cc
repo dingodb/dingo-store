@@ -127,6 +127,18 @@ Status CoordinatorProxy::ScanRegions(const pb::coordinator::ScanRegionsRequest& 
   }
 }
 
+Status CoordinatorProxy::GenerateAutoIncrement(const pb::meta::GenerateAutoIncrementRequest& request,
+                                               pb::meta::GenerateAutoIncrementResponse& response) {
+  butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("GenerateAutoIncrement", request, response);
+  if (!rpc_status.ok()) {
+    DINGO_LOG(INFO) << fmt::format("Fail GenerateAutoIncrement {}", COORDINATOR_RPC_MSG(rpc_status, request, response));
+    return Status::RemoteError(rpc_status.error_code(), rpc_status.error_cstr());
+  } else {
+    DINGO_LOG(DEBUG) << COORDINATOR_RPC_MSG(rpc_status, request, response);
+    return Status::OK();
+  }
+}
+
 Status CoordinatorProxy::TsoService(const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("TsoService", request, response);
   if (!rpc_status.ok()) {

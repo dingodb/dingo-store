@@ -32,14 +32,14 @@ namespace sdk {
 
 VectorClient::VectorClient(const ClientStub& stub) : stub_(stub) {}
 
-Status VectorClient::AddByIndexId(int64_t index_id, const std::vector<VectorWithId>& vectors, bool replace_deleted,
+Status VectorClient::AddByIndexId(int64_t index_id, std::vector<VectorWithId>& vectors, bool replace_deleted,
                                   bool is_update) {
   VectorAddTask task(stub_, index_id, vectors, replace_deleted, is_update);
   return task.Run();
 }
 
 Status VectorClient::AddByIndexName(int64_t schema_id, const std::string& index_name,
-                                    const std::vector<VectorWithId>& vectors, bool replace_deleted, bool is_update) {
+                                    std::vector<VectorWithId>& vectors, bool replace_deleted, bool is_update) {
   int64_t index_id{0};
   DINGO_RETURN_NOT_OK(
       stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));

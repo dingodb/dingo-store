@@ -21,12 +21,14 @@
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index_cache.h"
+#include "test_base.h"
 #include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
 
-TEST(VectorIndexCacheKeyTest, TestEncodeDecodeVectorIndexCacheKey) {
+
+TEST(SDKVectorIndexCacheKeyTest, TestEncodeDecodeVectorIndexCacheKey) {
   int64_t schema_id = 123;
   std::string index_name = "test_index";
 
@@ -40,20 +42,19 @@ TEST(VectorIndexCacheKeyTest, TestEncodeDecodeVectorIndexCacheKey) {
   EXPECT_EQ(decoded_index_name, index_name);
 }
 
-class VectorIndexCacheTest : public testing::Test {
+class SDKVectorIndexCacheTest : public TestBase {
  protected:
-  void SetUp() override { cache = std::make_shared<VectorIndexCache>(cooridnator_proxy); }
+  void SetUp() override { cache = std::make_shared<VectorIndexCache>(*stub); }
 
   void TearDown() override { cache.reset(); }
 
   int64_t schema_id{2};
-  MockCoordinatorProxy cooridnator_proxy;
   std::shared_ptr<VectorIndexCache> cache;
 };
 
-TEST_F(VectorIndexCacheTest, GetIndexIdByNameNotOK) {
+TEST_F(SDKVectorIndexCacheTest, GetIndexIdByNameNotOK) {
   std::string index_name = "test";
-  EXPECT_CALL(cooridnator_proxy, GetIndexByName)
+  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
       .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
         (void)response;
         EXPECT_EQ(request.index_name(), index_name);
@@ -67,9 +68,9 @@ TEST_F(VectorIndexCacheTest, GetIndexIdByNameNotOK) {
   EXPECT_EQ(id, -1);
 }
 
-TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
+TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
   std::string index_name = "test";
-  EXPECT_CALL(cooridnator_proxy, GetIndexByName)
+  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
       .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
         (void)response;
         EXPECT_EQ(request.index_name(), index_name);
@@ -82,9 +83,9 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
   EXPECT_TRUE(!status.ok());
 }
 
-TEST_F(VectorIndexCacheTest, GetVectorIndexByIdNotOK) {
+TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByIdNotOK) {
   int64_t index_id = 2;
-  EXPECT_CALL(cooridnator_proxy, GetIndexById)
+  EXPECT_CALL(*coordinator_proxy, GetIndexById)
       .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
         (void)response;
         EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
@@ -100,14 +101,14 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByIdNotOK) {
   EXPECT_TRUE(!status.ok());
 }
 
-TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyOK) {
+TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyOK) {
   std::string index_name = "test";
   std::vector<int64_t> index_and_part_ids{2, 3, 4, 5, 6};
   int64_t index_id = index_and_part_ids[0];
   std::vector<int64_t> range_seperator_ids = {5, 10, 20};
   FlatParam flat_param(1000, dingodb::sdk::MetricType::kL2);
 
-  EXPECT_CALL(cooridnator_proxy, GetIndexByName)
+  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
       .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
         EXPECT_EQ(request.index_name(), index_name);
         FillVectorIndexId(response.mutable_index_definition_with_id()->mutable_index_id(), index_id, schema_id);
@@ -149,7 +150,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyOK) {
     EXPECT_EQ(index->GetVectorIndexType(), flat_param.Type());
   }
 
-  EXPECT_CALL(cooridnator_proxy, GetIndexById)
+  EXPECT_CALL(*coordinator_proxy, GetIndexById)
       .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
         (void)response;
         EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
@@ -176,14 +177,14 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByKeyOK) {
   }
 }
 
-TEST_F(VectorIndexCacheTest, GetVectorIndexByIdOK) {
+TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByIdOK) {
   std::string index_name = "test";
   std::vector<int64_t> index_and_part_ids{2, 3, 4, 5, 6};
   int64_t index_id = index_and_part_ids[0];
   std::vector<int64_t> range_seperator_ids = {5, 10, 20};
   FlatParam flat_param(1000, dingodb::sdk::MetricType::kL2);
 
-  EXPECT_CALL(cooridnator_proxy, GetIndexById)
+  EXPECT_CALL(*coordinator_proxy, GetIndexById)
       .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
         EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
         EXPECT_EQ(request.index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
@@ -231,7 +232,7 @@ TEST_F(VectorIndexCacheTest, GetVectorIndexByIdOK) {
     EXPECT_EQ(index->GetVectorIndexType(), flat_param.Type());
   }
 
-  EXPECT_CALL(cooridnator_proxy, GetIndexByName)
+  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
       .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
         (void)response;
         EXPECT_EQ(request.index_name(), index_name);

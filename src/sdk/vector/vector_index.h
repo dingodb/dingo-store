@@ -16,6 +16,7 @@
 #define DINGODB_SDK_VECTOR_INDEX_ITEM_H_
 
 #include <cstdint>
+#include <memory>
 
 #include "proto/meta.pb.h"
 #include "sdk/vector.h"
@@ -52,8 +53,14 @@ class VectorIndex {
 
   bool HasScalarSchema() const;
 
+  bool HasAutoIncrement() const { return has_auto_increment_; }
+
+  int64_t GetIncrementStartId() const { return increment_start_id_; }
+
   // the caller must make sure the vector index is not destroyed and HasScalarSchema
   const pb::common::ScalarSchema& GetScalarSchema() const;
+
+  const pb::meta::IndexDefinitionWithId& GetIndexDefWithId() const { return index_def_with_id_; }
 
   std::string ToString(bool verbose = false) const;
 
@@ -67,6 +74,8 @@ class VectorIndex {
   const int64_t id_{-1};
   const int64_t schema_id_{-1};
   const std::string name_;
+  const bool has_auto_increment_{false};
+  const int64_t increment_start_id_{0};
   const pb::meta::IndexDefinitionWithId index_def_with_id_;
   // start_key is 0 or valid vector id
   std::map<int64_t, int64_t> start_key_to_part_id_;
