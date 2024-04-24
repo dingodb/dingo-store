@@ -44,6 +44,7 @@ class Dataset {
     sdk::VectorWithId vector_with_id;
     std::unordered_map<int64_t, float> neighbors;
     std::string filter_json;
+    std::vector<int64_t> filter_vector_ids;
   };
   using TestEntryPtr = std::shared_ptr<TestEntry>;
 

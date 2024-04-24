@@ -842,6 +842,13 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
     entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
   }
 
+  // set filter_vector_ids
+  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
+  }
+
   return entry;
 }
 
@@ -953,31 +960,18 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
         vector_with_id.scalar_data["text"] = scalar_value;
       }
     }
-  } else {
-    if (item.HasMember("filter")) {
-      for (const auto& m : item["filter"].GetObject()) {
-        if (m.value.IsString()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kSTRING;
-          sdk::ScalarField field;
-          field.string_data = m.value.GetString();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        } else if (m.value.IsInt64()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kINT64;
-          sdk::ScalarField field;
-          field.long_data = m.value.GetInt64();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        }
-      }
-    }
   }
 
   Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
   entry->vector_with_id = vector_with_id;
 
+  // set filter_json
+  if (item.HasMember("filter")) {
+    std::string filter_value = item["filter"].GetString();
+    entry->filter_json = GenFilterJson(filter_value);
+  }
+
+  // set nuighbors
   const auto& neighbors = item["neighbors"].GetArray();
   CHECK(!neighbors.Empty()) << "neighbor size is empty.";
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
@@ -987,6 +981,13 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
     CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
     CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
     entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
+  }
+
+  // set filter_vector_ids
+  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
   }
 
   return entry;
@@ -1110,31 +1111,18 @@ Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) 
         vector_with_id.scalar_data["text"] = scalar_value;
       }
     }
-  } else {
-    if (item.HasMember("filter")) {
-      for (const auto& m : item["filter"].GetObject()) {
-        if (m.value.IsString()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kSTRING;
-          sdk::ScalarField field;
-          field.string_data = m.value.GetString();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        } else if (m.value.IsInt64()) {
-          sdk::ScalarValue scalar_value;
-          scalar_value.type = sdk::Type::kINT64;
-          sdk::ScalarField field;
-          field.long_data = m.value.GetInt64();
-          scalar_value.fields.push_back(field);
-          vector_with_id.scalar_data[m.name.GetString()] = scalar_value;
-        }
-      }
-    }
   }
 
   Dataset::TestEntryPtr entry = std::make_shared<Dataset::TestEntry>();
   entry->vector_with_id = vector_with_id;
 
+  // set filter
+  if (item.HasMember("filter")) {
+    std::string filter_value = item["filter"].GetString();
+    entry->filter_json = GenFilterJson(filter_value);
+  }
+
+  // set neighbors
   const auto& neighbors = item["neighbors"].GetArray();
   CHECK(!neighbors.Empty()) << "neighbor size is empty.";
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
@@ -1144,6 +1132,13 @@ Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) 
     CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
     CHECK(neighbor_obj["distance"].IsFloat()) << "distance type is not float.";
     entry->neighbors[neighbor_obj["id"].GetInt64() + 1] = neighbor_obj["distance"].GetFloat();
+  }
+
+  // set filter_vector_ids
+  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
+    const auto& neighbor_obj = neighbors[i].GetObject();
+    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
+    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
   }
 
   return entry;
