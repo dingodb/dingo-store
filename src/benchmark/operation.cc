@@ -91,6 +91,7 @@ DEFINE_bool(vector_search_arrange_data, true, "Arrange data for search");
 DEFINE_bool(use_coprocessor, false, "Vector search use coprocessor");
 
 DEFINE_uint32(vector_search_filter_vector_id_num, 10000, "Vector search filter vector id num");
+DEFINE_bool(filter_vector_id_is_negation, false, "Use negation vector id filter");
 
 namespace dingodb {
 namespace benchmark {
@@ -509,8 +510,7 @@ static bool IsMonotoneIncreasing(const std::vector<sdk::VectorWithId>& vector_wi
   return true;
 }
 
-Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry,
-                                           std::vector<sdk::VectorWithId>& vector_with_ids) {
+Operation::Result BaseOperation::VectorPut(VectorIndexEntryPtr entry, std::vector<sdk::VectorWithId>& vector_with_ids) {
   Operation::Result result;
 
   IsMonotoneIncreasing(vector_with_ids);
@@ -1168,6 +1168,7 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
   if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter) {
     for (int i = 0; i < FLAGS_vector_search_filter_vector_id_num; ++i) {
       search_param.vector_ids.push_back(Helper::GenerateRealRandomInteger(1, 10000000));
+      search_param.is_negation = FLAGS_filter_vector_id_is_negation;
     }
   }
 
@@ -1245,6 +1246,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     // vector id filter
     if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
       search_param.vector_ids = test_entry->filter_vector_ids;
+      search_param.is_negation = FLAGS_filter_vector_id_is_negation;
     }
 
   } else {
@@ -1258,6 +1260,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     auto& test_entry = all_test_entries[offset % all_test_entries.size()];
     if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
       search_param.vector_ids = test_entry->filter_vector_ids;
+      search_param.is_negation = FLAGS_filter_vector_id_is_negation;
     }
   }
 

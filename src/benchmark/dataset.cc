@@ -64,7 +64,7 @@ DEFINE_string(vector_search_filter, "", "vector search filter,e.g. key=value;key
 
 DEFINE_int64(arrange_data_start_offset, 0, "arrange data start offset");
 
-DECLARE_bool(enable_filter_vector_id);
+DECLARE_string(vector_search_filter_source);
 
 namespace dingodb {
 namespace benchmark {
@@ -847,7 +847,7 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
   }
 
   // set filter_vector_ids
-  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+  if (FLAGS_vector_search_filter_source == "VECTOR_ID" && item.HasMember("filter_vector_ids")) {
     const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
     for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
       entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);
@@ -989,7 +989,7 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
   }
 
   // set filter_vector_ids
-  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+  if (FLAGS_vector_search_filter_source == "VECTOR_ID" && item.HasMember("filter_vector_ids")) {
     const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
     for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
       entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);
@@ -1142,7 +1142,7 @@ Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) 
   }
 
   // set filter_vector_ids
-  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+  if (FLAGS_vector_search_filter_source == "VECTOR_ID" && item.HasMember("filter_vector_ids")) {
     const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
     for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
       entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);

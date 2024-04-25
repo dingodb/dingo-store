@@ -806,8 +806,8 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
     const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  auto status =
-      VectorReader::SetVectorIndexIdsFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters,
+                                                      Helper::PbRepeatedToVector(parameter.vector_ids()));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_str();
     return status;
@@ -912,7 +912,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1154,7 +1154,7 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1386,8 +1386,8 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(  // NOLINT
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   auto start_ids = lambda_time_now_function();
-  auto status =
-      VectorReader::SetVectorIndexIdsFilter(vector_index, filters, Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters,
+                                                      Helper::PbRepeatedToVector(parameter.vector_ids()));
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1516,7 +1516,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
 
-  status = VectorReader::SetVectorIndexIdsFilter(vector_index, filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1536,10 +1536,10 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::SetVectorIndexIdsFilter(VectorIndexWrapperPtr /*vector_index*/,
+butil::Status VectorReader::SetVectorIndexIdsFilter(bool is_negation,
                                                     std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                                     const std::vector<int64_t>& vector_ids) {
-  filters.push_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids));
+  filters.push_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids, is_negation));
   return butil::Status::OK();
 }
 

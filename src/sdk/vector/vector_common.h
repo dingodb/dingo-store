@@ -376,9 +376,11 @@ static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal
       break;
   }
 
+  internal_parameter->mutable_vector_ids()->Reserve(parameter.vector_ids.size());
   for (const auto id : parameter.vector_ids) {
     internal_parameter->add_vector_ids(id);
   }
+  internal_parameter->set_is_negation(parameter.is_negation);
 
   internal_parameter->set_use_brute_force(parameter.use_brute_force);
 }
