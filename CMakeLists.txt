@@ -565,11 +565,19 @@ execute_process(
 
 if (NOT GIT_VERSION)
     set(GIT_VERSION "unknown")
+    message(WARNING "Git version is unknown")
 endif()
 
 if (NOT GIT_TAG_NAME)
     set(GIT_TAG_NAME "unknown")
+    message(WARNING "Git tag name is unknown")
 endif()
+
+message(STATUS "Git version: ${GIT_VERSION}")
+message(STATUS "Git tag name: ${GIT_TAG_NAME}")
+message(STATUS "Git commit user: ${GIT_COMMIT_USER}")
+message(STATUS "Git commit mail: ${GIT_COMMIT_MAIL}")
+message(STATUS "Git commit time: ${GIT_COMMIT_TIME}")
 
 add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
