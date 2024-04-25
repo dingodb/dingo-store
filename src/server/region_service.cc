@@ -283,7 +283,8 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
     std::string start_key = Helper::StringToHex(region.definition().range().start_key());
     std::string end_key = Helper::StringToHex(region.definition().range().end_key());
-    if (region.region_type() == pb::common::INDEX_REGION) {
+    if (region.region_type() == pb::common::INDEX_REGION &&
+        region.definition().index_parameter().has_vector_index_parameter()) {
       int64_t min_vector_id = 0, max_vector_id = 0;
       VectorCodec::DecodeRangeToVectorId(region.definition().range(), min_vector_id, max_vector_id);
       start_key += fmt::format("({})", min_vector_id);
