@@ -49,8 +49,11 @@ DEFINE_uint32(split_num, 1000, "spilt num");
 
 DECLARE_uint32(concurrency);
 
+DEFINE_uint32(nearest_neighbor_num, 100, "nearest neighbor num");
 DEFINE_bool(enable_filter_vector_id, false, "enable filter vector id");
 DEFINE_double(filter_vector_id_ratio, 0.1, "filter vector id ratio");
+
+DECLARE_bool(filter_vector_id_is_negation);
 
 namespace dingodb {
 namespace benchmark {
@@ -89,8 +92,6 @@ struct VectorEntry {
   std::priority_queue<Neighbor, std::vector<Neighbor>, Neighbor> max_heap;
   std::mutex mutex;
 
-  std::vector<Neighbor> neighbors;
-
   void PutCandidateNeighbors(const VectorEntry& vector_entry) {
     CHECK(emb.size() == vector_entry.emb.size());
 
@@ -105,8 +106,7 @@ struct VectorEntry {
   void InsertHeap(const Neighbor& neighbor) {
     std::lock_guard lock(mutex);
 
-    const int nearest_neighbor_num = 100;
-    if (max_heap.size() < nearest_neighbor_num) {
+    if (max_heap.size() < FLAGS_nearest_neighbor_num) {
       max_heap.push(neighbor);
     } else {
       const auto& max_neighbor = max_heap.top();
@@ -117,9 +117,10 @@ struct VectorEntry {
     }
   }
 
-  void GenerateNeighbors() {
+  std::vector<Neighbor> GenerateNeighbors() {
     std::lock_guard lock(mutex);
 
+    std::vector<Neighbor> neighbors;
     while (!max_heap.empty()) {
       const auto& max_neighbor = max_heap.top();
       neighbors.push_back(max_neighbor);
@@ -127,10 +128,11 @@ struct VectorEntry {
     }
 
     std::sort(neighbors.begin(), neighbors.end(), Neighbor());
+    return neighbors;
   }
 
-  void PrintNeighbors() {
-    for (auto& neighbor : neighbors) {
+  static void PrintNeighbors(const std::vector<Neighbor>& neighbors) {
+    for (const auto& neighbor : neighbors) {
       std::cout << fmt::format("{} {}", neighbor.id, neighbor.distance) << std::endl;
     }
   }
@@ -164,25 +166,25 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
   for (int i = 0; i < array.Size(); ++i) {
     auto out_obj = array[i].GetObject();
     auto& test_entry = test_entries[i];
-    test_entry.GenerateNeighbors();
+    auto neighbors = test_entry.GenerateNeighbors();
 
     std::set<int64_t> filter_vector_ids_copy = filter_vector_ids;
 
     std::vector<int64_t> neighbor_vector_ids;
-    rapidjson::Value neighbors(rapidjson::kArrayType);
-    for (const auto& neighbor : test_entry.neighbors) {
+    rapidjson::Value neighbor_array(rapidjson::kArrayType);
+    for (const auto& neighbor : neighbors) {
       rapidjson::Value obj(rapidjson::kObjectType);
       obj.AddMember("id", neighbor.id, allocator);
       obj.AddMember("distance", neighbor.distance, allocator);
 
-      neighbors.PushBack(obj, allocator);
+      neighbor_array.PushBack(obj, allocator);
       neighbor_vector_ids.push_back(neighbor.id);
     }
 
     if (out_obj.HasMember("neighbors")) {
       out_obj.EraseMember("neighbors");
     }
-    out_obj.AddMember("neighbors", neighbors, allocator);
+    out_obj.AddMember("neighbors", neighbor_array, allocator);
 
     if (!FLAGS_filter_field.empty()) {
       out_obj.AddMember("filter", rapidjson::StringRef(FLAGS_filter_field.c_str()), allocator);
@@ -191,7 +193,9 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
     // for filter vector id
     if (FLAGS_enable_filter_vector_id) {
       rapidjson::Value filter_vector_id_array(rapidjson::kArrayType);
-      filter_vector_ids_copy.insert(neighbor_vector_ids.begin(), neighbor_vector_ids.end());
+      if (!FLAGS_filter_vector_id_is_negation) {
+        filter_vector_ids_copy.insert(neighbor_vector_ids.begin(), neighbor_vector_ids.end());
+      }
       for (auto filter_vector_id : filter_vector_ids_copy) {
         filter_vector_id_array.PushBack(filter_vector_id, allocator);
       }
