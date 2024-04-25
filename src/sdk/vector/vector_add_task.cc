@@ -40,15 +40,36 @@ Status VectorAddTask::Init() {
   vector_index_ = std::move(tmp);
 
   if (vector_index_->HasAutoIncrement()) {
-    auto incrementer = stub.GetAutoIncrementerManager()->GetOrCreateIndexIncrementer(vector_index_);
-    std::vector<int64_t> ids;
-    int64_t id_count = vectors_.size();
-    ids.reserve(id_count);
-    DINGO_RETURN_NOT_OK(incrementer->GetNextIds(ids, id_count));
-    CHECK_EQ(ids.size(), id_count);
+    bool has_id = vectors_[0].id > 0;
+    for (int i = 1; i < vectors_.size(); i++) {
+      bool next_has_id = vectors_[i].id > 0;
+      if (has_id ^ next_has_id) {
+        return Status::InvalidArgument("vector id must be all positive or not when vector index has auto increment");
+      } else {
+        has_id = next_has_id;
+      }
+    }
 
-    for (auto i = 0; i < id_count; i++) {
-      vectors_[i].id = ids[i];
+    if (!has_id) {
+      auto incrementer = stub.GetAutoIncrementerManager()->GetOrCreateIndexIncrementer(vector_index_);
+      std::vector<int64_t> ids;
+      int64_t id_count = vectors_.size();
+      ids.reserve(id_count);
+
+      DINGO_RETURN_NOT_OK(incrementer->GetNextIds(ids, id_count));
+      CHECK_EQ(ids.size(), id_count);
+
+      for (auto i = 0; i < id_count; i++) {
+        vectors_[i].id = ids[i];
+      }
+    }
+
+  } else {
+    for (auto& vector : vectors_) {
+      int64_t id = vector.id;
+      if (id <= 0) {
+        return Status::InvalidArgument("vector id must be positive");
+      }
     }
   }
 
