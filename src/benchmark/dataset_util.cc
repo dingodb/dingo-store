@@ -21,13 +21,16 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/threadpool.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "rapidjson/document.h"
 #include "rapidjson/istreamwrapper.h"
 #include "rapidjson/rapidjson.h"
@@ -45,6 +48,9 @@ DEFINE_string(test_dataset_filepath, "", "test dataset filepath");
 DEFINE_uint32(split_num, 1000, "spilt num");
 
 DECLARE_uint32(concurrency);
+
+DEFINE_bool(enable_filter_vector_id, false, "enable filter vector id");
+DEFINE_double(filter_vector_id_ratio, 0.1, "filter vector id ratio");
 
 namespace dingodb {
 namespace benchmark {
@@ -85,7 +91,7 @@ struct VectorEntry {
 
   std::vector<Neighbor> neighbors;
 
-  void MakeNeighbors(const VectorEntry& vector_entry) {
+  void PutCandidateNeighbors(const VectorEntry& vector_entry) {
     CHECK(emb.size() == vector_entry.emb.size());
 
     float distance = dingodb::Helper::DingoHnswL2Sqr(emb.data(), vector_entry.emb.data(), emb.size());
@@ -111,7 +117,7 @@ struct VectorEntry {
     }
   }
 
-  void SaveNeighbors() {
+  void GenerateNeighbors() {
     std::lock_guard lock(mutex);
 
     while (!max_heap.empty()) {
@@ -149,7 +155,7 @@ static std::vector<std::vector<std::string>> ParseFilterFieldV1(const std::strin
 }
 
 static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, std::vector<VectorEntry>& test_entries,
-                                    const std::string& out_filepath) {
+                                    const std::set<int64_t>& filter_vector_ids, const std::string& out_filepath) {
   rapidjson::Document out_doc;
   out_doc.SetArray();
   rapidjson::Document::AllocatorType& allocator = out_doc.GetAllocator();
@@ -158,8 +164,11 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
   for (int i = 0; i < array.Size(); ++i) {
     auto out_obj = array[i].GetObject();
     auto& test_entry = test_entries[i];
-    test_entry.SaveNeighbors();
+    test_entry.GenerateNeighbors();
 
+    std::set<int64_t> filter_vector_ids_copy = filter_vector_ids;
+
+    std::vector<int64_t> neighbor_vector_ids;
     rapidjson::Value neighbors(rapidjson::kArrayType);
     for (const auto& neighbor : test_entry.neighbors) {
       rapidjson::Value obj(rapidjson::kObjectType);
@@ -167,6 +176,7 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
       obj.AddMember("distance", neighbor.distance, allocator);
 
       neighbors.PushBack(obj, allocator);
+      neighbor_vector_ids.push_back(neighbor.id);
     }
 
     if (out_obj.HasMember("neighbors")) {
@@ -176,6 +186,16 @@ static void SaveTestDatasetNeighbor(std::shared_ptr<rapidjson::Document> doc, st
 
     if (!FLAGS_filter_field.empty()) {
       out_obj.AddMember("filter", rapidjson::StringRef(FLAGS_filter_field.c_str()), allocator);
+    }
+
+    // for filter vector id
+    if (FLAGS_enable_filter_vector_id) {
+      rapidjson::Value filter_vector_id_array(rapidjson::kArrayType);
+      filter_vector_ids_copy.insert(neighbor_vector_ids.begin(), neighbor_vector_ids.end());
+      for (auto filter_vector_id : filter_vector_ids_copy) {
+        filter_vector_id_array.PushBack(filter_vector_id, allocator);
+      }
+      out_obj.AddMember("filter_vector_ids", filter_vector_id_array, allocator);
     }
 
     out_doc.PushBack(out_obj, allocator);
@@ -279,6 +299,9 @@ static int64_t GetVectorId(const std::string& dataset_name, const rapidjson::Val
   return -1;
 };
 
+// take less than ratio
+bool MaybeTake(double ratio) { return Helper::GenerateRandomFloat(0.0, 1.0) <= ratio; }
+
 void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::string& test_dataset_filepath,
                                const std::string& train_dataset_dirpath, const std::string& out_filepath) {
   std::vector<VectorEntry> test_entries;
@@ -318,6 +341,7 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
   int64_t tatal_count = 0;
   int64_t filter_count = 0;
 
+  std::set<int64_t> filter_vector_ids;
   // load train data
   {
     std::vector<std::string> train_filepaths;
@@ -347,21 +371,27 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
           continue;
         }
 
-        auto* entry = new VectorEntry();
-        entry->id = GetVectorId(dataset_name, item);
-        CHECK(entry->id != -1) << fmt::format("vector id({}) is invalid", entry->id);
+        auto* train_entry = new VectorEntry();
+        train_entry->id = GetVectorId(dataset_name, item);
+        CHECK(train_entry->id != -1) << fmt::format("vector id({}) is invalid", train_entry->id);
 
         if (!item["emb"].IsArray()) {
           continue;
         }
 
-        entry->emb.reserve(item["emb"].GetArray().Size());
+        train_entry->emb.reserve(item["emb"].GetArray().Size());
         for (auto& f : item["emb"].GetArray()) {
-          entry->emb.push_back(f.GetFloat());
+          train_entry->emb.push_back(f.GetFloat());
         }
-        CHECK(entry->emb.size() == FLAGS_vector_dimension)
-            << fmt::format("dataset dimension({}) is not uniformity.", entry->emb.size());
+        CHECK(train_entry->emb.size() == FLAGS_vector_dimension)
+            << fmt::format("dataset dimension({}) is not uniformity.", train_entry->emb.size());
 
+        // for filter vector ids
+        if (MaybeTake(FLAGS_filter_vector_id_ratio)) {
+          filter_vector_ids.insert(train_entry->id);
+        }
+
+        // filter specific item
         ++tatal_count;
         if (FilterValue(item)) {
           ++filter_count;
@@ -373,11 +403,12 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
               VectorEntry* train_entry = static_cast<VectorEntry*>(arg);
 
               for (auto& entry : test_entries) {
-                entry.MakeNeighbors(*train_entry);
+                entry.PutCandidateNeighbors(*train_entry);
               }
             },
-            entry);
+            train_entry);
 
+        // slow down producer
         while (thread_pool.PendingTaskCount() > 1000) {
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
@@ -390,12 +421,13 @@ void DatasetUtils::GenNeighbor(const std::string& dataset_name, const std::strin
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  std::cout << fmt::format("tatal_count: {} filter_count: {} ratio: {:.2f}%", tatal_count, filter_count,
-                           static_cast<double>(filter_count * 100) / tatal_count)
+  std::cout << fmt::format("tatal_count: {} filter_count: {} ratio: {:.2f}% filter_vector_ids size: {}", tatal_count,
+                           filter_count, static_cast<double>(filter_count * 100) / tatal_count,
+                           filter_vector_ids.size())
             << std::endl;
 
   // handle result
-  SaveTestDatasetNeighbor(test_doc, test_entries, out_filepath);
+  SaveTestDatasetNeighbor(test_doc, test_entries, filter_vector_ids, out_filepath);
 }
 
 void DatasetUtils::GetStatisticsDistribution(const std::string& dataset_name, const std::string& train_dataset_dirpath,

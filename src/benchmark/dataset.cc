@@ -64,6 +64,8 @@ DEFINE_string(vector_search_filter, "", "vector search filter,e.g. key=value;key
 
 DEFINE_int64(arrange_data_start_offset, 0, "arrange data start offset");
 
+DECLARE_bool(enable_filter_vector_id);
+
 namespace dingodb {
 namespace benchmark {
 
@@ -832,6 +834,8 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
     entry->filter_json = GenFilterJson(filter_value);
   }
 
+  // set neighbors
+  CHECK(item.HasMember("neighbors")) << "missing neighbors";
   const auto& neighbors = item["neighbors"].GetArray();
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
   for (uint32_t i = 0; i < size; ++i) {
@@ -843,12 +847,12 @@ Dataset::TestEntryPtr Wikipedia2212Dataset::ParseTestData(const rapidjson::Value
   }
 
   // set filter_vector_ids
-  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
-    const auto& neighbor_obj = neighbors[i].GetObject();
-    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
-    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
+  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+    const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
+    for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
+      entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);
+    }
   }
-
   return entry;
 }
 
@@ -972,6 +976,7 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
   }
 
   // set nuighbors
+  CHECK(item.HasMember("neighbors")) << "missing neighbors";
   const auto& neighbors = item["neighbors"].GetArray();
   CHECK(!neighbors.Empty()) << "neighbor size is empty.";
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
@@ -984,10 +989,11 @@ Dataset::TestEntryPtr BeirBioasqDataset::ParseTestData(const rapidjson::Value& o
   }
 
   // set filter_vector_ids
-  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
-    const auto& neighbor_obj = neighbors[i].GetObject();
-    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
-    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
+  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+    const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
+    for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
+      entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);
+    }
   }
 
   return entry;
@@ -1123,6 +1129,7 @@ Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) 
   }
 
   // set neighbors
+  CHECK(item.HasMember("neighbors")) << "missing neighbors";
   const auto& neighbors = item["neighbors"].GetArray();
   CHECK(!neighbors.Empty()) << "neighbor size is empty.";
   uint32_t size = std::min(static_cast<uint32_t>(neighbors.Size()), FLAGS_vector_search_topk);
@@ -1135,10 +1142,11 @@ Dataset::TestEntryPtr MiraclDataset::ParseTestData(const rapidjson::Value& obj) 
   }
 
   // set filter_vector_ids
-  for (uint32_t i = 0; i < neighbors.Size(); ++i) {
-    const auto& neighbor_obj = neighbors[i].GetObject();
-    CHECK(neighbor_obj["id"].IsInt64()) << "id type is not int64_t.";
-    entry->filter_vector_ids.push_back(neighbor_obj["id"].GetInt64() + 1);
+  if (FLAGS_enable_filter_vector_id && item.HasMember("filter_vector_ids")) {
+    const auto& filter_vector_ids = item["filter_vector_ids"].GetArray();
+    for (uint32_t i = 0; i < filter_vector_ids.Size(); ++i) {
+      entry->filter_vector_ids.push_back(filter_vector_ids[i].GetInt64() + 1);
+    }
   }
 
   return entry;

@@ -819,7 +819,8 @@ int64_t Helper::GenerateRandomInteger(int64_t min_value, int64_t max_value) {
 }
 
 float Helper::GenerateRandomFloat(float min_value, float max_value) {
-  std::mt19937 rng;
+  std::random_device rd;  // Obtain a random seed from the hardware
+  std::mt19937 rng(rd());
   std::uniform_real_distribution<> distrib(min_value, max_value);
 
   return distrib(rng);
