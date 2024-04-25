@@ -1679,8 +1679,17 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
     DINGO_LOG(ERROR) << "[control.region] not support region control command.";
     return butil::Status(pb::error::EINTERNAL, "Not support region control command");
   }
-  if (!executor->Execute(task)) {
-    return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
+
+  // Because DeleteRegion task is very heavy, we use apply_wkr to execute it for limiting the concurrency
+  if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
+    auto apply_wkr = Server::GetInstance().GetRaftApplyWorkerSet();
+    if (!apply_wkr->Execute(task)) {
+      return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
+    }
+  } else {
+    if (!executor->Execute(task)) {
+      return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
+    }
   }
 
   return butil::Status();
