@@ -114,6 +114,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":RegionTest.*";
     default_run_case += ":StoreRpcControllerTest.*";
     default_run_case += ":ThreadPoolActuatorTest.*";
+    default_run_case += ":SDKVectorAddTaskTest.*";
     default_run_case += ":SDKVectorCommonTest.*";
     default_run_case += ":SDKVectorIndexCacheKeyTest.*";
     default_run_case += ":SDKVectorIndexCacheTest.*";
