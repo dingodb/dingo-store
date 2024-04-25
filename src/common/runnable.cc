@@ -300,10 +300,10 @@ SimpleWorkerSet::SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t 
       use_pthread_(use_pthread),
       use_prior_(use_prior),
       max_pending_task_count_(max_pending_task_count),
-      total_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_total_task_count", name)),
-      pending_task_count_metrics_(fmt::format("dingo_prior_worker_set_{}_pending_task_count", name)),
-      queue_wait_metrics_(fmt::format("dingo_prior_worker_set_{}_queue_wait_latency", name)),
-      queue_run_metrics_(fmt::format("dingo_prior_worker_set_{}_queue_run_latency", name)) {
+      total_task_count_metrics_(fmt::format("dingo_simple_worker_set_{}_total_task_count", name)),
+      pending_task_count_metrics_(fmt::format("dingo_simple_worker_set_{}_pending_task_count", name)),
+      queue_wait_metrics_(fmt::format("dingo_simple_worker_set_{}_queue_wait_latency", name)),
+      queue_run_metrics_(fmt::format("dingo_simple_worker_set_{}_queue_run_latency", name)) {
   bthread_mutex_init(&mutex_, nullptr);
   bthread_cond_init(&cond_, nullptr);
 }
