@@ -346,7 +346,7 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
     return region_metrics;
   }
 
-  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngine());
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   if (raw_engine == nullptr) {
     DINGO_LOG(ERROR) << "Not found raw engine for region " << region_id;
     return region_metrics;
@@ -357,13 +357,17 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   std::string min_key, max_key;
   auto range = region->Range();
 
+  std::string start_key = region->IsTxn() ? Helper::EncodeTxnKey(range.start_key(), 0) : range.start_key();
+  std::string end_key = region->IsTxn() ? Helper::EncodeTxnKey(range.end_key(), 0) : range.end_key();
+
   auto column_family_names = Helper::GetColumnFamilyNames(range.start_key());
   for (const auto& name : column_family_names) {
     IteratorOptions options;
-    options.upper_bound = range.end_key();
+    options.upper_bound = end_key;
+
     auto iter = raw_engine->Reader()->NewIterator(name, options);
     int32_t temp_key_count = 0;
-    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+    for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
       size += iter->Key().size() + iter->Value().size();
 
       ++temp_key_count;

@@ -494,7 +494,7 @@ bool StoreRegionMetrics::CollectMetrics() {
     // vector index
     bool vector_index_has_data = false;
     auto vector_index_wrapper = region->VectorIndexWrapper();
-    auto vector_reader = engine_->NewVectorReader(region->GetRawEngine());
+    auto vector_reader = engine_->NewVectorReader(region->GetRawEngineType());
 
     if (vector_index_wrapper != nullptr && vector_reader != nullptr) {
       if (BAIDU_UNLIKELY(pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE != vector_index_wrapper->Type())) {

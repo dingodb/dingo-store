@@ -65,7 +65,11 @@ class Region {
   const std::string& Name() const { return inner_region_.definition().name(); }
   pb::common::RegionType Type() { return inner_region_.region_type(); }
 
-  pb::common::RawEngine GetRawEngine() { return inner_region_.definition().raw_engine(); }
+  pb::common::RawEngine GetRawEngineType();
+
+  bool IsTxn();
+  bool IsExecutorTxn();
+  bool IsClientTxn();
 
   pb::common::RegionEpoch Epoch(bool lock = true);
   std::string EpochToString();
@@ -118,7 +122,6 @@ class Region {
 
   pb::store_internal::Region InnerRegion();
   pb::common::RegionDefinition Definition();
-  pb::common::RawEngine GetRawEngineType();
 
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }

@@ -96,6 +96,26 @@ void Region::DeSerialize(const std::string& data) {
   state_.store(inner_region_.state());
 }
 
+pb::common::RawEngine Region::GetRawEngineType() {
+  BAIDU_SCOPED_LOCK(mutex_);
+  return inner_region_.definition().raw_engine();
+}
+
+bool Region::IsTxn() {
+  auto range = Range(true);
+  return Helper::IsExecutorTxn(range.start_key()) || Helper::IsClientTxn(range.start_key());
+}
+
+bool Region::IsExecutorTxn() {
+  auto range = Range(true);
+  return Helper::IsExecutorTxn(range.start_key());
+}
+
+bool Region::IsClientTxn() {
+  auto range = Range(true);
+  return Helper::IsClientTxn(range.start_key());
+}
+
 pb::common::RegionEpoch Region::Epoch(bool lock) {
   if (lock) {
     BAIDU_SCOPED_LOCK(mutex_);
@@ -269,11 +289,6 @@ pb::store_internal::Region Region::InnerRegion() {
 pb::common::RegionDefinition Region::Definition() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.definition();
-}
-
-pb::common::RawEngine Region::GetRawEngineType() {
-  BAIDU_SCOPED_LOCK(mutex_);
-  return inner_region_.definition().raw_engine();
 }
 
 void Region::SetLastChangeJobId(int64_t job_id) {
