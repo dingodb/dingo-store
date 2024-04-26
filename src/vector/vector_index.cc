@@ -297,7 +297,7 @@ VectorIndexWrapper::VectorIndexWrapper(int64_t id, pb::common::VectorIndexParame
       rebuilding_num_(0),
       saving_num_(0),
       save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
-  snapshot_set_ = vector_index::SnapshotMetaSet::New(id);
+  snapshot_set_ = vector_index::SnapshotMetaSet::New(id, VectorIndexSnapshotManager::GetSnapshotParentPath(id));
   bthread_mutex_init(&vector_index_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.VectorIndexWrapper][id({})]", id_);
 }
@@ -332,6 +332,10 @@ bool VectorIndexWrapper::Init() { return true; }  // NOLINT
 void VectorIndexWrapper::Destroy() {
   DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] vector index destroy.", Id());
   stop_.store(true);
+
+  if (snapshot_set_ != nullptr) {
+    snapshot_set_->Destroy();
+  }
 }
 
 bool VectorIndexWrapper::Recover() {

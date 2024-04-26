@@ -103,12 +103,13 @@ TEST_F(VectorIndexSnapshotTest, ParseReaderId) {  // NOLINT
 }
 
 TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
-  auto snapshot_set = std::make_shared<dingodb::vector_index::SnapshotMetaSet>(100);
+  int64_t vector_index_id = 100;
+  std::string root_path = fmt::format("/tmp/{}", vector_index_id);
+  auto snapshot_set = std::make_shared<dingodb::vector_index::SnapshotMetaSet>(100, root_path);
 
   EXPECT_EQ(nullptr, snapshot_set->GetLastSnapshot());
 
   {
-    int64_t vector_index_id = 100;
     int64_t snapshot_log_id = 5;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
@@ -118,7 +119,6 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    int64_t vector_index_id = 100;
     int64_t snapshot_log_id = 11;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
@@ -129,8 +129,7 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    int64_t vector_index_id = 101;
-    int64_t snapshot_log_id = 6;
+    int64_t snapshot_log_id = 15;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
 
@@ -139,7 +138,6 @@ TEST_F(VectorIndexSnapshotTest, AddSnapshot) {  // NOLINT
   }
 
   {
-    int64_t vector_index_id = 101;
     int64_t snapshot_log_id = 16;
     std::string path = fmt::format("/tmp/{}/snapshot_{:020}", vector_index_id, snapshot_log_id);
     auto snapshot = dingodb::vector_index::SnapshotMeta::New(vector_index_id, path);
