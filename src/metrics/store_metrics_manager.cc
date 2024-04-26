@@ -34,6 +34,9 @@ namespace dingodb {
 
 DEFINE_double(min_system_disk_capacity_free_ratio, 0.05, "Min system disk capacity free ratio");
 DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory capacity free ratio");
+DEFINE_bool(enable_region_metrics_collect_key_count, false, "Enable region metrics collect key count");
+DEFINE_bool(enable_region_metrics_collect_key_max, false, "Enable region metrics collect key max");
+DEFINE_bool(enable_region_metrics_collect_key_min, false, "Enable region metrics collect key min");
 
 namespace store {
 
@@ -469,26 +472,34 @@ bool StoreRegionMetrics::CollectMetrics() {
     need_collect_regions.push_back(region);
 
     int64_t start_time = Helper::TimestampMs();
+
     // Get min key
     bool is_collect_min_key = false;
-    if (region_metrics->NeedUpdateMinKey()) {
-      is_collect_min_key = true;
-      region_metrics->SetNeedUpdateMinKey(false);
-      region_metrics->SetMinKey(GetRegionMinKey(region));
+    if (FLAGS_enable_region_metrics_collect_key_min) {
+      if (region_metrics->NeedUpdateMinKey()) {
+        is_collect_min_key = true;
+        region_metrics->SetNeedUpdateMinKey(false);
+        region_metrics->SetMinKey(GetRegionMinKey(region));
+      }
     }
+
     // Get max key
     bool is_collect_max_key = false;
-    if (region_metrics->NeedUpdateMaxKey()) {
-      is_collect_max_key = true;
-      region_metrics->SetNeedUpdateMaxKey(false);
-      region_metrics->SetMaxKey(GetRegionMaxKey(region));
+    if (FLAGS_enable_region_metrics_collect_key_max) {
+      if (region_metrics->NeedUpdateMaxKey()) {
+        is_collect_max_key = true;
+        region_metrics->SetNeedUpdateMaxKey(false);
+        region_metrics->SetMaxKey(GetRegionMaxKey(region));
+      }
     }
 
     // Get region key counts
-    if (region_metrics->NeedUpdateKeyCount()) {
-      region_metrics->SetKeyCount(GetRegionKeyCount(region));
-    } else {
-      region_metrics->SetNeedUpdateKeyCount(true);
+    if (FLAGS_enable_region_metrics_collect_key_count) {
+      if (region_metrics->NeedUpdateKeyCount()) {
+        region_metrics->SetKeyCount(GetRegionKeyCount(region));
+      } else {
+        region_metrics->SetNeedUpdateKeyCount(true);
+      }
     }
 
     // vector index
