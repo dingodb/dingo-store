@@ -100,6 +100,7 @@ DEFINE_int32(version_service_worker_num, 10, "service worker num");
 DEFINE_int64(version_service_worker_max_pending_num, 0, "service worker num");
 
 extern "C" {
+extern void goto_set_num_threads(int num_threads);      // NOLINT
 extern void openblas_set_num_threads(int num_threads);  // NOLINT
 }
 
@@ -811,6 +812,7 @@ int main(int argc, char *argv[]) {
 
 #ifdef USE_OPENBLAS
   DINGO_LOG(INFO) << "USE_OPENBLAS is ON";
+  goto_set_num_threads(1);
   openblas_set_num_threads(1);
 #endif
 
