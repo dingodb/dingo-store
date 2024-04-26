@@ -16,6 +16,7 @@
 
 package io.dingodb.sdk.service.connector;
 
+import io.dingodb.error.ErrorOuterClass;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
@@ -181,6 +182,7 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
 
         S stub = null;
         boolean connected = false;
+        boolean specialRetry = true;
         Map<String, Integer> errMsgs = new HashMap<>();
 
         while (retryTimes-- > 0) {
@@ -202,6 +204,10 @@ public abstract class ServiceConnector<S extends AbstractBlockingStub<S>> {
                         case RETRY:
                             errorLog(name, authority, error, RETRY);
                             LockSupport.parkNanos(TimeUnit.SECONDS.toNanos(1));
+                            if (errCode == ErrorOuterClass.Errno.EREQUEST_FULL_VALUE && specialRetry) {
+                                retryTimes = 3600;
+                                specialRetry = false;
+                            }
                             refresh(stub);
                             continue;
                         case FAILED:

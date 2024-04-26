@@ -75,6 +75,7 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
         Map<String, Integer> errMsgs = new HashMap<>();
         String methodName = method.getFullMethodName();
         REQ lastRequest = null;
+        boolean specialRetry = true;
         while (retry-- > 0) {
             try {
                 if (channel == null) {
@@ -104,6 +105,10 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
                             if (errCode == Errno.ERAFT_NOTLEADER.number) {
                                 channel = updateChannel(channel, requestId);
                             } else {
+                                if (errCode == Errno.EREQUEST_FULL.number && specialRetry) {
+                                    retry = 3600;
+                                    specialRetry = false;
+                                }
                                 waitRetry();
                             }
                             continue;
