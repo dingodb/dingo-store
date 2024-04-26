@@ -24,10 +24,12 @@
 
 #include "bthread/types.h"
 #include "butil/status.h"
+#include "common/helper.h"
 #include "common/runnable.h"
 #include "common/threadpool.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
+#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_snapshot.h"
@@ -74,12 +76,18 @@ class VectorIndex {
     ConcreteFilterFunctor& operator=(const ConcreteFilterFunctor&) = delete;
     ConcreteFilterFunctor& operator=(ConcreteFilterFunctor&&) = delete;
 
-    explicit ConcreteFilterFunctor(const std::vector<int64_t>& vector_ids)
-        : IDSelectorBatch(vector_ids.size(), vector_ids.data()) {}
+    explicit ConcreteFilterFunctor(const std::vector<int64_t>& vector_ids, bool is_negation = false)
+        : IDSelectorBatch(vector_ids.size(), vector_ids.data()), is_negation_(is_negation) {}
 
     ~ConcreteFilterFunctor() override = default;
 
-    bool Check(int64_t vector_id) override { return is_member(vector_id); }
+    bool Check(int64_t vector_id) override {
+      bool exist = is_member(vector_id);
+      return !is_negation_ ? exist : !exist;
+    }
+
+   private:
+    bool is_negation_{false};
   };
 
   virtual int32_t GetDimension() = 0;

@@ -16,6 +16,7 @@
 
 #include <sys/wait.h>  // Add this include
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
@@ -36,14 +37,6 @@ namespace vector_index {
 SnapshotMeta::SnapshotMeta(int64_t vector_index_id, const std::string& path)
     : vector_index_id_(vector_index_id), path_(path) {}
 
-SnapshotMeta::~SnapshotMeta() {
-  // Delete directory
-  DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.snapshot][index_id({})] Delete snapshot, epoch: {} snapshot_index_id: {} path: {}.",
-      vector_index_id_, Helper::RegionEpochToString(epoch_), snapshot_log_id_, path_);
-  Helper::RemoveAllFileOrDirectory(path_);
-}
-
 bool SnapshotMeta::Init() {
   std::filesystem::path path(path_);
   path.filename();
@@ -57,12 +50,14 @@ bool SnapshotMeta::Init() {
       DINGO_LOG(ERROR) << fmt::format(
           "[vector_index.snapshot][index_id({})] Parse snapshot index id failed from snapshot name, path: {}",
           vector_index_id_, path_);
+      Destroy();
       return false;
     }
   } catch (const std::exception& e) {
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.snapshot][index_id({})] Parse snapshot index id failed from snapshot name, path: {}",
         vector_index_id_, path_);
+    Destroy();
     return false;
   }
 
@@ -74,6 +69,7 @@ bool SnapshotMeta::Init() {
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.snapshot][index_id({})] Parse vector index snapshot meta failed, path: {}", vector_index_id_,
         path_);
+    Destroy();
     return false;
   }
 
@@ -95,7 +91,21 @@ std::string SnapshotMeta::IndexDataPath() {
 
 std::vector<std::string> SnapshotMeta::ListFileNames() { return Helper::TraverseDirectory(path_); }
 
-SnapshotMetaSet::SnapshotMetaSet(int64_t vector_index_id) : vector_index_id_(vector_index_id) {
+void SnapshotMeta::Destroy() {
+  bool is_destroied = false;
+  if (!is_destroied_.compare_exchange_strong(is_destroied, true)) {
+    return;
+  }
+
+  // Delete directory
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.snapshot][index_id({})] Delete snapshot, epoch: {} snapshot_index_id: {} path: {}.",
+      vector_index_id_, Helper::RegionEpochToString(epoch_), snapshot_log_id_, path_);
+  Helper::RemoveAllFileOrDirectory(path_);
+}
+
+SnapshotMetaSet::SnapshotMetaSet(int64_t vector_index_id, const std::string& path)
+    : vector_index_id_(vector_index_id), path_(path) {
   bthread_mutex_init(&mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.SnapshotMetaSet][id({})]", vector_index_id_);
 }
@@ -105,8 +115,8 @@ SnapshotMetaSet::~SnapshotMetaSet() {
   bthread_mutex_destroy(&mutex_);
 }
 
-std::shared_ptr<SnapshotMetaSet> SnapshotMetaSet::New(int64_t vector_index_id) {
-  return std::make_shared<SnapshotMetaSet>(vector_index_id);
+std::shared_ptr<SnapshotMetaSet> SnapshotMetaSet::New(int64_t vector_index_id, const std::string& path) {
+  return std::make_shared<SnapshotMetaSet>(vector_index_id, path);
 }
 
 bool SnapshotMetaSet::AddSnapshot(SnapshotMetaPtr snapshot) {
@@ -114,7 +124,7 @@ bool SnapshotMetaSet::AddSnapshot(SnapshotMetaPtr snapshot) {
 
   if (snapshots_.find(snapshot->SnapshotLogId()) == snapshots_.end()) {
     // Delete stale snapshot
-    snapshots_.clear();
+    ClearSnapshotImpl();
     snapshots_[snapshot->SnapshotLogId()] = snapshot;
   } else {
     DINGO_LOG(WARNING) << fmt::format("Already exist vector index snapshot {} {}", snapshot->VectorIndexId(),
@@ -128,7 +138,7 @@ bool SnapshotMetaSet::AddSnapshot(SnapshotMetaPtr snapshot) {
 void SnapshotMetaSet::ClearSnapshot() {
   BAIDU_SCOPED_LOCK(mutex_);
 
-  snapshots_.clear();
+  ClearSnapshotImpl();
 }
 
 SnapshotMetaPtr SnapshotMetaSet::GetLastSnapshot() {
@@ -159,6 +169,25 @@ bool SnapshotMetaSet::IsExistSnapshot(int64_t snapshot_log_id) {
 }
 
 bool SnapshotMetaSet::IsExistLastSnapshot() { return GetLastSnapshot() != nullptr; }
+
+void SnapshotMetaSet::Destroy() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  ClearSnapshotImpl();
+
+  // Delete directory
+  DINGO_LOG(INFO) << fmt::format("[vector_index.snapshot][index_id({})] Delete snapshot set dir, path: {}.",
+                                 vector_index_id_, path_);
+  Helper::RemoveAllFileOrDirectory(path_);
+}
+
+void SnapshotMetaSet::ClearSnapshotImpl() {
+  for (auto& [_, snapshot] : snapshots_) {
+    snapshot->Destroy();
+  }
+
+  snapshots_.clear();
+}
 
 }  // namespace vector_index
 

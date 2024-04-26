@@ -31,7 +31,7 @@ namespace vector_index {
 class SnapshotMeta {
  public:
   SnapshotMeta(int64_t vector_index_id, const std::string& path);
-  ~SnapshotMeta();
+  ~SnapshotMeta() = default;
 
   static std::shared_ptr<SnapshotMeta> New(int64_t vector_index_id, const std::string& path) {
     return std::make_shared<SnapshotMeta>(vector_index_id, path);
@@ -49,6 +49,8 @@ class SnapshotMeta {
   pb::common::RegionEpoch Epoch() const { return epoch_; }
   pb::common::Range Range() const { return range_; }
 
+  void Destroy();
+
  private:
   int64_t vector_index_id_;
   int64_t snapshot_log_id_;
@@ -56,16 +58,18 @@ class SnapshotMeta {
 
   pb::common::RegionEpoch epoch_;
   pb::common::Range range_;
+
+  std::atomic<bool> is_destroied_{false};
 };
 
 using SnapshotMetaPtr = std::shared_ptr<SnapshotMeta>;
 
 class SnapshotMetaSet {
  public:
-  SnapshotMetaSet(int64_t vector_index_id);
+  SnapshotMetaSet(int64_t vector_index_id, const std::string& path);
   ~SnapshotMetaSet();
 
-  static std::shared_ptr<SnapshotMetaSet> New(int64_t vector_index_id);
+  static std::shared_ptr<SnapshotMetaSet> New(int64_t vector_index_id, const std::string& path);
 
   int64_t VectorIndexId() const { return vector_index_id_; }
 
@@ -76,8 +80,13 @@ class SnapshotMetaSet {
   bool IsExistSnapshot(int64_t snapshot_log_id);
   bool IsExistLastSnapshot();
 
+  void Destroy();
+
  private:
+  void ClearSnapshotImpl();
+
   int64_t vector_index_id_;
+  std::string path_;
 
   bthread_mutex_t mutex_;
   // vector index snapshots, key: log_id
