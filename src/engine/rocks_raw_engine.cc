@@ -213,7 +213,7 @@ butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<s
 
   status = checkpoint->CreateCheckpoint(dirpath);
   if (!status.ok()) {
-    GetDB()->EnableFileDeletions(false);
+    GetDB()->EnableFileDeletions();
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] export column family checkpoint failed, error: {}.", status.ToString());
     delete checkpoint;
     return butil::Status(status.code(), status.ToString());
@@ -228,7 +228,7 @@ butil::Status Checkpoint::Create(const std::string& dirpath, const std::vector<s
     meta_datas.push_back(meta_data);
   }
 
-  status = GetDB()->EnableFileDeletions(false);
+  status = GetDB()->EnableFileDeletions();
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[rocksdb] enable file deletion failed, error: {}.", status.ToString());
     return butil::Status(status.code(), status.ToString());

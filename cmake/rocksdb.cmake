@@ -22,10 +22,11 @@ SET(ROCKSDB_INCLUDE_DIR "${ROCKSDB_INSTALL_DIR}/include" CACHE PATH "rocksdb inc
 SET(ROCKSDB_LIBRARIES "${ROCKSDB_INSTALL_DIR}/lib/librocksdb.a" CACHE FILEPATH "rocksdb library." FORCE)
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags")
+message(STATUS "rocksdb search prefix_path in ${prefix_path}")
 
 # To avoid rocksdb PROTABLE options on old arch machine when build using docker
 set(ROCKSDB_PROTABLE_OPTION "0" CACHE STRING "An option for rocksdb PROTABLE, default 0")
-message(STATUS "Rocksdb protable option(ROCKSDB_PROTABLE_OPTION): ${ROCKSDB_PROTABLE_OPTION}")
+message(STATUS "rocksdb protable option: ${ROCKSDB_PROTABLE_OPTION}")
 
 ExternalProject_Add(
     extern_rocksdb
