@@ -21,6 +21,9 @@ SET(LEVELDB_INSTALL_DIR ${THIRD_PARTY_PATH}/install/leveldb)
 SET(LEVELDB_INCLUDE_DIR "${LEVELDB_INSTALL_DIR}/include" CACHE PATH "leveldb include directory." FORCE)
 SET(LEVELDB_LIBRARIES "${LEVELDB_INSTALL_DIR}/lib/libleveldb.a" CACHE FILEPATH "leveldb library." FORCE)
 
+set(prefix_path "${THIRD_PARTY_PATH}/install/snappy")
+message(STATUS "leveldb search prefix_path in ${prefix_path}")
+
 ExternalProject_Add(
     extern_leveldb
     ${EXTERNAL_PROJECT_LOG_ARGS}

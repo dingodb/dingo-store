@@ -22,6 +22,7 @@ SET(SNAPPY_INCLUDE_DIR "${SNAPPY_INSTALL_DIR}/include" CACHE PATH "snappy includ
 SET(SNAPPY_LIBRARIES "${SNAPPY_INSTALL_DIR}/lib/libsnappy.a" CACHE FILEPATH "snappy library." FORCE)
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/gflags")
+message(STATUS "snappy search prefix_path in ${prefix_path}")
 
 ExternalProject_Add(
     extern_snappy

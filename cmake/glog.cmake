@@ -29,6 +29,7 @@ ELSE (WIN32)
 ENDIF (WIN32)
 
 set(prefix_path "${THIRD_PARTY_PATH}/install/gflags")
+message(STATUS "glog search prefix_path in ${prefix_path}")
 
 SET(gflags_BUILD_STATIC_LIBS ON)
 
