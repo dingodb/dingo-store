@@ -264,32 +264,6 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   // Delete raft meta
   store_meta_manager->GetStoreRaftMeta()->DeleteRaftMeta(region_id);
 
-  // Delete data
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  if (!Helper::InvalidRange(region->Range())) {
-    std::vector<std::string> raw_cf_names;
-    std::vector<std::string> txn_cf_names;
-
-    Helper::GetColumnFamilyNames(region->Range().start_key(), raw_cf_names, txn_cf_names);
-
-    if (!raw_cf_names.empty()) {
-      status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, region->Range());
-      if (!status.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
-                                        region->Id(), status.error_str());
-      }
-    }
-
-    if (!txn_cf_names.empty()) {
-      pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
-      status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
-      if (!status.ok()) {
-        DINGO_LOG(FATAL) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
-                                        region->Id(), status.error_str());
-      }
-    }
-  }
-
   // Index region
   if (GetRole() == pb::common::ClusterRole::INDEX) {
     auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -298,9 +272,54 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     }
   }
 
-  // Delete region executor
   auto region_controller = Server::GetInstance().GetRegionController();
 
+  // Delete data
+  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
+  if (!Helper::InvalidRange(region->Range())) {
+    std::vector<std::string> raw_cf_names;
+    std::vector<std::string> txn_cf_names;
+
+    Helper::GetColumnFamilyNames(region->Range().start_key(), raw_cf_names, txn_cf_names);
+    if (region_raw_engine->GetRawEngineType() != pb::common::RAW_ENG_BDB) {
+      if (!raw_cf_names.empty()) {
+        status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, region->Range());
+        CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
+                                          region->Id(), status.error_str());
+      }
+
+      if (!txn_cf_names.empty()) {
+        pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
+        status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+        CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
+                                          region->Id(), status.error_str());
+      }
+    } else {
+      auto command = std::make_shared<pb::coordinator::RegionCmd>();
+      command->set_id(Helper::TimestampNs());
+      command->set_region_id(region_id);
+      command->set_create_timestamp(Helper::TimestampMs());
+      command->set_region_cmd_type(pb::coordinator::CMD_DELETE_DATA);
+      auto* mut_request = command->mutable_delete_data_request();
+      *mut_request->mutable_range() = region->Range();
+      Helper::VectorToPbRepeated(raw_cf_names, mut_request->mutable_raw_cf_names());
+      Helper::VectorToPbRepeated(txn_cf_names, mut_request->mutable_txn_cf_names());
+
+      auto ctx = std::make_shared<Context>();
+      auto cond = ctx->CreateSyncModeCond();
+      status = region_controller->DispatchRegionControlCommand(ctx, command);
+      DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format(
+          "[control.region][region({})] dispatch region executor command failed, error: {} {}", region_id,
+          status.error_code(), status.error_str());
+
+      if (status.ok()) cond->IncreaseWait();
+    }
+  } else {
+    DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] delete region, invalid range {}", region_id,
+                                      region->RangeToString());
+  }
+
+  // Delete region executor
   auto command = std::make_shared<pb::coordinator::RegionCmd>();
   command->set_id(Helper::TimestampNs());
   command->set_region_id(region_id);
@@ -309,11 +328,9 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   command->mutable_destroy_executor_request()->set_region_id(region_id);
 
   status = region_controller->DispatchRegionControlCommand(std::make_shared<Context>(), command);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[control.region][region({})] dispatch region executor command failed, error: {} {}", region_id,
-        status.error_code(), status.error_str());
-  }
+  DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format(
+      "[control.region][region({})] dispatch region executor command failed, error: {} {}", region_id,
+      status.error_code(), status.error_str());
 
   // Purge region for coordinator recycle_orphan_region mechanism
   // TODO: need to implement a better mechanism of tombstone for region's meta info
@@ -543,7 +560,7 @@ butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id
     if (log_entry.type == LogEntryType::kEntryTypeData) {
       auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
       butil::IOBufAsZeroCopyInputStream wrapper(log_entry.data);
-      CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
+      CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper)) << "parse raft log fail.";
       for (const auto& request : raft_cmd->requests()) {
         if (request.cmd_type() == pb::raft::CmdType::SPLIT || request.cmd_type() == pb::raft::CmdType::PREPARE_MERGE ||
             request.cmd_type() == pb::raft::CmdType::COMMIT_MERGE ||
@@ -1412,7 +1429,7 @@ void SnapshotVectorIndexTask::Run() {
   } else {
     auto status = SaveSnapshotAsync(ctx_, region_cmd_);
     if (!status.ok()) {
-      DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] save vector index  failed, {}",
+      DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] save vector index failed, {}",
                                         region_cmd_->switch_split_request().region_id(), status.error_str());
     }
 
@@ -1424,6 +1441,49 @@ void SnapshotVectorIndexTask::Run() {
   // Notify coordinator
   if (region_cmd_->is_notify()) {
     Heartbeat::TriggerStoreHeartbeat({region_cmd_->region_id()});
+  }
+}
+
+butil::Status DeleteDataTask::DeleteData(std::shared_ptr<Context>, RegionCmdPtr region_cmd) {
+  const auto& range = region_cmd->delete_data_request().range();
+  std::vector<std::string> raw_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().raw_cf_names());
+  std::vector<std::string> txn_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().txn_cf_names());
+
+  auto region_raw_engine = Server::GetInstance().GetRawEngine(pb::common::RAW_ENG_BDB);
+  CHECK(region_raw_engine != nullptr) << fmt::format(
+      "[control.region][region({})] delete region, delete data, raw engine is null", region_cmd->region_id());
+
+  Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
+  if (!raw_cf_names.empty()) {
+    auto status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, range);
+    CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
+                                      region_cmd->region_id(), status.error_str());
+  }
+
+  if (!txn_cf_names.empty()) {
+    pb::common::Range txn_range = Helper::GetMemComparableRange(range);
+    auto status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+    CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
+                                      region_cmd->region_id(), status.error_str());
+  }
+
+  return butil::Status::OK();
+}
+
+void DeleteDataTask::Run() {
+  int64_t start_time = Helper::TimestampMs();
+  auto status = DeleteData(ctx_, region_cmd_);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})][time({})] delete data failed, {}",
+                                    region_cmd_->region_id(), Helper::TimestampMs() - start_time, status.error_str());
+  } else {
+    DINGO_LOG(INFO) << fmt::format("[control.region][region({})][elapse_time({}ms)] delete data finish.",
+                                   region_cmd_->region_id(), Helper::TimestampMs() - start_time);
+  }
+
+  if (ctx_ != nullptr) {
+    auto cond = ctx_->SyncModeCond();
+    if (cond != nullptr) cond->DecreaseSignal();
   }
 }
 
@@ -1558,6 +1618,12 @@ bool RegionController::Init() {
     return false;
   }
 
+  heavy_task_executor_ = std::make_shared<HeavyTaskExecutor>();
+  if (!heavy_task_executor_->Init()) {
+    DINGO_LOG(ERROR) << "[control.region] heavy task executor init failed.";
+    return false;
+  }
+
   auto regions = Server::GetInstance().GetAllAliveRegion();
   for (auto& region : regions) {
     if (!RegisterExecutor(region->Id())) {
@@ -1577,7 +1643,7 @@ bool RegionController::Recover() {
   for (auto& command : commands) {
     auto ctx = std::make_shared<Context>();
 
-    auto status = InnerDispatchRegionControlCommand(ctx, command);
+    auto status = DispatchRegionControlCommandImpl(ctx, command);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[control.region] recover region control command failed, error: {}",
                                       status.error_str());
@@ -1594,6 +1660,7 @@ void RegionController::Destroy() {
   }
 
   share_executor_->Stop();
+  heavy_task_executor_->Stop();
 }
 
 std::vector<int64_t> RegionController::GetAllRegion() {
@@ -1647,7 +1714,7 @@ std::shared_ptr<RegionControlExecutor> RegionController::GetRegionControlExecuto
   return it->second;
 }
 
-butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
+butil::Status RegionController::DispatchRegionControlCommandImpl(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] dispatch region control command, commad id: {} {}",
                                   command->region_id(), command->id(),
                                   pb::coordinator::RegionCmdType_Name(command->region_cmd_type()));
@@ -1657,10 +1724,15 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
     RegisterExecutor(command->region_id());
   }
 
-  auto executor = (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_PURGE ||
-                   command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DESTROY_EXECUTOR)
-                      ? share_executor_
-                      : GetRegionControlExecutor(command->region_id());
+  ControlExecutorPtr executor;
+  if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_PURGE ||
+      command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DESTROY_EXECUTOR) {
+    executor = share_executor_;
+  } else if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE_DATA) {
+    executor = heavy_task_executor_;
+  } else {
+    executor = GetRegionControlExecutor(command->region_id());
+  }
   if (executor == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] not find region control executor.",
                                     command->region_id());
@@ -1668,28 +1740,14 @@ butil::Status RegionController::InnerDispatchRegionControlCommand(std::shared_pt
   }
 
   auto it = task_builders.find(command->region_cmd_type());
-  if (it == task_builders.end()) {
-    DINGO_LOG(ERROR) << "[control.region] not exist region control command.";
-    return butil::Status(pb::error::EINTERNAL, "Not exist region control command");
-  }
+  CHECK(it != task_builders.end()) << "[control.region] not exist region control command.";
 
   // Free at ExecuteRoutine()
   auto task = it->second(ctx, command);
-  if (task == nullptr) {
-    DINGO_LOG(ERROR) << "[control.region] not support region control command.";
-    return butil::Status(pb::error::EINTERNAL, "Not support region control command");
-  }
+  CHECK(task != nullptr) << "[control.region] not support region control command.";
 
-  // Because DeleteRegion task is very heavy, we use apply_wkr to execute it for limiting the concurrency
-  if (command->region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
-    auto apply_wkr = Server::GetInstance().GetRaftApplyWorkerSet();
-    if (!apply_wkr->Execute(task)) {
-      return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
-    }
-  } else {
-    if (!executor->Execute(task)) {
-      return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
-    }
+  if (!executor->Execute(task)) {
+    return butil::Status(pb::error::EINTERNAL, "Execute region control command failed");
   }
 
   return butil::Status();
@@ -1705,7 +1763,7 @@ butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Con
   // Save region command
   region_command_manager->AddCommand(command);
 
-  return InnerDispatchRegionControlCommand(ctx, command);
+  return DispatchRegionControlCommandImpl(ctx, command);
 }
 
 RegionController::ValidateFunc RegionController::GetValidater(pb::coordinator::RegionCmdType cmd_type) {
@@ -1774,6 +1832,10 @@ RegionController::TaskBuilderMap RegionController::task_builders = {
     {pb::coordinator::CMD_HOLD_VECTOR_INDEX,
      [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
        return std::make_shared<HoldVectorIndexTask>(ctx, command);
+     }},
+    {pb::coordinator::CMD_DELETE_DATA,
+     [](std::shared_ptr<Context> ctx, RegionCmdPtr command) -> TaskRunnablePtr {
+       return std::make_shared<DeleteDataTask>(ctx, command);
      }},
 };
 

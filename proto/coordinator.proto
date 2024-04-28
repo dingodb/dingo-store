@@ -156,6 +156,12 @@ message DestroyExecutorRequest {
   int64 region_id = 1;
 }
 
+message DeleteDataRequest {
+  dingodb.pb.common.Range range = 1;
+  repeated string raw_cf_names = 2;
+  repeated string txn_cf_names = 3;
+}
+
 // RegionCmdType
 enum RegionCmdType {
   CMD_NONE = 0;                   // this is a placeholder
@@ -174,6 +180,7 @@ enum RegionCmdType {
 
   CMD_STOP = 30;              // when region state ORPHAN, stop region
   CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
+  CMD_DELETE_DATA = 32;       // bdb engine delete data when delete region
 }
 
 // Region cmd status
@@ -207,6 +214,7 @@ message RegionCmd {
 
     StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
     DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
+    DeleteDataRequest delete_data_request = 32;
   }
 
   bool is_notify = 40;                // store need to notify coordinator when this cmd is done
@@ -554,7 +562,7 @@ message GetCoordinatorMapResponse {
   dingodb.pb.common.Location kv_leader_location = 5;
   dingodb.pb.common.Location tso_leader_location = 6;
   dingodb.pb.common.Location auto_increment_leader_location = 7;
-  repeated dingodb.pb.common.Location coordinator_locations = 8; // deprcated
+  repeated dingodb.pb.common.Location coordinator_locations = 8;  // deprcated
   dingodb.pb.common.CoordinatorMap coordinator_map = 9;
 }
 

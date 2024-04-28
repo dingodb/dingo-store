@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -310,6 +311,22 @@ class SnapshotVectorIndexTask : public TaskRunnable {
   RegionCmdPtr region_cmd_;
 };
 
+class DeleteDataTask : public TaskRunnable {
+ public:
+  DeleteDataTask(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd) : ctx_(ctx), region_cmd_(region_cmd) {}
+  ~DeleteDataTask() override = default;
+
+  std::string Type() override { return "DELETE_DATA"; }
+
+  void Run() override;
+
+ private:
+  static butil::Status DeleteData(std::shared_ptr<Context> ctx, RegionCmdPtr region_cmd);
+
+  std::shared_ptr<Context> ctx_;
+  RegionCmdPtr region_cmd_;
+};
+
 class ControlExecutor {
  public:
   explicit ControlExecutor() { worker_ = Worker::New(); }
@@ -324,6 +341,17 @@ class ControlExecutor {
  private:
   WorkerPtr worker_;
 };
+
+using ControlExecutorPtr = std::shared_ptr<ControlExecutor>;
+
+// execute heavy task, e.g. bdb engine DeleteRange
+class HeavyTaskExecutor : public ControlExecutor {
+ public:
+  HeavyTaskExecutor() = default;
+  ~HeavyTaskExecutor() override = default;
+};
+
+using HeavyTaskExecutorPtr = std::shared_ptr<HeavyTaskExecutor>;
 
 class RegionControlExecutor : public ControlExecutor {
  public:
@@ -406,13 +434,16 @@ class RegionController {
 
  private:
   std::shared_ptr<RegionControlExecutor> GetRegionControlExecutor(int64_t region_id);
-  butil::Status InnerDispatchRegionControlCommand(std::shared_ptr<Context> ctx, RegionCmdPtr command);
+  butil::Status DispatchRegionControlCommandImpl(std::shared_ptr<Context> ctx, RegionCmdPtr command);
 
   bthread_mutex_t mutex_;
   std::unordered_map<int64_t, std::shared_ptr<RegionControlExecutor>> executors_;
 
   // When have no regoin executor, used this executorm, like PURGE.
-  std::shared_ptr<ControlExecutor> share_executor_;
+  ControlExecutorPtr share_executor_;
+
+  // execute heavy task, e.g. bdb engine DeleteRange
+  HeavyTaskExecutorPtr heavy_task_executor_;
 
   // task builder
   using TaskBuildFunc = std::function<TaskRunnablePtr(std::shared_ptr<Context>, RegionCmdPtr)>;
