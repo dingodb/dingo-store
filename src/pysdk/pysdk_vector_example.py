@@ -55,7 +55,7 @@ def post_clean(use_index_name=False):
     g_vector_ids.clear()
 
 def vector_add(use_index_name=False):
-    vectors = []
+    vectors = dingosdk.VectorWithIdVector()
 
     delta = 0.1
     for id in g_range_partition_seperator_ids:
@@ -71,6 +71,9 @@ def vector_add(use_index_name=False):
         add = g_vector_client.AddByIndexName(g_schema_id, g_index_name, vectors, False, False)
     else:
         add = g_vector_client.AddByIndexId(g_index_id, vectors, False, False)
+
+    for v in vectors:
+        print(f"add vector: {v.ToString()}")
 
     print(f"add vector status: {add.ToString()}")
 
@@ -242,6 +245,67 @@ def vector_delete(use_index_name=False):
         delete_result = result[i]
         print(f"vector_id: {delete_result.vector_id}, bool is deleted: {delete_result.deleted}")
 
+def index_with_auot_incre():
+    global g_index_id
+
+    start_id = 1
+
+#   create index with auto increment
+    s, creator = g_client.NewVectorIndexCreator()
+    assert s.ok(),  f"dingo creator build fail: {s.ToString()}"
+
+    creator.SetSchemaId(g_schema_id)
+    creator.SetName(g_index_name)
+    creator.SetReplicaNum(3)
+    creator.SetRangePartitions(g_range_partition_seperator_ids)
+    creator.SetFlatParam(g_flat_param)
+    creator.SetAutoIncrementStart(start_id)
+    s, g_index_id = creator.Create()
+    print(f"create index status: {s.ToString()}, index_id: {g_index_id}")
+    assert s.ok(), f"create index fail: {s.ToString()}"
+
+    time.sleep(20)
+
+# add use auto incre id
+    vectors = dingosdk.VectorWithIdVector()
+    vector_ids = []
+    delta = 0.1
+    count = 5
+    for id in range(start_id, start_id + count):
+        tmp_vector = dingosdk.Vector(dingosdk.kFloat, g_dimension)
+        tmp_vector.float_values = [1.0 + delta, 2.0 + delta]
+        tmp = dingosdk.VectorWithId(0, tmp_vector)
+
+        vectors.append(tmp)
+        vector_ids.append(id)
+        delta += 1
+
+    add = g_vector_client.AddByIndexId(g_index_id, vectors, False, False)
+
+    for v in vectors:
+        print(f"add vector: {v.ToString()}")
+
+    print(f"add vector status: {add.ToString()}")
+
+    # scan
+    param = dingosdk.ScanQueryParam()
+    param.vector_id_start = 1
+    param.vector_id_end = 100
+    param.max_scan_count = 100
+
+    tmp, result = g_vector_client.ScanQueryByIndexId(g_index_id, param)
+
+    print(f"vector scan query status:{tmp.ToString()}, result: {result.ToString()}")
+
+    if tmp.ok():
+        target_ids = [vector.id for vector in result.vectors]
+
+        if add.ok():
+            # sort vector_ids and target_ids, and check equal
+            vector_ids.sort()
+            target_ids.sort()
+            assert vector_ids == target_ids
+
 if __name__ == "__main__":
     prepare_vector_index()
     vector_add()
@@ -264,4 +328,6 @@ if __name__ == "__main__":
     vector_count(True)
     vector_delete(True)
     post_clean(True)
+
+    index_with_auot_incre()
 
