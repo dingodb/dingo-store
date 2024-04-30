@@ -2559,6 +2559,14 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::ind
       auto* new_region_metrics = response->add_region_metrics();
       *new_region_metrics = region_metrics->InnerRegionMetrics();
     }
+
+    auto store_metrics_ptr = store_metrics_manager->GetStoreMetrics();
+    if (store_metrics_ptr == nullptr) {
+      return;
+    }
+
+    auto store_own_metrics = store_metrics_ptr->Metrics();
+    *(response->mutable_store_own_metrics()) = store_own_metrics.store_own_metrics();
   }
 }
 

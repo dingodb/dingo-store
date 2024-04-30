@@ -214,6 +214,7 @@ class Constant {
 
   // force_read_only
   inline static const std::string kForceReadOnlyKey = "FORCE_READ_ONLY";
+  inline static const std::string kForceReadOnlyReason = "FORCE_READ_REASON";
   inline static const std::string kForceReadOnlyValueTrue = "TRUE";
   inline static const std::string kForceReadOnlyValueFalse = "FALSE";
 };

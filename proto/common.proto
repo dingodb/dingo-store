@@ -821,8 +821,9 @@ message VectorIndexStatus {
 }
 
 message StoreOwnMetrics {
-  int64 id = 1;            // store id
-  bool is_ready_only = 2;  // is read only
+  int64 id = 1;                 // store id
+  bool is_ready_only = 2;       // is read only
+  string read_only_reason = 3;  // read only reason
 
   int64 system_total_capacity = 11;  // total capacity of this store
   int64 system_free_capacity = 12;   // free capacity of this store

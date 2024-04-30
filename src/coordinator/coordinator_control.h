@@ -572,9 +572,13 @@ class CoordinatorControl : public MetaControl {
   butil::Status CheckStoreNormal(int64_t store_id);
 
   // force_read_only
-  butil::Status UpdateForceReadOnly(bool is_force_read_only, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateForceReadOnly(bool is_force_read_only, const std::string &reason,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetForceReadOnly(bool &is_force_read_only);
+  butil::Status GetForceReadOnlyReason(std::string &reason);
   bool GetForceReadOnly();
+  std::string GetForceReadOnlyReason();
+  butil::Status ValidateReadOnly();
 
   // get regionmap
   void GenRegionFull(const pb::coordinator_internal::RegionInternal &region_internal, pb::common::Region &region);
@@ -601,7 +605,7 @@ class CoordinatorControl : public MetaControl {
   void DeleteRegionBvar(int64_t region_id);
 
   void UpdateRegionState();
-  void UpdateClusterReadOnly();
+  void UpdateClusterReadOnlyFromStoreMetrics();
 
   // for web service
   butil::Status GetMetaCount(int64_t &schema_count, int64_t &table_count, int64_t &index_count, int64_t &region_count);

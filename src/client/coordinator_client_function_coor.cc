@@ -91,6 +91,7 @@ DECLARE_int64(start_id);
 DECLARE_int64(end_id);
 DECLARE_string(raw_engine);
 DECLARE_bool(force_read_only);
+DECLARE_string(force_read_only_reason);
 DECLARE_int64(tenant_id);
 DECLARE_bool(get_all_tenant);
 
@@ -2000,7 +2001,15 @@ void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> co
   request.set_set_force_read_only(true);
   request.set_is_force_read_only(FLAGS_force_read_only);
 
-  DINGO_LOG(INFO) << "Try to set_force_read_only to " << FLAGS_force_read_only;
+  if (FLAGS_force_read_only_reason.empty()) {
+    DINGO_LOG(ERROR) << "force_read_only_reason is empty, please set -force-read-only and -force-read-only-reason";
+    return;
+  }
+
+  request.set_force_read_only_reason(FLAGS_force_read_only_reason);
+
+  DINGO_LOG(INFO) << "Try to set_force_read_only to " << FLAGS_force_read_only
+                  << ", reason: " << FLAGS_force_read_only_reason;
 
   auto status = coordinator_interaction->SendRequest("ConfigCoordinator", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

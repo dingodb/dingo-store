@@ -45,10 +45,6 @@ DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after delet
 
 DECLARE_string(raft_snapshot_policy);
 
-DEFINE_int64(store_heartbeat_report_store_own_metrics_multiple, 10,
-             "store heartbeat report store own metrics multiple, "
-             "this defines how many times of heartbeat will "
-             "report store_metrics once to coordinator");
 DEFINE_int64(store_heartbeat_report_region_multiple, 10,
              "store heartbeat report region multiple, this defines how many times of heartbeat will report "
              "region_metrics once to coordinator");
@@ -79,30 +75,22 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
 
   auto store_metrics_manager = Server::GetInstance().GetStoreMetricsManager();
 
-  // store_metrics
-  bool need_report_store_own_metrics =
-      temp_heartbeat_count % FLAGS_store_heartbeat_report_store_own_metrics_multiple == 0 || region_ids.size() > 2;
-
   // region metrics
   // only partial heartbeat or temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0 will report
   // region_metrics, this is for reduce heartbeat size and cpu usage.
   bool need_report_region_metrics =
       !region_ids.empty() || (temp_heartbeat_count % FLAGS_store_heartbeat_report_region_multiple == 0);
 
-  if (need_report_store_own_metrics) {
-    *(request.mutable_store_metrics()) = (*store_metrics_manager->GetStoreMetrics()->Metrics());
-    // setup id for store_metrics here, coordinator need this id to update store_metrics
-    request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
-    request.mutable_store_metrics()->set_is_update_epoch_version(is_update_epoch_version);
+  // construct store_own_metrics
+  *(request.mutable_store_metrics()) = store_metrics_manager->GetStoreMetrics()->Metrics();
+  // setup id for store_metrics here, coordinator need this id to update store_metrics
+  request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
+  request.mutable_store_metrics()->set_is_update_epoch_version(is_update_epoch_version);
 
-    DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) store_metrics size({}) elapsed time({} ms)",
-                                   first_start_time, request.mutable_store_metrics()->ByteSizeLong(),
-                                   Helper::TimestampMs() - start_time)
-                    << ", metrics: " << request.mutable_store_metrics()->ShortDebugString();
-  } else {
-    // setup id for store_metrics here, coordinator need this id to update store_metrics
-    request.mutable_store_metrics()->set_id(Server::GetInstance().Id());
-  }
+  DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) store_metrics size({}) elapsed time({} ms)",
+                                 first_start_time, request.mutable_store_metrics()->ByteSizeLong(),
+                                 Helper::TimestampMs() - start_time)
+                  << ", metrics: " << request.mutable_store_metrics()->ShortDebugString();
 
   if (need_report_region_metrics) {
     DINGO_LOG(INFO) << fmt::format("[heartbeat.store] start_time({}) heartbeat_counter: {}", first_start_time,
@@ -297,10 +285,23 @@ void HeartbeatTask::HandleStoreHeartbeatResponse(std::shared_ptr<dingodb::StoreM
   }
 
   // set up read-only
-  auto is_read_only = Server::GetInstance().IsReadOnly();
+  bool is_read_only = Server::GetInstance().IsClusterReadOnly();
   if (is_read_only != response.cluster_state().cluster_is_read_only()) {
-    Server::GetInstance().SetReadOnly(response.cluster_state().cluster_is_read_only());
-    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] cluster set read-only to {}", is_read_only);
+    Server::GetInstance().SetClusterReadOnly(response.cluster_state().cluster_is_read_only(),
+                                             response.cluster_state().cluster_read_only_reason());
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] cluster set read-only to {}, reason: {}",
+                                      response.cluster_state().cluster_is_read_only(),
+                                      response.cluster_state().cluster_read_only_reason());
+  }
+
+  // set up force-read-only
+  bool is_force_read_only = Server::GetInstance().IsClusterForceReadOnly();
+  if (is_force_read_only != response.cluster_state().cluster_is_force_read_only()) {
+    Server::GetInstance().SetClusterForceReadOnly(response.cluster_state().cluster_is_force_read_only(),
+                                                  response.cluster_state().cluster_force_read_only_reason());
+    DINGO_LOG(WARNING) << fmt::format("[heartbeat.store] cluster set force-read-only to {}, reason: {}",
+                                      response.cluster_state().cluster_is_force_read_only(),
+                                      response.cluster_state().cluster_force_read_only_reason());
   }
 }
 
@@ -409,7 +410,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   // }
 
   // update cluster is_read_only
-  coordinator_control->UpdateClusterReadOnly();
+  coordinator_control->UpdateClusterReadOnlyFromStoreMetrics();
 }
 
 // this is for coordinator

@@ -75,14 +75,22 @@ void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const 
   }
 
   // response cluster state
-  auto is_read_only = Server::GetInstance().IsReadOnly();
-  bool is_force_read_only = coordinator_control->GetForceReadOnly();
-
-  if (is_read_only || is_force_read_only) {
+  bool is_read_only = Server::GetInstance().IsClusterReadOnly();
+  if (is_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
+    if (reason_ptr != nullptr) {
+      response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
+    } else {
+      response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
+    }
+  }
+
+  bool is_force_read_only = coordinator_control->GetForceReadOnly();
+  if (is_force_read_only) {
     response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
-    DINGO_LOG(INFO) << "Hello response: cluster_is_read_only=" << is_read_only
-                    << ", cluster_is_force_read_only=" << is_force_read_only;
+    response->mutable_cluster_state()->set_cluster_force_read_only_reason(
+        coordinator_control->GetForceReadOnlyReason());
   }
 
   if (FLAGS_hello_latency_ms > 0) {
@@ -124,14 +132,22 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
     }
 
     // response cluster state
-    auto is_read_only = Server::GetInstance().IsReadOnly();
-    bool is_force_read_only = coordinator_control_->GetForceReadOnly();
-
-    if (is_read_only || is_force_read_only) {
+    bool is_read_only = Server::GetInstance().IsClusterReadOnly();
+    if (is_read_only) {
       response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+      auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
+      if (reason_ptr != nullptr) {
+        response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
+      } else {
+        response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
+      }
+    }
+
+    bool is_force_read_only = coordinator_control_->GetForceReadOnly();
+    if (is_force_read_only) {
       response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
-      DINGO_LOG(INFO) << "Hello response: cluster_is_read_only=" << is_read_only
-                      << ", cluster_is_force_read_only=" << is_force_read_only;
+      response->mutable_cluster_state()->set_cluster_force_read_only_reason(
+          coordinator_control_->GetForceReadOnlyReason());
     }
 
     if (FLAGS_hello_latency_ms > 0) {
@@ -675,20 +691,32 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
 
     // update is_read_only
     auto is_read_only_from_store = request->store_metrics().store_own_metrics().is_ready_only();
-    if (is_read_only_from_store) {
-      Server::GetInstance().SetReadOnly(true);
+    if (is_read_only_from_store && (!Server::GetInstance().IsClusterReadOnly())) {
+      std::string read_only_reason = "[store_id: " + std::to_string(request->store_metrics().store_own_metrics().id()) +
+                                     "][" + request->store_metrics().store_own_metrics().read_only_reason() + "]";
+      DINGO_LOG(INFO) << "StoreHeartbeat set cluster read only, store_id=" << request->store().id()
+                      << ", reason=" << read_only_reason;
+      Server::GetInstance().SetClusterReadOnly(true, read_only_reason);
     }
   }
 
   // response cluster state
-  auto is_read_only = Server::GetInstance().IsReadOnly();
-  bool is_force_read_only = coordinator_control->GetForceReadOnly();
-
-  if (is_read_only || is_force_read_only) {
+  bool is_read_only = Server::GetInstance().IsClusterReadOnly();
+  if (is_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
+    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
+    if (reason_ptr != nullptr) {
+      response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
+    } else {
+      response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
+    }
+  }
+
+  bool is_force_read_only = coordinator_control->GetForceReadOnly();
+  if (is_force_read_only) {
     response->mutable_cluster_state()->set_cluster_is_force_read_only(is_force_read_only);
-    DINGO_LOG(INFO) << "StoreHeartbeat response: cluster_is_read_only=" << is_read_only
-                    << ", cluster_is_force_read_only=" << is_force_read_only;
+    response->mutable_cluster_state()->set_cluster_force_read_only_reason(
+        coordinator_control->GetForceReadOnlyReason());
   }
 
   // if no need to update meta, just skip raft submit
@@ -1043,7 +1071,8 @@ void DoConfigCoordinator(google::protobuf::RpcController * /*controller*/,
 
   if (request->set_force_read_only()) {
     // setup force_read_only
-    auto ret = coordinator_control->UpdateForceReadOnly(request->is_force_read_only(), meta_increment);
+    auto ret = coordinator_control->UpdateForceReadOnly(request->is_force_read_only(),
+                                                        request->force_read_only_reason(), meta_increment);
     if (!ret.ok()) {
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
       response->mutable_error()->set_errmsg(ret.error_str());

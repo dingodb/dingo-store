@@ -205,7 +205,7 @@ void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb:
   if (!store_ids_to_get_own.empty()) {
     BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
     for (auto& metrics_to_update : store_metrics) {
-      if (store_ids_to_get_own.count(metrics_to_update.id()) > 0) {
+      if (store_ids_to_get_own.count(metrics_to_update.id()) > 0) {  // NOLINT
         if (store_metrics_map_.find(metrics_to_update.id()) != store_metrics_map_.end()) {
           (*metrics_to_update.mutable_store_own_metrics()) =
               store_metrics_map_.at(metrics_to_update.id()).store_own_metrics;
@@ -695,35 +695,44 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   }
 }
 
-void CoordinatorControl::UpdateClusterReadOnly() {
-  BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+void CoordinatorControl::UpdateClusterReadOnlyFromStoreMetrics() {
   bool cluster_is_read_only = false;
-  for (const auto& store_metrics : store_region_metrics_map_) {
-    if (store_metrics.second.store_own_metrics().is_ready_only()) {
-      pb::common::Store store;
-      auto ret = store_map_.Get(store_metrics.first, store);
-      if (ret < 0) {
-        DINGO_LOG(WARNING) << "UpdateClusterReadOnly... Get store failed, store_id=" << store_metrics.first;
-        continue;
-      }
+  std::string read_only_reason;
+  {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (const auto& [store_id, store_metrics_slim] : store_metrics_map_) {
+      if (store_metrics_slim.store_own_metrics.is_ready_only()) {
+        pb::common::Store store;
+        auto ret = store_map_.Get(store_id, store);
+        if (ret < 0) {
+          DINGO_LOG(WARNING) << "Get store failed, store_id=" << store_id;
+          continue;
+        }
 
-      if (store.state() != pb::common::StoreState::STORE_NORMAL) {
-        DINGO_LOG(WARNING) << "UpdateClusterReadOnly... store_id=" << store_metrics.first
-                           << " is_read_only=" << store_metrics.second.store_own_metrics().is_ready_only()
-                           << " but store.state()=" << store.state();
-        continue;
-      }
+        if (store.state() != pb::common::StoreState::STORE_NORMAL) {
+          DINGO_LOG(WARNING) << "store_id=" << store_id
+                             << " is_read_only=" << store_metrics_slim.store_own_metrics.is_ready_only()
+                             << " but store.state()=" << store.state();
+          continue;
+        }
 
-      DINGO_LOG(WARNING) << "UpdateClusterReadOnly... store_id=" << store_metrics.first
-                         << " is_read_only=" << store_metrics.second.store_own_metrics().is_ready_only();
-      cluster_is_read_only = true;
-      break;
+        DINGO_LOG(WARNING) << "store_id=" << store_id
+                           << " is_read_only=" << store_metrics_slim.store_own_metrics.is_ready_only();
+        cluster_is_read_only = true;
+        read_only_reason = "[store_id: " + std::to_string(store_id) + "][" +
+                           store_metrics_slim.store_own_metrics.read_only_reason() + "]";
+        break;
+      }
     }
   }
 
-  if (Server::GetInstance().IsReadOnly() != cluster_is_read_only) {
-    DINGO_LOG(WARNING) << "UpdateClusterReadOnly... cluster_is_read_only=" << cluster_is_read_only;
-    Server::GetInstance().SetReadOnly(cluster_is_read_only);
+  if (cluster_is_read_only != Server::GetInstance().IsClusterReadOnly()) {
+    DINGO_LOG(WARNING) << "cluster_is_read_only=" << cluster_is_read_only << " read_only_reason=[" << read_only_reason
+                       << "], will update cluster read_only status";
+    Server::GetInstance().SetClusterReadOnly(cluster_is_read_only, read_only_reason);
+  } else {
+    DINGO_LOG(INFO) << "cluster_is_read_only=" << cluster_is_read_only << " read_only_reason=[" << read_only_reason
+                    << "]";
   }
 }
 
@@ -1817,10 +1826,10 @@ butil::Status CoordinatorControl::CreateShadowRegion(
     return ret;
   }
 
-  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
-    DINGO_LOG(WARNING) << "CreateShadowRegion cluster is read only, cannot create region, is_read_only = "
-                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
-    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  // check and set read_only reason
+  ret = ValidateReadOnly();
+  if (!ret.ok()) {
+    return ret;
   }
 
   auto ret1 = ValidateMaxRegionCount();
@@ -1979,10 +1988,10 @@ butil::Status CoordinatorControl::CreateRegionFinal(
     return ret;
   }
 
-  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
-    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region, is_read_only = "
-                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
-    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  // check and set read_only reason
+  ret = ValidateReadOnly();
+  if (!ret.ok()) {
+    return ret;
   }
 
   auto ret1 = ValidateMaxRegionCount();
@@ -2150,10 +2159,10 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", index_parameter=" << index_parameter.ShortDebugString();
 
-  if (Server::GetInstance().IsReadOnly() || GetForceReadOnly()) {
-    DINGO_LOG(WARNING) << "CreateRegionFinal cluster is read only, cannot create region, is_read_only = "
-                       << Server::GetInstance().IsReadOnly() << ", force_read_only = " << GetForceReadOnly();
-    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, "cluster is read only, cannot create region");
+  // check and set read_only reason
+  auto ret = ValidateReadOnly();
+  if (!ret.ok()) {
+    return ret;
   }
 
   std::vector<pb::common::Store> selected_stores_for_regions;
@@ -2165,8 +2174,7 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
   }
 
   // select store for region
-  auto ret =
-      SelectStore(store_type, replica_num, resource_tag, index_parameter, store_ids, selected_stores_for_regions);
+  ret = SelectStore(store_type, replica_num, resource_tag, index_parameter, store_ids, selected_stores_for_regions);
   if (!ret.ok()) {
     return ret;
   }
@@ -6148,12 +6156,18 @@ butil::Status CoordinatorControl::CheckStoreNormal(int64_t store_id) {
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateForceReadOnly(bool is_force_read_only,
+butil::Status CoordinatorControl::UpdateForceReadOnly(bool is_force_read_only, const std::string& reason,
                                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "UpdateForceReadOnly is_force_read_only = " << is_force_read_only;
+  DINGO_LOG(INFO) << "UpdateForceReadOnly is_force_read_only = " << is_force_read_only << ", reason: " << reason;
+
+  if (is_force_read_only && reason.empty()) {
+    DINGO_LOG(ERROR) << "UpdateForceReadOnly reason cannot empty when set force read only to true";
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "reason cannot empty when set force read only to true");
+  }
 
   // update gc_stop
   pb::coordinator_internal::CommonInternal element;
+  pb::coordinator_internal::CommonInternal element2;
   auto ret1 = common_mem_meta_->Get(Constant::kForceReadOnlyKey, element);
   if (!ret1.ok()) {
     DINGO_LOG(ERROR) << "common_mem_meta_->Get(Constant::kForceReadOnlyKey) failed, errcode=" << ret1.error_code()
@@ -6177,18 +6191,25 @@ butil::Status CoordinatorControl::UpdateForceReadOnly(bool is_force_read_only,
     element.set_value(Constant::kForceReadOnlyValueFalse);
   }
 
+  element2.set_id(Constant::kForceReadOnlyReason);
+  element2.set_value(reason);
+
   auto* increment = meta_increment.add_common_mem_s();
   increment->set_id(Constant::kForceReadOnlyKey);
   increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
   *(increment->mutable_common()) = element;
 
-  DINGO_LOG(INFO) << "UpdateForceReadOnly new_force_read_only=" << element.value();
+  auto* increment2 = meta_increment.add_common_mem_s();
+  increment2->set_id(Constant::kForceReadOnlyReason);
+  increment2->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+  *(increment2->mutable_common()) = element2;
+
+  DINGO_LOG(INFO) << "UpdateForceReadOnly new_force_read_only=" << element.value() << ", reason: " << element2.value();
 
   return butil::Status::OK();
 }
 
 butil::Status CoordinatorControl::GetForceReadOnly(bool& is_force_read_only) {
-  // update gc_stop
   pb::coordinator_internal::CommonInternal element;
   auto ret1 = common_mem_meta_->Get(Constant::kForceReadOnlyKey, element);
   if (!ret1.ok()) {
@@ -6204,10 +6225,57 @@ butil::Status CoordinatorControl::GetForceReadOnly(bool& is_force_read_only) {
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::GetForceReadOnlyReason(std::string& reason) {
+  pb::coordinator_internal::CommonInternal element;
+  auto ret1 = common_mem_meta_->Get(Constant::kForceReadOnlyReason, element);
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "common_mem_meta_->Get(Constant::kForceReadOnlyReason) failed, errcode=" << ret1.error_code()
+                     << " errmsg=" << ret1.error_str();
+    return ret1;
+  }
+
+  reason = element.value();
+
+  return butil::Status::OK();
+}
+
 bool CoordinatorControl::GetForceReadOnly() {
   bool is_force_read_only = false;
   GetForceReadOnly(is_force_read_only);
   return is_force_read_only;
+}
+
+std::string CoordinatorControl::GetForceReadOnlyReason() {
+  std::string reason;
+  GetForceReadOnlyReason(reason);
+  return reason;
+}
+
+butil::Status CoordinatorControl::ValidateReadOnly() {
+  // check and set read_only reason
+  bool is_cluster_read_only = Server::GetInstance().IsClusterReadOnly();
+  if (is_cluster_read_only) {
+    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
+    std::string s;
+    if (reason_ptr != nullptr) {
+      s = "cluster is read only, reason: " + *reason_ptr;
+    } else {
+      s = "cluster is read only, reason: unknown";
+    }
+
+    DINGO_LOG(WARNING) << s;
+    return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, s);
+
+  } else {
+    bool is_force_read_only = GetForceReadOnly();
+    if (is_force_read_only) {
+      std::string s = "cluster is force read only, reason: " + GetForceReadOnlyReason();
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, s);
+    }
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace dingodb

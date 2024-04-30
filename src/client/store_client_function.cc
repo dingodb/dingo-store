@@ -2082,7 +2082,7 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
       table_data->set_table_value(fmt::format("table_value{}", vector_id));
     }
 
-    DINGO_LOG(INFO) << "vector_with_id : " << vector_with_id->ShortDebugString();
+    DINGO_LOG(DEBUG) << "vector_with_id : " << vector_with_id->ShortDebugString();
   }
 
   butil::Status status =
