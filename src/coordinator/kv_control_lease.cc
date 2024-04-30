@@ -231,7 +231,8 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
 }
 
 void KvControl::LeaseTask() {
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_lease) << "lease task start";
+  auto lease_task_start_time_ms = Helper::TimestampMs();
+  DINGO_LOG(INFO) << "lease task start, start_time: " << lease_task_start_time_ms;
 
   std::vector<int64_t> lease_ids_to_revoke;
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -269,6 +270,11 @@ void KvControl::LeaseTask() {
       }
     }
   }
+
+  auto lease_task_end_time_ms = Helper::TimestampMs();
+  DINGO_LOG(INFO) << "lease task finish, start_time: " << lease_task_start_time_ms
+                  << ", end_time: " << lease_task_end_time_ms
+                  << ", cost: " << lease_task_end_time_ms - lease_task_start_time_ms << "ms";
 }
 
 void KvControl::BuildLeaseToKeyMap() {
