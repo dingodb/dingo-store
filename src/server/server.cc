@@ -959,9 +959,38 @@ std::string Server::GetIndexPath() {
   return config == nullptr ? "" : config->GetString("vector.index_path");
 }
 
-bool Server::IsReadOnly() const { return is_read_only_; }
+bool Server::IsClusterReadOnlyOrForceReadOnly() const { return cluster_is_read_only_ || cluster_is_force_read_only_; }
 
-void Server::SetReadOnly(bool is_read_only) { is_read_only_ = is_read_only; }
+bool Server::IsClusterReadOnly() const { return cluster_is_read_only_; }
+
+std::shared_ptr<std::string> Server::GetClusterReadOnlyReason() const {
+  return cluster_read_only_reason_.load(std::memory_order_relaxed);
+}
+
+void Server::SetClusterReadOnly(bool is_read_only, const std::string& read_only_reason) {
+  DINGO_LOG(INFO) << "SetClusterReadOnly: " << is_read_only << " reason: " << read_only_reason;
+  cluster_is_read_only_ = is_read_only;
+  if (is_read_only) {
+    cluster_read_only_reason_.store(std::make_shared<std::string>(read_only_reason), std::memory_order_relaxed);
+  } else {
+    cluster_read_only_reason_.store(nullptr, std::memory_order_relaxed);
+  }
+}
+
+bool Server::IsClusterForceReadOnly() const { return cluster_is_force_read_only_; }
+
+std::shared_ptr<std::string> Server::GetClusterForceReadOnlyReason() const {
+  return cluster_force_read_only_reason_.load(std::memory_order_relaxed);
+}
+
+void Server::SetClusterForceReadOnly(bool is_read_only, const std::string& read_only_reason) {
+  cluster_is_force_read_only_ = is_read_only;
+  if (is_read_only) {
+    cluster_force_read_only_reason_.store(std::make_shared<std::string>(read_only_reason), std::memory_order_relaxed);
+  } else {
+    cluster_force_read_only_reason_.store(nullptr, std::memory_order_relaxed);
+  }
+}
 
 bool Server::IsLeader(int64_t region_id) { return storage_->IsLeader(region_id); }
 

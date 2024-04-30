@@ -523,10 +523,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
       return;
     }
     auto store_metrics = store_metrics_manager->GetStoreMetrics()->Metrics();
-    if (store_metrics == nullptr) {
-      return;
-    }
-    *(response->mutable_store_metrics()->mutable_metrics()) = (*store_metrics);
+    *(response->mutable_store_metrics()->mutable_metrics()) = store_metrics;
 
   } else if (request->type() == pb::debug::DebugType::STORE_REGION_CHANGE_RECORD) {
     std::vector<pb::store_internal::RegionChangeRecord> records;

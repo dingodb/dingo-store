@@ -297,8 +297,8 @@ using RegionMetricsPtr = std::shared_ptr<RegionMetrics>;
 
 class StoreMetrics {
  public:
-  explicit StoreMetrics() : metrics_(std::make_shared<pb::common::StoreMetrics>()) {}
-  ~StoreMetrics() = default;
+  explicit StoreMetrics() { bthread_mutex_init(&mutex_, nullptr); }
+  ~StoreMetrics() { bthread_mutex_destroy(&mutex_); }
 
   StoreMetrics(const StoreMetrics&) = delete;
   const StoreMetrics& operator=(const StoreMetrics&) = delete;
@@ -307,10 +307,14 @@ class StoreMetrics {
 
   bool CollectMetrics();
 
-  std::shared_ptr<pb::common::StoreMetrics> Metrics() { return metrics_; }
+  pb::common::StoreMetrics Metrics() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return metrics_;
+  }
 
  private:
-  std::shared_ptr<pb::common::StoreMetrics> metrics_;
+  bthread_mutex_t mutex_;
+  pb::common::StoreMetrics metrics_;
 };
 
 class StoreRegionMetrics : public TransformKvAble {

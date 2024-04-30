@@ -242,10 +242,19 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
 
   if (coordinator_controller_->IsLeader()) {
     os << (use_html ? "<br>\n" : "\n");
-    os << "Coordinator role: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+    os << "CoordinatorRole: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+
+    auto read_only_ret = coordinator_controller_->ValidateReadOnly();
+    if (read_only_ret.ok()) {
+      os << "<span class=\"blue-text bold-text\">CLUSTER_NORMAL</span>" << '\n';
+    } else {
+      // cluster is read only, print the reason
+      os << "<span class=\"red-text bold-text\">CLUSTER_READ_ONLY: [" << read_only_ret.error_str() << "]</span>"
+         << '\n';
+    }
 
     // add url for task_list
-    os << (use_html ? "<br>\n" : "\n");
+    os << (use_html ? "<br>CoordinatorStatus:\n" : "\n");
     os << "<a href=\"/task_list/"
        << "\">"
        << "GET_TASK_LIST"
@@ -263,7 +272,7 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
     }
   } else {
     os << (use_html ? "<br>\n" : "\n");
-    os << "Coordinator role: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
+    os << "CoordinatorRole: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
 
     os << (use_html ? "<br>\n" : "\n");
     os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +

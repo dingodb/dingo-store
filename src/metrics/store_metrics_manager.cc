@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "bthread/bthread.h"
+#include "butil/scoped_lock.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -115,68 +116,76 @@ bool StoreMetrics::CollectMetrics() {
     return false;
   }
 
-  metrics_->mutable_store_own_metrics()->set_id(Server::GetInstance().Id());
-  metrics_->mutable_store_own_metrics()->set_system_total_capacity(output["system_total_capacity"]);
-  metrics_->mutable_store_own_metrics()->set_system_free_capacity(output["system_free_capacity"]);
-
   // system memory info
-  output.clear();
   if (!Helper::GetSystemMemoryInfo(output)) {
     return false;
   }
 
-  metrics_->mutable_store_own_metrics()->set_system_total_memory(output["system_total_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_free_memory(output["system_free_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_shared_memory(output["system_shared_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_buffer_memory(output["system_buffer_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_cached_memory(output["system_cached_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_available_memory(output["system_available_memory"]);
-  metrics_->mutable_store_own_metrics()->set_system_total_swap(output["system_total_swap"]);
-  metrics_->mutable_store_own_metrics()->set_system_free_swap(output["system_free_swap"]);
-
   // system cpu usage
-  output.clear();
   if (!Helper::GetSystemCpuUsage(output)) {
     return false;
   }
 
-  metrics_->mutable_store_own_metrics()->set_system_cpu_usage(output["system_cpu_usage"]);
-
   // process memory info
-  output.clear();
   if (!Helper::GetProcessMemoryInfo(output)) {
     return false;
   }
 
-  metrics_->mutable_store_own_metrics()->set_process_used_memory(output["process_used_memory"]);
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    // system disk capacity
+    metrics_.mutable_store_own_metrics()->set_id(Server::GetInstance().Id());
+    metrics_.mutable_store_own_metrics()->set_system_total_capacity(output["system_total_capacity"]);
+    metrics_.mutable_store_own_metrics()->set_system_free_capacity(output["system_free_capacity"]);
 
-  // calc is_read_only for self store
-  bool self_store_is_read_only = false;
-  int64_t free_capacity = metrics_->store_own_metrics().system_free_capacity();
-  int64_t total_capacity = metrics_->store_own_metrics().system_total_capacity();
-  if (total_capacity != 0) {
-    double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
-    if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
-      std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
-                                  total_capacity, disk_free_capacity_ratio);
-      DINGO_LOG(WARNING) << s;
-      self_store_is_read_only = true;
+    // system memory info
+    metrics_.mutable_store_own_metrics()->set_system_total_memory(output["system_total_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_free_memory(output["system_free_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_shared_memory(output["system_shared_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_buffer_memory(output["system_buffer_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_cached_memory(output["system_cached_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_available_memory(output["system_available_memory"]);
+    metrics_.mutable_store_own_metrics()->set_system_total_swap(output["system_total_swap"]);
+    metrics_.mutable_store_own_metrics()->set_system_free_swap(output["system_free_swap"]);
+
+    // system cpu usage
+    metrics_.mutable_store_own_metrics()->set_system_cpu_usage(output["system_cpu_usage"]);
+
+    // process memory info
+    metrics_.mutable_store_own_metrics()->set_process_used_memory(output["process_used_memory"]);
+
+    // calc is_read_only for self store
+    bool self_store_is_read_only = false;
+    std::string read_only_reason;
+    int64_t free_capacity = metrics_.store_own_metrics().system_free_capacity();
+    int64_t total_capacity = metrics_.store_own_metrics().system_total_capacity();
+    if (total_capacity != 0) {
+      double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
+      if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
+        std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
+                                    total_capacity, disk_free_capacity_ratio);
+        DINGO_LOG(WARNING) << s;
+        self_store_is_read_only = true;
+        read_only_reason = s;
+      }
     }
-  }
 
-  int64_t available_memory = metrics_->store_own_metrics().system_available_memory();
-  int64_t total_memory = metrics_->store_own_metrics().system_total_memory();
-  if (total_memory != 0 && available_memory != INT64_MAX) {
-    double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
-    if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
-      std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
-                                  total_memory, memory_free_capacity_ratio);
-      DINGO_LOG(WARNING) << s;
-      self_store_is_read_only = true;
+    int64_t available_memory = metrics_.store_own_metrics().system_available_memory();
+    int64_t total_memory = metrics_.store_own_metrics().system_total_memory();
+    if (total_memory != 0 && available_memory != INT64_MAX) {
+      double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
+      if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
+        std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
+                                    total_memory, memory_free_capacity_ratio);
+        DINGO_LOG(WARNING) << s;
+        self_store_is_read_only = true;
+        read_only_reason = s;
+      }
     }
-  }
 
-  metrics_->mutable_store_own_metrics()->set_is_ready_only(self_store_is_read_only);
+    metrics_.mutable_store_own_metrics()->set_is_ready_only(self_store_is_read_only);
+    metrics_.mutable_store_own_metrics()->set_read_only_reason(read_only_reason);
+  }
 
   return true;
 }

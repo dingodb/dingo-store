@@ -15,6 +15,7 @@
 #ifndef DINGODB_STORE_SERVER_H_
 #define DINGODB_STORE_SERVER_H_
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -171,8 +172,16 @@ class Server {
 
   static std::string GetIndexPath();
 
-  bool IsReadOnly() const;
-  void SetReadOnly(bool is_read_only);
+  bool IsClusterReadOnlyOrForceReadOnly() const;
+
+  bool IsClusterReadOnly() const;
+  std::shared_ptr<std::string> GetClusterReadOnlyReason() const;
+  void SetClusterReadOnly(bool is_read_only, const std::string& read_only_reason);
+
+  bool IsClusterForceReadOnly() const;
+  std::shared_ptr<std::string> GetClusterForceReadOnlyReason() const;
+  void SetClusterForceReadOnly(bool is_read_only, const std::string& read_only_reason);
+
   bool IsLeader(int64_t region_id);
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
 
@@ -290,7 +299,12 @@ class Server {
   std::vector<CrontabConfig> crontab_configs_;
 
   // Is cluster read-only
-  bool is_read_only_ = false;
+  bool cluster_is_read_only_{false};
+  bool cluster_is_force_read_only_{false};
+
+  // read_only reason
+  std::atomic<std::shared_ptr<std::string>> cluster_read_only_reason_{nullptr};
+  std::atomic<std::shared_ptr<std::string>> cluster_force_read_only_reason_{nullptr};
 
   // reference worker queue, just for trace
   SimpleWorkerSetPtr store_service_read_worker_set_{nullptr};

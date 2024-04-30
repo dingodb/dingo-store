@@ -207,11 +207,35 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
 // if one store is set to read-only, all stores are set to read-only
 // this flag is set by coordinator and send to all stores using store heartbeat
 butil::Status ServiceHelper::ValidateClusterReadOnly() {
-  auto is_read_only = Server::GetInstance().IsReadOnly();
-  if (is_read_only) {
-    DINGO_LOG(WARNING) << "cluster is set to read-only from coordinator.";
-    return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY,
-                         "ESYSTEM_CLUSTER_READ_ONLY: cluster is set to read-only from coordinator.");
+  auto is_read_only_or_force_read_only = Server::GetInstance().IsClusterReadOnlyOrForceReadOnly();
+  if (!is_read_only_or_force_read_only) {
+    return butil::Status();
+  }
+
+  if (Server::GetInstance().IsClusterReadOnly()) {
+    auto reason = Server::GetInstance().GetClusterReadOnlyReason();
+    std::string s;
+    if (reason == nullptr) {
+      s = "cluster is set to read-only from coordinator, reason: unknown";
+    } else {
+      s = fmt::format("cluster is set to read-only from coordinator, reason: {}", *reason);
+    }
+
+    DINGO_LOG(WARNING) << s;
+    return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY, s);
+  }
+
+  if (Server::GetInstance().IsClusterForceReadOnly()) {
+    auto reason = Server::GetInstance().GetClusterForceReadOnlyReason();
+    std::string s;
+    if (reason == nullptr) {
+      s = "cluster is set to force-read-only from coordinator, reason: unknown";
+    } else {
+      s = fmt::format("cluster is set to read-only from coordinator, reason: {}", *reason);
+    }
+
+    DINGO_LOG(WARNING) << s;
+    return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY, s);
   }
 
   return butil::Status();

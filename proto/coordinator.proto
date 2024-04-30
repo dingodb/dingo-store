@@ -384,6 +384,8 @@ message HelloRequest {
 message ClusterState {
   bool cluster_is_read_only = 1;
   bool cluster_is_force_read_only = 2;
+  string cluster_read_only_reason = 3;
+  string cluster_force_read_only_reason = 4;
 }
 
 message HelloResponse {
@@ -570,6 +572,7 @@ message ConfigCoordinatorRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   bool set_force_read_only = 2;
   bool is_force_read_only = 3;
+  string force_read_only_reason = 4;
 }
 
 message ConfigCoordinatorResponse {

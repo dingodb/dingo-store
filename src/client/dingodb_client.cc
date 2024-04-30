@@ -187,6 +187,7 @@ DEFINE_double(radius, 10.1, "range search radius");
 DEFINE_double(rate, 0.0, "rate");
 
 DEFINE_bool(force_read_only, false, "force read only");
+DEFINE_string(force_read_only_reason, "", "force read only reason");
 DEFINE_int64(scan_id, 1, "scan id client supply");
 
 // for meta watch
@@ -1102,8 +1103,8 @@ int main(int argc, char* argv[]) {
 
   if (dingodb::FLAGS_show_version || FLAGS_method.empty()) {
     dingodb::DingoShowVerion();
-    printf("Usage: %s [method] [paramters]\n", argv[0]);
-    printf("Example: %s CreateTable --name=test_table_name\n", argv[0]);
+    printf("Usage: %s [method] [paramters]\n", argv[0]);                  // NOLINT
+    printf("Example: %s CreateTable --name=test_table_name\n", argv[0]);  // NOLINT
     exit(-1);
   }
 

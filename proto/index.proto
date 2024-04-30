@@ -250,6 +250,7 @@ message HelloResponse {
   int64 region_leader_count = 4;
   repeated dingodb.pb.common.RegionMetrics region_metrics = 5;
   dingodb.pb.common.VersionInfo version_info = 6;
+  dingodb.pb.common.StoreOwnMetrics store_own_metrics = 7;
 }
 
 service IndexService {
