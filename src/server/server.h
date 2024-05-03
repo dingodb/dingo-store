@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "bthread/types.h"
 #include "common/safe_map.h"
 #include "common/threadpool.h"
 #include "coordinator/auto_increment_control.h"
@@ -175,11 +176,11 @@ class Server {
   bool IsClusterReadOnlyOrForceReadOnly() const;
 
   bool IsClusterReadOnly() const;
-  std::shared_ptr<std::string> GetClusterReadOnlyReason() const;
+  std::string GetClusterReadOnlyReason();
   void SetClusterReadOnly(bool is_read_only, const std::string& read_only_reason);
 
   bool IsClusterForceReadOnly() const;
-  std::shared_ptr<std::string> GetClusterForceReadOnlyReason() const;
+  std::string GetClusterForceReadOnlyReason();
   void SetClusterForceReadOnly(bool is_read_only, const std::string& read_only_reason);
 
   bool IsLeader(int64_t region_id);
@@ -210,8 +211,15 @@ class Server {
   const Server& operator=(const Server&) = delete;
 
  private:
-  Server() = default;
-  ~Server() = default;
+  Server() {
+    bthread_mutex_init(&cluster_read_only_reason_mutex_, nullptr);
+    bthread_mutex_init(&cluster_force_read_only_reason_mutex_, nullptr);
+  };
+
+  ~Server() {
+    bthread_mutex_destroy(&cluster_read_only_reason_mutex_);
+    bthread_mutex_destroy(&cluster_force_read_only_reason_mutex_);
+  };
 
   std::shared_ptr<pb::common::RegionDefinition> CreateCoordinatorRegion(const std::shared_ptr<Config>& config,
                                                                         int64_t region_id,
@@ -303,8 +311,10 @@ class Server {
   bool cluster_is_force_read_only_{false};
 
   // read_only reason
-  std::atomic<std::shared_ptr<std::string>> cluster_read_only_reason_{nullptr};
-  std::atomic<std::shared_ptr<std::string>> cluster_force_read_only_reason_{nullptr};
+  bthread_mutex_t cluster_read_only_reason_mutex_;
+  bthread_mutex_t cluster_force_read_only_reason_mutex_;
+  std::string cluster_read_only_reason_{};
+  std::string cluster_force_read_only_reason_{};
 
   // reference worker queue, just for trace
   SimpleWorkerSetPtr store_service_read_worker_set_{nullptr};

@@ -6255,13 +6255,8 @@ butil::Status CoordinatorControl::ValidateReadOnly() {
   // check and set read_only reason
   bool is_cluster_read_only = Server::GetInstance().IsClusterReadOnly();
   if (is_cluster_read_only) {
-    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
-    std::string s;
-    if (reason_ptr != nullptr) {
-      s = "cluster is read only, reason: " + *reason_ptr;
-    } else {
-      s = "cluster is read only, reason: unknown";
-    }
+    auto reason_str = Server::GetInstance().GetClusterReadOnlyReason();
+    std::string s = "cluster is read only, reason: " + reason_str;
 
     DINGO_LOG(WARNING) << s;
     return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, s);
