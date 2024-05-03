@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "butil/endpoint.h"
+#include "butil/scoped_lock.h"
 #include "butil/time.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -963,32 +964,32 @@ bool Server::IsClusterReadOnlyOrForceReadOnly() const { return cluster_is_read_o
 
 bool Server::IsClusterReadOnly() const { return cluster_is_read_only_; }
 
-std::shared_ptr<std::string> Server::GetClusterReadOnlyReason() const {
-  return cluster_read_only_reason_.load(std::memory_order_relaxed);
+std::string Server::GetClusterReadOnlyReason() {
+  BAIDU_SCOPED_LOCK(cluster_read_only_reason_mutex_);
+  return cluster_read_only_reason_;
 }
 
 void Server::SetClusterReadOnly(bool is_read_only, const std::string& read_only_reason) {
   DINGO_LOG(INFO) << "SetClusterReadOnly: " << is_read_only << " reason: " << read_only_reason;
   cluster_is_read_only_ = is_read_only;
-  if (is_read_only) {
-    cluster_read_only_reason_.store(std::make_shared<std::string>(read_only_reason), std::memory_order_relaxed);
-  } else {
-    cluster_read_only_reason_.store(nullptr, std::memory_order_relaxed);
+  {
+    BAIDU_SCOPED_LOCK(cluster_read_only_reason_mutex_);
+    cluster_read_only_reason_ = read_only_reason;
   }
 }
 
 bool Server::IsClusterForceReadOnly() const { return cluster_is_force_read_only_; }
 
-std::shared_ptr<std::string> Server::GetClusterForceReadOnlyReason() const {
-  return cluster_force_read_only_reason_.load(std::memory_order_relaxed);
+std::string Server::GetClusterForceReadOnlyReason() {
+  BAIDU_SCOPED_LOCK(cluster_force_read_only_reason_mutex_);
+  return cluster_force_read_only_reason_;
 }
 
 void Server::SetClusterForceReadOnly(bool is_read_only, const std::string& read_only_reason) {
   cluster_is_force_read_only_ = is_read_only;
-  if (is_read_only) {
-    cluster_force_read_only_reason_.store(std::make_shared<std::string>(read_only_reason), std::memory_order_relaxed);
-  } else {
-    cluster_force_read_only_reason_.store(nullptr, std::memory_order_relaxed);
+  {
+    BAIDU_SCOPED_LOCK(cluster_force_read_only_reason_mutex_);
+    cluster_force_read_only_reason_ = read_only_reason;
   }
 }
 

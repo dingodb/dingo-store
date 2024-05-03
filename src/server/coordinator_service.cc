@@ -78,12 +78,7 @@ void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const 
   bool is_read_only = Server::GetInstance().IsClusterReadOnly();
   if (is_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
-    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
-    if (reason_ptr != nullptr) {
-      response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
-    } else {
-      response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
-    }
+    response->mutable_cluster_state()->set_cluster_read_only_reason(Server::GetInstance().GetClusterReadOnlyReason());
   }
 
   bool is_force_read_only = coordinator_control->GetForceReadOnly();
@@ -135,12 +130,7 @@ void CoordinatorServiceImpl::Hello(google::protobuf::RpcController *controller,
     bool is_read_only = Server::GetInstance().IsClusterReadOnly();
     if (is_read_only) {
       response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
-      auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
-      if (reason_ptr != nullptr) {
-        response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
-      } else {
-        response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
-      }
+      response->mutable_cluster_state()->set_cluster_read_only_reason(Server::GetInstance().GetClusterReadOnlyReason());
     }
 
     bool is_force_read_only = coordinator_control_->GetForceReadOnly();
@@ -704,12 +694,7 @@ void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
   bool is_read_only = Server::GetInstance().IsClusterReadOnly();
   if (is_read_only) {
     response->mutable_cluster_state()->set_cluster_is_read_only(is_read_only);
-    auto reason_ptr = Server::GetInstance().GetClusterReadOnlyReason();
-    if (reason_ptr != nullptr) {
-      response->mutable_cluster_state()->set_cluster_read_only_reason(*reason_ptr);
-    } else {
-      response->mutable_cluster_state()->set_cluster_read_only_reason("unknown");
-    }
+    response->mutable_cluster_state()->set_cluster_read_only_reason(Server::GetInstance().GetClusterReadOnlyReason());
   }
 
   bool is_force_read_only = coordinator_control->GetForceReadOnly();
