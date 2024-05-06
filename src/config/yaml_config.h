@@ -42,6 +42,7 @@ class YamlConfig : public Config {
   int64_t GetInt64(const std::string& key) override;
   double GetDouble(const std::string& key) override;
   std::string GetString(const std::string& key) override;
+  std::string GetStringOrNullIfNotExists(const std::string& key) override;
 
   std::vector<int> GetIntList(const std::string& key) override;
   std::vector<std::string> GetStringList(const std::string& key) override;

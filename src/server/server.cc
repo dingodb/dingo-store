@@ -815,9 +815,17 @@ void Server::SetServerEndpoint(const butil::EndPoint& endpoint) {
   server_addr_ = Helper::EndPointToString(endpoint);
 }
 
+butil::EndPoint Server::ServerListenEndpoint() { return server_listen_endpoint_; }
+
+void Server::SetServerListenEndpoint(const butil::EndPoint& endpoint) { server_listen_endpoint_ = endpoint; }
+
 butil::EndPoint Server::RaftEndpoint() { return raft_endpoint_; }
 
 void Server::SetRaftEndpoint(const butil::EndPoint& endpoint) { raft_endpoint_ = endpoint; }
+
+butil::EndPoint Server::RaftListenEndpoint() { return raft_listen_endpoint_; }
+
+void Server::SetRaftListenEndpoint(const butil::EndPoint& endpoint) { raft_listen_endpoint_ = endpoint; }
 
 std::shared_ptr<CoordinatorInteraction> Server::GetCoordinatorInteraction() {
   assert(coordinator_interaction_ != nullptr);
@@ -934,7 +942,9 @@ std::shared_ptr<KvControl> Server::GetKvControl() {
   return kv_control_;
 }
 
-void Server::SetEndpoints(const std::vector<butil::EndPoint>& endpoints) { endpoints_ = endpoints; }
+void Server::SetCoordinatorPeerEndpoints(const std::vector<butil::EndPoint>& endpoints) {
+  coordinator_peer_endpoints_ = endpoints;
+}
 
 std::shared_ptr<Heartbeat> Server::GetHeartbeat() { return heartbeat_; }
 
@@ -1105,7 +1115,7 @@ std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(co
   region->set_schema_id(Constant::kCoordinatorSchemaId);
   region->set_name(region_name);
 
-  for (auto& endpoint : endpoints_) {
+  for (auto& endpoint : coordinator_peer_endpoints_) {
     auto* peer = region->add_peers();
     auto* location = peer->mutable_raft_location();
     location->set_host(butil::ip2str(endpoint.ip).c_str());

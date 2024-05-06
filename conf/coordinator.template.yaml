@@ -3,6 +3,7 @@ cluster:
   instance_id: $INSTANCE_ID$
   keyring: TO_BE_CONTINUED
 server:
+  listen_host: $SERVER_LISTEN_HOST$
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   # worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
@@ -28,6 +29,7 @@ coordinator:
   compaction_interval_s: 300
   compaction_retention_rev_count: 1000
 raft:
+  listen_host: $RAFT_LISTEN_HOST$
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/raft_data

@@ -124,8 +124,12 @@ class Server {
   std::string ServerAddr();
   butil::EndPoint ServerEndpoint();
   void SetServerEndpoint(const butil::EndPoint& endpoint);
+  butil::EndPoint ServerListenEndpoint();
+  void SetServerListenEndpoint(const butil::EndPoint& endpoint);
   butil::EndPoint RaftEndpoint();
   void SetRaftEndpoint(const butil::EndPoint& endpoint);
+  butil::EndPoint RaftListenEndpoint();
+  void SetRaftListenEndpoint(const butil::EndPoint& endpoint);
 
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction();
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr();
@@ -159,7 +163,7 @@ class Server {
   std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl();
   std::shared_ptr<TsoControl> GetTsoControl();
   std::shared_ptr<KvControl> GetKvControl();
-  void SetEndpoints(const std::vector<butil::EndPoint>& endpoints);
+  void SetCoordinatorPeerEndpoints(const std::vector<butil::EndPoint>& endpoints);
 
   std::shared_ptr<Heartbeat> GetHeartbeat();
 
@@ -234,11 +238,15 @@ class Server {
   std::string keyring_;
   // Service ip and port.
   butil::EndPoint server_endpoint_;
+  // Service listen ip and port.
+  butil::EndPoint server_listen_endpoint_;
   // Service ip and port.
   std::string server_addr_;
-  // Raft ip and port.
+  // Raft peer ip and port.
   butil::EndPoint raft_endpoint_;
-  std::vector<butil::EndPoint> endpoints_;
+  // Raft listen ip and port.
+  butil::EndPoint raft_listen_endpoint_;
+  std::vector<butil::EndPoint> coordinator_peer_endpoints_;
 
   struct HostnameItem {
     std::string hostname;

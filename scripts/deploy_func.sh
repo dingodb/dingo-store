@@ -41,12 +41,14 @@ function deploy_store() {
   if [ "${FLAGS_replace_conf}" == "0" ]; then
     cp $srcpath/conf/${role}.template.yaml $dstpath/conf/${role}.yaml
 
-    sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'          $dstpath/conf/${role}.yaml
-    sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'              $dstpath/conf/${role}.yaml
-    sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'              $dstpath/conf/${role}.yaml
-    sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                $dstpath/conf/${role}.yaml
+    sed  -i 's,\$INSTANCE_ID\$,'"$instance_id"',g'                  $dstpath/conf/${role}.yaml
+    sed  -i 's,\$SERVER_HOST\$,'"$SERVER_HOST"',g'                  $dstpath/conf/${role}.yaml
+    sed  -i 's,\$SERVER_LISTEN_HOST\$,'"$SERVER_LISTEN_HOST"',g'    $dstpath/conf/${role}.yaml
+    sed  -i 's,\$SERVER_PORT\$,'"$server_port"',g'                  $dstpath/conf/${role}.yaml
+    sed  -i 's,\$RAFT_LISTEN_HOST\$,'"$RAFT_LISTEN_HOST"',g'        $dstpath/conf/${role}.yaml
+    sed  -i 's,\$RAFT_HOST\$,'"$RAFT_HOST"',g'                      $dstpath/conf/${role}.yaml
+    sed  -i 's,\$RAFT_PORT\$,'"$raft_port"',g'                      $dstpath/conf/${role}.yaml
+    sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                        $dstpath/conf/${role}.yaml
 
     sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
 

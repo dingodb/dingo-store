@@ -35,6 +35,7 @@ class Config {
   virtual int64_t GetInt64(const std::string& key) = 0;
   virtual double GetDouble(const std::string& key) = 0;
   virtual std::string GetString(const std::string& key) = 0;
+  virtual std::string GetStringOrNullIfNotExists(const std::string& key) = 0;
 
   virtual std::vector<int> GetIntList(const std::string& key) = 0;
   virtual std::vector<std::string> GetStringList(const std::string& key) = 0;
