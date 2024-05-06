@@ -89,6 +89,18 @@ std::string YamlConfig::GetString(const std::string& key) {
   return "";
 }
 
+std::string YamlConfig::GetStringOrNullIfNotExists(const std::string& key) {
+  try {
+    const std::string s = GetScalar<std::string>(key);
+    std::string result;
+    butil::TrimWhitespaceASCII(s, butil::TrimPositions::TRIM_ALL, &result);
+    return result;
+  } catch (std::exception& e) {
+    return "";
+  }
+  return "";
+}
+
 std::vector<int> YamlConfig::GetIntList(const std::string& key) {
   try {
     return GetList<int>(key);

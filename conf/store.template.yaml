@@ -3,6 +3,7 @@ cluster:
   instance_id: $INSTANCE_ID$
   keyring: TO_BE_CONTINUED
 server:
+  listen_host: $SERVER_LISTEN_HOST$
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   heartbeat_interval_s: 6
@@ -22,6 +23,7 @@ region:
   enable_auto_split: true
   split_check_interval_s: 120
 raft:
+  listen_host: $RAFT_LISTEN_HOST$
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/raft_data

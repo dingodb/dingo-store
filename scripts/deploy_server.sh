@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 mydir="${BASH_SOURCE%/*}"
 if [[ ! -d "$mydir" ]]; then mydir="$PWD"; fi
 . $mydir/shflags
@@ -54,9 +53,9 @@ if [ -e ${SERVER_NUM} ]; then
 fi
 
 for ((i=1; i<=$SERVER_NUM; ++i)); do
-    COOR_RAFT_PEERS=${COOR_RAFT_PEERS}","$SERVER_HOST":"`expr $COORDINATOR_RAFT_START_PORT + $i`
+    COOR_RAFT_PEERS=${COOR_RAFT_PEERS}","$RAFT_HOST":"`expr $COORDINATOR_RAFT_START_PORT + $i`
 
-    echo $SERVER_HOST":"`expr $COORDINATOR_SERVER_START_PORT + $i` >> ${TMP_COORDINATOR_SERVICES}
+    echo $RAFT_HOST":"`expr $COORDINATOR_SERVER_START_PORT + $i` >> ${TMP_COORDINATOR_SERVICES}
 done
 
 COOR_RAFT_PEERS=${COOR_RAFT_PEERS:1}

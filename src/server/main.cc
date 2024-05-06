@@ -122,21 +122,55 @@ DECLARE_int32(vector_operation_parallel_thread_num);
 // Get server endpoint from config
 butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
+  DINGO_LOG(INFO) << "server.host is set to: " << host;
   const int port = config->GetInt("server.port");
+  DINGO_LOG(INFO) << "server.port is set to: " << port;
+  return dingodb::Helper::StringToEndPoint(host, port);
+}
+
+// Get server listen endpoint from config
+butil::EndPoint GetServerListenEndPoint(std::shared_ptr<dingodb::Config> config) {
+  std::string host = config->GetStringOrNullIfNotExists("server.listen_host");
+  if (host.empty()) {
+    host = config->GetString("server.host");
+    DINGO_LOG(INFO) << "server.listen_host is not set, use server.host: " << host;
+  } else {
+    DINGO_LOG(INFO) << "server.listen_host is set to: " << host;
+  }
+  const int port = config->GetInt("server.port");
+  DINGO_LOG(INFO) << "server.port is set to: " << port;
   return dingodb::Helper::StringToEndPoint(host, port);
 }
 
 // Get raft endpoint from config
 butil::EndPoint GetRaftEndPoint(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("raft.host");
+  DINGO_LOG(INFO) << "raft.host is set to: " << host;
   const int port = config->GetInt("raft.port");
+  DINGO_LOG(INFO) << "raft.port is set to: " << port;
   return dingodb::Helper::StringToEndPoint(host, port);
 }
 
-std::vector<butil::EndPoint> GetEndpoints(const std::shared_ptr<dingodb::Config> &config,
-                                          const std::string peer_nodes_name) {
+// Get raft endpoint from config
+butil::EndPoint GetRaftListenEndPoint(std::shared_ptr<dingodb::Config> config) {
+  std::string host = config->GetStringOrNullIfNotExists("raft.listen_host");
+  if (host.empty()) {
+    host = config->GetString("raft.host");
+    DINGO_LOG(INFO) << "raft.listen_host is not set, use raft.host: " << host;
+  } else {
+    DINGO_LOG(INFO) << "raft.listen_host is set to: " << host;
+  }
+
+  const int port = config->GetInt("raft.port");
+  DINGO_LOG(INFO) << "raft.port is set to: " << port;
+  return dingodb::Helper::StringToEndPoint(host, port);
+}
+
+std::vector<butil::EndPoint> GetCoordinatorPeerEndpoints(const std::shared_ptr<dingodb::Config> &config,
+                                                         const std::string peer_nodes_name) {
   std::vector<butil::EndPoint> peer_nodes;
   std::string coordinator_list = config->GetString(peer_nodes_name);
+  DINGO_LOG(INFO) << peer_nodes_name << " is set to: " << coordinator_list;
   return dingodb::Helper::StringToEndpoints(coordinator_list);
 }
 
@@ -824,7 +858,9 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "DoSystemCheck ret:" << ret;
 
   dingo_server.SetServerEndpoint(GetServerEndPoint(config));
+  dingo_server.SetServerListenEndpoint(GetServerListenEndPoint(config));
   dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
+  dingo_server.SetRaftListenEndpoint(GetRaftListenEndPoint(config));
 
   if (!dingo_server.InitEngine()) {
     DINGO_LOG(ERROR) << "InitEngine failed!";
@@ -909,7 +945,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    dingo_server.SetEndpoints(GetEndpoints(config, "coordinator.peers"));
+    dingo_server.SetCoordinatorPeerEndpoints(GetCoordinatorPeerEndpoints(config, "coordinator.peers"));
 
     coordinator_service.SetControl(dingo_server.GetCoordinatorControl());
     coordinator_service.SetKvControl(dingo_server.GetKvControl());
@@ -1063,12 +1099,12 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftListenEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
@@ -1226,12 +1262,12 @@ int main(int argc, char *argv[]) {
     }
 
     // raft server
-    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftListenEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
@@ -1370,12 +1406,12 @@ int main(int argc, char *argv[]) {
     }
 
     // raft server
-    if (braft::add_service(&raft_server, dingo_server.RaftEndpoint()) != 0) {
+    if (braft::add_service(&raft_server, dingo_server.RaftListenEndpoint()) != 0) {
       DINGO_LOG(ERROR) << "Fail to add raft service!";
       return -1;
     }
 
-    if (raft_server.Start(dingo_server.RaftEndpoint(), &options) != 0) {
+    if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
     }
@@ -1403,10 +1439,10 @@ int main(int argc, char *argv[]) {
   // Start server after raft server started.
   options.pid_file = dingo_server.PidFilePath();
 
-  DINGO_LOG(INFO) << "Server is going to start on " << dingo_server.ServerEndpoint()
+  DINGO_LOG(INFO) << "Server is going to start on " << dingo_server.ServerListenEndpoint()
                   << ", pid_file:" << options.pid_file;
 
-  if (brpc_server.Start(dingo_server.ServerEndpoint(), &options) != 0) {
+  if (brpc_server.Start(dingo_server.ServerListenEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
   }
