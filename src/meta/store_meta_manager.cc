@@ -650,8 +650,7 @@ bool StoreServerMeta::Init() {
   }
 
   auto* server_location = store->mutable_server_location();
-  server_location->set_host(butil::ip2str(server.ServerEndpoint().ip).c_str());
-  server_location->set_port(server.ServerEndpoint().port);
+  *server_location = server.ServerLocation();
   auto* raf_location = store->mutable_raft_location();
   raf_location->set_host(butil::ip2str(server.RaftEndpoint().ip).c_str());
   raf_location->set_port(server.RaftEndpoint().port);

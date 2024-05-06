@@ -63,16 +63,13 @@ void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*
 
   // parse server location
   auto* server_location = node_info->mutable_server_location();
-  auto* server_host = server_location->mutable_host();
-  auto host_str = butil::ip2str(server.ServerEndpoint().ip);
-  server_host->assign(std::string(host_str.c_str()));
-  server_location->set_port(server.ServerEndpoint().port);
+  *server_location = server.ServerLocation();
 
   // parse raft location
   auto* raft_location = node_info->mutable_raft_location();
   auto* raft_host = raft_location->mutable_host();
   auto raft_host_str = butil::ip2str(server.RaftEndpoint().ip);
-  raft_host->assign(std::string(host_str.c_str()));
+  raft_host->assign(std::string(raft_host_str.c_str()));
   raft_location->set_port(server.RaftEndpoint().port);
 }
 

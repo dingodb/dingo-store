@@ -119,13 +119,17 @@ DECLARE_int64(vector_max_background_task_count);
 DECLARE_int32(vector_operation_parallel_thread_num);
 }  // namespace dingodb
 
-// Get server endpoint from config
-butil::EndPoint GetServerEndPoint(std::shared_ptr<dingodb::Config> config) {
+// Get server location from config
+dingodb::pb::common::Location GetServerLocation(std::shared_ptr<dingodb::Config> config) {
   const std::string host = config->GetString("server.host");
   DINGO_LOG(INFO) << "server.host is set to: " << host;
   const int port = config->GetInt("server.port");
   DINGO_LOG(INFO) << "server.port is set to: " << port;
-  return dingodb::Helper::StringToEndPoint(host, port);
+
+  dingodb::pb::common::Location location;
+  location.set_host(host);
+  location.set_port(port);
+  return location;
 }
 
 // Get server listen endpoint from config
@@ -857,7 +861,7 @@ int main(int argc, char *argv[]) {
   }
   DINGO_LOG(INFO) << "DoSystemCheck ret:" << ret;
 
-  dingo_server.SetServerEndpoint(GetServerEndPoint(config));
+  dingo_server.SetServerLocation(GetServerLocation(config));
   dingo_server.SetServerListenEndpoint(GetServerListenEndPoint(config));
   dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
   dingo_server.SetRaftListenEndpoint(GetRaftListenEndPoint(config));

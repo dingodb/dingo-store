@@ -808,11 +808,11 @@ std::string Server::LogDir() { return log_dir_; }
 
 std::string Server::PidFilePath() { return Helper::ConcatPath(log_dir_, FLAGS_pid_file_name); }
 
-butil::EndPoint Server::ServerEndpoint() { return server_endpoint_; }
+pb::common::Location Server::ServerLocation() { return server_location_; }
 
-void Server::SetServerEndpoint(const butil::EndPoint& endpoint) {
-  server_endpoint_ = endpoint;
-  server_addr_ = Helper::EndPointToString(endpoint);
+void Server::SetServerLocation(const pb::common::Location& location) {
+  server_location_ = location;
+  server_addr_ = Helper::LocationToString(location);
 }
 
 butil::EndPoint Server::ServerListenEndpoint() { return server_listen_endpoint_; }

@@ -48,7 +48,12 @@ COOR_RAFT_PEERS=""
 echo "# dingo-store coordinators">${TMP_COORDINATOR_SERVICES}
 
 if [ -e ${SERVER_NUM} ]; then
-  echo "server number is not set"
+  echo "server number is not set, please set SERVER_NUM"
+  exit 0
+fi
+
+if [ -e ${DEFAULT_REPLICA_NUM} ]; then
+  echo "default replica number is not set, please set DEFAULT_REPLICA_NUM"
   exit 0
 fi
 

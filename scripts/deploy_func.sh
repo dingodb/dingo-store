@@ -56,6 +56,7 @@ function deploy_store() {
     then
         echo "cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf"
         cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf
+        sed  -i 's,\$DEFAULT_REPLICA_NUM\$,'"$DEFAULT_REPLICA_NUM"',g' $dstpath/conf/gflags.conf
     fi
   fi
 
