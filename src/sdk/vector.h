@@ -229,6 +229,7 @@ struct SearchParam {
   FilterSource filter_source{kNoneFilterSource};
   FilterType filter_type{kNoneFilterType};
   bool is_negation{false};
+  bool is_sorted{false};
   std::vector<int64_t> vector_ids;  // vector id array; filter_source == kVectorIdFilter enable vector_ids
   bool use_brute_force{false};      // use brute-force search
   std::map<SearchExtraParamType, int32_t> extra_params;  // The search method to use

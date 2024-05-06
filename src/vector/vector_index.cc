@@ -89,6 +89,7 @@ butil::Status ParallelRun(ThreadPoolPtr thread_pool, int64_t vector_index_id,
   return butil::Status();
 }
 
+
 VectorIndex::VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                          const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
                          ThreadPoolPtr thread_pool)

@@ -275,12 +275,13 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
     return;
   }
 
+  auto* mut_request = const_cast<pb::index::VectorSearchRequest*>(request);
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
   ctx->region_range = region->Range();
-  ctx->parameter = request->parameter();
+  ctx->parameter.Swap(mut_request->mutable_parameter());
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
 

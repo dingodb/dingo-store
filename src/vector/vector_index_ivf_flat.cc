@@ -183,11 +183,9 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
     BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
     RWLockReadGuard guard(&rw_lock_);
 
+    // Not trained(no data), direct return blank.
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-      for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-        auto& result = results.emplace_back();
-      }
-
+      results.resize(vector_with_ids.size(), pb::index::VectorWithDistanceResult());
       return butil::Status::OK();
     }
 
@@ -251,11 +249,9 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
     BvarLatencyGuard bvar_guard(&g_ivf_flat_range_search_latency);
     RWLockReadGuard guard(&rw_lock_);
 
+    // Not trained(no data), direct return blank.
     if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
-      for (size_t row = 0; row < vector_with_ids.size(); ++row) {
-        auto& result = results.emplace_back();
-      }
-
+      results.resize(vector_with_ids.size(), pb::index::VectorWithDistanceResult());
       return butil::Status::OK();
     }
 
