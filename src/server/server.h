@@ -122,8 +122,8 @@ class Server {
   std::string LogDir();
   std::string PidFilePath();
   std::string ServerAddr();
-  butil::EndPoint ServerEndpoint();
-  void SetServerEndpoint(const butil::EndPoint& endpoint);
+  pb::common::Location ServerLocation();
+  void SetServerLocation(const pb::common::Location& location);
   butil::EndPoint ServerListenEndpoint();
   void SetServerListenEndpoint(const butil::EndPoint& endpoint);
   butil::EndPoint RaftEndpoint();
@@ -236,8 +236,8 @@ class Server {
   int64_t id_;
   // This is keyring, the password for this instance to join in the cluster
   std::string keyring_;
-  // Service ip and port.
-  butil::EndPoint server_endpoint_;
+  // Service host and port.
+  pb::common::Location server_location_;
   // Service listen ip and port.
   butil::EndPoint server_listen_endpoint_;
   // Service ip and port.

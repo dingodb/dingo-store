@@ -5987,18 +5987,13 @@ void CoordinatorControl::TryToSendStoreOperations() {
 butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Location& location,
                                                             pb::push::PushStoreOperationRequest& request,
                                                             pb::push::PushStoreOperationResponse& response) {
-  // build send location string
-  auto store_server_location_string = location.host() + ":" + std::to_string(location.port());
-
   int retry_times = 0;
   int max_retry_times = 3;
 
   do {
-    braft::PeerId remote_node(store_server_location_string);
-
     // rpc
     brpc::Channel channel;
-    if (channel.Init(remote_node.addr, nullptr) != 0) {
+    if (channel.Init(location.host().c_str(), location.port(), nullptr) != 0) {
       DINGO_LOG(ERROR) << "... channel init failed";
       return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "cannot connect store");
     }
