@@ -640,6 +640,7 @@ message VectorSearchParameter {
 
   // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
   bool is_negation = 26;
+  bool is_sorted = 27;  // vector_ids is sorted
   repeated int64 vector_ids = 24;
 
   // use brute-force search

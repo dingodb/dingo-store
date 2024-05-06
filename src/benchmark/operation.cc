@@ -547,6 +547,7 @@ Operation::Result BaseOperation::VectorSearch(VectorIndexEntryPtr entry,
   for (const auto& vector_with_id : vector_with_ids) {
     result.write_bytes += vector_with_id.vector.Size();
   }
+  result.write_bytes += search_param.vector_ids.size() * sizeof(int64_t);
 
   int64_t start_time = Helper::TimestampUs();
 
@@ -1169,6 +1170,7 @@ Operation::Result VectorSearchOperation::ExecuteAutoData(VectorIndexEntryPtr ent
     for (int i = 0; i < FLAGS_vector_search_filter_vector_id_num; ++i) {
       search_param.vector_ids.push_back(Helper::GenerateRealRandomInteger(1, 10000000));
       search_param.is_negation = FLAGS_filter_vector_id_is_negation;
+      search_param.is_sorted = true;
     }
   }
 
@@ -1247,6 +1249,8 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
       search_param.vector_ids = test_entry->filter_vector_ids;
       search_param.is_negation = FLAGS_filter_vector_id_is_negation;
+      search_param.is_sorted = true;
+      DINGO_LOG(INFO) << fmt::format("search_param.vector_ids size: {}", search_param.vector_ids.size());
     }
 
   } else {
@@ -1261,6 +1265,7 @@ Operation::Result VectorSearchOperation::ExecuteManualData(VectorIndexEntryPtr e
     if (search_param.filter_source == sdk::FilterSource::kVectorIdFilter && !test_entry->filter_vector_ids.empty()) {
       search_param.vector_ids = test_entry->filter_vector_ids;
       search_param.is_negation = FLAGS_filter_vector_id_is_negation;
+      search_param.is_sorted = true;
     }
   }
 

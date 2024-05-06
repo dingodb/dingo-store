@@ -117,6 +117,7 @@ class Helper {
   template <typename T>
   static std::vector<T> PbRepeatedToVector(const google::protobuf::RepeatedField<T>& data) {
     std::vector<T> vec;
+    vec.reserve(data.size());
     for (auto& item : data) {
       vec.push_back(item);
     }
@@ -127,6 +128,7 @@ class Helper {
   template <typename T>
   static std::vector<T> PbRepeatedToVector(google::protobuf::RepeatedField<T>* data) {
     std::vector<T> vec;
+    vec.reserve(data->size());
     for (auto& item : *data) {
       vec.push_back(item);
     }
