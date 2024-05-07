@@ -1349,10 +1349,11 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
   // create region with split_from_region_id & store_ids
   if (is_shadow_create) {
     return CreateShadowRegion(split_from_region.definition().name(), split_from_region.region_type(),
-                              split_from_region.definition().raw_engine(), split_from_region.definition().store_engine(),
-                              "", store_ids.size(), new_range, split_from_region.definition().schema_id(),
-                              split_from_region.definition().table_id(),split_from_region.definition().index_id(), 
-                              split_from_region.definition().part_id(),split_from_region.definition().tenant_id(), 
+                              split_from_region.definition().raw_engine(),
+                              split_from_region.definition().store_engine(), "", store_ids.size(), new_range,
+                              split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
+                              split_from_region.definition().index_id(), split_from_region.definition().part_id(),
+                              split_from_region.definition().tenant_id(),
                               split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                               new_region_id, meta_increment);
   } else {
@@ -1360,7 +1361,7 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
                              split_from_region.definition().raw_engine(), split_from_region.definition().store_engine(),
                              "", store_ids.size(), new_range, split_from_region.definition().schema_id(),
                              split_from_region.definition().table_id(), split_from_region.definition().index_id(),
-                             split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),             
+                             split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
                              split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
                              new_region_id, store_operations, meta_increment);
   }
@@ -1390,13 +1391,12 @@ butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region
 
   // create region with split_from_region_id & store_ids
   std::vector<pb::coordinator::StoreOperation> store_operations;
-  return CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(), 
-                           split_from_region.definition().store_engine(), resource_tag,
-                           store_ids.size(), region_range, split_from_region.definition().schema_id(),
-                           split_from_region.definition().table_id(), split_from_region.definition().index_id(),
-                           split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
-                           split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
-                           new_region_id, store_operations, meta_increment);
+  return CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(),
+                           split_from_region.definition().store_engine(), resource_tag, store_ids.size(), region_range,
+                           split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
+                           split_from_region.definition().index_id(), split_from_region.definition().part_id(),
+                           split_from_region.definition().tenant_id(), split_from_region.definition().index_parameter(),
+                           store_ids, split_from_region_id, new_region_id, store_operations, meta_increment);
 }
 
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
@@ -1809,16 +1809,14 @@ butil::Status CoordinatorControl::CheckRegionPrefix(const std::string& start_key
 }
 
 butil::Status CoordinatorControl::CreateShadowRegion(
-    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine, 
-    pb::common::StorageEngine store_engine, const std::string& resource_tag, int32_t replica_num, 
-    pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, 
-    int64_t part_id, int64_t tenant_id, const pb::common::IndexParameter& index_parameter, 
-    std::vector<int64_t>& store_ids, int64_t split_from_region_id,
-    int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
+    pb::common::StorageEngine store_engine, const std::string& resource_tag, int32_t replica_num,
+    pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+    int64_t tenant_id, const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids,
+    int64_t split_from_region_id, int64_t& new_region_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateShadowRegion replica_num=" << replica_num << ", region_name=" << region_name
-                  << ", region_type=" << pb::common::RegionType_Name(region_type)
-                   <<", region_store_engine"<<pb::common::StorageEngine_Name(store_engine)
-                  << ", resource_tag=" << resource_tag
+                  << ", region_type=" << pb::common::RegionType_Name(region_type) << ", region_store_engine"
+                  << pb::common::StorageEngine_Name(store_engine) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
                   << ", part_id=" << part_id << ", tenant_id=" << tenant_id
@@ -1975,13 +1973,14 @@ butil::Status CoordinatorControl::CreateShadowRegion(
 
 butil::Status CoordinatorControl::CreateRegionFinal(
     const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
-    pb::common::StorageEngine store_engine, const std::string& resource_tag, 
-    int32_t replica_num, pb::common::Range region_range, int64_t schema_id,
-    int64_t table_id, int64_t index_id, int64_t part_id, int64_t tenant_id,
-    const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids, int64_t split_from_region_id,
-    int64_t& new_region_id, std::vector<pb::coordinator::StoreOperation>& store_operations,
+    pb::common::StorageEngine store_engine, const std::string& resource_tag, int32_t replica_num,
+    pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
+    int64_t tenant_id, const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids,
+    int64_t split_from_region_id, int64_t& new_region_id,
+    std::vector<pb::coordinator::StoreOperation>& store_operations,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
-  DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name << ", store_engine="<<pb::common::StorageEngine_Name(store_engine)
+  DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
+                  << ", store_engine=" << pb::common::StorageEngine_Name(store_engine)
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
@@ -2686,6 +2685,20 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
                         "merge_to_region_id = "
                      << merge_to_region_id << " from_state=" << merge_to_region.state();
     return butil::Status(pb::error::Errno::EMERGE_STATUS_ILLEGAL, "MergeRegion merge_to_region is not ready for merge");
+  }
+
+  // check StoreEngineType
+  if (merge_to_region.definition().store_engine() != merge_from_region.definition().store_engine()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different store_engine";
+    return butil::Status(pb::error::Errno::EMERGE_STORE_ENGINE_NOT_MATCH,
+                         "MergeRegion merge_from_region and merge_to_region has different store_engine");
+  }
+
+  // check raw engine
+  if (merge_to_region.definition().raw_engine() != merge_from_region.definition().raw_engine()) {
+    DINGO_LOG(ERROR) << "MergeRegion merge_from_region and merge_to_region has different raw_engine";
+    return butil::Status(pb::error::Errno::EMERGE_RAW_ENGINE_NOT_MATCH,
+                         "MergeRegion merge_from_region and merge_to_region has different raw_engine");
   }
 
   // check if all peers are healthy
@@ -4126,7 +4139,7 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       need_update_region_metrics = true;
     };
 
-    if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE ){
+    if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE) {
       region_metrics_is_not_leader = false;
     }
 
@@ -4237,10 +4250,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
       DINGO_LOG(DEBUG) << "region no need to update region_id = " << region_metrics.id() << " last_update_timestamp = "
                        << region_metrics_to_update.region_status().last_update_timestamp()
                        << " now = " << butil::gettimeofday_ms();
-      if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE ){
+      if (region_to_update.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
         continue;
       }
-      
     }
 
     if (need_update_region_definition || need_update_region_state) {

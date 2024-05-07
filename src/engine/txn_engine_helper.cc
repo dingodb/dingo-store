@@ -3925,8 +3925,6 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
         Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
   }
 
-  std::shared_ptr<Engine> engine = storage->GetEngine();
-
   // Caution !!!
   // We will not use a snapshot globally because it will affect other region compaction.
   for (const auto &region_ptr : leader_region_ptrs) {
@@ -3959,8 +3957,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
     if (safe_point_ts < internal_safe_point_ts) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-          "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. "
-          "ignore.",
+          "current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with it next time. ignore.",
           safe_point_ts, internal_safe_point_ts);
     }
 
@@ -3973,8 +3970,9 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     ctx->SetRegionEpoch(region_ptr->Epoch());
     ctx->SetIsolationLevel(::dingodb::pb::store::IsolationLevel::ReadCommitted);
     ctx->SetRawEngineType(region_ptr->GetRawEngineType());
+    ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
 
-    std::shared_ptr<Engine::TxnWriter> writer = engine->NewTxnWriter(ctx->RawEngineType());
+    auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
     if (nullptr == writer) {
       DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}.  start_key : {} end_key : {} ",
                                       ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),

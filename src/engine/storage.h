@@ -32,10 +32,9 @@ namespace dingodb {
 
 class Storage {
  public:
-  Storage(std::shared_ptr<Engine> engine, std::shared_ptr<Engine> rocks_engine);
+  Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine);
   ~Storage() = default;
 
-  std::shared_ptr<Engine> GetEngine();
   std::shared_ptr<Engine::Reader> GetEngineReader(pb::common::StorageEngine store_engine_type,
                                                   pb::common::RawEngine raw_engine_type);
   std::shared_ptr<Engine::TxnReader> GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
@@ -177,8 +176,8 @@ class Storage {
                             const std::vector<pb::raft::LogEntry>& entries);
 
  private:
-  std::shared_ptr<Engine> engine_;
-  std::shared_ptr<Engine> rocks_engine_;
+  std::shared_ptr<Engine> raft_engine_;
+  std::shared_ptr<Engine> mono_engine_;
 };
 
 using StoragePtr = std::shared_ptr<Storage>;
