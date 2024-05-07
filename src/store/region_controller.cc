@@ -134,15 +134,15 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   // Add region metrics
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region add region metrics", region->Id());
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
-  
-  if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE){
+
+  if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
     // Add raft node
     auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-    if (raft_store_engine == nullptr){
+    if (raft_store_engine == nullptr) {
       return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
     }
     DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region, add raft node", region->Id());
-     
+
     RaftControlAble::AddNodeParameter parameter;
     parameter.role = GetRole();
     parameter.is_restart = false;
@@ -165,16 +165,16 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
       return status;
     }
     Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta()->AddRaftMeta(raft_meta);
-  }else if(definition.store_engine() == pb::common::StorageEngine::STORE_ENG_MONO_STORE){
+  } else if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (GetRole() == pb::common::INDEX) {
       auto vector_index_wrapper = region->VectorIndexWrapper();
       VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, true, 0, "region create");
     }
-  }else{
-    //not support
+  } else {
+    // not support
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
   }
- 
+
   Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
   DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, update region state NORMAL",
@@ -423,7 +423,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region->State() != pb::common::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Parent region state is NORMAL, not allow split.");
   }
- 
+
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
@@ -628,6 +628,16 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_NOT_NEIGHBOR, "Not neighbor region");
   }
 
+  // check StoreEngineType
+  if (source_region->GetStoreEngineType() != target_region->GetStoreEngineType()) {
+    return butil::Status(pb::error::EINTERNAL, "StoreEngineType is not equal.");
+  }
+
+  // check raw engine
+  if (source_region->GetRawEngineType() != target_region->GetRawEngineType()) {
+    return butil::Status(pb::error::EINTERNAL, "RawEngineType is not equal.");
+  }
+
   // Check region peers
   if (Helper::IsDifferencePeers(source_region->Definition(), target_region->Definition())) {
     return butil::Status(pb::error::EMERGE_PEER_NOT_MATCH, "Peers is differencce.");
@@ -780,6 +790,8 @@ butil::Status MergeRegionTask::MergeRegion() {
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(source_region->Id());
   ctx->SetRegionEpoch(source_region->Epoch());
+  ctx->SetStoreEngineType(source_region->GetStoreEngineType());
+  ctx->SetRawEngineType(source_region->GetRawEngineType());
 
   status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->job_id(), target_region->Definition(),
                                                             min_applied_log_id);
@@ -830,7 +842,6 @@ butil::Status ChangeRegionTask::PreValidateChangeRegion(const pb::coordinator::R
 
 // Check region leader
 static butil::Status CheckLeader(int64_t region_id) {
-
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
@@ -1427,11 +1438,12 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshotAsync(std::shared_ptr<Context
 void SnapshotVectorIndexTask::Run() {
   auto region = Server::GetInstance().GetRegion(region_cmd_->region_id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] Not found region.",region_cmd_->region_id());                                
+    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] Not found region.", region_cmd_->region_id());
     return;
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
-    DINGO_LOG(INFO) << fmt::format("[control.region][region({})] rocks engine not need save vector index.", region_cmd_->snapshot_vector_index_request().vector_index_id());
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+    DINGO_LOG(INFO) << fmt::format("[control.region][region({})] rocks engine not need save vector index.",
+                                   region_cmd_->snapshot_vector_index_request().vector_index_id());
     return;
   }
 

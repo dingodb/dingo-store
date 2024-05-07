@@ -41,20 +41,19 @@
 
 namespace dingodb {
 
-Storage::Storage(std::shared_ptr<Engine> engine, std::shared_ptr<Engine> rocks_engine)
-    : engine_(engine), rocks_engine_(rocks_engine) {}
+Storage::Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine)
+    : raft_engine_(raft_engine), mono_engine_(mono_engine) {}
 
-std::shared_ptr<Engine> Storage::GetEngine() { return engine_; }
 std::shared_ptr<RaftStoreEngine> Storage::GetRaftStoreEngine() {
-  return std::dynamic_pointer_cast<RaftStoreEngine>(GetEngine());
+  return std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
 }
 
 std::shared_ptr<Engine::Reader> Storage::GetEngineReader(pb::common::StorageEngine store_engine_type,
                                                          pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->NewReader(raw_engine_type);
+    return raft_engine_->NewReader(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->NewReader(raw_engine_type);
+    return mono_engine_->NewReader(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -63,9 +62,9 @@ std::shared_ptr<Engine::Reader> Storage::GetEngineReader(pb::common::StorageEngi
 std::shared_ptr<Engine::TxnReader> Storage::GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
                                                                pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->NewTxnReader(raw_engine_type);
+    return raft_engine_->NewTxnReader(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->NewTxnReader(raw_engine_type);
+    return mono_engine_->NewTxnReader(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -74,9 +73,9 @@ std::shared_ptr<Engine::TxnReader> Storage::GetEngineTxnReader(pb::common::Stora
 std::shared_ptr<Engine::VectorReader> Storage::GetEngineVectorReader(pb::common::StorageEngine store_engine_type,
                                                                      pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->NewVectorReader(raw_engine_type);
+    return raft_engine_->NewVectorReader(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->NewVectorReader(raw_engine_type);
+    return mono_engine_->NewVectorReader(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -85,9 +84,9 @@ std::shared_ptr<Engine::VectorReader> Storage::GetEngineVectorReader(pb::common:
 std::shared_ptr<Engine::Writer> Storage::GetEngineWriter(pb::common::StorageEngine store_engine_type,
                                                          pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->NewWriter(raw_engine_type);
+    return raft_engine_->NewWriter(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->NewWriter(raw_engine_type);
+    return mono_engine_->NewWriter(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -96,9 +95,9 @@ std::shared_ptr<Engine::Writer> Storage::GetEngineWriter(pb::common::StorageEngi
 std::shared_ptr<Engine::TxnWriter> Storage::GetEngineTxnWriter(pb::common::StorageEngine store_engine_type,
                                                                pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->NewTxnWriter(raw_engine_type);
+    return raft_engine_->NewTxnWriter(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->NewTxnWriter(raw_engine_type);
+    return mono_engine_->NewTxnWriter(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -107,9 +106,9 @@ std::shared_ptr<Engine::TxnWriter> Storage::GetEngineTxnWriter(pb::common::Stora
 std::shared_ptr<RawEngine> Storage::GetRawEngine(pb::common::StorageEngine store_engine_type,
                                                  pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->GetRawEngine(raw_engine_type);
+    return raft_engine_->GetRawEngine(raw_engine_type);
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->GetRawEngine(raw_engine_type);
+    return mono_engine_->GetRawEngine(raw_engine_type);
   } else {
     return nullptr;
   }
@@ -126,7 +125,7 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region_id);
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
@@ -141,7 +140,7 @@ butil::Status Storage::ValidateLeader(store::RegionPtr region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region->Id());
     if (node == nullptr) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
@@ -162,7 +161,7 @@ bool Storage::IsLeader(int64_t region_id) {
   }
 
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     return raft_kv_engine->IsLeader(region_id);
   } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
@@ -175,7 +174,7 @@ bool Storage::IsLeader(store::RegionPtr region) {
     return false;
   }
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(engine_);
+    auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     return raft_kv_engine->IsLeader(region->Id());
   } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
@@ -304,7 +303,8 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
   auto raw_engine = GetRawEngine(ctx->StoreEngineType(), ctx->RawEngineType());
   if (raw_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("raw_engine is nullptr, store_engine_type : {}, raw_engine_type : {}",
-                                    ctx->StoreEngineType(), ctx->RawEngineType());
+                                    pb::common::StorageEngine_Name(ctx->StoreEngineType()),
+                                    pb::common::RawEngine_Name(ctx->RawEngineType()));
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "raw_engine is nullptr");
   }
 
@@ -462,26 +462,26 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
                                  const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
     if (is_sync) {
-      return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
     }
 
-    return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
-                               [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                 if (!status.ok()) {
-                                   Helper::SetPbMessageError(status, ctx->Response());
-                                 }
-                               });
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
   } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (is_sync) {
-      return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
+      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
     }
 
-    return rocks_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
-                                     [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                       if (!status.ok()) {
-                                         Helper::SetPbMessageError(status, ctx->Response());
-                                       }
-                                     });
+    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
   } else {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
   }
@@ -490,26 +490,26 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
 butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
     if (is_sync) {
-      return engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
     }
 
-    return engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                               [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                 if (!status.ok()) {
-                                   Helper::SetPbMessageError(status, ctx->Response());
-                                 }
-                               });
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
   } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (is_sync) {
-      return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
     }
 
-    return rocks_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                                     [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                       if (!status.ok()) {
-                                         Helper::SetPbMessageError(status, ctx->Response());
-                                       }
-                                     });
+    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
   } else {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
   }
@@ -1242,9 +1242,9 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t job_id,
                                     const pb::common::RegionDefinition& region_definition, int64_t min_applied_log_id) {
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->Write(ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, min_applied_log_id));
+    return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, min_applied_log_id));
   } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, min_applied_log_id));
+    return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, min_applied_log_id));
   } else {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
   }
@@ -1253,15 +1253,11 @@ butil::Status Storage::PrepareMerge(std::shared_ptr<Context> ctx, int64_t job_id
 butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t job_id,
                                    const pb::common::RegionDefinition& region_definition, int64_t prepare_merge_log_id,
                                    const std::vector<pb::raft::LogEntry>& entries) {
-  auto engine = GetEngine(ctx->StoreEngineType());
-  return engine->AsyncWrite(ctx,
-                            WriteDataBuilder::BuildWrite(job_id, region_definition, prepare_merge_log_id, entries));
-
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    return engine_->AsyncWrite(ctx,
-                               WriteDataBuilder::BuildWrite(job_id, region_definition, prepare_merge_log_id, entries));
+    return raft_engine_->AsyncWrite(
+        ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, prepare_merge_log_id, entries));
   } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    return rocks_engine_->AsyncWrite(
+    return mono_engine_->AsyncWrite(
         ctx, WriteDataBuilder::BuildWrite(job_id, region_definition, prepare_merge_log_id, entries));
   } else {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
