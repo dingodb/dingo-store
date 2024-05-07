@@ -151,22 +151,10 @@ struct Vector {
 
   explicit Vector(ValueType p_value_type, int32_t p_dimension) : value_type(p_value_type), dimension(p_dimension) {}
 
-  Vector(Vector&& other) noexcept
-      : dimension(other.dimension),
-        value_type(other.value_type),
-        float_values(std::move(other.float_values)),
-        binary_values(std::move(other.binary_values)) {}
+  Vector(Vector&& other) = default;
+  Vector& operator=(Vector&& other) = default;
 
   Vector(const Vector& other) noexcept = default;
-
-  Vector& operator=(Vector&& other) noexcept {
-    dimension = other.dimension;
-    value_type = other.value_type;
-    float_values = std::move(other.float_values);
-    binary_values = std::move(other.binary_values);
-    return *this;
-  }
-
   Vector& operator=(const Vector&) = default;
 
   uint32_t Size() const { return float_values.size() * 4 + binary_values.size() + 4; }
@@ -185,6 +173,8 @@ struct ScalarField {
 struct ScalarValue {
   Type type;
   std::vector<ScalarField> fields;
+
+  std::string ToString() const;
 };
 
 struct VectorWithId {
@@ -199,16 +189,10 @@ struct VectorWithId {
 
   explicit VectorWithId(Vector p_vector) : id(0), vector(std::move(p_vector)) {}
 
-  VectorWithId(VectorWithId&& other) noexcept
-      : id(other.id), vector(std::move(other.vector)), scalar_data(std::move(other.scalar_data)) {}
+  VectorWithId(VectorWithId&& other) = default;
+  VectorWithId& operator=(VectorWithId&& other) = default;
+
   VectorWithId(const VectorWithId& other) = default;
-
-  VectorWithId& operator=(VectorWithId&& other) noexcept {
-    id = other.id;
-    vector = std::move(other.vector);
-    return *this;
-  }
-
   VectorWithId& operator=(const VectorWithId&) = default;
 
   std::string ToString() const;
@@ -311,15 +295,8 @@ struct VectorWithDistance {
 
   explicit VectorWithDistance() = default;
 
-  VectorWithDistance(VectorWithDistance&& other) noexcept
-      : vector_data(std::move(other.vector_data)), distance(other.distance), metric_type(other.metric_type) {}
-
-  VectorWithDistance& operator=(VectorWithDistance&& other) noexcept {
-    vector_data = std::move(other.vector_data);
-    distance = other.distance;
-    metric_type = other.metric_type;
-    return *this;
-  }
+  VectorWithDistance(VectorWithDistance&& other) = default;
+  VectorWithDistance& operator=(VectorWithDistance&& other) = default;
 
   VectorWithDistance(const VectorWithDistance&) = default;
   VectorWithDistance& operator=(const VectorWithDistance&) = default;
@@ -516,6 +493,9 @@ class VectorClient {
 
   Status GetIndexMetricsByIndexId(int64_t index_id, IndexMetricsResult& out_result);
   Status GetIndexMetricsByIndexName(int64_t schema_id, const std::string& index_name, IndexMetricsResult& out_result);
+
+  Status CountAllByIndexId(int64_t index_id, int64_t& out_count);
+  Status CountallByIndexName(int64_t schema_id, const std::string& index_name, int64_t& out_count);
 
   Status CountByIndexId(int64_t index_id, int64_t start_vector_id, int64_t end_vector_id, int64_t& out_count);
   Status CountByIndexName(int64_t schema_id, const std::string& index_name, int64_t start_vector_id,
