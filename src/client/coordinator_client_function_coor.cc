@@ -97,6 +97,9 @@ DECLARE_bool(get_all_tenant);
 
 DEFINE_bool(get_coordinator_map, false, "get_coordinator_map");
 
+DEFINE_bool(use_filter_store_type, false, "use filter_store_type");
+DEFINE_int32(filter_store_type, 0, "filter_store_type");
+
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
     return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
@@ -510,6 +513,12 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   dingodb::pb::coordinator::GetStoreMapResponse response;
 
   request.set_epoch(1);
+
+  DINGO_LOG(INFO) << "Usage: GetStoreMap -use-filter-store-type=true -filter-store-type=0";
+
+  if (FLAGS_use_filter_store_type) {
+    request.add_filter_store_types(static_cast<dingodb::pb::common::StoreType>(FLAGS_filter_store_type));
+  }
 
   auto status = coordinator_interaction->SendRequest("GetStoreMap", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;

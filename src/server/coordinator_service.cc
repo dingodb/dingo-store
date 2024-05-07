@@ -745,7 +745,27 @@ void DoGetStoreMap(google::protobuf::RpcController * /*controller*/, const pb::c
 
   pb::common::StoreMap storemap;
   coordinator_control->GetStoreMap(storemap);
-  *(response->mutable_storemap()) = storemap;
+
+  if (request->filter_store_types_size() > 0) {
+    pb::common::StoreMap filterd_storemap;
+    filterd_storemap.set_epoch(storemap.epoch());
+
+    std::set<int> filterd_store_types;
+    for (const auto &store_type : request->filter_store_types()) {
+      filterd_store_types.insert(store_type);
+    }
+
+    for (const auto &store : storemap.stores()) {
+      if (filterd_store_types.find(store.store_type()) != filterd_store_types.end()) {
+        *filterd_storemap.add_stores() = store;
+      }
+    }
+
+    *(response->mutable_storemap()) = filterd_storemap;
+  } else {
+    *(response->mutable_storemap()) = storemap;
+  }
+
   response->set_epoch(storemap.epoch());
 }
 
