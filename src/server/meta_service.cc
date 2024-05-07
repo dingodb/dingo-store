@@ -1405,7 +1405,7 @@ void DoGenerateTableIds(google::protobuf::RpcController * /*controller*/,
 
   if (!request->has_schema_id() || !request->has_count()) {
     response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("schema id or count.");
+    response->mutable_error()->set_errmsg("schema_id or count is not provided.");
     return;
   }
 
@@ -2970,7 +2970,7 @@ void MetaServiceImpl::GenerateTableIds(google::protobuf::RpcController *controll
 
   if (!request->has_schema_id() || !request->has_count()) {
     response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
-    response->mutable_error()->set_errmsg("schema id or count.");
+    response->mutable_error()->set_errmsg("schema_id or count is not provided.");
     return;
   }
 
