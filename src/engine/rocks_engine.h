@@ -15,21 +15,18 @@
 #ifndef DINGODB_ENGINE_ROCKS_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ROCKS_ENGINE_H_
 
-
 #include "config/config.h"
-#include "common/meta_control.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
-#include "engine/raft_store_engine.h"
 #include "event/event.h"
-//#include "standalone/stand_alone_node_manager.h"
-
+// #include "standalone/stand_alone_node_manager.h"
 
 namespace dingodb {
 
 class RocksEngine : public Engine {
  public:
-  RocksEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine, std::shared_ptr<EventListenerCollection> listeners);
+  RocksEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine,
+              std::shared_ptr<EventListenerCollection> listeners);
   ~RocksEngine() override = default;
   std::shared_ptr<RocksEngine> GetSelfPtr();
 
@@ -39,7 +36,7 @@ class RocksEngine : public Engine {
   RocksEngine& operator=(RocksEngine&& rhs) = delete;
 
   bool Init(std::shared_ptr<Config> config) override;
-  bool Recover();
+  bool Recover() override;
   std::string GetName() override;
   pb::common::StorageEngine GetID() override;
   std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type) override;
@@ -53,8 +50,8 @@ class RocksEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
-  //butil::Status AddNode(store::RegionPtr region, const RaftControlAble::AddNodeParameter& parameter);
-  //std::shared_ptr<StandAloneNode> GetNode(int64_t region_id);
+  // butil::Status AddNode(store::RegionPtr region, const RaftControlAble::AddNodeParameter& parameter);
+  // std::shared_ptr<StandAloneNode> GetNode(int64_t region_id);
   class Reader : public Engine::Reader {
    public:
     Reader(RawEngine::ReaderPtr reader) : reader_(reader) {}
@@ -88,7 +85,6 @@ class RocksEngine : public Engine {
     std::shared_ptr<RocksEngine> rocks_engine_;
   };
 
-
   // Vector reader
   class VectorReader : public Engine::VectorReader {
    public:
@@ -117,7 +113,6 @@ class RocksEngine : public Engine {
     RawEngine::ReaderPtr reader_;
   };
 
-
   class TxnReader : public Engine::TxnReader {
    public:
     TxnReader(std::shared_ptr<RawEngine> engine) : txn_reader_raw_engine_(engine) {}
@@ -138,7 +133,6 @@ class RocksEngine : public Engine {
    private:
     std::shared_ptr<RawEngine> txn_reader_raw_engine_;
   };
-
 
   class TxnWriter : public Engine::TxnWriter {
    public:
@@ -173,17 +167,17 @@ class RocksEngine : public Engine {
     std::shared_ptr<RawEngine> txn_writer_raw_engine_;
     std::shared_ptr<RocksEngine> rocks_engine_;
   };
-  
+
   std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
 
-  protected:
+ protected:
   std::shared_ptr<RawEngine> raw_rocks_engine;  // RocksDB, the system engine, for meta and data
   std::shared_ptr<RawEngine> raw_bdb_engine;    // BDB, the engine for data
-  std::shared_ptr<EventListenerCollection> listeners_;
+  std::shared_ptr<EventListenerCollection> listeners;
 };
 
 }  // namespace dingodb
