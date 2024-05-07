@@ -473,6 +473,9 @@ message GetRegionCountResponse {
 message GetStoreMapRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 epoch = 2;
+
+  // if filter_store_types is not empty, only return the store with the store type in filter_store_types
+  repeated dingodb.pb.common.StoreType filter_store_types = 3;
 }
 
 message GetStoreMapResponse {

@@ -130,7 +130,12 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     table_urls.push_back(url_line);
   }
 
-  os << "<span class=\"bold-text\">STORE: " << table_contents.size() << "</span>" << '\n';
+  if (use_html) {
+    os << "<span class=\"bold-text\">STORE: " << table_contents.size() << "</span>" << '\n';
+  } else {
+    os << "STORE: " << table_contents.size() << '\n';
+  }
+
   Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
@@ -179,7 +184,12 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
     table_contents.push_back(line);
   }
 
-  os << "<span class=\"bold-text\">EXECUTOR: " << table_contents.size() << "</span>" << '\n';
+  if (use_html) {
+    os << "<span class=\"bold-text\">EXECUTOR: " << table_contents.size() << "</span>" << '\n';
+  } else {
+    os << "EXECUTOR: " << table_contents.size() << '\n';
+  }
+
   Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
 }
 
@@ -241,44 +251,69 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
   os << "DINGO_STORE VERSION: " << std::string(GIT_VERSION) << '\n';
 
   if (coordinator_controller_->IsLeader()) {
-    os << (use_html ? "<br>\n" : "\n");
-    os << "CoordinatorRole: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+    if (use_html) {
+      os << (use_html ? "<br>\n" : "\n");
+      os << "CoordinatorRole: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+    } else {
+      os << (use_html ? "<br>\n" : "\n");
+      os << "CoordinatorRole: LEADER ";
+    }
 
     auto read_only_ret = coordinator_controller_->ValidateReadOnly();
     if (read_only_ret.ok()) {
-      os << "<span class=\"blue-text bold-text\">CLUSTER_NORMAL</span>" << '\n';
+      if (use_html) {
+        os << "<span class=\"blue-text bold-text\">CLUSTER_NORMAL</span>" << '\n';
+      } else {
+        os << "CLUSTER_NORMAL" << '\n';
+      }
     } else {
       // cluster is read only, print the reason
-      os << "<span class=\"red-text bold-text\">CLUSTER_READ_ONLY: [" << read_only_ret.error_str() << "]</span>"
-         << '\n';
+      if (use_html) {
+        os << "<span class=\"red-text bold-text\">CLUSTER_READ_ONLY: [" << read_only_ret.error_str() << "]</span>"
+           << '\n';
+      } else {
+        os << "CLUSTER_READ_ONLY: [" << read_only_ret.error_str() << "]" << '\n';
+      }
     }
 
     // add url for task_list
     os << (use_html ? "<br>CoordinatorStatus:\n" : "\n");
-    os << "<a href=\"/task_list/"
-       << "\">"
-       << "GET_TASK_LIST"
-       << "</a>" << '\n';
-    os << "<a href=\"/store_operation/"
-       << "\">"
-       << "GET_OPERATION"
-       << "</a>" << '\n';
+    if (use_html) {
+      os << "<a href=\"/task_list/"
+         << "\">"
+         << "GET_TASK_LIST"
+         << "</a>" << '\n';
+      os << "<a href=\"/store_operation/"
+         << "\">"
+         << "GET_OPERATION"
+         << "</a>" << '\n';
+    }
 
     os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
-    for (const auto& location : locations) {
-      os << "<a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" + location.host() +
-                ":" + std::to_string(location.port()) + "</a>"
-         << '\n';
+    if (use_html) {
+      for (const auto& location : locations) {
+        os << "<a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" +
+                  location.host() + ":" + std::to_string(location.port()) + "</a>"
+           << '\n';
+      }
     }
   } else {
     os << (use_html ? "<br>\n" : "\n");
-    os << "CoordinatorRole: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
+    if (use_html) {
+      os << "CoordinatorRole: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
 
-    os << (use_html ? "<br>\n" : "\n");
-    os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +
-              ":" + std::to_string(coordinator_leader_location.port()) + "/dingo>" +
-              coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
-       << '\n';
+      os << (use_html ? "<br>\n" : "\n");
+      os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +
+                ":" + std::to_string(coordinator_leader_location.port()) + "/dingo>" +
+                coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
+         << '\n';
+    } else {
+      os << "CoordinatorRole: FOLLOWER " << '\n';
+      os << (use_html ? "<br>\n" : "\n");
+      os << "Coordinator Leader is " + coordinator_leader_location.host() + ":" +
+                std::to_string(coordinator_leader_location.port())
+         << '\n';
+    }
   }
 
   os << (use_html ? "<br>\n" : "\n");

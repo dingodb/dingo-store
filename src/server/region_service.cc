@@ -29,6 +29,8 @@
 
 namespace dingodb {
 
+DECLARE_int32(dingo_max_print_html_table);
+
 void RegionImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   brpc::TabInfo* info = info_list->add();
   info->tab_name = "region";
@@ -87,36 +89,33 @@ void RegionImpl::default_method(google::protobuf::RpcController* controller,
     coordinator_controller_->GetCoordinatorMap(0, epoch, coordinator_leader_location, locations, coordinator_map);
 
     if (coordinator_controller_->IsLeader()) {
-      os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator role: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
-
-      // add url for task_list
-      os << (use_html ? "<br>\n" : "\n");
-      os << "<a href=\"/task_list/"
-         << "\">"
-         << "GET_TASK_LIST"
-         << "</a>" << '\n';
-      os << "<a href=\"/store_operation/"
-         << "\">"
-         << "GET_OPERATION"
-         << "</a>" << '\n';
-
-      os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
-      for (const auto& location : locations) {
-        os << "<a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" +
-                  location.host() + ":" + std::to_string(location.port()) + "</a>"
-           << '\n';
+      if (use_html) {
+        os << (use_html ? "<br>\n" : "\n");
+        os << "CoordinatorRole: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+      } else {
+        os << (use_html ? "<br>\n" : "\n");
+        os << "CoordinatorRole: LEADER ";
       }
     } else {
       os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator role: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
+      if (use_html) {
+        os << "CoordinatorRole: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
 
-      os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +
-                ":" + std::to_string(coordinator_leader_location.port()) + "/dingo>" +
-                coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
-         << '\n';
+        os << (use_html ? "<br>\n" : "\n");
+        os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" +
+                  coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) +
+                  "/dingo>" + coordinator_leader_location.host() + ":" +
+                  std::to_string(coordinator_leader_location.port()) + "</a>"
+           << '\n';
+      } else {
+        os << "CoordinatorRole: FOLLOWER " << '\n';
+        os << (use_html ? "<br>\n" : "\n");
+        os << "Coordinator Leader is " + coordinator_leader_location.host() + ":" +
+                  std::to_string(coordinator_leader_location.port())
+           << '\n';
+      }
     }
+
     os << (use_html ? "<br>\n" : "\n");
     os << (use_html ? "<br>\n" : "\n");
     PrintRegions(os, use_html);
@@ -267,10 +266,10 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
     line.push_back(pb::common::RegionState_Name(region.state()));  // REGION_STATE
     url_line.push_back(std::string());
-    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
       line.push_back("N/A");  // BRAFT_STATUS
       url_line.push_back(std::string());
-    }else{
+    } else {
       line.push_back(pb::common::RegionRaftStatus_Name(region.status().raft_status()));  // BRAFT_STATUS
       url_line.push_back(std::string());
     }
@@ -330,17 +329,17 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     line.push_back(std::to_string(region.id()));  // REGION_ID
     url_line.push_back(std::string("/region/"));
 
-    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
       line.push_back("N/A");  // RAFT_STATE
       url_line.push_back(std::string());
-    }else{
+    } else {
       line.push_back(pb::common::RaftNodeState_Name(region.metrics().braft_status().raft_state()));  // RAFT_STATE
       url_line.push_back(std::string());
     }
 
     line.push_back(std::to_string(region.metrics().braft_status().readonly()));  // READONLY
     url_line.push_back(std::string());
-    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE){
+    if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
       line.push_back("N/A");  // TERM
       url_line.push_back(std::string());
 
@@ -370,7 +369,7 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
       line.push_back("N/A");  // UNSTABLE_FOLLOWERS
       url_line.push_back(std::string());
-    }else{
+    } else {
       line.push_back(std::to_string(region.metrics().braft_status().term()));  // TERM
       url_line.push_back(std::string());
 
@@ -398,7 +397,8 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
       line.push_back(std::to_string(region.metrics().braft_status().stable_followers().size()));  // STABLE_FOLLOWERS
       url_line.push_back(std::string());
 
-      line.push_back(std::to_string(region.metrics().braft_status().unstable_followers().size()));  // UNSTABLE_FOLLOWERS
+      line.push_back(
+          std::to_string(region.metrics().braft_status().unstable_followers().size()));  // UNSTABLE_FOLLOWERS
       url_line.push_back(std::string());
     }
 
@@ -485,7 +485,12 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     os << "<span class=\"bold-text\">REGION: " << table_contents.size() << "</span>" << '\n';
   }
 
-  Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+  // if region is too many, do not print html
+  if (table_contents.size() > FLAGS_dingo_max_print_html_table) {
+    Helper::PrintHtmlLines(os, use_html, table_header, min_widths, table_contents, table_urls);
+  } else {
+    Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+  }
 }
 
 }  // namespace dingodb

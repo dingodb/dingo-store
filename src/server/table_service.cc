@@ -21,8 +21,10 @@
 #include "brpc/closure_guard.h"
 #include "brpc/controller.h"
 #include "brpc/server.h"
-
+#include "gflags/gflags.h"
 namespace dingodb {
+
+DEFINE_int32(dingo_max_print_html_table, 2000, "Max number of rows to print html table");
 
 void TableImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   brpc::TabInfo* info = info_list->add();
@@ -82,35 +84,31 @@ void TableImpl::default_method(google::protobuf::RpcController* controller,
     os << "DINGO_STORE VERSION: " << std::string(GIT_VERSION) << '\n';
 
     if (coordinator_controller_->IsLeader()) {
-      os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator role: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
-
-      // add url for task_list
-      os << (use_html ? "<br>\n" : "\n");
-      os << "<a href=\"/task_list/"
-         << "\">"
-         << "GET_TASK_LIST"
-         << "</a>" << '\n';
-      os << "<a href=\"/store_operation/"
-         << "\">"
-         << "GET_OPERATION"
-         << "</a>" << '\n';
-
-      os << (use_html ? "<br>CoordinatorMap:\n" : "\n");
-      for (const auto& location : locations) {
-        os << "<a href=http://" + location.host() + ":" + std::to_string(location.port()) + "/dingo>" +
-                  location.host() + ":" + std::to_string(location.port()) + "</a>"
-           << '\n';
+      if (use_html) {
+        os << (use_html ? "<br>\n" : "\n");
+        os << "CoordinatorRole: <span class=\"blue-text bold-text\">LEADER</span>" << '\n';
+      } else {
+        os << (use_html ? "<br>\n" : "\n");
+        os << "CoordinatorRole: LEADER ";
       }
     } else {
       os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator role: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
+      if (use_html) {
+        os << "CoordinatorRole: <span class=\"red-text bold-text\">FOLLOWER</span>" << '\n';
 
-      os << (use_html ? "<br>\n" : "\n");
-      os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" + coordinator_leader_location.host() +
-                ":" + std::to_string(coordinator_leader_location.port()) + "/dingo>" +
-                coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) + "</a>"
-         << '\n';
+        os << (use_html ? "<br>\n" : "\n");
+        os << "Coordinator Leader is <a class=\"red-text bold-text\" href=http://" +
+                  coordinator_leader_location.host() + ":" + std::to_string(coordinator_leader_location.port()) +
+                  "/dingo>" + coordinator_leader_location.host() + ":" +
+                  std::to_string(coordinator_leader_location.port()) + "</a>"
+           << '\n';
+      } else {
+        os << "CoordinatorRole: FOLLOWER " << '\n';
+        os << (use_html ? "<br>\n" : "\n");
+        os << "Coordinator Leader is " + coordinator_leader_location.host() + ":" +
+                  std::to_string(coordinator_leader_location.port())
+           << '\n';
+      }
     }
 
     os << (use_html ? "<br>\n" : "\n");
@@ -438,7 +436,12 @@ void TableImpl::PrintSchemaTables(std::ostream& os, bool use_html) {
     os << "<span class=\"bold-text\">TABLE: " << table_contents.size() << "</span>" << '\n';
   }
 
-  Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+  // if table is too many, do not print html
+  if (table_contents.size() > FLAGS_dingo_max_print_html_table) {
+    Helper::PrintHtmlLines(os, use_html, table_header, min_widths, table_contents, table_urls);
+  } else {
+    Helper::PrintHtmlTable(os, use_html, table_header, min_widths, table_contents, table_urls);
+  }
 }
 
 }  // namespace dingodb

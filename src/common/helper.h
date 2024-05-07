@@ -397,6 +397,11 @@ class Helper {
                              const std::vector<std::vector<std::string>>& table_contents,
                              const std::vector<std::vector<std::string>>& table_urls);
 
+  static void PrintHtmlLines(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
+                             const std::vector<int32_t>& min_widths,
+                             const std::vector<std::vector<std::string>>& table_contents,
+                             const std::vector<std::vector<std::string>>& table_urls);
+
   static int32_t GetCores();
   static int64_t GetPid();
   static std::vector<int64_t> GetThreadIds(int64_t pid);

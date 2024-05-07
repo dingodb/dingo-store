@@ -21,7 +21,6 @@
 #include <unistd.h>
 
 #include <algorithm>
-#include <cassert>
 #include <cctype>
 #include <cerrno>
 #include <chrono>
@@ -2032,6 +2031,8 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
     for (const auto& header : table_header) {
       os << header << "|";
     }
+
+    os << '\n';
   }
 
   for (int i = 0; i < table_contents.size(); i++) {
@@ -2057,7 +2058,7 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
           os << brpc::min_width(line[i], min_widths[i]);
         }
       } else {
-        os << brpc::min_width(line[i], min_widths[i]);
+        os << brpc::min_width(line[i], min_widths[i]) << '\n';
       }
       if (use_html) {
         os << "</td>";
@@ -2065,14 +2066,86 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
         os << "|";
       }
     }
+
     if (use_html) {
       os << "</tr>";
     }
+
     os << '\n';
   }
 
   if (use_html) {
     os << "</table>\n";
+  }
+}
+
+// Print a multi-lines in HTML or plain text format.
+// @param os Output stream
+// @param use_html Whether to use HTML format
+// @param table_header Header of the table
+// @param min_widths Minimum width of each column
+// @param table_contents Contents of the table
+// @param table_urls Urls of the table
+void Helper::PrintHtmlLines(std::ostream& os, bool use_html, const std::vector<std::string>& table_header,
+                            const std::vector<int32_t>& min_widths,
+                            const std::vector<std::vector<std::string>>& table_contents,
+                            const std::vector<std::vector<std::string>>& table_urls) {
+  if (BAIDU_UNLIKELY(table_header.size() != min_widths.size())) {
+    os << "! table_header.size(" << table_header.size() << ") == min_widths.size(" << min_widths.size() << ")";
+    return;
+  }
+  if (BAIDU_UNLIKELY(!table_contents.empty() && table_header.size() != table_contents[0].size())) {
+    os << "! table_header.size(" << table_header.size() << ") == table_contents[0].size(" << table_contents[0].size()
+       << ")";
+    return;
+  }
+  if (BAIDU_UNLIKELY(!table_urls.empty() && table_header.size() != table_urls[0].size())) {
+    os << "! table_header.size(" << table_header.size() << ") == table_urls[0].size(" << table_urls[0].size() << ")";
+    return;
+  }
+
+  if (BAIDU_LIKELY(use_html)) {
+    os << "<p>";
+    for (const auto& header : table_header) {
+      os << header << "|";
+    }
+    os << "</p>";
+  } else {
+    for (const auto& header : table_header) {
+      os << header << "|";
+    }
+    os << '\n';
+  }
+
+  for (int i = 0; i < table_contents.size(); i++) {
+    const auto& line = table_contents[i];
+    const std::vector<std::string>& url_line = table_urls.empty() ? std::vector<std::string>() : table_urls[i];
+
+    if (use_html) {
+      os << "<p>";
+    }
+
+    for (size_t i = 0; i < line.size(); ++i) {
+      if (use_html) {
+        if (!url_line.empty() && !url_line[i].empty()) {
+          if (url_line[i].substr(0, 4) == "http") {
+            os << "<a href=\"" << url_line[i] << "\">" << line[i] << "|</a>";
+          } else {
+            os << "<a href=\"" << url_line[i] << line[i] << "\">" << line[i] << "|</a>";
+          }
+        } else {
+          os << brpc::min_width(line[i], min_widths[i]) << "|";
+        }
+      } else {
+        os << brpc::min_width(line[i], min_widths[i]) << "|";
+      }
+    }
+
+    if (use_html) {
+      os << "</p>";
+    } else {
+      os << '\n';
+    }
   }
 }
 
