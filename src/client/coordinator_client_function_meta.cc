@@ -63,7 +63,6 @@ DECLARE_bool(enable_rocks_engine);
 DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
 
-
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
     return dingodb::pb::common::Engine::ENG_ROCKSDB;
@@ -435,9 +434,9 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   if (FLAGS_replica > 0) {
     table_definition->set_replica(FLAGS_replica);
   }
-  if (FLAGS_enable_rocks_engine){
+  if (FLAGS_enable_rocks_engine) {
     table_definition->set_store_engine(::dingodb::pb::common::StorageEngine::STORE_ENG_MONO_STORE);
-  }else{
+  } else {
     table_definition->set_store_engine(::dingodb::pb::common::StorageEngine::STORE_ENG_RAFT_STORE);
   }
   // repeated ColumnDefinition columns = 2;

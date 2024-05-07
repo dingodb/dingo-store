@@ -139,8 +139,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
       }
 
       if ((inner_region.state() == pb::common::StoreRegionState::NORMAL ||
-          inner_region.state() == pb::common::StoreRegionState::STANDBY ||
-          inner_region.state() == pb::common::StoreRegionState::TOMBSTONE) &&
+           inner_region.state() == pb::common::StoreRegionState::STANDBY ||
+           inner_region.state() == pb::common::StoreRegionState::TOMBSTONE) &&
           inner_region.definition().store_engine() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
         auto raft_node = raft_store_engine->GetNode(inner_region.id());
         if (raft_node != nullptr) {

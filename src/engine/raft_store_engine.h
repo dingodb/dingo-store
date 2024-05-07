@@ -236,7 +236,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   std::unique_ptr<RaftNodeManager> raft_node_manager;
 };
 
-std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,       // NOLINT
+std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,  // NOLINT
                                                             std::shared_ptr<WriteData> write_data);
 }  // namespace dingodb
 

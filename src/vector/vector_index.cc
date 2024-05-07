@@ -1124,10 +1124,10 @@ bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
 
   auto region = Server::GetInstance().GetRegion(region_id);
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Not found region.",region_id);                                
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Not found region.", region_id);
     return false;
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
   }
 

@@ -228,22 +228,22 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common
 static bool CheckLeaderAndFollowerStatus(int64_t region_id) {
   auto region = Server::GetInstance().GetRegion(region_id);
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] Not found region.",region_id);                                
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] Not found region.", region_id);
     return false;
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
-  }else if(region->GetStoreEngineType() == pb::common::STORE_ENG_MEMORY){
-    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] Not support memory engine.",region_id);                                
+  } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MEMORY) {
+    DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] Not support memory engine.", region_id);
     return false;
   }
-  
+
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get engine failed.", region_id);
     return false;
   }
-  
+
   auto node = raft_store_engine->GetNode(region_id);
   if (node == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[split.check][region({})] get raft node failed.", region_id);

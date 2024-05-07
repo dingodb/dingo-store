@@ -36,11 +36,11 @@ namespace dingodb {
 int SmApplyEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmApplyEvent>(event);
 
-  // Dispatch 
+  // Dispatch
   std::shared_ptr<Context> ctx;
-  if (the_event->ctx != nullptr){
+  if (the_event->ctx != nullptr) {
     ctx = the_event->ctx;
-  }else{
+  } else {
     auto* done = dynamic_cast<BaseClosure*>(the_event->done);
     ctx = done ? done->GetCtx() : nullptr;
   }

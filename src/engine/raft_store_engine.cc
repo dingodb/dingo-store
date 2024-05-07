@@ -106,10 +106,10 @@ bool RaftStoreEngine::Recover() {
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
   for (auto& region : regions) {
     if ((region->State() == pb::common::StoreRegionState::NORMAL ||
-        region->State() == pb::common::StoreRegionState::STANDBY ||
-        region->State() == pb::common::StoreRegionState::SPLITTING ||
-        region->State() == pb::common::StoreRegionState::MERGING ||
-        region->State() == pb::common::StoreRegionState::TOMBSTONE) &&
+         region->State() == pb::common::StoreRegionState::STANDBY ||
+         region->State() == pb::common::StoreRegionState::SPLITTING ||
+         region->State() == pb::common::StoreRegionState::MERGING ||
+         region->State() == pb::common::StoreRegionState::TOMBSTONE) &&
         region->GetStoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
       auto raft_meta = store_raft_meta->GetRaftMeta(region->Id());
       if (raft_meta == nullptr) {
