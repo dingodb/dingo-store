@@ -66,7 +66,6 @@ DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
 IndexServiceImpl::IndexServiceImpl() = default;
 
-
 bool IndexServiceImpl::IsRaftApplyPendingExceed() {
   if (BAIDU_UNLIKELY(raft_apply_worker_set_ != nullptr && FLAGS_raft_apply_worker_max_pending_num > 0 &&
                      raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
@@ -170,8 +169,9 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorBatchQuery(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorBatchQuery(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -324,8 +324,9 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorSearch(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorSearch(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteLeastQueue(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -502,8 +503,9 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorAdd(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorAdd(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -603,8 +605,9 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorDelete(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorDelete(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -677,8 +680,9 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorGetBorderId(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorGetBorderId(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -785,8 +789,9 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorScanQuery(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorScanQuery(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -870,8 +875,9 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoVectorGetRegionMetrics(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorGetRegionMetrics(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -976,12 +982,14 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
                                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
- if (!FLAGS_enable_async_vector_count) {
+  if (!FLAGS_enable_async_vector_count) {
     return DoVectorCount(storage_, controller, request, response, svr_done);
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>([=]() { DoVectorCount(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorCount(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1133,8 +1141,9 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
     return DoVectorSearchDebug(storage_, controller, request, response, svr_done);
   }
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoVectorSearchDebug(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorSearchDebug(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1239,8 +1248,9 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnGetVector(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnGetVector(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1369,8 +1379,9 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnScanVector(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnScanVector(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1399,8 +1410,9 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1430,8 +1442,9 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1715,8 +1728,9 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnPrewriteVector(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnPrewriteVector(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1828,8 +1842,9 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnCommit(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnCommit(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1926,8 +1941,9 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2026,8 +2042,9 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnResolveLock(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnResolveLock(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2144,8 +2161,9 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnBatchGetVector(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnBatchGetVector(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2208,8 +2226,9 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnBatchRollback(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnBatchRollback(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2271,7 +2290,9 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnScanLock(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnScanLock(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2328,8 +2349,9 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
   }
 
   // Run in queue.
-  auto task =
-      std::make_shared<ServiceTask>([=]() { DoTxnHeartBeat(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2391,7 +2413,9 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnGc(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnGc(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2444,8 +2468,9 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
   }
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>(
-      [=]() { DoTxnDeleteRange(storage_, controller, request, response, svr_done, true); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnDeleteRange(storage_, controller, request, response, svr_done, true);
+  });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2492,7 +2517,9 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
   // Run in queue.
-  auto task = std::make_shared<ServiceTask>([=]() { DoTxnDump(storage_, controller, request, response, svr_done); });
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnDump(storage_, controller, request, response, svr_done);
+  });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
