@@ -24,6 +24,7 @@
 #include "common/context.h"
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
+#include "engine/raw_engine.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
@@ -35,9 +36,19 @@ class Storage {
   ~Storage() = default;
 
   std::shared_ptr<Engine> GetEngine();
-  std::shared_ptr<Engine> GetEngine(pb::common::StorageEngine store_engine_type);
+  std::shared_ptr<Engine::Reader> GetEngineReader(pb::common::StorageEngine store_engine_type,
+                                                  pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<Engine::TxnReader> GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
+                                                        pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<Engine::Writer> GetEngineWriter(pb::common::StorageEngine store_engine_type,
+                                                  pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<Engine::TxnWriter> GetEngineTxnWriter(pb::common::StorageEngine store_engine_type,
+                                                        pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<Engine::VectorReader> GetEngineVectorReader(pb::common::StorageEngine store_engine_type,
+                                                              pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<RawEngine> GetRawEngine(pb::common::StorageEngine store_engine_type,
+                                          pb::common::RawEngine raw_engine_type);
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
- 
 
   static Snapshot* GetSnapshot();
   void ReleaseSnapshot();
