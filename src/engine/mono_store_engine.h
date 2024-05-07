@@ -19,21 +19,20 @@
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
-// #include "standalone/stand_alone_node_manager.h"
 
 namespace dingodb {
 
-class RocksEngine : public Engine {
+class MonoStoreEngine : public Engine {
  public:
-  RocksEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine,
-              std::shared_ptr<EventListenerCollection> listeners);
-  ~RocksEngine() override = default;
-  std::shared_ptr<RocksEngine> GetSelfPtr();
+  MonoStoreEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine,
+                  std::shared_ptr<EventListenerCollection> listeners);
+  ~MonoStoreEngine() override = default;
+  std::shared_ptr<MonoStoreEngine> GetSelfPtr();
 
-  RocksEngine(const RocksEngine& rhs) = delete;
-  RocksEngine& operator=(const RocksEngine& rhs) = delete;
-  RocksEngine(RocksEngine&& rhs) = delete;
-  RocksEngine& operator=(RocksEngine&& rhs) = delete;
+  MonoStoreEngine(const MonoStoreEngine& rhs) = delete;
+  MonoStoreEngine& operator=(const MonoStoreEngine& rhs) = delete;
+  MonoStoreEngine(MonoStoreEngine&& rhs) = delete;
+  MonoStoreEngine& operator=(MonoStoreEngine&& rhs) = delete;
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
@@ -69,7 +68,7 @@ class RocksEngine : public Engine {
 
   class Writer : public Engine::Writer {
    public:
-    Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RocksEngine> rocks_engine)
+    Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MonoStoreEngine> rocks_engine)
         : writer_raw_engine_(raw_engine), rocks_engine_(rocks_engine) {}
     butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
     butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) override;
@@ -82,7 +81,7 @@ class RocksEngine : public Engine {
 
    private:
     std::shared_ptr<RawEngine> writer_raw_engine_;
-    std::shared_ptr<RocksEngine> rocks_engine_;
+    std::shared_ptr<MonoStoreEngine> rocks_engine_;
   };
 
   // Vector reader
@@ -136,7 +135,7 @@ class RocksEngine : public Engine {
 
   class TxnWriter : public Engine::TxnWriter {
    public:
-    TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RocksEngine> rocks_engine)
+    TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MonoStoreEngine> rocks_engine)
         : txn_writer_raw_engine_(raw_engine), rocks_engine_(rocks_engine) {}
 
     butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
@@ -165,7 +164,7 @@ class RocksEngine : public Engine {
 
    private:
     std::shared_ptr<RawEngine> txn_writer_raw_engine_;
-    std::shared_ptr<RocksEngine> rocks_engine_;
+    std::shared_ptr<MonoStoreEngine> rocks_engine_;
   };
 
   std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;

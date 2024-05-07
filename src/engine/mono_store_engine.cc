@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#include "engine/rocks_engine.h"
+#include "engine/mono_store_engine.h"
 
 #include "common/role.h"
 #include "engine/engine.h"
@@ -24,21 +24,21 @@
 
 namespace dingodb {
 
-RocksEngine::RocksEngine(std::shared_ptr<RawEngine> rocks_engine, std::shared_ptr<RawEngine> bdb_engine,
-                         std::shared_ptr<EventListenerCollection> listeners)
+MonoStoreEngine::MonoStoreEngine(std::shared_ptr<RawEngine> rocks_engine, std::shared_ptr<RawEngine> bdb_engine,
+                                 std::shared_ptr<EventListenerCollection> listeners)
     : raw_rocks_engine(rocks_engine), raw_bdb_engine(bdb_engine), listeners(listeners) {}
 
-bool RocksEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
-std::string RocksEngine::GetName() {
+bool MonoStoreEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
+std::string MonoStoreEngine::GetName() {
   return pb::common::StorageEngine_Name(pb::common::StorageEngine::STORE_ENG_MONO_STORE);
 }
 
-std::shared_ptr<RocksEngine> RocksEngine::GetSelfPtr() {
-  return std::dynamic_pointer_cast<RocksEngine>(shared_from_this());
+std::shared_ptr<MonoStoreEngine> MonoStoreEngine::GetSelfPtr() {
+  return std::dynamic_pointer_cast<MonoStoreEngine>(shared_from_this());
 }
 
 // Invoke when server starting.
-bool RocksEngine::Recover() {
+bool MonoStoreEngine::Recover() {
   auto store_region_meta = GET_STORE_REGION_META;
   auto regions = store_region_meta->GetAllRegion();
 
@@ -64,9 +64,9 @@ bool RocksEngine::Recover() {
   return true;
 }
 
-pb::common::StorageEngine RocksEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_MONO_STORE; }
+pb::common::StorageEngine MonoStoreEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_MONO_STORE; }
 
-std::shared_ptr<RawEngine> RocksEngine::GetRawEngine(pb::common::RawEngine type) {
+std::shared_ptr<RawEngine> MonoStoreEngine::GetRawEngine(pb::common::RawEngine type) {
   if (type == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
     return raw_rocks_engine;
   } else if (type == pb::common::RawEngine::RAW_ENG_BDB) {
@@ -79,7 +79,7 @@ std::shared_ptr<RawEngine> RocksEngine::GetRawEngine(pb::common::RawEngine type)
 
 bvar::LatencyRecorder g_rocks_write_latency("dingo_rocks_store_engine_write_latency");
 
-int RocksEngine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
+int MonoStoreEngine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
   if (listeners == nullptr) return -1;
 
   for (auto& listener : listeners->Get(event_type)) {
@@ -93,7 +93,7 @@ int RocksEngine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<di
 }
 
 // todo
-butil::Status RocksEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
+butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   BvarLatencyGuard bvar_guard(&g_rocks_write_latency);
   auto store_region_meta = GET_STORE_REGION_META;
 
@@ -135,13 +135,13 @@ butil::Status RocksEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<W
   return butil::Status();
 }
 
-butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
+butil::Status MonoStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   return AsyncWrite(ctx, write_data, [](std::shared_ptr<Context> ctx, butil::Status status) {});
 }
 bvar::LatencyRecorder g_rocks_async_write_latency("dingo_rocks_store_engine_async_write_latency");
 
-butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
-                                      WriteCbFunc write_cb) {
+butil::Status MonoStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
+                                          WriteCbFunc write_cb) {
   BvarLatencyGuard bvar_guard(&g_rocks_async_write_latency);
 
   auto store_region_meta = GET_STORE_REGION_META;
@@ -178,62 +178,62 @@ butil::Status RocksEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::shared_
   return butil::Status();
 }
 
-butil::Status RocksEngine::Reader::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
+butil::Status MonoStoreEngine::Reader::KvGet(std::shared_ptr<Context> ctx, const std::string& key, std::string& value) {
   return reader_->KvGet(ctx->CfName(), key, value);
 }
 
-butil::Status RocksEngine::Reader::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
-                                          const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
+butil::Status MonoStoreEngine::Reader::KvScan(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                              const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
   return reader_->KvScan(ctx->CfName(), start_key, end_key, kvs);
 }
 
-butil::Status RocksEngine::Reader::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
-                                           const std::string& end_key, int64_t& count) {
+butil::Status MonoStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                               const std::string& end_key, int64_t& count) {
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> RocksEngine::NewReader(pb::common::RawEngine type) {
-  return std::make_shared<RocksEngine::Reader>(GetRawEngine(type)->Reader());
+std::shared_ptr<Engine::Reader> MonoStoreEngine::NewReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::Reader>(GetRawEngine(type)->Reader());
 }
 
-butil::Status RocksEngine::VectorReader::VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
-                                                           std::vector<pb::index::VectorWithDistanceResult>& results) {
+butil::Status MonoStoreEngine::VectorReader::VectorBatchSearch(
+    std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorBatchSearch(ctx, results);
 }
 
-butil::Status RocksEngine::VectorReader::VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
-                                                          std::vector<pb::common::VectorWithId>& vector_with_ids) {
+butil::Status MonoStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
+                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorBatchQuery(ctx, vector_with_ids);
 }
 
-butil::Status RocksEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                           int64_t& vector_id) {
+butil::Status MonoStoreEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
+                                                               int64_t& vector_id) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
 }
 
-butil::Status RocksEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
-                                                         std::vector<pb::common::VectorWithId>& vector_with_ids) {
+butil::Status MonoStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
+                                                             std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorScanQuery(ctx, vector_with_ids);
 }
 
-butil::Status RocksEngine::VectorReader::VectorGetRegionMetrics(int64_t region_id,
-                                                                const pb::common::Range& region_range,
-                                                                VectorIndexWrapperPtr vector_index,
-                                                                pb::common::VectorIndexMetrics& region_metrics) {
+butil::Status MonoStoreEngine::VectorReader::VectorGetRegionMetrics(int64_t region_id,
+                                                                    const pb::common::Range& region_range,
+                                                                    VectorIndexWrapperPtr vector_index,
+                                                                    pb::common::VectorIndexMetrics& region_metrics) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
-butil::Status RocksEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
+butil::Status MonoStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorCount(range, count);
 }
 
-butil::Status RocksEngine::VectorReader::VectorBatchSearchDebug(
+butil::Status MonoStoreEngine::VectorReader::VectorBatchSearchDebug(
     std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
     std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& deserialization_id_time_us,
     int64_t& scan_scalar_time_us, int64_t& search_time_us) {
@@ -242,25 +242,26 @@ butil::Status RocksEngine::VectorReader::VectorBatchSearchDebug(
                                                search_time_us);
 }
 
-std::shared_ptr<Engine::Writer> RocksEngine::NewWriter(pb::common::RawEngine type) {
-  return std::make_shared<RocksEngine::Writer>(GetRawEngine(type), GetSelfPtr());
+std::shared_ptr<Engine::Writer> MonoStoreEngine::NewWriter(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::Writer>(GetRawEngine(type), GetSelfPtr());
 }
 
-butil::Status RocksEngine::Writer::KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) {
+butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
+                                             const std::vector<pb::common::KeyValue>& kvs) {
   return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs));
 }
 
-butil::Status RocksEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
+butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
   return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys));
 }
 
-butil::Status RocksEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
+butil::Status MonoStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
   return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
 }
 
-butil::Status RocksEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ctx,
-                                                 const std::vector<pb::common::KeyValue>& kvs, bool is_atomic,
-                                                 std::vector<bool>& key_states) {
+butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ctx,
+                                                     const std::vector<pb::common::KeyValue>& kvs, bool is_atomic,
+                                                     std::vector<bool>& key_states) {
   if (BAIDU_UNLIKELY(kvs.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -311,10 +312,10 @@ butil::Status RocksEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ctx,
   return butil::Status();
 }
 
-butil::Status RocksEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> ctx,
-                                                   const std::vector<pb::common::KeyValue>& kvs,
-                                                   const std::vector<std::string>& expect_values, bool is_atomic,
-                                                   std::vector<bool>& key_states) {
+butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> ctx,
+                                                       const std::vector<pb::common::KeyValue>& kvs,
+                                                       const std::vector<std::string>& expect_values, bool is_atomic,
+                                                       std::vector<bool>& key_states) {
   if (BAIDU_UNLIKELY(kvs.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
@@ -407,107 +408,104 @@ butil::Status RocksEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> ctx,
   return butil::Status();
 }
 
-std::shared_ptr<Engine::VectorReader> RocksEngine::NewVectorReader(pb::common::RawEngine type) {
-  return std::make_shared<RocksEngine::VectorReader>(GetRawEngine(type)->Reader());
+std::shared_ptr<Engine::VectorReader> MonoStoreEngine::NewVectorReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
 }
 
-std::shared_ptr<Engine::TxnReader> RocksEngine::NewTxnReader(pb::common::RawEngine type) {
-  return std::make_shared<RocksEngine::TxnReader>(GetRawEngine(type));
+std::shared_ptr<Engine::TxnReader> MonoStoreEngine::NewTxnReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::TxnReader>(GetRawEngine(type));
 }
 
-butil::Status RocksEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                  const std::vector<std::string>& keys,
-                                                  std::vector<pb::common::KeyValue>& kvs,
-                                                  const std::set<int64_t>& resolved_locks,
-                                                  pb::store::TxnResultInfo& txn_result_info) {
+butil::Status MonoStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                      const std::vector<std::string>& keys,
+                                                      std::vector<pb::common::KeyValue>& kvs,
+                                                      const std::set<int64_t>& resolved_locks,
+                                                      pb::store::TxnResultInfo& txn_result_info) {
   return TxnEngineHelper::BatchGet(txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, keys, resolved_locks,
                                    txn_result_info, kvs);
 }
 
-butil::Status RocksEngine::TxnReader::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                              const pb::common::Range& range, int64_t limit, bool key_only,
-                                              bool is_reverse, const std::set<int64_t>& resolved_locks,
-                                              bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor,
-                                              pb::store::TxnResultInfo& txn_result_info,
-                                              std::vector<pb::common::KeyValue>& kvs, bool& has_more,
-                                              std::string& end_scan_key) {
+butil::Status MonoStoreEngine::TxnReader::TxnScan(
+    std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only,
+    bool is_reverse, const std::set<int64_t>& resolved_locks, bool disable_coprocessor,
+    const pb::common::CoprocessorV2& coprocessor, pb::store::TxnResultInfo& txn_result_info,
+    std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_scan_key) {
   return TxnEngineHelper::Scan(txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only,
                                is_reverse, resolved_locks, disable_coprocessor, coprocessor, txn_result_info, kvs,
                                has_more, end_scan_key);
 }
 
-butil::Status RocksEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, int64_t min_lock_ts,
-                                                  int64_t max_lock_ts, const pb::common::Range& range, int64_t limit,
-                                                  std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,
-                                                  std::string& end_scan_key) {
+butil::Status MonoStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, int64_t min_lock_ts,
+                                                      int64_t max_lock_ts, const pb::common::Range& range,
+                                                      int64_t limit, std::vector<pb::store::LockInfo>& lock_infos,
+                                                      bool& has_more, std::string& end_scan_key) {
   return TxnEngineHelper::ScanLockInfo(txn_reader_raw_engine_, min_lock_ts, max_lock_ts, range, limit, lock_infos,
                                        has_more, end_scan_key);
 }
 
-std::shared_ptr<Engine::TxnWriter> RocksEngine::NewTxnWriter(pb::common::RawEngine type) {
-  return std::make_shared<RocksEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
+std::shared_ptr<Engine::TxnWriter> MonoStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
 }
 
-butil::Status RocksEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
-                                                         const std::vector<pb::store::Mutation>& mutations,
-                                                         const std::string& primary_lock, int64_t start_ts,
-                                                         int64_t lock_ttl, int64_t for_update_ts) {
+butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
+                                                             const std::vector<pb::store::Mutation>& mutations,
+                                                             const std::string& primary_lock, int64_t start_ts,
+                                                             int64_t lock_ttl, int64_t for_update_ts) {
   return TxnEngineHelper::PessimisticLock(txn_writer_raw_engine_, rocks_engine_, ctx, mutations, primary_lock, start_ts,
                                           lock_ttl, for_update_ts);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                             int64_t for_update_ts,
-                                                             const std::vector<std::string>& keys) {
+butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                                 int64_t for_update_ts,
+                                                                 const std::vector<std::string>& keys) {
   return TxnEngineHelper::PessimisticRollback(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, for_update_ts,
                                               keys);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnPrewrite(std::shared_ptr<Context> ctx,
-                                                  const std::vector<pb::store::Mutation>& mutations,
-                                                  const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                                  int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-                                                  const std::vector<int64_t>& pessimistic_checks,
-                                                  const std::map<int64_t, int64_t>& for_update_ts_checks,
-                                                  const std::map<int64_t, std::string>& lock_extra_datas) {
+butil::Status MonoStoreEngine::TxnWriter::TxnPrewrite(
+    std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations, const std::string& primary_lock,
+    int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
+    const std::vector<int64_t>& pessimistic_checks, const std::map<int64_t, int64_t>& for_update_ts_checks,
+    const std::map<int64_t, std::string>& lock_extra_datas) {
   return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, rocks_engine_, ctx, mutations, primary_lock, start_ts,
                                    lock_ttl, txn_size, try_one_pc, max_commit_ts, pessimistic_checks,
                                    for_update_ts_checks, lock_extra_datas);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                                const std::vector<std::string>& keys) {
+butil::Status MonoStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+                                                    const std::vector<std::string>& keys) {
   return TxnEngineHelper::Commit(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, commit_ts, keys);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key,
-                                                        int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) {
+butil::Status MonoStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,
+                                                            const std::string& primary_key, int64_t lock_ts,
+                                                            int64_t caller_start_ts, int64_t current_ts) {
   return TxnEngineHelper::CheckTxnStatus(txn_writer_raw_engine_, rocks_engine_, ctx, primary_key, lock_ts,
                                          caller_start_ts, current_ts);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                                     const std::vector<std::string>& keys) {
+butil::Status MonoStoreEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                         int64_t commit_ts, const std::vector<std::string>& keys) {
   return TxnEngineHelper::ResolveLock(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, commit_ts, keys);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                       const std::vector<std::string>& keys) {
+butil::Status MonoStoreEngine::TxnWriter::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
+                                                           const std::vector<std::string>& keys) {
   return TxnEngineHelper::BatchRollback(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, keys);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock,
-                                                   int64_t start_ts, int64_t advise_lock_ttl) {
+butil::Status MonoStoreEngine::TxnWriter::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock,
+                                                       int64_t start_ts, int64_t advise_lock_ttl) {
   return TxnEngineHelper::HeartBeat(txn_writer_raw_engine_, rocks_engine_, ctx, primary_lock, start_ts,
                                     advise_lock_ttl);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
-                                                     const std::string& end_key) {
+butil::Status MonoStoreEngine::TxnWriter::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
+                                                         const std::string& end_key) {
   return TxnEngineHelper::DeleteRange(txn_writer_raw_engine_, rocks_engine_, ctx, start_key, end_key);
 }
 
-butil::Status RocksEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
+butil::Status MonoStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
   return TxnEngineHelper::Gc(txn_writer_raw_engine_, rocks_engine_, ctx, safe_point_ts);
 }
 }  // namespace dingodb

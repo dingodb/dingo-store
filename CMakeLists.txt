@@ -51,8 +51,6 @@ option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
-#option(ENABLE_LITE "Enable lite" ON)
-
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -62,11 +60,6 @@ SET(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0  -g3 -ggdb")
 
 message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SYSTEM: ${CMAKE_HOST_SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_PROCESSOR}")
-
-#if(ENABLE_LITE)
-#    message(STATUS "Enable lite")
-#    add_definitions(-DENABLE_LITE=ON)
-#endif()
 
 # xdprocks
 if(XDPROCKS_PATH)
