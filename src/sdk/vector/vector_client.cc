@@ -143,6 +143,21 @@ Status VectorClient::GetIndexMetricsByIndexName(int64_t schema_id, const std::st
   return task.Run();
 }
 
+Status VectorClient::CountAllByIndexId(int64_t index_id, int64_t& out_count) {
+  VectorCountTask task(stub_, index_id, 0, INT64_MAX, out_count);
+  return task.Run();
+}
+
+Status VectorClient::CountallByIndexName(int64_t schema_id, const std::string& index_name, int64_t& out_count) {
+  int64_t index_id{0};
+  DINGO_RETURN_NOT_OK(
+      stub_.GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+  CHECK_GT(index_id, 0);
+
+  VectorCountTask task(stub_, index_id, 0, INT64_MAX, out_count);
+  return task.Run();
+}
+
 Status VectorClient::CountByIndexId(int64_t index_id, int64_t start_vector_id, int64_t end_vector_id,
                                     int64_t& out_count) {
   VectorCountTask task(stub_, index_id, start_vector_id, end_vector_id, out_count);

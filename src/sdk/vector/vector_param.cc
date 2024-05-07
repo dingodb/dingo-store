@@ -22,6 +22,7 @@
 
 #include "fmt/core.h"
 #include "fmt/ranges.h"
+#include "sdk/types.h"
 #include "sdk/vector.h"
 
 namespace dingodb {
@@ -48,8 +49,52 @@ std::string Vector::ToString() const {
                      ValueTypeToString(value_type), float_ss.str(), binary_ss.str());
 }
 
+static std::string FieldToString(const Type& type, const ScalarField& field) {
+  switch (type) {
+    case Type::kBOOL:
+      return std::to_string(field.bool_data);
+    case Type::kINT64:
+      return std::to_string(field.long_data);
+    case Type::kDOUBLE:
+      return std::to_string(field.double_data);
+    case Type::kSTRING:
+      return field.string_data;
+    default:
+      return "Unknown";
+  }
+}
+
+std::string ScalarValue::ToString() const {
+  std::stringstream ss;
+  ss << "ScalarValue { type: " << TypeToString(type) << ", fields: [";
+
+  for (const ScalarField& field : fields) {
+    ss << " " << FieldToString(type, field) << ",";
+  }
+
+  if (!fields.empty()) {
+    ss.seekp(-1, std::ios_base::end);  // Remove the trailing comma
+  }
+
+  ss << " ] }";
+  return ss.str();
+}
+
 std::string VectorWithId::ToString() const {
-  return fmt::format("VectorWithId {{ id: {}, vector: {} }}", id, vector.ToString());
+  std::stringstream ss;
+  ss << "VectorWithId { id: " << id << ", vector: " << vector.ToString();
+
+  if (!scalar_data.empty()) {
+    ss << ", scalar_data: {";
+    for (const auto& pair : scalar_data) {
+      ss << " " << pair.first << ": " << pair.second.ToString() << ",";
+    }
+    ss.seekp(-1, std::ios_base::end);  // Remove the trailing comma
+    ss << " }";
+  }
+
+  ss << " }";
+  return ss.str();
 }
 
 std::string VectorWithDistance::ToString() const {

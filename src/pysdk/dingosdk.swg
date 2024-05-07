@@ -5,6 +5,7 @@
 #include "common/slice.h"
 #include "sdk/vector.h"
 #include "sdk/client.h"
+#include "sdk/types.h"
 
 using namespace dingodb;
 using namespace dingodb::sdk;
@@ -26,7 +27,9 @@ using namespace dingodb::sdk;
 
 %template(Int64Vector)  std::vector<int64_t>;
 %template(FloatVector) std::vector<float>;
+%template(UInt8Vector) std::vector<uint8_t>;
 %template(StringVector) std::vector<std::string>;
+
 
 %template(KVPairVector) std::vector<dingodb::sdk::KVPair>;
 %template(KeyOpStateVector) std::vector<dingodb::sdk::KeyOpState>;
@@ -35,8 +38,10 @@ using namespace dingodb::sdk;
 %template(SearchResultVector) std::vector<dingodb::sdk::SearchResult>;
 %template(DeleteResultVector) std::vector<dingodb::sdk::DeleteResult>;
 %template(VectorWithDistanceVector) std::vector<dingodb::sdk::VectorWithDistance>;
+%template(ScalarFieldVector) std::vector<dingodb::sdk::ScalarField>;
 
-%template(SearchExtraParamMap)  std::map<dingodb::sdk::SearchExtraParamType, int32_t>;
+%template(SearchExtraParamMap)  std::map<enum dingodb::sdk::SearchExtraParamType, int32_t>;
+%template(ScalarDataMap)  std::map<std::string, dingodb::sdk::ScalarValue>;
 
 // client
 // vector index creator
@@ -193,5 +198,6 @@ namespace dingodb {
 
 
 %include "sdk/status.h"
+%include "sdk/types.h"
 %include "sdk/vector.h"
 %include "sdk/client.h"

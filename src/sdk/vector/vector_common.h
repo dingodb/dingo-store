@@ -17,6 +17,7 @@
 
 #include <cstdint>
 
+#include "common/logging.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
@@ -185,24 +186,52 @@ static pb::common::ScalarValue ScalarValue2InternalScalarValuePB(const sdk::Scal
   pb::common::ScalarValue result;
   result.set_field_type(Type2InternalScalarFieldTypePB(scalar_value.type));
 
-  if (scalar_value.type == kBOOL) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_bool_data(field.bool_data);
+  for (const auto& field : scalar_value.fields) {
+    auto* pb_field = result.add_fields();
+    switch (scalar_value.type) {
+      case kBOOL:
+        pb_field->set_bool_data(field.bool_data);
+        break;
+      case kINT64:
+        pb_field->set_long_data(field.long_data);
+        break;
+      case kDOUBLE:
+        pb_field->set_double_data(field.double_data);
+        break;
+      case kSTRING:
+        pb_field->set_string_data(field.string_data);
+        break;
+      default:
+        CHECK(false) << "unsupported scalar value type:" << scalar_value.type;
     }
-  } else if (scalar_value.type == kINT64) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_long_data(field.long_data);
+  }
+
+  return result;
+}
+
+static sdk::ScalarValue InternalScalarValuePB2ScalarValue(const pb::common::ScalarValue& pb) {
+  sdk::ScalarValue result;
+  result.type = InternalScalarFieldTypePB2Type(pb.field_type());
+
+  for (const auto& field : pb.fields()) {
+    ScalarField value;
+    switch (result.type) {
+      case kBOOL:
+        value.bool_data = field.bool_data();
+        break;
+      case kINT64:
+        value.long_data = field.long_data();
+        break;
+      case kDOUBLE:
+        value.double_data = field.double_data();
+        break;
+      case kSTRING:
+        value.string_data = field.string_data();
+        break;
+      default:
+        CHECK(false) << "unsupported scalar value type:" << result.type;
     }
-  } else if (scalar_value.type == kDOUBLE) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_double_data(field.double_data);
-    }
-  } else if (scalar_value.type == kSTRING) {
-    for (const auto& field : scalar_value.fields) {
-      result.add_fields()->set_string_data(field.string_data);
-    }
-  } else {
-    LOG(WARNING) << "unsupported scalar value type:" << scalar_value.type;
+    result.fields.push_back(value);
   }
 
   return result;
@@ -250,12 +279,17 @@ static VectorWithId InternalVectorIdPB2VectorWithId(const pb::common::VectorWith
   for (const auto& float_value : vector_pb.float_values()) {
     to_return.vector.float_values.push_back(float_value);
   }
-  return std::move(to_return);
+
+  for (const auto& [key, value] : pb.scalar_data().scalar_data()) {
+    to_return.scalar_data.insert({key, InternalScalarValuePB2ScalarValue(value)});
+  }
+
+  return to_return;
 }
 
 static VectorWithDistance InternalVectorWithDistance2VectorWithDistance(const pb::common::VectorWithDistance& pb) {
   VectorWithDistance to_return;
-  to_return.vector_data = std::move(InternalVectorIdPB2VectorWithId(pb.vector_with_id()));
+  to_return.vector_data = InternalVectorIdPB2VectorWithId(pb.vector_with_id());
   to_return.distance = pb.distance();
   to_return.metric_type = InternalMetricTypePB2MetricType(pb.metric_type());
   return std::move(to_return);
