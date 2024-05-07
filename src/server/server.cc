@@ -40,7 +40,7 @@
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
-#include "engine/rocks_engine.h"
+#include "engine/mono_store_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -294,11 +294,11 @@ bool Server::InitEngine() {
 
   } else {
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-    rocks_engine_ = std::make_shared<RocksEngine>(raw_rocks_engine, raw_bdb_engine, listener_factory->Build());
+    rocks_engine_ = std::make_shared<MonoStoreEngine>(raw_rocks_engine, raw_bdb_engine, listener_factory->Build());
     if (!rocks_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RocksEngine failed with Config[" << config->ToString() << "]";
       return false;
-    }  
+    }
     DINGO_LOG(INFO) << "Init rocks_engine";
 
     raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
@@ -306,7 +306,7 @@ bool Server::InitEngine() {
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
       return false;
-    }    
+    }
   }
 
   return true;
@@ -735,7 +735,7 @@ bool Server::Recover() {
       DINGO_LOG(ERROR) << "Recover region controller failed";
       return false;
     }
-  } 
+  }
   return true;
 }
 
@@ -857,7 +857,6 @@ std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
   }
   return nullptr;
 }
-
 
 std::shared_ptr<MetaReader> Server::GetMetaReader() {
   assert(meta_reader_ != nullptr);
