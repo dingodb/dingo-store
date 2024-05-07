@@ -256,7 +256,7 @@ TEST_F(VectorIndexWrapperTest, ConcreteFilterFunctorPerformance) {
   std::cout << "query elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
 }
 
-TEST_F(VectorIndexWrapperTest, ConcreteFilterFunctorPerformance2) {
+TEST_F(VectorIndexWrapperTest, SortFilterFunctorPerformance) {
   GTEST_SKIP() << "skip performance";
 
   int num = 100000;
@@ -278,38 +278,10 @@ TEST_F(VectorIndexWrapperTest, ConcreteFilterFunctorPerformance2) {
 
   start_time = dingodb::Helper::TimestampUs();
   for (int i = 0; i < 100000; ++i) {
-    bool ret = selecter->Check(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
-    if (ret) {
-      std::cout << "here 001" << std::endl;
-    }
+    selecter->Check(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
   }
 
   std::cout << "query elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
-}
-
-TEST_F(VectorIndexWrapperTest, ConcreteFilterFunctorPerformance3) {
-  GTEST_SKIP() << "skip performance";
-  pb::common::VectorSearchParameter parameter;
-  int num = 100000;
-  for (int i = 0; i < num; ++i) {
-    parameter.add_vector_ids(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
-  }
-
-  int64_t start_time = dingodb::Helper::TimestampNs();
-  auto vector_ids = Helper::PbRepeatedToVector(parameter.vector_ids());
-  std::cout << "elapsed time: " << dingodb::Helper::TimestampNs() - start_time << std::endl;
-
-  start_time = dingodb::Helper::TimestampNs();
-  std::vector<int64_t> vector_ids2;
-  vector_ids2.resize(parameter.vector_ids_size());
-  std::memcpy(vector_ids2.data(), parameter.vector_ids().data(), parameter.vector_ids_size() * sizeof(int64_t));
-  std::cout << "elapsed time: " << dingodb::Helper::TimestampNs() - start_time << std::endl;
-
-  for (int i = 0; i < vector_ids2.size(); ++i) {
-    if (vector_ids2[i] != parameter.vector_ids().at(i)) {
-      std::cout << "not equal" << std::endl;
-    }
-  }
 }
 
 }  // namespace dingodb
