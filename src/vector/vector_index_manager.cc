@@ -155,7 +155,7 @@ void RebuildVectorIndexTask::Run() {
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saving vector index {}", region->Id()));
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     // raft store engine use snapshot
     status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper_, trace_);
     if (!status.ok()) {
@@ -409,8 +409,8 @@ void LoadAsyncBuildVectorIndexTask::Run() {
   // New region don't pull snapshot, directly build.
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper_->Id());
   int64_t applied_index = (raft_meta != nullptr) ? raft_meta->AppliedId() : -1;
-  
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
+
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     // start to do async build vector index.
     bool is_fast_build =
         is_fast_load_ && (region->Epoch().version() == 1) && (applied_index <= FLAGS_vector_fast_build_log_gap);
@@ -418,8 +418,8 @@ void LoadAsyncBuildVectorIndexTask::Run() {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.loadasyncbuild][index_id({}_v{})][trace({})] rocks engine direct do async "
         "build,  is_fast_build {} region_version {}",
-        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_,
-        is_fast_build, region->Epoch().version());
+        vector_index_wrapper_->Id(), vector_index_wrapper_->Version(), trace_, is_fast_build,
+        region->Epoch().version());
 
     VectorIndexManager::LaunchBuildVectorIndex(vector_index_wrapper_, is_temp_hold_vector_index_, is_fast_build,
                                                job_id_, "load async build");
@@ -783,13 +783,14 @@ butil::Status VectorIndexManager::LoadOrBuildVectorIndex(VectorIndexWrapperPtr v
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.loadorbuild][index_id({})][trace({})] Rebuild vector index success, elapsed time({}ms).",
       vector_index_id, trace, Helper::TimestampMs() - start_time);
-  
+
   auto region = Server::GetInstance().GetRegion(vector_index_wrapper->Id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})] Not found region.",vector_index_wrapper->Id());                                
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.loadorbuild][region({})] Not found region.",
+                                    vector_index_wrapper->Id());
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_wrapper->Id()));
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     // raft store engine use snapshot
     // Save vector index
     status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, trace);
@@ -854,14 +855,15 @@ butil::Status VectorIndexManager::BuildVectorIndexOnly(VectorIndexWrapperPtr vec
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.buildonly][index_id({})][trace({})] Rebuild vector index success, elapsed time({}ms).",
       vector_index_id, trace, Helper::TimestampMs() - start_time);
-  
+
   auto region = Server::GetInstance().GetRegion(vector_index_wrapper->Id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.buildonly][region({})] Not found region.",vector_index_wrapper->Id());                                
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.buildonly][region({})] Not found region.",
+                                    vector_index_wrapper->Id());
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", vector_index_wrapper->Id()));
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     status = VectorIndexManager::SaveVectorIndex(vector_index_wrapper, trace);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format(
@@ -1020,9 +1022,8 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status();
   }
 
- DINGO_LOG(INFO) << fmt::format("[vector_index.replaywal][index_id({})] replay wal log({}-{})", vector_index->Id(),
+  DINGO_LOG(INFO) << fmt::format("[vector_index.replaywal][index_id({})] replay wal log({}-{})", vector_index->Id(),
                                  start_log_id, end_log_id);
- 
 
   int64_t start_time = Helper::TimestampMs();
   auto raft_kv_engine = Server::GetInstance().GetRaftStoreEngine();
@@ -1134,7 +1135,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     return nullptr;
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     // Get last applied log id
     auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
     if (raft_store_engine == nullptr) {
@@ -1144,7 +1145,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     auto raft_node = raft_store_engine->GetNode(vector_index_id);
     if (raft_node == nullptr) {
       DINGO_LOG(ERROR) << fmt::format(
-          "[vector_index.build][index_id({})][trace({})] not found raft node, skip this build.", vector_index_id, trace);
+          "[vector_index.build][index_id({})][trace({})] not found raft node, skip this build.", vector_index_id,
+          trace);
       return nullptr;
     }
 
@@ -1153,7 +1155,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
       vector_index->SetApplyLogId(raft_status->known_applied_index());
     }
   }
-  
+
   const std::string& start_key = range.start_key();
   const std::string& end_key = range.end_key();
 
@@ -1369,7 +1371,7 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
   // try to load vector index from snapshot
   auto vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
   if (vector_index == nullptr) {
-     return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
+    return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
   }
 
   DINGO_LOG(INFO) << fmt::format(
@@ -1431,9 +1433,8 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
           "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success.", vector_index_id, trace,
           start_log_id, end_log_id);
     }
-  }else if(regoin->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
-
-  }else{
+  } else if (regoin->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+  } else {
     return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
   }
   pb::common::RegionEpoch epoch;
@@ -1491,14 +1492,15 @@ void VectorIndexManager::LaunchSaveVectorIndex(VectorIndexWrapperPtr vector_inde
   assert(vector_index_wrapper != nullptr);
   auto region = Server::GetInstance().GetRegion(vector_index_wrapper->Id());
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})][trace({})] Not found region.",vector_index_wrapper->Id(), trace);                                
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.launch][index_id({})][trace({})] Not found region.",
+                                    vector_index_wrapper->Id(), trace);
     return;
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE){
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})][trace({})] rocks engine not need save vector index.",
-      vector_index_wrapper->Id(), trace);
-      return;
+        "[vector_index.launch][index_id({})][trace({})] rocks engine not need save vector index.",
+        vector_index_wrapper->Id(), trace);
+    return;
   }
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.launch][index_id({})][trace({})] Launch save vector index, pending tasks({}) total running({}).",

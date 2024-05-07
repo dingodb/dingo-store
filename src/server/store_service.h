@@ -137,7 +137,6 @@ class StoreServiceImpl : public pb::store::StoreService {
 
   bool IsRaftApplyPendingExceed();
 
-
  private:
   StoragePtr storage_;
   // Run service request.

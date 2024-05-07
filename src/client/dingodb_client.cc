@@ -347,7 +347,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendKvBatchGet(FLAGS_region_id, FLAGS_prefix, FLAGS_req_num);
     } else if (method == "KvPut") {
       std::string value = FLAGS_value.empty() ? client::Helper::GenRandomString(256) : FLAGS_value;
-      DINGO_LOG(INFO) << "value:"<<value;
+      DINGO_LOG(INFO) << "value:" << value;
       client::SendKvPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key), value);
     } else if (method == "KvBatchPut") {
       client::SendKvBatchPut(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix), FLAGS_count);

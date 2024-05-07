@@ -1243,17 +1243,17 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       store_ids.push_back(id);
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag, replica_num,
-                                                 range, schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
-                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
+    ret = coordinator_control->CreateRegionFinal(
+        region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
+        index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
   } else {
     // store_ids is empty, will auto select store
     std::vector<int64_t> store_ids;
     std::vector<pb::coordinator::StoreOperation> store_operations;
 
-    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag, replica_num,
-                                                 range, schema_id, table_id, index_id, part_id, tenant_id, index_parameter,
-                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
+    ret = coordinator_control->CreateRegionFinal(
+        region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
+        index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
   }
 
   if (!ret.ok()) {
