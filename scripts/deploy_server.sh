@@ -13,13 +13,15 @@ DEFINE_boolean clean_log 1 'clean log'
 DEFINE_boolean clean_all 1 'clean all'
 DEFINE_boolean replace_conf 0 'replace conf'
 DEFINE_string parameters 'deploy_parameters' 'server role'
+DEFINE_string enable_lite 'false' 'enable lite'
 
 # parse the command-line
 FLAGS "$@" || exit 1
 eval set -- "${FLAGS_ARGV}"
-
 echo "role: ${FLAGS_role}"
 echo "parameters: ${FLAGS_parameters}"
+echo "enable_lite: ${FLAGS_enable_lite}"
+
 
 BASE_DIR=$(dirname $(cd $(dirname $0); pwd))
 DIST_DIR=$BASE_DIR/dist

@@ -9,7 +9,7 @@ x-shared-environment: &shared-env
   COOR_RAFT_PEERS: ${DINGO_HOST_IP}:22101,${DINGO_HOST_IP}:22102,${DINGO_HOST_IP}:22103
   COOR_SRV_PEERS: ${DINGO_HOST_IP}:22001,${DINGO_HOST_IP}:22002,${DINGO_HOST_IP}:22003
   DEFAULT_REPLICA_NUM: 3
-
+  ENABLE_LITE: false
 services:
   coordinator1:
     image: dingodatabase/dingo-store:latest
