@@ -613,7 +613,7 @@ int64_t Benchmark::CreateVectorIndex(const std::string& name, const std::string&
   creator->SetName(name)
       .SetSchemaId(pb::meta::ReservedSchemaIds::DINGO_SCHEMA)
       .SetRangePartitions(separator_id)
-      .SetReplicaNum(3);
+      .SetReplicaNum(FLAGS_replica);
 
   if (vector_index_type == "HNSW") {
     creator->SetHnswParam(GenHnswParam());

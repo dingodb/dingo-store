@@ -372,7 +372,7 @@ butil::Status VectorIndexSnapshotManager::PullLastSnapshotFromPeers(vector_index
   auto last_snapshot = snapshot_set->GetLastSnapshot();
   if (last_snapshot != nullptr && (last_snapshot->Epoch().version() > peer_snapshot_version ||
                                    last_snapshot->Epoch().version() == peer_snapshot_version &&
-                                       last_snapshot->SnapshotLogId() + Constant::kVectorIndexSnapshotCatchupMargin >
+                                       last_snapshot->SnapshotLogId() + Constant::kVectorIndexSnapshotCatchupMargin <
                                            peer_max_snapshot_log_index)) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.snapshot][index({})] local snapshot is enough fresh, version({}/{}) log_id({} / {}).",
@@ -410,11 +410,9 @@ butil::Status VectorIndexSnapshotManager::DownloadSnapshotFile(const std::string
   }
 
   if (snapshot_set->IsExistSnapshot(meta.snapshot_log_index())) {
-    std::string msg =
-        fmt::format("[vector_index.snapshot][index({})] already exist vector index snapshot snapshot_log_index {}",
-                    meta.vector_index_id(), meta.snapshot_log_index());
-    DINGO_LOG(INFO) << msg;
-    return butil::Status(pb::error::EVECTOR_SNAPSHOT_EXIST, msg);
+    return butil::Status(
+        pb::error::EVECTOR_SNAPSHOT_EXIST,
+        fmt::format("already exist vector index snapshot snapshot_log_index {}", meta.snapshot_log_index()));
   }
 
   // temp snapshot path for save vector index.

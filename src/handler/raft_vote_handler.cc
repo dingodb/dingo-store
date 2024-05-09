@@ -39,9 +39,8 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
 
     if (region->Epoch().version() == 1) {
       auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
-      int64_t applied_index = -1;
       if (raft_meta != nullptr) {
-        applied_index = raft_meta->AppliedId();
+        int64_t applied_index = raft_meta->AppliedId();
 
         if (applied_index < FLAGS_vector_fast_build_log_gap) {
           // use fast load

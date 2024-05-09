@@ -14,6 +14,7 @@
 
 #include "vector/vector_reader.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <deque>
 #include <limits>
@@ -806,8 +807,9 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilter(  // NOLINT
     const pb::common::VectorSearchParameter& parameter, const pb::common::Range& region_range,
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  auto status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters,
-                                                      Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto vector_ids = Helper::PbRepeatedToVector(parameter.vector_ids());
+  auto status =
+      VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), parameter.is_sorted(), vector_ids, filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_str();
     return status;
@@ -912,7 +914,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(false, false, vector_ids, filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1154,7 +1156,7 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   }
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
-  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(false, false, vector_ids, filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1386,8 +1388,9 @@ butil::Status VectorReader::DoVectorSearchForVectorIdPreFilterDebug(  // NOLINT
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
   auto start_ids = lambda_time_now_function();
-  auto status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters,
-                                                      Helper::PbRepeatedToVector(parameter.vector_ids()));
+  auto vector_ids = Helper::PbRepeatedToVector(parameter.vector_ids());
+  auto status =
+      VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), parameter.is_sorted(), vector_ids, filters);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -1516,9 +1519,8 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
 
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
 
-  status = VectorReader::SetVectorIndexIdsFilter(parameter.is_negation(), filters, vector_ids);
+  status = VectorReader::SetVectorIndexIdsFilter(false, false, vector_ids, filters);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
@@ -1527,7 +1529,6 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
                                                      vector_with_distance_results, parameter.top_n(), filters);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
@@ -1536,10 +1537,12 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   return butil::Status::OK();
 }
 
-butil::Status VectorReader::SetVectorIndexIdsFilter(bool is_negation,
-                                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
-                                                    const std::vector<int64_t>& vector_ids) {
-  filters.push_back(std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids, is_negation));
+butil::Status VectorReader::SetVectorIndexIdsFilter(bool is_negation, bool is_sorted, std::vector<int64_t>& vector_ids,
+                                                    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters) {
+  if (!is_sorted) {
+    std::sort(vector_ids.begin(), vector_ids.end());
+  }
+  filters.push_back(std::make_shared<VectorIndex::SortFilterFunctor>(vector_ids, is_negation));
   return butil::Status::OK();
 }
 

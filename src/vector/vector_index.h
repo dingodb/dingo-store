@@ -16,6 +16,7 @@
 #define DINGODB_VECTOR_INDEX_H_
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -23,6 +24,7 @@
 #include <vector>
 
 #include "bthread/types.h"
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/runnable.h"
@@ -88,6 +90,47 @@ class VectorIndex {
 
    private:
     bool is_negation_{false};
+  };
+
+  // sort vector, binary search, performance is great.
+  class SortFilterFunctor : public FilterFunctor {
+   public:
+    SortFilterFunctor(const SortFilterFunctor&) = delete;
+    SortFilterFunctor(SortFilterFunctor&&) = delete;
+    SortFilterFunctor& operator=(const SortFilterFunctor&) = delete;
+    SortFilterFunctor& operator=(SortFilterFunctor&&) = delete;
+
+    explicit SortFilterFunctor(std::vector<int64_t>& vector_ids, bool is_negation = false) : is_negation_(is_negation) {
+      vector_ids_.swap(vector_ids);
+    }
+
+    ~SortFilterFunctor() override = default;
+
+    bool Check(int64_t vector_id) override {
+      bool exist = IsExist(vector_id);
+      return !is_negation_ ? exist : !exist;
+    }
+
+   private:
+    bool IsExist(int64_t vector_id) const {
+      int64_t begin = 0, end = vector_ids_.size() - 1;
+      while (begin <= end) {
+        int64_t mid = (begin + end) / 2;
+        if (vector_id == vector_ids_[mid]) {
+          return true;
+        } else if (vector_id < vector_ids_[mid]) {
+          end = mid - 1;
+        } else {
+          begin = mid + 1;
+        }
+      }
+
+      return false;
+    }
+
+    bool is_negation_{false};
+
+    std::vector<int64_t> vector_ids_;
   };
 
   virtual int32_t GetDimension() = 0;

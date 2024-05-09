@@ -415,6 +415,7 @@ static void FillInternalSearchParams(pb::common::VectorSearchParameter* internal
     internal_parameter->add_vector_ids(id);
   }
   internal_parameter->set_is_negation(parameter.is_negation);
+  internal_parameter->set_is_sorted(parameter.is_sorted);
 
   internal_parameter->set_use_brute_force(parameter.use_brute_force);
 }

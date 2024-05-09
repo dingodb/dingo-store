@@ -663,8 +663,6 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
                                      store::RegionPtr target_region, int64_t prepare_merge_log_id) {
   auto storage = Server::GetInstance().GetStorage();
   assert(storage != nullptr);
-  auto node = storage->GetRaftStoreEngine()->GetNode(source_region_definition.id());
-  assert(node != nullptr);
 
   uint64_t start_time = Helper::TimestampMs();
   // Generate LogEntry.

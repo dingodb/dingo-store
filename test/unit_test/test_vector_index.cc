@@ -14,12 +14,17 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/helper.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "vector/codec.h"
@@ -226,6 +231,57 @@ TEST_F(VectorIndexWrapperTest, MergeSearchResult) {
     MergeSearchResult(12, result_1, result_2, result);
     EXPECT_EQ(12, result.vector_with_distances_size());
   }
+}
+
+TEST_F(VectorIndexWrapperTest, ConcreteFilterFunctorPerformance) {
+  GTEST_SKIP() << "skip performance";
+
+  int num = 100000;
+  std::vector<int64_t> vector_ids;
+  vector_ids.reserve(num);
+  for (int i = 0; i < num; ++i) {
+    vector_ids.push_back(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
+  }
+
+  int64_t start_time = dingodb::Helper::TimestampUs();
+
+  auto selecter = std::make_shared<VectorIndex::ConcreteFilterFunctor>(vector_ids, false);
+  std::cout << "build elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
+
+  start_time = dingodb::Helper::TimestampUs();
+  for (int i = 0; i < 100000; ++i) {
+    selecter->is_member(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
+  }
+
+  std::cout << "query elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
+}
+
+TEST_F(VectorIndexWrapperTest, SortFilterFunctorPerformance) {
+  GTEST_SKIP() << "skip performance";
+
+  int num = 100000;
+  std::vector<int64_t> vector_ids;
+  vector_ids.reserve(num);
+  for (int i = 0; i < num; ++i) {
+    vector_ids.push_back(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
+  }
+
+  int64_t start_time = dingodb::Helper::TimestampUs();
+
+  std::sort(vector_ids.begin(), vector_ids.end());
+
+  std::cout << "sort elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
+
+  start_time = dingodb::Helper::TimestampUs();
+  auto selecter = std::make_shared<VectorIndex::SortFilterFunctor>(vector_ids);
+  std::cout << "build elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
+
+  start_time = dingodb::Helper::TimestampUs();
+  for (int i = 0; i < 100000; ++i) {
+    selecter->Check(dingodb::Helper::GenerateRealRandomInteger(1000000, 1000000000));
+  }
+
+  std::cout << "query elapsed time: " << dingodb::Helper::TimestampUs() - start_time << std::endl;
 }
 
 }  // namespace dingodb

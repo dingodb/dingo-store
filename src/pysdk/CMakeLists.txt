@@ -32,5 +32,9 @@ target_link_libraries(dingosdk
   sdk
 )
 
-configure_file(pysdk_rawkv_example.py pysdk_rawkv_example.py COPYONLY)
-configure_file(pysdk_vector_example.py pysdk_vector_example.py COPYONLY)
+configure_file(setup.py setup.py COPYONLY)
+configure_file(__init__.py __init__.py COPYONLY)
+configure_file(loader.py loader.py COPYONLY)
+
+configure_file(examples/pysdk_rawkv_example.py pysdk_rawkv_example.py COPYONLY)
+configure_file(examples/pysdk_vector_example.py pysdk_vector_example.py COPYONLY)

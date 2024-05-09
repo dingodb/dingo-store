@@ -470,8 +470,8 @@ void NodeServiceImpl::GetVectorIndexSnapshot(google::protobuf::RpcController* co
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
-  DINGO_LOG(INFO) << fmt::format("GetVectorIndexSnapshot request: {} response: {}", request->ShortDebugString(),
-                                 response->ShortDebugString());
+
+  DINGO_LOG(INFO) << fmt::format("response: {}", response->ShortDebugString());
 }
 
 void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*controller*/,
