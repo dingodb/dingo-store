@@ -10,7 +10,7 @@
 
 DEPLOY_PARAMETER=deploy_parameters
 DEPLOY_SERVER_NUM=3
-
+DEPLOY_ENABLE_LITE=true
 # This is for developer, and only can be openned in develop envirement.
 export TCMALLOC_SAMPLE_PARAMETER=524288
 echo "export TCMALLOC_SAMPLE_PARAMETER=524288, to enable heap profiler"
@@ -25,22 +25,27 @@ then
     DEPLOY_SERVER_NUM=$2
 fi
 
+if [ -n "$3" ]
+then
+    DEPLOY_ENABLE_LITE=$3
+fi
+
 echo "DEPLOY_PARAMETER="${DEPLOY_PARAMETER}
 echo "DEPLOY_SERVER_NUM="${DEPLOY_SERVER_NUM}
+echo "DEPLOY_ENABLE_LITE="${DEPLOY_ENABLE_LITE}
 
 ./stop.sh --role coordinator --force=1
 ./stop.sh --role store --force=1
 ./stop.sh --role index --force=1
 echo "force stop all"
 sleep 1
-
-./deploy_server.sh --role coordinator --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
-./deploy_server.sh --role store --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
-./deploy_server.sh --role index --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
+./deploy_server.sh --role coordinator --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER} --enable_lite=${DEPLOY_ENABLE_LITE}
+./deploy_server.sh --role store --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER} --enable_lite=${DEPLOY_ENABLE_LITE}
+./deploy_server.sh --role index --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER} --enable_lite=${DEPLOY_ENABLE_LITE}
 sleep 1
 echo "deploy all"
 
-./start_server.sh --role coordinator --server_num=${DEPLOY_SERVER_NUM}
+./start_server.sh --role coordinator --server_num=${DEPLOY_SERVER_NUM} 
 ./start_server.sh --role store --server_num=${DEPLOY_SERVER_NUM}
 ./start_server.sh --role index --server_num=${DEPLOY_SERVER_NUM}
 echo "start all"
