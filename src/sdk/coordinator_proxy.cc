@@ -18,6 +18,7 @@
 #include "fmt/core.h"
 #include "proto/coordinator.pb.h"
 #include "proto/error.pb.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -188,8 +189,13 @@ Status CoordinatorProxy::GetIndexById(const pb::meta::GetIndexRequest& request, 
 Status CoordinatorProxy::DropIndex(const pb::meta::DropIndexRequest& request, pb::meta::DropIndexResponse& response) {
   butil::Status rpc_status = coordinator_interaction_meta_->SendRequest("DropIndex", request, response);
   if (!rpc_status.ok()) {
-    DINGO_LOG(INFO) << fmt::format("Fail drop index {}", COORDINATOR_RPC_MSG(rpc_status, request, response));
-    return Status::RemoteError(rpc_status.error_code(), rpc_status.error_cstr());
+    if (rpc_status.error_code() == pb::error::Errno::EINDEX_NOT_FOUND) {
+      DINGO_LOG(DEBUG) << COORDINATOR_RPC_MSG(rpc_status, request, response);
+      return Status::OK();
+    } else {
+      DINGO_LOG(INFO) << fmt::format("Fail drop index {}", COORDINATOR_RPC_MSG(rpc_status, request, response));
+      return Status::RemoteError(rpc_status.error_code(), rpc_status.error_cstr());
+    }
   } else {
     DINGO_LOG(DEBUG) << COORDINATOR_RPC_MSG(rpc_status, request, response);
     return Status::OK();

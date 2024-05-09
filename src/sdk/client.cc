@@ -143,8 +143,14 @@ Status Client::DropIndex(int64_t index_id) {
 
 Status Client::DropIndexByName(int64_t schema_id, const std::string& index_name) {
   int64_t index_id{0};
-  DINGO_RETURN_NOT_OK(
-      data_->stub->GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id));
+
+  Status s =
+      data_->stub->GetVectorIndexCache()->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index_id);
+
+  if (!s.ok()) {
+    return s.Errno() == pb::error::Errno::EINDEX_NOT_FOUND ? Status::OK() : s;
+  }
+
   CHECK_GT(index_id, 0);
   data_->stub->GetVectorIndexCache()->RemoveVectorIndexById(index_id);
   return data_->stub->GetAdminTool()->DropIndex(index_id);
