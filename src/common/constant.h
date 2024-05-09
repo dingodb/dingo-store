@@ -217,6 +217,9 @@ class Constant {
   inline static const std::string kForceReadOnlyReason = "FORCE_READ_REASON";
   inline static const std::string kForceReadOnlyValueTrue = "TRUE";
   inline static const std::string kForceReadOnlyValueFalse = "FALSE";
+
+  static const uint32_t kRandomElectionTimeoutMinDeltaMs = 2000;
+  static const uint32_t kRandomElectionTimeoutMaxDeltaMs = 7000;
 };
 
 }  // namespace dingodb

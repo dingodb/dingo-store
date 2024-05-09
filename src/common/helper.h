@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_HELPER_H_
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -409,6 +410,12 @@ class Helper {
   static std::vector<int64_t> GetThreadIds(int64_t pid);
   static std::vector<std::string> GetThreadNames(int64_t pid);
   static std::vector<std::string> GetThreadNames(int64_t pid, const std::string& filter_name);
+
+  template <typename T>
+  static void ShuffleVector(std::vector<T>& vec) {
+    std::random_device rd;
+    std::shuffle(vec.begin(), vec.end(), rd);
+  }
 };
 
 }  // namespace dingodb
