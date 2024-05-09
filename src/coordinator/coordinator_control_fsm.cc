@@ -1742,13 +1742,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             table_ids_old.insert(std::make_pair(table_id.entity_id(), table_id));
           }
 
-          if (table_index->table_ids_to_add_size() > 0) {
-            for (const auto& table_id : table_index->table_ids_to_add()) {
-              table_ids_old.insert(std::make_pair(table_id.entity_id(), table_id));
-            }
-            for (const auto& table_id : table_index->table_ids_to_del()) {
-              table_ids_old.erase(table_id.entity_id());
-            }
+          for (const auto& table_id : table_index->table_ids_to_add()) {
+            table_ids_old.insert(std::make_pair(table_id.entity_id(), table_id));
+          }
+
+          for (const auto& table_id : table_index->table_ids_to_del()) {
+            table_ids_old.erase(table_id.entity_id());
           }
 
           table_index_internal.clear_table_ids();
