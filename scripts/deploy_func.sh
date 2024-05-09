@@ -57,7 +57,13 @@ function deploy_store() {
         echo "cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf"
         cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf
         sed  -i 's,\$DEFAULT_REPLICA_NUM\$,'"$DEFAULT_REPLICA_NUM"',g' $dstpath/conf/gflags.conf
-        sed  -i 's,\$ENABLE_LITE\$,'"$ENABLE_LITE"',g' $dstpath/conf/gflags.conf
+        if [ ${DINGODB_ENABLE_LITE} = "1" ];then
+          echo "" >> $dstpath/conf/gflags.conf
+          echo "-enable_lite=true" >> $dstpath/conf/gflags.conf
+          echo "enable_lite is set"
+        else
+          echo "enable-lite is not set"
+        fi
     fi
   fi
 
