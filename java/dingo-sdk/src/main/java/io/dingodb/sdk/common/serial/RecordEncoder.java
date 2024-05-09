@@ -55,6 +55,13 @@ public class RecordEncoder {
         buf.reverseWrite((byte) 0);
     }
 
+    private void encodeReverseTag(Buf buf) {
+        buf.reverseWrite(Config.CODEC_VERSION);
+        buf.reverseWrite((byte) 0);
+        buf.reverseWrite((byte) 0);
+        buf.reverseWrite((byte) 0);
+    }
+
     private void encodeSchemaVersion(Buf buf) {
         buf.writeInt(schemaVersion);
     }

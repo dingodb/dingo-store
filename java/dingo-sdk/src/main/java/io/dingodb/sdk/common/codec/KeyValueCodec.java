@@ -28,6 +28,10 @@ public interface KeyValueCodec {
 
     byte[] encodeKey(Object[] record);
 
+    default byte[] encodeKeyPrefix(Object[] record) {
+        return encodeKeyPrefix(record, record.length);
+    }
+
     byte[] encodeKeyPrefix(Object[] record, int columnCount);
 
     byte[] encodeMinKeyPrefix();

@@ -16,20 +16,22 @@
 
 package io.dingodb.sdk.common.codec;
 
+import io.dingodb.sdk.common.DingoCommonId;
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.RecordDecoder;
 import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.table.Table;
+import io.dingodb.sdk.common.utils.Optional;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.io.IOException;
 import java.util.List;
 
 public class DingoKeyValueCodec implements KeyValueCodec {
 
-    private List<DingoSchema> schemas;
+    private final long id;
+    private final List<DingoSchema> schemas;
     RecordEncoder re;
     RecordDecoder rd;
 
@@ -39,16 +41,25 @@ public class DingoKeyValueCodec implements KeyValueCodec {
 
     public DingoKeyValueCodec(int schemaVersion, long id, List<DingoSchema> schemas) {
         this.schemas = schemas;
+        this.id = id;
         re = new RecordEncoder(schemaVersion, schemas, id);
         rd = new RecordDecoder(schemaVersion, schemas, id);
     }
 
+    public static DingoKeyValueCodec of(Table table) {
+        return of(
+                table.getVersion(),
+                Optional.mapOrGet(table.id(), DingoCommonId::entityId, () -> 0L),
+                table.getColumns()
+        );
+    }
+
     public static DingoKeyValueCodec of(long id, Table table) {
-        return of(table.getVersion(), id, table.getColumns());
+        return of(table.getVersion(), id, table);
     }
 
     public static DingoKeyValueCodec of(long id, List<Column> columns) {
-        return new DingoKeyValueCodec(1, id, CodecUtils.createSchemaForColumns(columns));
+        return of(1, id, columns);
     }
 
     public static DingoKeyValueCodec of(int schemaVersion,long id, Table table) {
@@ -92,6 +103,10 @@ public class DingoKeyValueCodec implements KeyValueCodec {
     @Override
     public byte[] encodeMaxKeyPrefix() {
         return re.encodeMaxKeyPrefix();
+    }
+
+    public byte[] resetPrefix(byte[] key) {
+        return re.resetKeyPrefix(key, id);
     }
 
     @Override
