@@ -47,6 +47,8 @@
 #include "server/server.h"
 #include "vector/vector_reader.h"
 
+DECLARE_int32(init_election_timeout_ms);
+
 namespace dingodb {
 
 RaftStoreEngine::RaftStoreEngine(std::shared_ptr<RawEngine> rocks_engine, std::shared_ptr<RawEngine> bdb_engine)
@@ -101,6 +103,9 @@ bool RaftStoreEngine::Recover() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   auto regions = store_region_meta->GetAllRegion();
 
+  // shuffle regions for balance leader on restart
+  Helper::ShuffleVector(regions);
+
   int count = 0;
   auto ctx = std::make_shared<Context>();
   auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
@@ -127,7 +132,10 @@ bool RaftStoreEngine::Recover() {
       parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
       parameter.raft_path = config->GetString("raft.path");
-      parameter.election_timeout_ms = config->GetInt("raft.election_timeout_s") * 1000;
+      // random election timeout for balance leader on restart
+      parameter.election_timeout_ms = FLAGS_init_election_timeout_ms +
+                                      Helper::GenerateRealRandomInteger(Constant::kRandomElectionTimeoutMinDeltaMs,
+                                                                        Constant::kRandomElectionTimeoutMaxDeltaMs);
       parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
       parameter.log_path = config->GetString("raft.log_path");
 
