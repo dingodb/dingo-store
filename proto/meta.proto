@@ -80,6 +80,10 @@ message ColumnDefinition {
   int32 state = 20;
 
   string comment = 30;
+
+  uint32 create_version = 51;
+  uint32 update_version = 52;
+  uint32 delete_version = 53;
 }
 
 // Information about Index.
