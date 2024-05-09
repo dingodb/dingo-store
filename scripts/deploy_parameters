@@ -1,7 +1,7 @@
 #!/bin/bash
-
 SERVER_NUM=${FLAGS_server_num}
 DEFAULT_REPLICA_NUM=${FLAGS_server_num}
+ENABLE_LITE=${FLAGS_enable_lite}
 SERVER_HOST=127.0.0.1
 SERVER_LISTEN_HOST=0.0.0.0
 RAFT_HOST=127.0.0.1
