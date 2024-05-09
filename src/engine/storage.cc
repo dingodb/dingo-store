@@ -121,13 +121,17 @@ void Storage::ReleaseSnapshot() {}
 butil::Status Storage::ValidateLeader(int64_t region_id) {
   auto region = Server::GetInstance().GetRegion(region_id);
   if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] Not found region.", region_id);
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
+
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region_id);
     if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found region");
+    }
+
+    if (!node->IsLeader()) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
     }
   }
@@ -139,6 +143,7 @@ butil::Status Storage::ValidateLeader(store::RegionPtr region) {
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
+
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region->Id());
