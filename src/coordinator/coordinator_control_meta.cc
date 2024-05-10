@@ -3113,10 +3113,15 @@ butil::Status CoordinatorControl::DropIndexOnTable(int64_t table_id, int64_t ind
     DINGO_LOG(ERROR) << "ERRROR: table_id not found in table_index_map_" << table_id;
     return butil::Status(pb::error::Errno::ETABLE_NOT_FOUND, "table_id not found in table_index_map_");
   }
+
   bool found = false;
+  pb::meta::DingoCommonId del_index_id;
   for (const auto& id : table_index_internal.table_ids()) {
     if (id.entity_id() == index_id) {
       found = true;
+      del_index_id = id;
+      DINGO_LOG(INFO) << "found index_id in table_index_map_" << index_id
+                      << ", will drop it from table_id: " << table_id;
       break;
     }
   }
@@ -3133,14 +3138,6 @@ butil::Status CoordinatorControl::DropIndexOnTable(int64_t table_id, int64_t ind
   }
 
   // del index from table_index_map_
-  pb::meta::DingoCommonId del_index_id;
-  for (const auto& id : table_index_internal.table_ids()) {
-    if (id.entity_id() != index_id) {
-      del_index_id = id;
-      break;
-    }
-  }
-
   auto* table_index_increment = meta_increment.add_table_indexes();
   table_index_increment->set_id(table_id);
   table_index_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);

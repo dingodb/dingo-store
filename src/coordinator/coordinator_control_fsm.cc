@@ -1744,10 +1744,14 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
 
           for (const auto& table_id : table_index->table_ids_to_add()) {
             table_ids_old.insert(std::make_pair(table_id.entity_id(), table_id));
+            DINGO_LOG(INFO) << "ApplyMetaIncrement table_index UPDATE, [id=" << table_index->id()
+                            << "] add table_id: " << table_id.entity_id();
           }
 
           for (const auto& table_id : table_index->table_ids_to_del()) {
             table_ids_old.erase(table_id.entity_id());
+            DINGO_LOG(INFO) << "ApplyMetaIncrement table_index UPDATE, [id=" << table_index->id()
+                            << "] del table_id: " << table_id.entity_id();
           }
 
           table_index_internal.clear_table_ids();
