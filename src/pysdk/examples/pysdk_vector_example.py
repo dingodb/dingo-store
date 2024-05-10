@@ -20,7 +20,7 @@ g_dimension = 2
 g_flat_param = dingosdk.FlatParam(g_dimension, dingosdk.kL2)
 g_vector_ids = []
 
-s, g_client = dingosdk.Client.Build(args.coordinator_url)
+s, g_client = dingosdk.Client.BuildAndInitLog(args.coordinator_url)
 assert s.ok(), f"client build fail, {s.ToString()}"
 
 s, g_vector_client = g_client.NewVectorClient()

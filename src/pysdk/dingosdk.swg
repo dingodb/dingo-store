@@ -61,6 +61,7 @@ using namespace dingodb::sdk;
 namespace dingodb {
     namespace sdk {
     
+        %feature("docstring") Client::BuildAndInitLog "return Status, Client"
         %feature("docstring") Client::Build "return Status, Client"
         %feature("docstring") Client::NewRawKV "return Status, RawKV"
         %feature("docstring") Client::NewTransaction "return Status, Transaction"
