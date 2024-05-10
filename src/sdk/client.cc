@@ -53,6 +53,24 @@
 namespace dingodb {
 namespace sdk {
 
+Status Client::BuildAndInitLog(std::string naming_service_url, Client** client) {
+  if (naming_service_url.empty()) {
+    return Status::InvalidArgument("naming_service_url is empty");
+  };
+
+  Client* tmp = new Client();
+  Status s = tmp->Init(std::move(naming_service_url));
+  if (!s.ok()) {
+    delete tmp;
+    return s;
+  }
+
+  google::InitGoogleLogging("dingo_sdk");
+
+  *client = tmp;
+  return s;
+}
+
 Status Client::Build(std::string naming_service_url, Client** client) {
   if (naming_service_url.empty()) {
     return Status::InvalidArgument("naming_service_url is empty");

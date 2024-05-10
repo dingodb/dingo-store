@@ -44,6 +44,10 @@ class Client {
   ~Client();
 
   // NOTE:: Caller must delete *client when it is no longer needed.
+  // TODO: add client builder if we have more options
+  static Status BuildAndInitLog(std::string naming_service_url, Client** client);
+
+  // NOTE:: Caller must delete *client when it is no longer needed.
   static Status Build(std::string naming_service_url, Client** client);
 
   // NOTE:: Caller must delete *raw_kv when it is no longer needed.
