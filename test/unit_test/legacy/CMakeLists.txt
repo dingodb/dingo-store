@@ -1,0 +1,16 @@
+# include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
+
+file(GLOB LEGACY_UNIT_TEST_COMMON_SRCS "common/*.cc")
+file(GLOB LEGACY_UNIT_TEST_VECTOR_SRCS "vector/*.cc")
+
+set(LEGACY_UNIT_TEST_SRCS
+  ${LEGACY_UNIT_TEST_COMMON_SRCS}
+  ${LEGACY_UNIT_TEST_VECTOR_SRCS}
+)
+
+add_library(LEGACY_UNIT_TEST_OBJS
+            OBJECT
+            ${LEGACY_UNIT_TEST_SRCS}
+)
+
+add_dependencies(LEGACY_UNIT_TEST_OBJS ${DEPEND_LIBS})
