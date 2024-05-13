@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <map>
 #include <string>
-#include <variant>
 #include <vector>
 
 #include "sdk/status.h"
@@ -131,8 +130,9 @@ struct VectorScalarColumnSchema {
       : key(key), type(type), speed(speed) {}
 };
 
-// TODO: maybe use builder to build VectorScalarSchema
 struct VectorScalarSchema {
+  void AddScalarColumn(const VectorScalarColumnSchema& col) { cols.push_back(col); }
+
   std::vector<VectorScalarColumnSchema> cols;
 };
 
