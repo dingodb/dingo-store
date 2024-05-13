@@ -234,6 +234,8 @@ class Constant {
 
   static const uint32_t kRandomElectionTimeoutMinDeltaMs = 2000;
   static const uint32_t kRandomElectionTimeoutMaxDeltaMs = 7000;
+
+  static const uint32_t kLeaderNumWeightDefaultValue = 1;
 };
 
 }  // namespace dingodb

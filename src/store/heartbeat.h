@@ -239,6 +239,18 @@ class DocumentIndexScrubTask : public TaskRunnable {
   static void ScrubDocumentIndex();
 };
 
+class BalanceLeaderTask : public TaskRunnable {
+ public:
+  BalanceLeaderTask() = default;
+  ~BalanceLeaderTask() override = default;
+
+  std::string Type() override { return "BALANCE_LEADER"; }
+
+  void Run() override { DoBalanceLeader(); }
+
+  static void DoBalanceLeader();
+};
+
 class Heartbeat {
  public:
   Heartbeat() = default;
@@ -262,6 +274,7 @@ class Heartbeat {
   static void TriggerScrubDocumentIndex(void*);
   static void TriggerLeaseTask(void*);
   static void TriggerCompactionTask(void*);
+  static void TriggerBalanceLeader(void*);
 
  private:
   bool Execute(TaskRunnablePtr task);

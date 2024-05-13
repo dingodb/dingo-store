@@ -381,8 +381,6 @@ class Helper {
 
   static float DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d);
 
-  static std::string VectorToString(const std::vector<float>& vec);
-
   static std::vector<float> StringToVector(const std::string& str);
 
   template <typename T>

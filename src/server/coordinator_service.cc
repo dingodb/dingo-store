@@ -33,7 +33,9 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "coordinator/auto_increment_control.h"
+#include "coordinator/balance_leader.h"
 #include "coordinator/coordinator_control.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -3624,6 +3626,41 @@ void CoordinatorServiceImpl::UpdateRegionCmdStatus(google::protobuf::RpcControll
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
+  }
+}
+
+void CoordinatorServiceImpl::BalanceLeader(google::protobuf::RpcController *,
+                                           const pb::coordinator::BalanceLeaderRequest *request,
+                                           pb::coordinator::BalanceLeaderResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive BalanceLeader Request:" << request->ShortDebugString();
+
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND, "Not found raft engine.");
+    return;
+  }
+
+  auto tracker = balance::Tracker::New();
+  auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                     request->store_type(), request->dryrun(), tracker);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  response->set_leader_score(tracker->leader_score);
+  response->set_expect_leader_score(tracker->expect_leader_score);
+  for (auto &transfer_leader_task : tracker->tasks) {
+    auto *task = response->add_tasks();
+    task->set_region_id(transfer_leader_task->region_id);
+    task->set_source_store_id(transfer_leader_task->source_store_id);
+    task->set_target_store_id(transfer_leader_task->target_store_id);
   }
 }
 

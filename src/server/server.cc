@@ -40,6 +40,7 @@
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
+#include "coordinator/balance_leader.h"
 #include "engine/mono_store_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
@@ -70,6 +71,32 @@ DEFINE_int32(document_operation_parallel_thread_num, 1, "document operation para
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
 DEFINE_int32(omp_num_threads, 1, "omp num threads");
+
+DEFINE_int32(server_heartbeat_interval_s, 10, "heartbeat interval seconds");
+DEFINE_int32(server_metrics_collect_interval_s, 300, "metrics collect interval seconds");
+DEFINE_int32(server_store_metrics_collect_interval_s, 30, "store metrics collect interval seconds");
+DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
+             "approximate size metrics collect interval seconds");
+DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
+DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
+DEFINE_bool(region_enable_auto_split, true, "enable auto split");
+DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
+DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
+DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
+DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
+DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
+DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
+DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
+DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
+DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
+DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
+DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
+DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
+DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
+DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
+DEFINE_int32(balance_leader_interval_s, 10, "balance leader interval seconds");
+
+DEFINE_bool(enable_balance_leader, false, "enable balance leader");
 
 extern "C" {
 extern void omp_set_num_threads(int) noexcept;  // NOLINT
@@ -418,30 +445,6 @@ static int32_t GetInterval(std::shared_ptr<Config> config, const std::string& co
   return interval_s > 0 ? interval_s : default_value;
 }
 
-DEFINE_int32(server_heartbeat_interval_s, 10, "heartbeat interval seconds");
-DEFINE_int32(server_metrics_collect_interval_s, 300, "metrics collect interval seconds");
-DEFINE_int32(server_store_metrics_collect_interval_s, 30, "store metrics collect interval seconds");
-DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
-             "approximate size metrics collect interval seconds");
-DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
-DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
-DEFINE_bool(region_enable_auto_split, true, "enable auto split");
-DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
-DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
-DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
-DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
-DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
-DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
-DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
-DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
-DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
-DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
-DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
-DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
-DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
-DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
-DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
-
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
@@ -703,6 +706,19 @@ bool Server::InitCrontabManager() {
       true,
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
   });
+
+  if (FLAGS_enable_balance_leader) {
+    // Add gc  do gc crontab
+    FLAGS_balance_leader_interval_s =
+        GetInterval(config, "gc.balance_leader_interval_s", FLAGS_balance_leader_interval_s);
+    crontab_configs_.push_back({
+        "BALANCE_LEADER",
+        {pb::common::COORDINATOR},
+        FLAGS_balance_leader_interval_s * 1000,
+        true,
+        [](void*) { Heartbeat::TriggerBalanceLeader(nullptr); },
+    });
+  }
 
   crontab_manager_->AddCrontab(crontab_configs_);
 

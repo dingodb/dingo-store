@@ -156,6 +156,30 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
   }
 }
 
+void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map, pb::common::StoreType store_type) {
+  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  store_map.set_epoch(store_map_epoch);
+
+  {
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
+    butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
+    store_map_copy.init(100);
+    store_map_.GetRawMapCopy(store_map_copy);
+
+    for (auto& [_, store] : store_map_copy) {
+      if (store.store_type() == store_type) {
+        *store_map.add_stores() = store;
+      }
+    }
+  }
+}
+
+pb::common::Store CoordinatorControl::GetStore(int64_t store_id) {
+  pb::common::Store store;
+  store_map_.Get(store_id, store);
+  return store;
+}
+
 void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
   std::vector<int64_t> store_ids_to_get_full;
   std::set<int64_t> store_ids_to_get_own;
@@ -519,17 +543,25 @@ int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         *(store_increment_store->mutable_raft_location()) = store.raft_location();
         store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
         store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
+        store_increment_store->set_leader_num_weight(store.leader_num_weight());
       } else if (store_to_update.server_location().host() != store.server_location().host() ||
                  store_to_update.server_location().port() != store.server_location().port() ||
                  store_to_update.raft_location().host() != store.raft_location().host() ||
                  store_to_update.raft_location().port() != store.raft_location().port() ||
                  store_to_update.resource_tag() != store.resource_tag() ||
-                 store_to_update.keyring() != store.keyring()) {
+                 store_to_update.keyring() != store.keyring() ||
+                 store_to_update.leader_num_weight() != store.leader_num_weight()) {
         // this is normal heartbeat, with state change or location change
         // so only need to update state & last_seen_timestamp, no need to update epoch
         auto* store_increment = meta_increment.add_stores();
         store_increment->set_id(store.id());
         store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        store_to_update.set_resource_tag(store.resource_tag());
+        store_to_update.set_keyring(store.keyring());
+        *store_to_update.mutable_server_location() = store.server_location();
+        *store_to_update.mutable_raft_location() = store.raft_location();
+        store_to_update.set_leader_num_weight(store.leader_num_weight());
 
         auto* store_increment_store = store_increment->mutable_store();
         *store_increment_store = store_to_update;  // only update server_location & raft_location & state
@@ -879,9 +911,6 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
     region_internal_map_copy.init(30000);
     region_map_.GetRawMapCopy(region_internal_map_copy);
-    butil::FlatMap<int64_t, pb::common::RegionMetrics> region_metrics_map_copy;
-    region_metrics_map_copy.init(30000);
-    region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
 
     for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
@@ -901,6 +930,25 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
     for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
       GenRegionFull(element.second, *tmp_region);
+    }
+  }
+}
+
+void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb::common::RegionType region_type,
+                                          pb::common::IndexType index_type) {
+  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    region_internal_map_copy.init(30000);
+    region_map_.GetRawMapCopy(region_internal_map_copy);
+
+    for (auto& element : region_internal_map_copy) {
+      const auto& region = element.second;
+      if (region.region_type() == region_type && region.definition().index_parameter().index_type() == index_type) {
+        auto* tmp_region = region_map.add_regions();
+        GenRegionFull(region, *tmp_region);
+      }
     }
   }
 }
@@ -1003,6 +1051,12 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
   }
 
   return butil::Status::OK();
+}
+
+pb::coordinator_internal::RegionInternal CoordinatorControl::GetRegion(int64_t region_id) {
+  pb::coordinator_internal::RegionInternal region;
+  region_map_.Get(region_id, region);
+  return region;
 }
 
 void CoordinatorControl::GetRegionCount(int64_t& region_count) { region_count = region_map_.Size(); }

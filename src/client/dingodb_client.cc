@@ -204,6 +204,9 @@ DEFINE_bool(with_scalar_schema, false, "create vector index with scalar schema")
 
 DEFINE_bool(enable_rocks_engine, false, "create table with rocks engine");
 
+DEFINE_bool(dryrun, true, "dryrun");
+DEFINE_int32(store_type, 0, "store type");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -992,6 +995,10 @@ int CoordinatorSender() {
     SendGetGCSafePoint(coordinator_interaction);
   }
 
+  // balance leader
+  else if (FLAGS_method == "BalanceLeader") {
+    SendBalanceLeader(coordinator_interaction);
+  }
   // force_read_only
   else if (FLAGS_method == "UpdateForceReadOnly") {
     SendUpdateForceReadOnly(coordinator_interaction);

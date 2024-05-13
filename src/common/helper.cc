@@ -1990,15 +1990,6 @@ float Helper::DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_
   return (res);
 }
 
-std::string Helper::VectorToString(const std::vector<float>& vec) {
-  std::stringstream ss;
-  for (size_t i = 0; i < vec.size(); ++i) {
-    if (i != 0) ss << ", ";
-    ss << vec[i];
-  }
-  return ss.str();
-}
-
 std::vector<float> Helper::StringToVector(const std::string& str) {
   std::vector<float> vec;
   std::stringstream ss(str);

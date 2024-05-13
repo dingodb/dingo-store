@@ -104,6 +104,8 @@ DEFINE_int32(filter_store_type, 0, "filter_store_type");
 
 DEFINE_bool(create_document_region, false, "create_document_region");
 DECLARE_bool(use_json_parameter);
+DECLARE_bool(dryrun);
+DECLARE_int32(store_type);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -2046,6 +2048,21 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendBalanceLeader(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::BalanceLeaderRequest request;
+  dingodb::pb::coordinator::BalanceLeaderResponse response;
+
+  request.set_dryrun(FLAGS_dryrun);
+  request.set_store_type(dingodb::pb::common::StoreType(FLAGS_store_type));
+
+  auto status = coordinator_interaction->SendRequest("BalanceLeader", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+  }
 }
 
 void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

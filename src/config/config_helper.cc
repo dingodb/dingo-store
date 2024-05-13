@@ -162,4 +162,14 @@ int ConfigHelper::GetRocksDBStatsDumpPeriodSec() {
   return (num <= 0) ? Constant::kStatsDumpPeriodSecDefault : num;
 }
 
+uint32_t ConfigHelper::GetLeaderNumWeight() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kStatsDumpPeriodSecDefault;
+  }
+
+  int num = config->GetInt("raft.leader_num_weight");
+  return (num <= 0) ? Constant::kLeaderNumWeightDefaultValue : num;
+}
+
 }  // namespace dingodb
