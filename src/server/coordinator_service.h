@@ -298,6 +298,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
                       const pb::coordinator::GetGCSafePointRequest* request,
                       pb::coordinator::GetGCSafePointResponse* response, google::protobuf::Closure* done) override;
 
+  // Balance leader
+  void BalanceLeader(google::protobuf::RpcController* controller, const pb::coordinator::BalanceLeaderRequest* request,
+                     pb::coordinator::BalanceLeaderResponse* response, google::protobuf::Closure* done) override;
+
   void SetWorkSet(SimpleWorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:

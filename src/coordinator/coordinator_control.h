@@ -500,6 +500,8 @@ class CoordinatorControl : public MetaControl {
 
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
+  void GetStoreMap(pb::common::StoreMap &store_map, pb::common::StoreType store_type);
+  pb::common::Store GetStore(int64_t store_id);
 
   // get store metrics
   void GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
@@ -597,9 +599,12 @@ class CoordinatorControl : public MetaControl {
 
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
+  void GetRegionMapFull(pb::common::RegionMap &region_map, pb::common::RegionType region_type,
+                        pb::common::IndexType index_type);
   void GetDeletedRegionMap(pb::common::RegionMap &region_map);
   butil::Status AddDeletedRegionMap(int64_t region_id, bool force);
   butil::Status CleanDeletedRegionMap(int64_t region_id);
+  virtual pb::coordinator_internal::RegionInternal GetRegion(int64_t region_id);
   void GetRegionCount(int64_t &region_count);
   void GetRegionIdsInMap(std::vector<int64_t> &region_ids);
   void RecycleDeletedTableAndIndex();

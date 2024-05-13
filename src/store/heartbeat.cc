@@ -28,6 +28,7 @@
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/balance_leader.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -527,6 +528,24 @@ void DocumentIndexScrubTask::ScrubDocumentIndex() {
   }
 }
 
+void BalanceLeaderTask::DoBalanceLeader() {
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return;
+  }
+
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    return;
+  }
+
+  auto tracker = balance::Tracker::New();
+  balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine, pb::common::NODE_TYPE_STORE,
+                                                       false, tracker);
+  balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine, pb::common::NODE_TYPE_INDEX,
+                                                       false, tracker);
+}
+
 bool Heartbeat::Init() {
   auto worker = Worker::New();
   if (!worker->Init()) {
@@ -621,6 +640,12 @@ void Heartbeat::TriggerScrubVectorIndex(void*) {
 void Heartbeat::TriggerScrubDocumentIndex(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<DocumentIndexScrubTask>();
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerBalanceLeader(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<BalanceLeaderTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

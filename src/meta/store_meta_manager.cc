@@ -29,6 +29,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "common/synchronization.h"
+#include "config/config_helper.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -661,6 +662,7 @@ bool StoreServerMeta::Init() {
   store->mutable_keyring()->assign(server.Keyring());
   store->set_epoch(0);
   store->set_state(pb::common::STORE_NORMAL);
+  store->set_leader_num_weight(ConfigHelper::GetLeaderNumWeight());
 
   if (GetRole() == pb::common::ClusterRole::STORE) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);

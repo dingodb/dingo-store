@@ -271,6 +271,8 @@ message Store {
 
   // store type
   StoreType store_type = 11;  // only updated by coordinator
+
+  int32 leader_num_weight = 20;
 }
 
 message StoreMap {

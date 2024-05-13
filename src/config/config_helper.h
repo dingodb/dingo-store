@@ -37,6 +37,8 @@ class ConfigHelper {
 
   static int GetRocksDBBackgroundThreadNum();
   static int GetRocksDBStatsDumpPeriodSec();
+
+  static uint32_t GetLeaderNumWeight();
 };
 
 }  // namespace dingodb
