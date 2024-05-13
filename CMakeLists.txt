@@ -51,6 +51,7 @@ option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
+option(WITH_DOC "Build document" OFF)
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -232,6 +233,9 @@ include(bdb)
 include(brpc)
 include(braft)
 include(nlohmann)
+if(WITH_DOC)
+    include(tantivy-search)
+endif()
 
 if(BUILD_BENCHMARK STREQUAL "ON")
     include(hdf5)
@@ -313,6 +317,10 @@ include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${HDF5_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 
+if(WITH_DOC)
+    include_directories(${TANTIVY_SEARCH_INCLUDE_DIR})
+endif()
+
 # CAUTION: the order of the libraries is important, please do not change it.
 set(DYNAMIC_LIB
     ${BRAFT_LIBRARIES}
@@ -337,6 +345,13 @@ set(DYNAMIC_LIB
     ${ZLIB_LIBRARIES}
     ${BDB_LIBRARIES}
     )
+
+if(WITH_DOC)
+    set(DYNAMIC_LIB
+        ${DYNAMIC_LIB}
+        ${TANTIVY_SEARCH_LIBRARIES}
+    )
+endif()
 
 if (ENABLE_XDPROCKS)
     set(DYNAMIC_LIB
@@ -386,6 +401,10 @@ set(DEPEND_LIBS
     rapidjson
     nlohmann-json
     )
+
+if(WITH_DOC)
+    set(DEPEND_LIBS ${DEPEND_LIBS} tantivy-search)
+endif()
 
 if(WITH_MKL)
     if(DEFINED ENV{MKLROOT})
