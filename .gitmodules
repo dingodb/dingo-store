@@ -79,3 +79,6 @@
 [submodule "contrib/nlohmann-json"]
 	path = contrib/nlohmann-json
 	url = https://github.com/nlohmann/json.git
+[submodule "contrib/tantivy-search"]
+	path = contrib/tantivy-search
+	url = https://github.com/dingodb/tantivy-search
