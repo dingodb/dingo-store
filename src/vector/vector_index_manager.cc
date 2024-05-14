@@ -736,6 +736,8 @@ bool VectorIndexManager::Init() {
     return false;
   }
 
+  VectorIndex::SetSimdHook();
+
   return true;
 }
 

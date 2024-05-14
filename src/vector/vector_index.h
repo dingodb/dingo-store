@@ -213,6 +213,10 @@ class VectorIndex {
   pb::common::Range Range() const;
   void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
+  static void SetSimdHook();
+  static void SetSimdHookForFaiss();
+  static void SetSimdHookForHnswlib();
+
  protected:
   // vector index id
   int64_t id;

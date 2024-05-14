@@ -31,8 +31,20 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "simd/hook.h"
 #include "vector/codec.h"
 #include "vector/vector_index_snapshot_manager.h"
+
+#ifndef ENABLE_SIMD_HOOK
+#define ENABLE_SIMD_HOOK
+#endif
+
+// #undef ENABLE_SIMD_HOOK
+
+#if defined(ENABLE_SIMD_HOOK)
+#include "faiss/FaissHook.h"
+#include "hnswlib/hnswlib.h"  // do not remove me. hnswlibhook.h requires this header.
+#endif
 
 namespace dingodb {
 
@@ -89,7 +101,6 @@ butil::Status ParallelRun(ThreadPoolPtr thread_pool, int64_t vector_index_id,
   return butil::Status();
 }
 
-
 VectorIndex::VectorIndex(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                          const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
                          ThreadPoolPtr thread_pool)
@@ -128,6 +139,45 @@ void VectorIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const p
                                  Helper::RangeToString(this->range), Helper::RangeToString(range));
   this->epoch = epoch;
   this->range = range;
+}
+
+void VectorIndex::SetSimdHook() {
+  VectorIndex::SetSimdHookForFaiss();
+  VectorIndex::SetSimdHookForHnswlib();
+}
+
+void VectorIndex::SetSimdHookForFaiss() {
+#if defined(ENABLE_SIMD_HOOK)
+  std::string simd_type;
+  fvec_hook_info(simd_type);
+
+#if defined(__x86_64__)
+  DINGO_LOG(INFO) << fmt::format("cpu_support_avx512 : {} cpu_support_avx2 : {} cpu_support_sse4_2 : {}",
+                                 cpu_support_avx512() ? "true" : "false", cpu_support_avx2() ? "true" : "false",
+                                 cpu_support_sse4_2() ? "true" : "false");
+#endif
+  DINGO_LOG(INFO) << fmt::format("cpu simd_type : {}", simd_type);
+  faiss::set_fvec_L2sqr_hook(fvec_L2sqr);
+  faiss::set_fvec_inner_product_hook(fvec_inner_product);
+  DINGO_LOG(INFO) << fmt::format("set faiss hook : {} {}", "fvec_L2sqr", "fvec_inner_product");
+#endif
+}
+
+void VectorIndex::SetSimdHookForHnswlib() {
+#if defined(ENABLE_SIMD_HOOK)
+  std::string simd_type;
+  fvec_hook_info(simd_type);
+
+#if defined(__x86_64__)
+  DINGO_LOG(INFO) << fmt::format("cpu_support_avx512 : {} cpu_support_avx2 : {} cpu_support_sse4_2 : {}",
+                                 cpu_support_avx512() ? "true" : "false", cpu_support_avx2() ? "true" : "false",
+                                 cpu_support_sse4_2() ? "true" : "false");
+#endif
+  DINGO_LOG(INFO) << fmt::format("cpu simd_type : {}", simd_type);
+  hnswlib::set_fvec_L2sqr_hook(fvec_L2sqr);
+  hnswlib::set_fvec_inner_product_hook(fvec_inner_product);
+  DINGO_LOG(INFO) << fmt::format("set hnswlib hook : {} {}", "fvec_L2sqr", "fvec_inner_product");
+#endif
 }
 
 butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool) {
