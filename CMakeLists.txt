@@ -535,6 +535,63 @@ endif()
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
 
+include(CheckSymbolExists)
+
+macro(detect_target_arch)
+  check_symbol_exists(__aarch64__ "" __AARCH64)
+  check_symbol_exists(__x86_64__ "" __X86_64)
+
+  if(NOT __AARCH64 AND NOT __X86_64)
+    message(FATAL "dingodb only support amd64 and arm64.")
+  endif()
+endmacro()
+
+detect_target_arch()
+
+if(__X86_64)
+  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc
+                     ${PROJECT_SOURCE_DIR}/src/simd/hook.cc)
+  set(SIMD_UTILS_SSE_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_sse.cc)
+  set(SIMD_UTILS_AVX_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_avx.cc)
+  set(SIMD_UTILS_AVX512_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_avx512.cc)
+
+  add_library(simd_utils_sse OBJECT ${SIMD_UTILS_SSE_SRC})
+  add_library(simd_utils_avx OBJECT ${SIMD_UTILS_AVX_SRC})
+  add_library(simd_utils_avx512 OBJECT ${SIMD_UTILS_AVX512_SRC})
+
+  target_compile_options(simd_utils_sse PRIVATE -msse4.2)
+  target_compile_options(simd_utils_avx PRIVATE -mf16c -mavx2)
+  target_compile_options(simd_utils_avx512 PRIVATE -mf16c -mavx512f -mavx512dq
+                                                   -mavx512bw)
+
+  add_library(
+    simd_utils STATIC
+    ${SIMD_UTILS_SRC} $<TARGET_OBJECTS:simd_utils_sse>
+    $<TARGET_OBJECTS:simd_utils_avx> $<TARGET_OBJECTS:simd_utils_avx512>)
+  # target_link_libraries(simd_utils PUBLIC glog::glog)
+endif()
+
+if(__AARCH64)
+  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/hook.cc
+                     ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc)
+  add_library(simd_utils STATIC ${SIMD_UTILS_SRC})
+  # target_link_libraries(simd_utils PUBLIC glog::glog)
+endif()
+
+if(CMAKE_BUILD_TYPE MATCHES "Debug")
+  set(SIMD_LIBRARIES
+      "${CMAKE_BINARY_DIR}/libsimd_utilsd.a"
+      CACHE FILEPATH "simd library." FORCE)
+else()
+  set(SIMD_LIBRARIES
+      "${CMAKE_BINARY_DIR}/libsimd_utils.a"
+      CACHE FILEPATH "simd library." FORCE)
+endif()
+
+set(DEPEND_LIBS ${DEPEND_LIBS} simd_utils)
+
+set(DYNAMIC_LIB ${DYNAMIC_LIB} ${SIMD_LIBRARIES})
+
 # object file
 add_library(DINGODB_OBJS
             OBJECT
