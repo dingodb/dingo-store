@@ -17,7 +17,6 @@ syntax = "proto3";
 package dingodb.pb.common;
 
 option java_package = "io.dingodb.common";
-option cc_generic_services = true;
 
 enum ClusterRole {
   ILLEGAL = 0;
@@ -25,6 +24,7 @@ enum ClusterRole {
   STORE = 2;
   EXECUTOR = 3;
   INDEX = 4;
+  DOCUMENT = 5;
 };
 
 enum Engine {
@@ -253,6 +253,7 @@ message ExecutorMap {
 enum StoreType {
   NODE_TYPE_STORE = 0;
   NODE_TYPE_INDEX = 1;
+  NODE_TYPE_DOCUMENT = 2;
 }
 
 // Store
@@ -319,12 +320,14 @@ message RegionDefinition {
 enum RegionType {
   STORE_REGION = 0;
   INDEX_REGION = 1;
+  DOCUMENT_REGION = 2;
 }
 
 enum IndexType {
   INDEX_TYPE_NONE = 0;  // this is not index, for store region only
   INDEX_TYPE_VECTOR = 1;
   INDEX_TYPE_SCALAR = 2;
+  INDEX_TYPE_DOCUMENT = 3;
 }
 
 enum VectorIndexType {
@@ -679,6 +682,12 @@ message IndexParameter {
   IndexType index_type = 1;
   VectorIndexParameter vector_index_parameter = 2;
   ScalarIndexParameter scalar_index_parameter = 3;
+  DocumentIndexParameter document_index_parameter = 4;
+}
+
+message DocumentIndexParameter {
+  string json_parameter = 1;
+  ScalarSchema scalar_schema = 2;
 }
 
 message RegionStatus {
@@ -729,6 +738,7 @@ message RegionMetrics {
   // bool is_hold_vector_index = 29;                // is hold vector index
   VectorIndexMetrics vector_index_metrics = 20;  // vector index  metrics
   int64 snapshot_epoch_version = 21;             // latest region raft snapshot epoch version
+  DocumentMetrics document_index_metrics = 22;   // document index metrics
 
   // region's info
   RegionStatus region_status = 30;
@@ -933,9 +943,8 @@ message DocumentSearchParameter {
   repeated string selected_keys = 4;  // If without_scalar_data is false, selected_keys is used to select scalar data,
                                       // if this parameter is null, all scalar data will be returned.
 
-  bool use_id_filter = 5;            // use id filter
-  bool is_negation = 10;             // if use_id_filter = true, use this field, if true, filter out the document_ids
-  bool is_sorted = 11;               // document_ids is sorted
+  // use id filter
+  bool use_id_filter = 5;
   repeated int64 document_ids = 12;  // if use_id_filter = true, use this field
 }
 
@@ -945,7 +954,7 @@ message DocumentWithScore {
 }
 
 // document index metrics
-message DocumentIndexMetrics {
+message DocumentMetrics {
   // total num docs
   int64 total_num_docs = 1;
 

@@ -464,6 +464,9 @@ message Mutation {
 
   // for vector index region, executor must use the VectorWithId to do put/putifabsent
   dingodb.pb.common.VectorWithId vector = 4;
+
+  // for document index region, executor must use the DocumentWithId to do put/putifabsent
+  dingodb.pb.common.DocumentWithId document = 5;
 }
 
 message WriteConflict {

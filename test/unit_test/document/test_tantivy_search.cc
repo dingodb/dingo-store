@@ -393,13 +393,11 @@ TEST(DingoTantivySearchTest, test_multi_type_column) {
                                          {"col2"}, {100}, {"col3"}, {100.0}, {}, {});
   std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
   EXPECT_EQ(ret.result, true);
-  ret =
-
-      ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
-                                       {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
-                                        "。",
-                                        "Artistic expressions reflect diverse cultural heritages."},
-                                       i64_column_names, {200}, f64_column_names, {200.0}, {}, {});
+  ret = ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
+                                         {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
+                                          "。",
+                                          "Artistic expressions reflect diverse cultural heritages."},
+                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 2, text_column_names,
                                          {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
