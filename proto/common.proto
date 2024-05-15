@@ -364,16 +364,17 @@ enum VectorFilterType {
 }
 
 enum ScalarFieldType {
-  NONE = 0;
-  BOOL = 1;
-  INT8 = 2;
-  INT16 = 3;
-  INT32 = 4;
-  INT64 = 5;
-  FLOAT32 = 6;
-  DOUBLE = 7;
-  STRING = 8;
-  BYTES = 9;
+  NONE = 0;     // just a placeholder
+  BOOL = 1;     // not used now
+  INT8 = 2;     // not used now
+  INT16 = 3;    // not used now
+  INT32 = 4;    // not used now
+  INT64 = 5;    // for vector and document
+  FLOAT32 = 6;  // not used now
+  DOUBLE = 7;   // for vector and document
+  STRING = 8;   // for vector is string, for document is text with tokenizer
+  BYTES = 9;  // for document only, is binary data, no tokenizer is used, not implemented now, will be used in the near
+              // future
 }
 
 message ScalarField {
@@ -901,4 +902,65 @@ message VersionInfo {
   bool use_tcmalloc = 90;
   bool use_profiler = 100;
   bool use_sanitizer = 110;
+}
+
+message DocumentValue {
+  // data type of scalar field
+  // for document, only INT64, DOUBLE and STRING is supported
+  ScalarFieldType field_type = 1;
+  // scalar field, only one element in most cases
+  ScalarField fields = 2;
+}
+
+message Document {
+  // scalar data of this document, key: scalar key, value: scalar value data.
+  map<string, DocumentValue> document_data = 1;
+}
+
+message DocumentWithId {
+  int64 id = 1;
+  Document document = 2;  // document data
+}
+
+message DocumentSearchParameter {
+  // The number of top results to return.
+  uint32 top_n = 1;
+
+  // The query_string for search
+  string query_string = 2;
+
+  bool without_scalar_data = 3;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 4;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+
+  bool use_id_filter = 5;            // use id filter
+  bool is_negation = 10;             // if use_id_filter = true, use this field, if true, filter out the document_ids
+  bool is_sorted = 11;               // document_ids is sorted
+  repeated int64 document_ids = 12;  // if use_id_filter = true, use this field
+}
+
+message DocumentWithScore {
+  DocumentWithId document_with_id = 1;
+  float score = 2;
+}
+
+// document index metrics
+message DocumentIndexMetrics {
+  // total num docs
+  int64 total_num_docs = 1;
+
+  // total num tokens
+  int64 total_num_tokens = 2;
+
+  // max id
+  int64 max_id = 3;
+
+  // min id
+  int64 min_id = 4;
+
+  // meta json
+  string meta_json = 5;
+
+  // json parameter
+  string json_parameter = 6;
 }
