@@ -66,6 +66,10 @@ class Constant {
   inline static const uint32_t kVectorKeyMinLenWithPrefix = 9;
   inline static const uint32_t kVectorKeyMaxLenWithPrefix = 17;
 
+  // document key len
+  inline static const uint32_t kDocumentKeyMinLenWithPrefix = 9;
+  inline static const uint32_t kDocumentKeyMaxLenWithPrefix = 17;
+
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
   // Define region change record.
@@ -80,6 +84,11 @@ class Constant {
   inline static const std::string kVectorIndexApplyLogIdPrefix = "VECTOR_INDEX_APPLY_LOG";
   // Define vector index snapshot max log prefix.
   inline static const std::string kVectorIndexSnapshotLogIdPrefix = "VECTOR_INDEX_SNAPSHOT_LOG";
+
+  // Define document index apply max log prefix.
+  inline static const std::string kDocumentIndexApplyLogIdPrefix = "DOCUMENT_INDEX_APPLY_LOG";
+  // Define document index snapshot max log prefix.
+  inline static const std::string kDocumentIndexSnapshotLogIdPrefix = "DOCUMENT_INDEX_SNAPSHOT_LOG";
 
   // Define default raft snapshot policy
   inline static const std::string kDefaultRaftSnapshotPolicy = "checkpoint";

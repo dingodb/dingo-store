@@ -46,6 +46,8 @@ std::shared_ptr<Engine::Writer> MemEngine::NewWriter(pb::common::RawEngine) { re
 
 std::shared_ptr<Engine::VectorReader> MemEngine::NewVectorReader(pb::common::RawEngine) { return nullptr; }
 
+std::shared_ptr<Engine::DocumentReader> MemEngine::NewDocumentReader(pb::common::RawEngine) { return nullptr; }
+
 std::shared_ptr<Engine::TxnReader> MemEngine::NewTxnReader(pb::common::RawEngine) { return nullptr; }
 
 std::shared_ptr<Engine::TxnWriter> MemEngine::NewTxnWriter(pb::common::RawEngine) { return nullptr; }

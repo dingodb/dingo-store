@@ -73,6 +73,8 @@ if [ ${FLAGS_role} == "coordinator" ]; then
   deploy_store ${FLAGS_role} ${BASE_DIR} ${program_dir} `expr ${COORDINATOR_SERVER_START_PORT} + ${i}` `expr ${COORDINATOR_RAFT_START_PORT} + ${i}` `expr ${COORDINATOR_INSTANCE_START_ID} + ${i}` ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
 elif [ ${FLAGS_role} == "index" ]; then
   deploy_store ${FLAGS_role} ${BASE_DIR} ${program_dir} `expr ${INDEX_SERVER_START_PORT} + ${i}` `expr ${INDEX_RAFT_START_PORT} + ${i}` `expr ${INDEX_INSTANCE_START_ID} + ${i}` ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
+elif [ ${FLAGS_role} == "document" ]; then
+  deploy_store ${FLAGS_role} ${BASE_DIR} ${program_dir} `expr ${DOCUMENT_SERVER_START_PORT} + ${i}` `expr ${DOCUMENT_RAFT_START_PORT} + ${i}` `expr ${DOCUMENT_INSTANCE_START_ID} + ${i}` ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
 else
   deploy_store ${FLAGS_role} ${BASE_DIR} ${program_dir} `expr ${SERVER_START_PORT} + ${i}` `expr ${RAFT_START_PORT} + ${i}` `expr ${STORE_INSTANCE_START_ID} + ${i}` ${COOR_RAFT_PEERS} ${TMP_COORDINATOR_SERVICES}
 fi

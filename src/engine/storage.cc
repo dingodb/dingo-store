@@ -81,6 +81,17 @@ std::shared_ptr<Engine::VectorReader> Storage::GetEngineVectorReader(pb::common:
   }
 }
 
+std::shared_ptr<Engine::DocumentReader> Storage::GetEngineDocumentReader(pb::common::StorageEngine store_engine_type,
+                                                                         pb::common::RawEngine raw_engine_type) {
+  if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
+    return raft_engine_->NewDocumentReader(raw_engine_type);
+  } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
+    return mono_engine_->NewDocumentReader(raw_engine_type);
+  } else {
+    return nullptr;
+  }
+}
+
 std::shared_ptr<Engine::Writer> Storage::GetEngineWriter(pb::common::StorageEngine store_engine_type,
                                                          pb::common::RawEngine raw_engine_type) {
   if (BAIDU_LIKELY(store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
@@ -752,6 +763,200 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
       return butil::Status::OK();
     }
 
+    return status;
+  }
+
+  return butil::Status();
+}
+
+// document
+
+butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
+                                   const std::vector<pb::common::DocumentWithId>& documents) {
+  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
+    if (is_sync) {
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents));
+    }
+
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
+  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
+    if (is_sync) {
+      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents));
+    }
+
+    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
+  } else {
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  }
+}
+
+butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
+  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
+    if (is_sync) {
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+    }
+
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
+  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
+    if (is_sync) {
+      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+    }
+
+    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
+                                      if (!status.ok()) {
+                                        Helper::SetPbMessageError(status, ctx->Response());
+                                      }
+                                    });
+  } else {
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  }
+}
+
+butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                          std::vector<pb::common::DocumentWithId>& document_with_ids) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status = vector_reader->DocumentBatchQuery(ctx, document_with_ids);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Storage::DocumentBatchSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                           std::vector<pb::document::DocumentWithScoreResult>& results) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+  if (vector_reader == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status = vector_reader->DocumentBatchSearch(ctx, results);
+  if (!status.ok()) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t& document_id) {
+  auto status = ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
+  if (!vector_reader) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region->Id());
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status = vector_reader->DocumentGetBorderId(region->Range(), get_min, document_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                         std::vector<pb::common::DocumentWithId>& document_with_ids) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+  if (!vector_reader) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status = vector_reader->DocumentScanQuery(ctx, document_with_ids);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::DocumentGetRegionMetrics(store::RegionPtr region, DocumentIndexWrapperPtr document_index_wrapper,
+                                                pb::common::DocumentIndexMetrics& region_metrics) {
+  auto status = ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
+  if (!vector_reader) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region->Id());
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status =
+      vector_reader->DocumentGetRegionMetrics(region->Id(), region->Range(), document_index_wrapper, region_metrics);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t& count) {
+  auto status = ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
+  if (!vector_reader) {
+    DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", region->Id());
+    return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
+  }
+
+  status = vector_reader->DocumentCount(range, count);
+  if (!status.ok()) {
     return status;
   }
 

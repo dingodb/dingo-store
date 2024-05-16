@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "config/config_manager.h"
+#include "document/document_reader.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "engine/txn_engine_helper.h"
@@ -473,6 +474,7 @@ std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(pb::common::RawEngine
   return std::make_shared<RaftStoreEngine::Reader>(GetRawEngine(type)->Reader());
 }
 
+// vector
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
     std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
@@ -523,6 +525,48 @@ std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(pb::commo
   return std::make_shared<RaftStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
 }
 
+// document
+butil::Status RaftStoreEngine::DocumentReader::DocumentBatchSearch(
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::document::DocumentWithScoreResult>& results) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentBatchSearch(ctx, results);
+}
+
+butil::Status RaftStoreEngine::DocumentReader::DocumentBatchQuery(
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& vector_with_ids) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentBatchQuery(ctx, vector_with_ids);
+}
+
+butil::Status RaftStoreEngine::DocumentReader::DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
+                                                                   int64_t& vector_id) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentGetBorderId(region_range, get_min, vector_id);
+}
+
+butil::Status RaftStoreEngine::DocumentReader::DocumentScanQuery(
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& vector_with_ids) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentScanQuery(ctx, vector_with_ids);
+}
+
+butil::Status RaftStoreEngine::DocumentReader::DocumentGetRegionMetrics(
+    int64_t region_id, const pb::common::Range& region_range, DocumentIndexWrapperPtr vector_index,
+    pb::common::DocumentIndexMetrics& region_metrics) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
+}
+
+butil::Status RaftStoreEngine::DocumentReader::DocumentCount(const pb::common::Range& range, int64_t& count) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentCount(range, count);
+}
+
+std::shared_ptr<Engine::DocumentReader> RaftStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::DocumentReader>(GetRawEngine(type)->Reader());
+}
+
+// txn
 std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader(pb::common::RawEngine type) {
   return std::make_shared<RaftStoreEngine::TxnReader>(GetRawEngine(type));
 }

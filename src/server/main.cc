@@ -1420,6 +1420,151 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+  } else if (role == dingodb::pb::common::ClusterRole::DOCUMENT) {
+    // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
+    InitBthreadWorkerThreadNum(config);
+
+    // init service workers
+    auto ret1 = InitServiceWorkerParameters(config, role);
+    if (ret1 < 0) {
+      DINGO_LOG(ERROR) << "InitServiceWorkerParameters failed!";
+      return -1;
+    }
+
+    options.num_threads = bthread::FLAGS_bthread_concurrency;
+
+    DINGO_LOG(INFO) << "bthread worker_thread_num: " << bthread::FLAGS_bthread_concurrency;
+
+    if (brpc_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add node service to brpc_server!";
+      return -1;
+    }
+
+    if (raft_server.AddService(&node_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add node service raft_server!";
+      return -1;
+    }
+
+    dingodb::SimpleWorkerSetPtr read_worker_set =
+        dingodb::SimpleWorkerSet::New("read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
+    if (!read_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
+      return -1;
+    }
+    index_service.SetReadWorkSet(read_worker_set);
+    util_service.SetReadWorkSet(read_worker_set);
+    dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
+
+    dingodb::SimpleWorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
+    if (!write_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
+      return -1;
+    }
+    index_service.SetWriteWorkSet(write_worker_set);
+    dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
+
+    if (FLAGS_raft_apply_worker_num > 0) {
+      dingodb::SimpleWorkerSetPtr raft_apply_worker_set = dingodb::SimpleWorkerSet::New(
+          "apply_wkr", FLAGS_raft_apply_worker_num, 0, FLAGS_use_pthread_prior_worker_set, FLAGS_use_prior_worker_set);
+      if (!raft_apply_worker_set->Init()) {
+        DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
+        return -1;
+      }
+      index_service.SetRaftApplyWorkSet(raft_apply_worker_set);
+      dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
+      DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
+    } else {
+      DINGO_LOG(INFO) << "RaftApply worker num: 0";
+    }
+
+    if (!dingo_server.InitCoordinatorInteraction()) {
+      DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
+      return -1;
+    }
+    if (!dingo_server.ValiateCoordinator()) {
+      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
+      return -1;
+    }
+    if (!dingo_server.InitStorage()) {
+      DINGO_LOG(ERROR) << "InitStorage failed!";
+      return -1;
+    }
+    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
+    // workers to load index, so InitStoreMetaManager must be called before InitStoreMetaManager
+    if (!dingo_server.InitVectorIndexManager()) {
+      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
+      return -1;
+    }
+    index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
+    if (!dingo_server.InitStoreMetaManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitStoreMetricsManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitStoreController()) {
+      DINGO_LOG(ERROR) << "InitStoreController failed!";
+      return -1;
+    }
+    if (!dingo_server.InitRegionCommandManager()) {
+      DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitRegionController()) {
+      DINGO_LOG(ERROR) << "InitRegionController failed!";
+      return -1;
+    }
+    if (!dingo_server.InitPreSplitChecker()) {
+      DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
+      return -1;
+    }
+
+    index_service.SetStorage(dingo_server.GetStorage());
+    if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add index service!";
+      return -1;
+    }
+
+    util_service.SetStorage(dingo_server.GetStorage());
+    if (brpc_server.AddService(&util_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add util service!";
+      return -1;
+    }
+
+    if (brpc_server.AddService(&debug_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add region control service!";
+      return -1;
+    }
+
+    // add push service to server_location
+    if (brpc_server.AddService(&push_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add push service!";
+      return -1;
+    }
+
+    // add file service
+    if (brpc_server.AddService(&file_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add push service!";
+      return -1;
+    }
+
+    // raft server
+    if (braft::add_service(&raft_server, dingo_server.RaftListenEndpoint()) != 0) {
+      DINGO_LOG(ERROR) << "Fail to add raft service!";
+      return -1;
+    }
+
+    if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
+      DINGO_LOG(ERROR) << "Fail to start raft server!";
+      return -1;
+    }
+    DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+
   } else {
     DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";
     return -1;

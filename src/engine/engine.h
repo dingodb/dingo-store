@@ -23,11 +23,13 @@
 #include "butil/status.h"
 #include "common/context.h"
 #include "config/config.h"
+#include "document/document_index.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
+#include "proto/document.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
@@ -147,6 +149,61 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                                  int64_t& search_time_us) = 0;
   };
 
+  // Document reader
+  class DocumentReader {
+   public:
+    DocumentReader() = default;
+    virtual ~DocumentReader() = default;
+
+    struct Context {
+      int64_t partition_id{};
+      int64_t region_id{};
+
+      pb::common::RawEngine raw_engine_type{pb::common::RAW_ENG_ROCKSDB};
+      pb::common::StorageEngine store_engine_type{pb::common::STORE_ENG_RAFT_STORE};
+
+      pb::common::Range region_range;
+
+      std::vector<pb::common::DocumentWithId> document_with_ids;
+      std::vector<int64_t> document_ids;
+      pb::common::DocumentSearchParameter parameter;
+      std::vector<std::string> selected_scalar_keys;
+
+      int64_t start_id{};
+      int64_t end_id{};
+      int64_t limit{};
+
+      bool with_scalar_data{};
+      bool is_reverse{};
+      bool use_scalar_filter{};
+
+      DocumentIndexWrapperPtr document_index;
+      pb::common::ScalarSchema scalar_schema;
+    };
+
+    virtual butil::Status DocumentBatchSearch(std::shared_ptr<DocumentReader::Context> ctx,
+                                              std::vector<pb::document::DocumentWithScoreResult>& results) = 0;
+
+    virtual butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
+                                             std::vector<pb::common::DocumentWithId>& vector_with_ids) = 0;
+
+    virtual butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
+                                              int64_t& vector_id) = 0;
+    virtual butil::Status DocumentScanQuery(std::shared_ptr<DocumentReader::Context> ctx,
+                                            std::vector<pb::common::DocumentWithId>& vector_with_ids) = 0;
+    virtual butil::Status DocumentGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
+                                                   DocumentIndexWrapperPtr vector_index,
+                                                   pb::common::DocumentIndexMetrics& region_metrics) = 0;
+
+    virtual butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) = 0;
+
+    // This function is for testing only
+    virtual butil::Status DocumentBatchSearchDebug(std::shared_ptr<DocumentReader::Context> ctx,
+                                                   std::vector<pb::document::DocumentWithScoreResult>& results,
+                                                   int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
+                                                   int64_t& search_time_us) = 0;
+  };
+
   class TxnReader {
    public:
     TxnReader() = default;
@@ -203,6 +260,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
   virtual std::shared_ptr<Reader> NewReader(pb::common::RawEngine type) = 0;
   virtual std::shared_ptr<Writer> NewWriter(pb::common::RawEngine type) = 0;
   virtual std::shared_ptr<VectorReader> NewVectorReader(pb::common::RawEngine type) = 0;
+  virtual std::shared_ptr<DocumentReader> NewDocumentReader(pb::common::RawEngine type) = 0;
 
   virtual std::shared_ptr<TxnReader> NewTxnReader(pb::common::RawEngine type) = 0;
   virtual std::shared_ptr<TxnWriter> NewTxnWriter(pb::common::RawEngine type) = 0;
