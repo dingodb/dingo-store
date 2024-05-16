@@ -803,10 +803,10 @@ butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
 butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
     if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids, true));
     }
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids, true),
                                     [](std::shared_ptr<Context> ctx, butil::Status status) {
                                       if (!status.ok()) {
                                         Helper::SetPbMessageError(status, ctx->Response());

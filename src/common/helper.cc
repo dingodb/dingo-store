@@ -901,7 +901,7 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
 std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
             Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
@@ -921,7 +921,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
 std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     return {Constant::kStoreDataCF,  Constant::kTxnDataCF,      Constant::kTxnLockCF,
@@ -935,7 +935,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
 std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
     }
@@ -958,7 +958,7 @@ void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::strin
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     raw_cf_names.push_back(Constant::kStoreDataCF);
     return;
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       txn_cf_names.push_back(Constant::kTxnDataCF);
       txn_cf_names.push_back(Constant::kTxnLockCF);

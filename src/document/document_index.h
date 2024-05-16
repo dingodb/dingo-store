@@ -39,7 +39,7 @@ class DocumentIndex {
  public:
   DocumentIndex(int64_t id, const pb::common::DocumentIndexParameter& document_index_parameter,
                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range, ThreadPoolPtr thread_pool);
-  virtual ~DocumentIndex();
+  ~DocumentIndex();
 
   DocumentIndex(const DocumentIndex& rhs) = delete;
   DocumentIndex& operator=(const DocumentIndex& rhs) = delete;
@@ -88,58 +88,51 @@ class DocumentIndex {
     bool is_negation_{false};
   };
 
-  virtual int32_t GetDimension() = 0;
-  virtual pb::common::MetricType GetMetricType() = 0;
-  virtual butil::Status GetCount(int64_t& count);
-  virtual butil::Status GetDeletedCount(int64_t& deleted_count);
-  virtual butil::Status GetMemorySize(int64_t& memory_size);
-  virtual bool IsExceedsMaxElements() = 0;
+  static butil::Status GetCount(int64_t& count);
 
-  virtual butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids) = 0;
-  virtual butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_priority);
+  static butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids);
+  butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_priority);
   butil::Status AddByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids,
                               bool is_priority = false);
 
-  virtual butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids) = 0;
-  virtual butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_priority);
+  static butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids);
+  butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_priority);
   butil::Status UpsertByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids,
                                  bool is_priority = false);
 
-  virtual butil::Status Delete(const std::vector<int64_t>& delete_ids) = 0;
-  virtual butil::Status Delete(const std::vector<int64_t>& delete_ids, bool is_priority);
-  virtual butil::Status DeleteByParallel(const std::vector<int64_t>& delete_ids, bool is_priority);
+  static butil::Status Delete(const std::vector<int64_t>& delete_ids);
+  butil::Status Delete(const std::vector<int64_t>& delete_ids, bool is_priority);
+  butil::Status DeleteByParallel(const std::vector<int64_t>& delete_ids, bool is_priority);
 
-  virtual butil::Status Save(const std::string& path);
+  static butil::Status Save(const std::string& path);
 
-  virtual butil::Status Load(const std::string& path);
+  static butil::Status Load(const std::string& path);
 
-  virtual butil::Status Search(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
-                               const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
-                               const pb::common::DocumentSearchParameter& parameter,
-                               std::vector<pb::document::DocumentWithScoreResult>& results) = 0;
+  butil::Status Search(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
+                       const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
+                       const pb::common::DocumentSearchParameter& parameter,
+                       std::vector<pb::document::DocumentWithScoreResult>& results);
 
   butil::Status SearchByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
                                  const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                  const pb::common::DocumentSearchParameter& parameter,
                                  std::vector<pb::document::DocumentWithScoreResult>& results);
 
-  virtual butil::Status RangeSearch(const std::vector<pb::common::DocumentWithId>& document_with_ids, float radius,
-                                    const std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,
-                                    bool reconstruct, const pb::common::DocumentSearchParameter& parameter,
-                                    std::vector<pb::document::DocumentWithScoreResult>& results) = 0;
+  butil::Status RangeSearch(const std::vector<pb::common::DocumentWithId>& document_with_ids, float radius,
+                            const std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters, bool reconstruct,
+                            const pb::common::DocumentSearchParameter& parameter,
+                            std::vector<pb::document::DocumentWithScoreResult>& results);
 
-  virtual void LockWrite() = 0;
-  virtual void UnlockWrite() = 0;
-  virtual butil::Status Train(std::vector<float>& train_datas) = 0;
-  virtual butil::Status TrainByParallel(std::vector<float>& train_datas);
-  virtual butil::Status Train(const std::vector<pb::common::DocumentWithId>& vectors) = 0;
-  virtual bool NeedToRebuild() = 0;
-  virtual bool NeedTrain() { return false; }
-  virtual bool IsTrained() { return true; }
-  virtual bool NeedToSave(int64_t last_save_log_behind) = 0;
-  virtual bool SupportSave() { return false; }
+  void LockWrite();
+  void UnlockWrite();
 
-  virtual uint32_t WriteOpParallelNum() { return 1; }
+  bool NeedToRebuild() { return false; }                           // NOLINT
+  bool NeedTrain() { return false; }                               // NOLINT
+  bool IsTrained() { return true; }                                // NOLINT
+  bool NeedToSave(int64_t last_save_log_behind) { return false; }  // NOLINT
+  bool SupportSave() { return false; }                             // NOLINT
+
+  uint32_t WriteOpParallelNum() { return 1; }  // NOLINT
 
   int64_t Id() const { return id; }
 
@@ -169,8 +162,11 @@ class DocumentIndex {
 
   pb::common::DocumentIndexParameter document_index_parameter;
 
-  // vector index thread pool
+  // document index thread pool
   ThreadPoolPtr thread_pool;
+
+ private:
+  RWLock rw_lock_;
 };
 
 using DocumentIndexPtr = std::shared_ptr<DocumentIndex>;
@@ -240,24 +236,17 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   bool IsSwitchingDocumentIndex();
   void SetIsSwitchingDocumentIndex(bool is_switching);
 
-  void SetIsTempHoldDocumentIndex(bool need);
-
-  // check temp hold vector index
-  bool IsTempHoldDocumentIndex() const;
-  // check permanent hold vector index
-  static bool IsPermanentHoldDocumentIndex(int64_t region_id);
-
-  void UpdateDocumentIndex(DocumentIndexPtr vector_index, const std::string& trace);
+  void UpdateDocumentIndex(DocumentIndexPtr document_index, const std::string& trace);
   void ClearDocumentIndex(const std::string& trace);
 
   DocumentIndexPtr GetOwnDocumentIndex();
   DocumentIndexPtr GetDocumentIndex();
 
   DocumentIndexPtr ShareDocumentIndex();
-  void SetShareDocumentIndex(DocumentIndexPtr vector_index);
+  void SetShareDocumentIndex(DocumentIndexPtr document_index);
 
   DocumentIndexPtr SiblingDocumentIndex();
-  void SetSiblingDocumentIndex(DocumentIndexPtr vector_index);
+  void SetSiblingDocumentIndex(DocumentIndexPtr document_index);
 
   bool ExecuteTask(TaskRunnablePtr task);
 
@@ -277,12 +266,7 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   void IncSavingNum();
   void DecSavingNum();
 
-  int32_t GetDimension();
-  pb::common::MetricType GetMetricType();
   butil::Status GetCount(int64_t& count);
-  butil::Status GetDeletedCount(int64_t& deleted_count);
-  butil::Status GetMemorySize(int64_t& memory_size);
-  bool IsExceedsMaxElements();
 
   bool NeedToRebuild();
   bool NeedToSave(std::string& reason);
@@ -298,22 +282,22 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
                        std::vector<pb::document::DocumentWithScoreResult>& results);
 
   static butil::Status SetDocumentIndexRangeFilter(
-      DocumentIndexPtr vector_index,
+      DocumentIndexPtr document_index,
       std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,  // NOLINT
       int64_t min_document_id, int64_t max_document_id);
 
  private:
-  // vector index id
+  // document index id
   int64_t id_;
-  // vector index version
+  // document index version
   int64_t version_{0};
-  // vector index is ready
+  // document index is ready
   std::atomic<bool> ready_;
-  // stop vector index
+  // stop document index
   std::atomic<bool> stop_;
-  // vector index build status
+  // document index build status
   std::atomic<bool> build_error_{false};
-  // vector index rebuild status
+  // document index rebuild status
   std::atomic<bool> rebuild_error_{false};
 
   // document index definition parameter
@@ -324,25 +308,25 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   // last snapshot log id
   std::atomic<int64_t> snapshot_log_id_;
 
-  // Indicate switching vector index.
-  std::atomic<bool> is_switching_vector_index_;
+  // Indicate switching document index.
+  std::atomic<bool> is_switching_document_index_;
 
-  // Own vector index
-  DocumentIndexPtr vector_index_;
-  // Share other vector index.
-  DocumentIndexPtr share_vector_index_;
-  // Sibling vector index by merge source region.
-  DocumentIndexPtr sibling_vector_index_;
+  // Own document index
+  DocumentIndexPtr document_index_;
+  // Share other document index.
+  DocumentIndexPtr share_document_index_;
+  // Sibling document index by merge source region.
+  DocumentIndexPtr sibling_document_index_;
 
-  // Protect vector_index_/share_vector_index_
-  bthread_mutex_t vector_index_mutex_;
+  // Protect document_index_/share_document_index_
+  bthread_mutex_t document_index_mutex_;
 
   std::atomic<int32_t> pending_task_num_;
-  // vector index loadorbuilding num
+  // document index loadorbuilding num
   std::atomic<int32_t> loadorbuilding_num_;
-  // vector index rebuilding num
+  // document index rebuilding num
   std::atomic<int32_t> rebuilding_num_;
-  // vector index saving num
+  // document index saving num
   std::atomic<int32_t> saving_num_;
 
   // write(add/update/delete) key count
@@ -350,9 +334,6 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t last_save_write_key_count_{0};
   // save snapshot threshold write key num
   int64_t save_snapshot_threshold_write_key_num_;
-
-  // need hold vector index
-  std::atomic<bool> is_hold_vector_index_;
 };
 
 using DocumentIndexWrapperPtr = std::shared_ptr<DocumentIndexWrapper>;

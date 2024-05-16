@@ -137,6 +137,24 @@ class RebuildVectorIndexHandler : public BaseHandler {
              int64_t log_id) override;
 };
 
+// DocumentAddRequest
+class DocumentAddHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kDocumentAdd; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
+};
+
+// DocumentDeleteRequest
+class DocumentDeleteHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kDocumentDelete; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metricss, int64_t term_id,
+             int64_t log_id) override;
+};
+
 class TxnHandler : public BaseHandler {
  public:
   HandlerType GetType() override { return HandlerType::kTxn; }

@@ -650,6 +650,8 @@ bool StoreServerMeta::Init() {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_INDEX);
+  } else if (GetRole() == pb::common::ClusterRole::DOCUMENT) {
+    store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT);
   } else {
     DINGO_LOG(FATAL) << "[store.meta] unknown server role: " << GetRole();
   }
