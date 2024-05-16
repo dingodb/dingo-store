@@ -30,17 +30,20 @@ echo "DEPLOY_SERVER_NUM="${DEPLOY_SERVER_NUM}
 ./stop.sh --role coordinator --force=1
 ./stop.sh --role store --force=1
 ./stop.sh --role index --force=1
+./stop.sh --role document --force=1
 echo "force stop all"
 sleep 1
 ./deploy_server.sh --role coordinator --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
 ./deploy_server.sh --role store --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
 ./deploy_server.sh --role index --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
+./deploy_server.sh --role document --clean_all --server_num=${DEPLOY_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
 sleep 1
 echo "deploy all"
 
 ./start_server.sh --role coordinator --server_num=${DEPLOY_SERVER_NUM} 
 ./start_server.sh --role store --server_num=${DEPLOY_SERVER_NUM}
 ./start_server.sh --role index --server_num=${DEPLOY_SERVER_NUM}
+./start_server.sh --role document --server_num=${DEPLOY_SERVER_NUM}
 echo "start all"
 
 ./check_store.sh

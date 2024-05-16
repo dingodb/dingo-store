@@ -15,7 +15,6 @@
 #ifndef DINGODB_ENGINE_WRITE_DATA_H_
 #define DINGODB_ENGINE_WRITE_DATA_H_
 
-#include <cstdarg>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -130,6 +129,51 @@ struct VectorDeleteDatum : public DatumAble {
     vector_delete_request->set_cf_name(cf_name);
     for (const auto& id : ids) {
       vector_delete_request->add_ids(id);
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<int64_t> ids;
+};
+
+struct DocumentAddDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kPut; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DOCUMENT_ADD);
+    pb::raft::DocumentAddRequest* document_add_request = request->mutable_document_add();
+    document_add_request->set_cf_name(cf_name);
+    for (auto& document : documents) {
+      document_add_request->add_documents()->Swap(&document);
+    }
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::DocumentWithId> documents;
+};
+
+struct DocumentDeleteDatum : public DatumAble {
+  ~DocumentDeleteDatum() override = default;
+  DatumType GetType() override { return DatumType::kDeleteBatch; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::VECTOR_DELETE);
+    pb::raft::DocumentDeleteRequest* document_delete_request = request->mutable_document_delete();
+    document_delete_request->set_cf_name(cf_name);
+    for (const auto& id : ids) {
+      document_delete_request->add_ids(id);
     }
 
     return request;
@@ -395,6 +439,32 @@ class WriteDataBuilder {
   // VectorDeleteDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<int64_t>& ids) {
     auto datum = std::make_shared<VectorDeleteDatum>();
+    datum->cf_name = cf_name;
+    datum->ids = ids;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // DocumentAddDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+                                               const std::vector<pb::common::DocumentWithId>& documents) {
+    auto datum = std::make_shared<DocumentAddDatum>();
+    datum->cf_name = cf_name;
+    datum->documents = documents;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // DocumentDeleteDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<int64_t>& ids,
+                                               bool is_document [[maybe_unused]]) {
+    auto datum = std::make_shared<DocumentDeleteDatum>();
     datum->cf_name = cf_name;
     datum->ids = ids;
 

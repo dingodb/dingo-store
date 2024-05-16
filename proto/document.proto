@@ -87,7 +87,7 @@ message DocumentGetRegionMetricsRequest {
 message DocumentGetRegionMetricsResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
-  dingodb.pb.common.DocumentMetrics metrics = 3;
+  dingodb.pb.common.DocumentIndexMetrics metrics = 3;
 }
 
 message DocumentSearchRequest {

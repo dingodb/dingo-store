@@ -45,6 +45,10 @@ enum CmdType {
   VECTOR_DELETE = 3001;
   REBUILD_VECTOR_INDEX = 3010;
 
+  // document [5000,6000]
+  DOCUMENT_ADD = 5000;
+  DOCUMENT_DELETE = 5001;
+
   // txn
   TXN = 4000;
 }
@@ -161,6 +165,7 @@ message RaftMetaRequest {
   dingodb.pb.coordinator_internal.MetaIncrement meta_increment = 1;
 }
 
+// vector
 message VectorAddRequest {
   string cf_name = 1;
   repeated dingodb.pb.common.VectorWithId vectors = 2;
@@ -182,6 +187,21 @@ message RebuildVectorIndexRequest {
 
 message RebuildVectorIndexResponse {}
 
+// document
+message DocumentAddRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.DocumentWithId documents = 2;
+}
+
+message DocumentAddResponse {}
+
+message DocumentDeleteRequest {
+  string cf_name = 1;
+  repeated int64 ids = 2;
+}
+
+message DocumentDeleteResponse {}
+
 // txn
 message PutsWithCf {
   bytes cf_name = 1;
@@ -198,6 +218,8 @@ message MultiCfPutAndDeleteRequest {
   repeated DeletesWithCf deletes_with_cf = 2;
   VectorAddRequest vector_add = 3;
   VectorDeleteRequest vector_del = 4;
+  DocumentAddRequest document_add = 5;
+  DocumentDeleteRequest document_del = 6;
 }
 
 message MultiCfPutAndDeleteResponse {}
@@ -255,6 +277,10 @@ message Request {
     VectorDeleteRequest vector_delete = 3001;
     RebuildVectorIndexRequest rebuild_vector_index = 3010;
 
+    // document [5000,6000]
+    DocumentAddRequest document_add = 5000;
+    DocumentDeleteRequest document_delete = 5001;
+
     // txn
     TxnRaftRequest txn_raft_req = 4000;
   }
@@ -283,6 +309,10 @@ message Response {
     VectorAddResponse vector_add = 3000;
     VectorDeleteResponse vector_delete = 3001;
     RebuildVectorIndexResponse rebuild_vector_index = 3010;
+
+    // document [5000,5000]
+    DocumentAddResponse document_add = 5000;
+    DocumentDeleteResponse document_delete = 5001;
 
     // txn
     TxnRaftResponse txn_raft_resp = 4000;
