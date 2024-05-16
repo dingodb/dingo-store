@@ -75,10 +75,12 @@ void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* c
 }
 
 void UtilServiceImpl::VectorCalcDistance(google::protobuf::RpcController* controller,
-                                         const ::dingodb::pb::index::VectorCalcDistanceRequest* request,
-                                         ::dingodb::pb::index::VectorCalcDistanceResponse* response,
+                                         const pb::index::VectorCalcDistanceRequest* request,
+                                         pb::index::VectorCalcDistanceResponse* response,
                                          ::google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto* svr_done =
+      new ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::VectorCalcDistanceResponse, false>(
+          __func__, done, request, response);
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorCalcDistance(storage_, controller, request, response, svr_done);

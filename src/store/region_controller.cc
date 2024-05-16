@@ -944,11 +944,13 @@ void ChangeRegionTask::Run() {
 butil::Status TransferLeaderTask::PreValidateTransferLeader(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
-  return ValidateTransferLeader(store_meta_manager, command.region_id(), command.transfer_leader_request().peer());
+  const auto& request = command.transfer_leader_request();
+  return ValidateTransferLeader(store_meta_manager, command.region_id(), request.peer(), request.is_force());
 }
 
 butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager,
-                                                         int64_t region_id, const pb::common::Peer& peer) {
+                                                         int64_t region_id, const pb::common::Peer& peer,
+                                                         bool is_force) {
   auto region = store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Region not exist, can't transfer leader.");
@@ -958,24 +960,70 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
     return butil::Status(pb::error::EREGION_STATE, "Region state not allow transfer leader.");
   }
 
-  if (peer.store_id() == Server::GetInstance().Id()) {
-    return butil::Status(pb::error::ERAFT_TRANSFER_LEADER, "The peer is already leader, not need transfer.");
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+    if (peer.store_id() == Server::GetInstance().Id()) {
+      return butil::Status(pb::error::ERAFT_TRANSFER_LEADER, "The peer is already leader, not need transfer.");
+    }
+
+    if (peer.raft_location().host().empty() || peer.raft_location().host() == "0.0.0.0") {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Raft location is invalid.");
+    }
+
+    auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+    if (raft_store_engine == nullptr) {
+      return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
+    }
+
+    auto node = raft_store_engine->GetNode(region_id);
+    if (node == nullptr) {
+      return butil::Status(pb::error::ERAFT_NOT_FOUND, "No found raft node.");
+    }
+
+    if (!node->IsLeader()) {
+      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+    }
+
+    auto raft_status = node->GetStatus();
+    if (raft_status == nullptr) {
+      return butil::Status(pb::error::EINTERNAL, "Get raft status failed.");
+    }
+
+    if (!is_force) {
+      if (!raft_status->unstable_followers().empty()) {
+        return butil::Status(pb::error::EINTERNAL, "Has unstable followers.");
+      }
+
+      for (const auto& [peer, follower] : raft_status->stable_followers()) {
+        if (follower.consecutive_error_times() > 0) {
+          return butil::Status(pb::error::EINTERNAL, "follower %s abnormal.", peer.c_str());
+        }
+
+        if (follower.next_index() + Constant::kTransferLeaderRaftLogFallBehindThreshold < raft_status->last_index()) {
+          return butil::Status(pb::error::EINTERNAL, "Follower %s log fall behind exceed %d.", peer.c_str(),
+                               Constant::kTransferLeaderRaftLogFallBehindThreshold);
+        }
+      }
+    }
   }
 
-  if (peer.raft_location().host().empty() || peer.raft_location().host() == "0.0.0.0") {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Raft location is invalid.");
+  if (!is_force) {
+    // check region traffic
+    int32_t serving_request_count = region->GetServingRequestCount();
+    if (serving_request_count > 0) {
+      return butil::Status(pb::error::EREGION_BUSY, "Region is busy.");
+    }
   }
 
   return butil::Status();
 }
 
 butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64_t region_id,
-                                                 const pb::common::Peer& peer) {
+                                                 const pb::common::Peer& peer, bool is_force) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] transfer leader, peer: {}", region_id,
                                   peer.ShortDebugString());
 
-  auto status = ValidateTransferLeader(store_meta_manager, region_id, peer);
+  auto status = ValidateTransferLeader(store_meta_manager, region_id, peer, is_force);
   if (!status.ok()) {
     return status;
   }
@@ -988,7 +1036,8 @@ butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64
 }
 
 void TransferLeaderTask::Run() {
-  auto status = TransferLeader(ctx_, region_cmd_->region_id(), region_cmd_->transfer_leader_request().peer());
+  const auto& request = region_cmd_->transfer_leader_request();
+  auto status = TransferLeader(ctx_, region_cmd_->region_id(), request.peer(), request.is_force());
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] transfer leader failed, error: {}",
                                     region_cmd_->change_peer_request().region_definition().id(), status.error_cstr());

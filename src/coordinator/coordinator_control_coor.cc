@@ -4753,10 +4753,6 @@ int CoordinatorControl::GetStoreOperationOfNotCreateForSend(int64_t store_id,
       continue;
     }
 
-    if (region_cmd.region_cmd().region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
-      continue;
-    }
-
     *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
 
     region_cmd_count++;
@@ -5765,6 +5761,10 @@ bool CoordinatorControl::CheckStoreOperationResult(pb::coordinator::RegionCmdTyp
       if (errcode == Errno::EREGION_NOT_FOUND) {
         return true;
       }
+      break;
+    case RegionCmdType::CMD_TRANSFER_LEADER:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... transfer leader failed, errcode=" << errcode;
+      return true;
       break;
     default:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... unknown region cmd type " << cmd_type

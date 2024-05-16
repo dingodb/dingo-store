@@ -119,13 +119,8 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorBatchQueryRequest(storage, request, region);
   if (!status.ok()) {
@@ -163,6 +158,11 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
                                         pb::index::VectorBatchQueryResponse* response,
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorBatchQuery(storage_, controller, request, response, svr_done);
@@ -257,13 +257,8 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorSearchRequest(storage, request, region);
   if (!status.ok()) {
@@ -319,6 +314,11 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
                                     const pb::index::VectorSearchRequest* request,
                                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_search) {
     return DoVectorSearch(storage_, controller, request, response, svr_done);
@@ -448,13 +448,8 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateVectorAddRequest(storage, request, region);
   if (!status.ok()) {
@@ -488,6 +483,11 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
                                  const pb::index::VectorAddRequest* request, pb::index::VectorAddResponse* response,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -562,13 +562,8 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateVectorDeleteRequest(storage, request, region);
   if (!status.ok()) {
@@ -597,6 +592,11 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
                                     const pb::index::VectorDeleteRequest* request,
                                     pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -645,13 +645,8 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorGetBorderIdRequest(storage, request, region);
   if (!status.ok()) {
@@ -675,6 +670,11 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
                                          pb::index::VectorGetBorderIdResponse* response,
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorGetBorderId(storage_, controller, request, response, svr_done);
@@ -735,13 +735,8 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorScanQueryRequest(storage, request, region);
   if (!status.ok()) {
@@ -784,6 +779,11 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
                                        const pb::index::VectorScanQueryRequest* request,
                                        pb::index::VectorScanQueryResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorScanQuery(storage_, controller, request, response, svr_done);
@@ -839,13 +839,8 @@ void DoVectorGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControlle
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorGetRegionMetricsRequest(storage, request, region);
   if (!status.ok()) {
@@ -870,6 +865,11 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
                                               pb::index::VectorGetRegionMetricsResponse* response,
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_operation) {
     return DoVectorGetRegionMetrics(storage_, controller, request, response, svr_done);
@@ -951,13 +951,8 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorCountRequest(storage, request, region);
   if (!status.ok()) {
@@ -982,6 +977,11 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
                                    const pb::index::VectorCountRequest* request,
                                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_vector_count) {
     return DoVectorCount(storage_, controller, request, response, svr_done);
@@ -1080,13 +1080,8 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateVectorSearchDebugRequest(storage, request, region);
   if (!status.ok()) {
@@ -1138,6 +1133,12 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
                                          pb::index::VectorSearchDebugResponse* response,
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (!FLAGS_enable_async_vector_search) {
     return DoVectorSearchDebug(storage_, controller, request, response, svr_done);
   }
@@ -1181,13 +1182,8 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
@@ -1248,6 +1244,11 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
                               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnGetVector(storage_, controller, request, response, svr_done);
@@ -1302,13 +1303,8 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
@@ -1379,6 +1375,11 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
                                pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnScanVector(storage_, controller, request, response, svr_done);
@@ -1402,6 +1403,11 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
                                           pb::store::TxnPessimisticLockResponse* response,
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1434,6 +1440,11 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
                                               pb::store::TxnPessimisticRollbackResponse* response,
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1625,13 +1636,8 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateIndexTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
@@ -1713,6 +1719,11 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    const pb::store::TxnPrewriteRequest* request,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -1828,6 +1839,11 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1912,6 +1928,11 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1926,14 +1947,8 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = VectorValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
@@ -2013,6 +2028,11 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2027,14 +2047,8 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = VectorValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
@@ -2092,13 +2106,8 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
@@ -2161,6 +2170,11 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnBatchGetVector(storage_, controller, request, response, svr_done);
@@ -2218,6 +2232,11 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         pb::store::TxnBatchRollbackResponse* response,
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2290,6 +2309,11 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnScanLock(storage_, controller, request, response, svr_done);
@@ -2342,6 +2366,11 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2391,6 +2420,11 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2398,14 +2432,8 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = VectorValidateTxnGcRequest(request, region);
   if (!status.ok()) {
@@ -2460,6 +2488,11 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       const pb::store::TxnDeleteRangeRequest* request,
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -2516,6 +2549,11 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
 void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, const pb::store::TxnDumpRequest* request,
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
@@ -2585,7 +2623,8 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::ind
 void IndexServiceImpl::Hello(google::protobuf::RpcController* controller, const pb::index::HelloRequest* request,
                              pb::index::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto* svr_done =
+      new ServiceClosure<pb::index::HelloRequest, pb::index::HelloResponse, false>(__func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
 
@@ -2601,7 +2640,8 @@ void IndexServiceImpl::GetMemoryInfo(google::protobuf::RpcController* controller
                                      const pb::index::HelloRequest* request, pb::index::HelloResponse* response,
                                      google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto* svr_done =
+      new ServiceClosure<pb::index::HelloRequest, pb::index::HelloResponse, false>(__func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
 

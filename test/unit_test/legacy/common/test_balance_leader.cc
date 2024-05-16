@@ -166,22 +166,22 @@ std::map<int64_t, RegionInternal> GenerateRegionInternalMap(std::vector<RegionDi
   return region_internal_map;
 }
 
-std::vector<dingodb::StoreEntryPtr> GenerateStoreEntries(int store_num) {
-  std::vector<dingodb::StoreEntryPtr> stores;
+std::vector<dingodb::balance::StoreEntryPtr> GenerateStoreEntries(int store_num) {
+  std::vector<dingodb::balance::StoreEntryPtr> stores;
 
   for (int i = 0; i < store_num; ++i) {
     std::vector<int64_t> leader_region_ids;
     std::vector<int64_t> follower_region_ids;
 
     stores.push_back(
-        dingodb::StoreEntry::New(GenerateStore(1000 + GetNextId()), leader_region_ids, follower_region_ids));
+        dingodb::balance::StoreEntry::New(GenerateStore(1000 + GetNextId()), leader_region_ids, follower_region_ids));
   }
 
   return stores;
 }
 
 void DistributeRandomRegionToStore(int region_num, int replicate_num,
-                                   std::vector<dingodb::StoreEntryPtr>& store_entries) {
+                                   std::vector<dingodb::balance::StoreEntryPtr>& store_entries) {
   uint32_t store_size = store_entries.size();
 
   for (int i = 0; i < region_num; ++i) {
@@ -218,7 +218,7 @@ void DistributeRandomRegionToStore(int region_num, int replicate_num,
 // 60004  | L       | F       | F
 // 60005  | L       | F       | F
 // 60006  | L       | F       | F
-void DistributeRegionToStore(std::vector<dingodb::StoreEntryPtr>& store_entries) {
+void DistributeRegionToStore(std::vector<dingodb::balance::StoreEntryPtr>& store_entries) {
   {
     int64_t region_id = 60001;
     store_entries[0]->TestAddLeader(region_id);
@@ -263,40 +263,45 @@ void DistributeRegionToStore(std::vector<dingodb::StoreEntryPtr>& store_entries)
 }
 
 TEST_F(CandidateStoresTest, Build1) {
-  std::vector<dingodb::StoreEntryPtr> stores = GenerateStoreEntries(3);
+  std::vector<dingodb::balance::StoreEntryPtr> stores = GenerateStoreEntries(3);
   // DistributeRegionToStore(stores);
   DistributeRandomRegionToStore(10, 3, stores);
 
-  auto source_candidate_stores = dingodb::CandidateStores::New(stores, true);
+  auto source_candidate_stores = dingodb::balance::CandidateStores::New(stores, true);
   std::cout << "leader score: " << source_candidate_stores->ToString() << std::endl;
 }
 
 TEST_F(BalanceLeaderSchedulerTest, Schedule) {
-  // {
-  //   // region | store-1 | stcore-2 | store-3
-  //   // 60001  | L       | F       | F
-  //   // 60002  | L       | F       | F
-  //   // 60003  | L       | F       | F
-  //   // 60004  | L       | F       | F
-  //   // 60005  | L       | F       | F
-  //   // 60006  | L       | F       | F
-  //   std::vector<RegionDistribution> region_distributions = {
-  //       {60001, {1001, 1002, 1003}}, {60002, {1001, 1002, 1003}}, {60003, {1001, 1002, 1003}},
-  //       {60004, {1001, 1002, 1003}}, {60005, {1001, 1002, 1003}}, {60006, {1001, 1002, 1003}},
-  //   };
+  {
+    // region | store-1 | stcore-2 | store-3
+    // 60001  | L       | F       | F
+    // 60002  | L       | F       | F
+    // 60003  | L       | F       | F
+    // 60004  | L       | F       | F
+    // 60005  | L       | F       | F
+    // 60006  | L       | F       | F
+    std::vector<RegionDistribution> region_distributions = {
+        {60001, {1001, 1002, 1003}}, {60002, {1001, 1002, 1003}}, {60003, {1001, 1002, 1003}},
+        {60004, {1001, 1002, 1003}}, {60005, {1001, 1002, 1003}}, {60006, {1001, 1002, 1003}},
+    };
 
-  //   dingodb::pb::common::StoreMap store_map = GenerateStoreMap(region_distributions);
-  //   dingodb::pb::common::RegionMap region_map = GenerateRegionMap(region_distributions);
-  //   std::map<int64_t, RegionInternal> region_internal_map = GenerateRegionInternalMap(region_distributions);
+    dingodb::pb::common::StoreMap store_map = GenerateStoreMap(region_distributions);
+    dingodb::pb::common::RegionMap region_map = GenerateRegionMap(region_distributions);
+    std::map<int64_t, RegionInternal> region_internal_map = GenerateRegionInternalMap(region_distributions);
 
-  //   std::shared_ptr<dingodb::CoordinatorControl> coordinator_control =
-  //       std::make_shared<MockCoordinatorControl>(region_internal_map);
-  //   auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(coordinator_control);
+    std::shared_ptr<dingodb::CoordinatorControl> coordinator_control =
+        std::make_shared<MockCoordinatorControl>(region_internal_map);
 
-  //   balance_leader_scheduler->Schedule(region_map, store_map);
+    std::vector<dingodb::balance::FilterPtr> store_filters;
+    std::vector<dingodb::balance::FilterPtr> region_filters;
+    std::vector<dingodb::balance::FilterPtr> task_filters;
+    auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(
+        coordinator_control, nullptr, store_filters, region_filters, task_filters, nullptr);
 
-  //   std::this_thread::sleep_for(std::chrono::seconds(5));
-  // }
+    balance_leader_scheduler->Schedule(region_map, store_map);
+
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+  }
 
   {
     // region | store-1 | store-2 | store-3 | store-4 | store-5
@@ -327,7 +332,12 @@ TEST_F(BalanceLeaderSchedulerTest, Schedule) {
 
     std::shared_ptr<dingodb::CoordinatorControl> coordinator_control =
         std::make_shared<MockCoordinatorControl>(region_internal_map);
-    auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(coordinator_control);
+
+    std::vector<dingodb::balance::FilterPtr> store_filters;
+    std::vector<dingodb::balance::FilterPtr> region_filters;
+    std::vector<dingodb::balance::FilterPtr> task_filters;
+    auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(
+        coordinator_control, nullptr, store_filters, region_filters, task_filters, nullptr);
 
     balance_leader_scheduler->Schedule(region_map, store_map);
 

@@ -32,6 +32,7 @@ raft:
   election_timeout_s: 20
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32MB
+  leader_num_weight: 1
 log:
   level: INFO
   path: $BASE_PATH$/log
