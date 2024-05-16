@@ -30,6 +30,7 @@
 #include "common/constant.h"
 #include "common/latch.h"
 #include "common/safe_map.h"
+#include "document/document_index.h"
 #include "engine/gc_safe_point.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -127,6 +128,11 @@ class Region {
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
 
+  DocumentIndexWrapperPtr DocumentIndexWrapper() { return document_index_wapper_; }
+  void SetDocumentIndexWrapper(DocumentIndexWrapperPtr document_index_wapper) {
+    document_index_wapper_ = document_index_wapper;
+  }
+
   scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
 
   void SetLastChangeJobId(int64_t job_id);
@@ -147,6 +153,7 @@ class Region {
   pb::raft::SplitStrategy split_strategy_{};
 
   VectorIndexWrapperPtr vector_index_wapper_{nullptr};
+  DocumentIndexWrapperPtr document_index_wapper_{nullptr};
 
   // latches is for multi request concurrency control
   Latches latches_;

@@ -196,12 +196,6 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                                    pb::common::DocumentIndexMetrics& region_metrics) = 0;
 
     virtual butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) = 0;
-
-    // This function is for testing only
-    virtual butil::Status DocumentBatchSearchDebug(std::shared_ptr<DocumentReader::Context> ctx,
-                                                   std::vector<pb::document::DocumentWithScoreResult>& results,
-                                                   int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
-                                                   int64_t& search_time_us) = 0;
   };
 
   class TxnReader {

@@ -32,10 +32,6 @@
 
 namespace dingodb {
 
-DEFINE_int64(vector_index_max_range_search_result_count, 1024, "max range search result count");
-DEFINE_int64(vector_index_bruteforce_batch_count, 2048, "bruteforce batch count");
-DEFINE_bool(dingo_log_switch_scalar_speed_up_detail, false, "scalar speed up log");
-
 butil::Status DocumentReader::QueryDocumentWithId(const pb::common::Range& region_range, int64_t partition_id,
                                                   int64_t document_id, pb::common::DocumentWithId& document_with_id) {
   std::string key;
@@ -65,14 +61,14 @@ butil::Status DocumentReader::SearchDocument(
     const pb::common::ScalarSchema& scalar_schema [[maybe_unused]],
     std::vector<pb::document::DocumentWithScoreResult>& document_with_score_results) {
   if (document_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "Empty vector with ids";
+    DINGO_LOG(WARNING) << "Empty document with ids";
     return butil::Status();
   }
 
   bool with_scalar_data = !(parameter.without_scalar_data());
   std::vector<pb::document::DocumentWithScoreResult> tmp_results;
 
-  // if document index does not support restruct vector ,we restruct it using RocksDB
+  // if document index does not support restruct document,we restruct it using RocksDB
   if (with_scalar_data) {
     for (auto& result : document_with_score_results) {
       for (auto& document_with_distance : *result.mutable_document_with_scores()) {
@@ -92,7 +88,7 @@ butil::Status DocumentReader::SearchDocument(
 
 butil::Status DocumentReader::DocumentBatchSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                                   std::vector<pb::document::DocumentWithScoreResult>& results) {
-  // Search vectors by vectors
+  // Search documents by documents
   auto status = SearchDocument(ctx->partition_id, ctx->document_index, ctx->region_range, ctx->document_with_ids,
                                ctx->parameter, ctx->scalar_schema, results);
   if (!status.ok()) {
@@ -123,7 +119,7 @@ butil::Status DocumentReader::DocumentGetBorderId(const pb::common::Range& regio
                                                   int64_t& document_id) {
   auto status = GetBorderId(region_range, get_min, document_id);
   if (!status.ok()) {
-    DINGO_LOG(INFO) << "Get border vector id failed, error: " << status.error_str();
+    DINGO_LOG(INFO) << "Get border document id failed, error: " << status.error_str();
     return status;
   }
 
@@ -132,29 +128,29 @@ butil::Status DocumentReader::DocumentGetBorderId(const pb::common::Range& regio
 
 butil::Status DocumentReader::DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                                 std::vector<pb::common::DocumentWithId>& document_with_ids) {
-  DINGO_LOG(INFO) << fmt::format("Scan vector id, region_id: {} start_id: {} is_reverse: {} limit: {}", ctx->region_id,
-                                 ctx->start_id, ctx->is_reverse, ctx->limit);
+  DINGO_LOG(INFO) << fmt::format("Scan document id, region_id: {} start_id: {} is_reverse: {} limit: {}",
+                                 ctx->region_id, ctx->start_id, ctx->is_reverse, ctx->limit);
 
   // scan for ids
   std::vector<int64_t> document_ids;
   auto status = ScanDocumentId(ctx, document_ids);
   if (!status.ok()) {
-    DINGO_LOG(INFO) << "Scan vector id failed, error: " << status.error_str();
+    DINGO_LOG(INFO) << "Scan document id failed, error: " << status.error_str();
     return status;
   }
 
-  DINGO_LOG(INFO) << "scan vector id count: " << document_ids.size();
+  DINGO_LOG(INFO) << "scan document id count: " << document_ids.size();
 
   if (document_ids.empty()) {
     return butil::Status();
   }
 
-  // query vector with id
+  // query document_with id
   for (auto document_id : document_ids) {
     pb::common::DocumentWithId document_with_id;
     auto status = QueryDocumentWithId(ctx->region_range, ctx->partition_id, document_id, document_with_id);
     if (!status.ok()) {
-      DINGO_LOG(WARNING) << fmt::format("Query vector data failed, document_id {} error: {}", document_id,
+      DINGO_LOG(WARNING) << fmt::format("Query document data failed, document_id {} error: {}", document_id,
                                         status.error_str());
     }
 
@@ -168,16 +164,17 @@ butil::Status DocumentReader::DocumentScanQuery(std::shared_ptr<Engine::Document
 butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, const pb::common::Range& region_range,
                                                        DocumentIndexWrapperPtr document_index,
                                                        pb::common::DocumentIndexMetrics& region_metrics) {
-  int64_t total_vector_count = 0;
+  int64_t total_document_count = 0;
   int64_t max_id = 0;
   int64_t min_id = 0;
 
   auto inner_document_index = document_index->GetOwnDocumentIndex();
   if (inner_document_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", document_index->Id());
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.",
+                         document_index->Id());
   }
 
-  auto status = inner_document_index->GetCount(total_vector_count);
+  auto status = inner_document_index->GetCount(total_document_count);
   if (!status.ok()) {
     return status;
   }
@@ -295,7 +292,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
     }
     for (iter->Seek(seek_key); iter->Valid(); iter->Next()) {
-      pb::common::DocumentWithId vector;
+      pb::common::DocumentWithId document;
 
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentId(key);
@@ -334,8 +331,6 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       if (iter->Key() == range_end_key) {
         continue;
       }
-
-      pb::common::DocumentWithId vector;
 
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentId(key);

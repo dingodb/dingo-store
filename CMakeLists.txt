@@ -509,6 +509,7 @@ file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB LOG_SRCS ${PROJECT_SOURCE_DIR}/src/log/*.cc)
 file(GLOB REPORT_SRCS ${PROJECT_SOURCE_DIR}/src/report/*.cc)
 file(GLOB VECTOR_SRCS ${PROJECT_SOURCE_DIR}/src/vector/*.cc)
+file(GLOB DOCUMENT_SRCS ${PROJECT_SOURCE_DIR}/src/document/*.cc)
 file(GLOB SPLIT_SRCS ${PROJECT_SOURCE_DIR}/src/split/*.cc)
 file(GLOB RAFT_SRCS ${PROJECT_SOURCE_DIR}/src/raft/*.cc)
 file(GLOB ENGINE_SRCS ${PROJECT_SOURCE_DIR}/src/engine/*.cc)
@@ -542,6 +543,7 @@ add_library(DINGODB_OBJS
             ${LOG_SRCS}
             ${REPORT_SRCS}
             ${VECTOR_SRCS}
+            ${DOCUMENT_SRCS}
             ${SPLIT_SRCS}
             ${RAFT_SRCS}
             ${ENGINE_SRCS}
@@ -633,6 +635,7 @@ add_executable(dingodb_client
                 src/common/service_access.cc
                 src/coprocessor/utils.cc
                 src/vector/codec.cc
+                src/document/codec.cc
                 ${SERIAL1_SRCS}
                 ${SERIAL2_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)

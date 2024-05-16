@@ -77,4 +77,7 @@ uint64_t Tracker::StoreWriteTime() const { return metrics_.store_write_time_ns; 
 void Tracker::SetVectorIndexWriteTime(uint64_t elapsed_time) { metrics_.vector_index_write_time_ns = elapsed_time; }
 uint64_t Tracker::VectorIndexwriteTime() const { return metrics_.vector_index_write_time_ns; }
 
+void Tracker::SetDocumentIndexWriteTime(uint64_t elapsed_time) { metrics_.document_index_write_time_ns = elapsed_time; }
+uint64_t Tracker::DocumentIndexwriteTime() const { return metrics_.document_index_write_time_ns; }
+
 }  // namespace dingodb

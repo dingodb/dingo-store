@@ -31,6 +31,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "config/config_manager.h"
+#include "document/codec.h"
 #include "engine/raw_engine.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
@@ -1270,6 +1271,240 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
 
     VectorIndexManager::LaunchRebuildVectorIndex(vector_index_wrapper, request.cmd_id(), false, false, true,
                                                  "from raft");
+  }
+
+  return 0;
+}
+
+int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+                               const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
+                               int64_t /*term_id*/, int64_t log_id) {
+  auto set_ctx_status = [ctx](butil::Status status) {
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  };
+
+  butil::Status status;
+  const auto &request = req.document_add();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
+
+  // Transform vector to kv
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
+
+  std::vector<pb::common::KeyValue> kvs_default;          // for vector data
+  std::vector<pb::common::KeyValue> kvs_scalar;           // for vector scalar data
+  std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
+  std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
+
+  auto region_start_key = region->Range().start_key();
+  auto region_part_id = region->PartitionId();
+  for (const auto &document : request.documents()) {
+    // vector data
+    {
+      pb::common::KeyValue kv;
+      std::string key;
+      // DocumentCodec::EncodeDocumentData(region->PartitionId(), vector.id(), key);
+      DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, document.id(), key);
+
+      kv.mutable_key()->swap(key);
+      kv.set_value(document.document().SerializeAsString());
+      kvs_default.push_back(kv);
+    }
+  }
+  kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
+
+  // Put vector data to rocksdb
+  if (!kv_puts_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
+    auto writer = engine->Writer();
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
+      return 0;
+    }
+  }
+
+  if (ctx) {
+    if (ctx->Response()) {
+      bool key_state = status.ok();
+      auto *response = dynamic_cast<pb::document::DocumentAddResponse *>(ctx->Response());
+      for (int i = 0; i < request.documents_size(); i++) {
+        response->add_key_states(key_state);
+      }
+    }
+
+    ctx->SetStatus(status);
+  }
+
+  // Handle document index
+  auto document_index_wrapper = region->DocumentIndexWrapper();
+  int64_t document_index_id = document_index_wrapper->Id();
+  bool is_ready = document_index_wrapper->IsReady();
+
+  if (is_ready) {
+    // Check if the log_id is greater than the ApplyLogIndex of the vector index
+    if (log_id > document_index_wrapper->ApplyLogId() ||
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+      try {
+        // Build vector_with_ids
+        std::vector<pb::common::DocumentWithId> document_with_ids;
+        document_with_ids.reserve(request.documents_size());
+
+        for (const auto &document : request.documents()) {
+          pb::common::DocumentWithId document_with_id;
+          *(document_with_id.mutable_document()) = document.document();
+          document_with_id.set_id(document.id());
+          document_with_ids.push_back(document_with_id);
+        }
+
+        auto start_time = Helper::TimestampNs();
+        auto status = document_index_wrapper->Add(document_with_ids);
+        if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us",
+                                        document_index_id, document_with_ids.size(),
+                                        Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+            document_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
+                                            document_index_id, document_with_ids.size(), Helper::PrintStatus(status));
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}",
+                                        document_index_id, e.what());
+      }
+    }
+  }
+
+  return 0;
+}
+
+int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                  store::RegionMetricsPtr /*region_metrics*/, int64_t /*term_id*/, int64_t log_id) {
+  auto set_ctx_status = [ctx](butil::Status status) {
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  };
+
+  butil::Status status;
+  const auto &request = req.document_delete();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
+
+  auto reader = engine->Reader();
+  auto snapshot = engine->GetSnapshot();
+  if (!snapshot) {
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})][cf_name({})] GetSnapshot failed.", region->Id(),
+                                    request.cf_name());
+  }
+
+  if (request.ids_size() == 0) {
+    DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector id is empty.", region->Id());
+    status = butil::Status::OK();
+    set_ctx_status(status);
+    return 0;
+  }
+
+  // Transform vector to kv
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
+
+  std::vector<std::string> kv_deletes_default;
+  std::vector<std::string> kv_deletes_for_scalar_data_key_speed_up;
+
+  std::vector<bool> key_states(request.ids_size(), false);
+  // std::vector<std::string> keys;
+  std::vector<int64_t> delete_ids;
+
+  auto region_start_key = region->Range().start_key();
+  auto region_part_id = region->PartitionId();
+  pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+  for (int i = 0; i < request.ids_size(); i++) {
+    // set key_states
+    std::string key;
+    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, request.ids(i), key);
+
+    std::string value;
+    auto ret = reader->KvGet(request.cf_name(), snapshot, key, value);
+    if (ret.ok()) {
+      kv_deletes_default.push_back(key);
+
+      key_states[i] = true;
+      delete_ids.push_back(request.ids(i));
+
+      for (const auto &field : scalar_schema.fields()) {
+        if (field.enable_speed_up()) {
+          std::string result;
+          DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, request.ids(i), field.key(), result);
+          kv_deletes_for_scalar_data_key_speed_up.push_back(std::move(result));
+        }
+      }
+
+      DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
+    }
+  }
+
+  if (!kv_deletes_default.empty()) {
+    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
+  }
+
+  // Delete vector and write wal
+  if (!kv_deletes_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
+    auto writer = engine->Writer();
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
+    }
+  }
+
+  if (ctx) {
+    if (ctx->Response()) {
+      auto *response = dynamic_cast<pb::document::DocumentDeleteResponse *>(ctx->Response());
+      if (status.ok()) {
+        for (const auto &state : key_states) {
+          response->add_key_states(state);
+        }
+      } else {
+        response->mutable_key_states()->Resize(key_states.size(), false);
+      }
+    }
+
+    ctx->SetStatus(status);
+  }
+
+  auto document_index_wrapper = region->DocumentIndexWrapper();
+  int64_t vector_index_id = document_index_wrapper->Id();
+  bool is_ready = document_index_wrapper->IsReady();
+  if (is_ready && !delete_ids.empty()) {
+    if (log_id > document_index_wrapper->ApplyLogId() ||
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+      try {
+        auto start_time = Helper::TimestampNs();
+        auto status = document_index_wrapper->Delete(delete_ids);
+        if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+            document_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
+                                            vector_index_id, delete_ids.size(), Helper::PrintStatus(status));
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
+                                        e.what());
+      }
+    }
   }
 
   return 0;

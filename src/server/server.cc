@@ -431,7 +431,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.heartbeat_interval_s", FLAGS_server_heartbeat_interval_s);
   crontab_configs_.push_back({
       "HEARTBEA",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_heartbeat_interval_s * 1000,
       true,
       [](void*) { Heartbeat::TriggerStoreHeartbeat({}, true); },
@@ -442,7 +442,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.metrics_collect_interval_s", FLAGS_server_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_REGION_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreRegionMetrics(); },
@@ -453,7 +453,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.store_metrics_collect_interval_s", FLAGS_server_store_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_store_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreMetrics(); },
@@ -465,7 +465,7 @@ bool Server::InitCrontabManager() {
                   FLAGS_server_approximate_size_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "APPROXIMATE_SIZE_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_approximate_size_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectApproximateSizeMetrics(); },
@@ -500,6 +500,7 @@ bool Server::InitCrontabManager() {
   }
 
   // Add split checker crontab
+  // CAUTION: Do not split region for DOCUMENT
   if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
     FLAGS_region_enable_auto_split = config->GetBool("region.enable_auto_split");
     if (FLAGS_region_enable_auto_split) {
@@ -644,7 +645,7 @@ bool Server::InitCrontabManager() {
     FLAGS_raft_snapshot_interval_s = GetInterval(config, "raft.snapshot_interval_s", FLAGS_raft_snapshot_interval_s);
     crontab_configs_.push_back({
         "RAFT_SNAPSHOT_CONTROLLER",
-        {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX},
+        {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
         FLAGS_raft_snapshot_interval_s * 1000,
         true,
         [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
@@ -656,7 +657,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "gc.update_safe_point_interval_s", FLAGS_gc_update_safe_point_interval_s);
   crontab_configs_.push_back({
       "GC_UPDATE_SAFE_POINT",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_gc_update_safe_point_interval_s * 1000,
       true,
       [](void*) { TxnEngineHelper::RegularUpdateSafePointTsHandler(nullptr); },
@@ -666,7 +667,7 @@ bool Server::InitCrontabManager() {
   FLAGS_gc_do_gc_interval_s = GetInterval(config, "gc.do_gc_interval_s", FLAGS_gc_do_gc_interval_s);
   crontab_configs_.push_back({
       "GC_DO_GC",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_gc_do_gc_interval_s * 1000,
       true,
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
@@ -719,7 +720,7 @@ bool Server::InitPreSplitChecker() {
 }
 
 bool Server::Recover() {
-  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX || GetRole() == pb::common::DOCUMENT) {
     // Recover engine state.
     if (!raft_engine_->Recover()) {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();

@@ -35,6 +35,7 @@
 #include <cxxabi.h>
 #include <dlfcn.h>
 #include <libunwind.h>
+#include <server/document_service.h>
 #include <unistd.h>
 
 #include <csignal>
@@ -759,6 +760,8 @@ bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
       FLAGS_conf = "./conf/store.yaml";
     } else if (role == dingodb::pb::common::INDEX && std::filesystem::exists("./conf/index.yaml")) {
       FLAGS_conf = "./conf/index.yaml";
+    } else if (role == dingodb::pb::common::DOCUMENT && std::filesystem::exists("./conf/document.yaml")) {
+      FLAGS_conf = "./conf/document.yaml";
     } else {
       DINGO_LOG(ERROR) << "unknown role:" << role;
       return false;
@@ -900,6 +903,9 @@ int main(int argc, char *argv[]) {
   // for index only
   dingodb::IndexServiceImpl index_service;
   dingodb::UtilServiceImpl util_service;
+
+  // for document only
+  dingodb::DocumentServiceImpl document_service;
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
@@ -1452,7 +1458,7 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
       return -1;
     }
-    index_service.SetReadWorkSet(read_worker_set);
+    document_service.SetReadWorkSet(read_worker_set);
     util_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
@@ -1463,7 +1469,7 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
       return -1;
     }
-    index_service.SetWriteWorkSet(write_worker_set);
+    document_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
 
     if (FLAGS_raft_apply_worker_num > 0) {
@@ -1473,7 +1479,7 @@ int main(int argc, char *argv[]) {
         DINGO_LOG(ERROR) << "Init RaftApply PriorWorkerSet failed!";
         return -1;
       }
-      index_service.SetRaftApplyWorkSet(raft_apply_worker_set);
+      document_service.SetRaftApplyWorkSet(raft_apply_worker_set);
       dingo_server.SetRaftApplyWorkerSet(raft_apply_worker_set);
       DINGO_LOG(INFO) << "RaftApply worker num: " << FLAGS_raft_apply_worker_num;
     } else {
@@ -1494,11 +1500,11 @@ int main(int argc, char *argv[]) {
     }
     // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
     // workers to load index, so InitStoreMetaManager must be called before InitStoreMetaManager
-    if (!dingo_server.InitVectorIndexManager()) {
-      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
-      return -1;
-    }
-    index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
+    // if (!dingo_server.InitVectorIndexManager()) {
+    //   DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
+    //   return -1;
+    // }
+    // document_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
     if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
@@ -1524,8 +1530,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    index_service.SetStorage(dingo_server.GetStorage());
-    if (brpc_server.AddService(&index_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+    document_service.SetStorage(dingo_server.GetStorage());
+    if (brpc_server.AddService(&document_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add index service!";
       return -1;
     }

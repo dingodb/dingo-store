@@ -38,6 +38,7 @@ class Tracker {
     uint64_t raft_apply_time_ns{0};
     uint64_t store_write_time_ns{0};
     uint64_t vector_index_write_time_ns{0};
+    uint64_t document_index_write_time_ns{0};
   };
 
   void SetTotalRpcTime();
@@ -63,6 +64,9 @@ class Tracker {
 
   void SetVectorIndexWriteTime(uint64_t elapsed_time);
   uint64_t VectorIndexwriteTime() const;
+
+  void SetDocumentIndexWriteTime(uint64_t elapsed_time);
+  uint64_t DocumentIndexwriteTime() const;
 
  private:
   uint64_t start_time_;
