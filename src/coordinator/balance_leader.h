@@ -47,6 +47,7 @@ using TransferLeaderTaskPtr = std::shared_ptr<TransferLeaderTask>;
 struct Tracker;
 using TrackerPtr = std::shared_ptr<Tracker>;
 
+// tracking balance leader process
 struct Tracker {
   struct Record {
     uint32_t round{0};
@@ -70,6 +71,7 @@ struct Tracker {
 
   void Print();
 
+  pb::common::StoreType store_type;
   std::string leader_score;
   std::string expect_leader_score;
 
@@ -245,7 +247,7 @@ class BalanceLeaderScheduler {
   // store_id: leader_region_ids,follower_region_ids
   using StoreRegionMap = std::map<int64_t, std::pair<std::vector<int64_t>, std::vector<int64_t>>>;
 
-  static StoreRegionMap GenerateStoreRegionMap(const pb::common::RegionMap& region_map);
+  StoreRegionMap GenerateStoreRegionMap(const pb::common::RegionMap& region_map);
 
   static void ReadjustLeaderScore(CandidateStoresPtr source_candidate_stores,
                                   CandidateStoresPtr target_candidate_stores, TransferLeaderTaskPtr task);

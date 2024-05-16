@@ -196,6 +196,7 @@ class Constant {
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
   static const int32_t kRaftLogFallBehindThreshold = 1000;
+  static const int32_t kTransferLeaderRaftLogFallBehindThreshold = 16;
 
   static constexpr int64_t kLockVer = INT64_MAX;
   static constexpr int64_t kMaxVer = INT64_MAX;

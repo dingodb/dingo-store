@@ -152,8 +152,8 @@ class TransferLeaderTask : public TaskRunnable {
 
  private:
   static butil::Status ValidateTransferLeader(std::shared_ptr<StoreMetaManager> store_meta_manager, int64_t region_id,
-                                              const pb::common::Peer& peer);
-  static butil::Status TransferLeader(std::shared_ptr<Context> ctx, int64_t region_id, const pb::common::Peer& peer);
+                                              const pb::common::Peer& peer, bool is_force);
+  static butil::Status TransferLeader(std::shared_ptr<Context> ctx, int64_t region_id, const pb::common::Peer& peer, bool is_force);
 
   std::shared_ptr<Context> ctx_;
   RegionCmdPtr region_cmd_;

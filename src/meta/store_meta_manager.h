@@ -16,6 +16,7 @@
 #define DINGODB_STORE_META_MANAGER_H_
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -48,6 +49,10 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
+  struct Statistics {
+    std::atomic<int32_t> serving_request_count{0};
+  };
+
   Region(int64_t region_id);
   ~Region();
 
@@ -145,6 +150,10 @@ class Region {
 
   pb::common::ScalarSchema ScalarSchema();
 
+  int32_t GetServingRequestCount() { return statistics_.serving_request_count.load(std::memory_order_relaxed); }
+  void IncServingRequestCount() { statistics_.serving_request_count.fetch_add(1, std::memory_order_relaxed); }
+  void DecServingRequestCount() { statistics_.serving_request_count.fetch_sub(1, std::memory_order_relaxed); }
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
@@ -157,6 +166,8 @@ class Region {
 
   // latches is for multi request concurrency control
   Latches latches_;
+
+  Statistics statistics_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;

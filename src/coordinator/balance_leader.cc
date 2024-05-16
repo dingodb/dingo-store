@@ -30,7 +30,7 @@
 #include "proto/coordinator.pb.h"
 #include "server/server.h"
 
-DEFINE_uint32(balacne_leader_task_batch_size, 2, "balance leader task batch size");
+DEFINE_uint32(balacne_leader_task_batch_size, 4, "balance leader task batch size");
 
 DEFINE_uint32(balacne_leader_random_select_region_num, 10, "balance leader random select region num");
 
@@ -116,7 +116,8 @@ bool TaskFilter::Check(int64_t region_id) {
 }
 
 void Tracker::Print() {
-  DINGO_LOG(INFO) << "[balance.tracker] ==========================================================";
+  DINGO_LOG(INFO) << fmt::format("[balance.tracker] ==========================={}===============================",
+                                 pb::common::StoreType_Name(store_type));
   for (auto& record : records) {
     DINGO_LOG(INFO) << fmt::format("[balance.tracker] record {} {} {} {} {}", record->round, record->region_id,
                                    record->source_store_id, record->target_store_id, record->leader_score);
@@ -132,7 +133,10 @@ void Tracker::Print() {
   DINGO_LOG(INFO) << fmt::format("[balance.tracker] leader score {}", leader_score);
   DINGO_LOG(INFO) << fmt::format("[balance.tracker] expect leader score {}", expect_leader_score);
 
-  DINGO_LOG(INFO) << "[balance.tracker] =========================end=================================";
+  DINGO_LOG(INFO) << fmt::format("[balance.tracker] transfer task count {}", tasks.size());
+
+  DINGO_LOG(INFO) << fmt::format("[balance.tracker] ========================={} end=================================",
+                                 pb::common::StoreType_Name(store_type));
 }
 
 bool StoreEntry::Less::operator()(const StoreEntryPtr& lhs, const StoreEntryPtr& rhs) {
@@ -237,6 +241,7 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
                                                           TrackerPtr tracker) {
   DINGO_LOG(INFO) << fmt::format("[balance.leader] launch balance leader store_type({}) dryrun({})",
                                  pb::common::StoreType_Name(store_type), dryrun);
+  if (tracker) tracker->store_type = store_type;
 
   // ready filters
   std::vector<FilterPtr> store_filters;
@@ -277,44 +282,9 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
 
   if (tracker) {
     tracker->tasks = transfer_leader_tasks;
-    tracker->Print();
   }
 
   return butil::Status::OK();
-}
-
-// commit transfer leader task to raft
-void BalanceLeaderScheduler::CommitTransferLeaderTaskList(const std::vector<TransferLeaderTaskPtr>& tasks) {
-  dingodb::pb::coordinator_internal::MetaIncrement meta_increment;
-  auto* task_list = coordinator_controller_->CreateTaskList(meta_increment);
-  for (const auto& task : tasks) {
-    auto* mut_task = task_list->add_tasks();
-
-    auto* mut_store_operation = mut_task->add_store_operations();
-    mut_store_operation->set_id(task->source_store_id);
-
-    auto* mut_region_cmd = mut_store_operation->add_region_cmds();
-    mut_region_cmd->set_id(
-        coordinator_controller_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    mut_region_cmd->set_job_id(task_list->id());
-    mut_region_cmd->set_region_id(task->region_id);
-    mut_region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
-
-    auto* mut_request = mut_region_cmd->mutable_transfer_leader_request();
-    auto* mut_peer = mut_request->mutable_peer();
-    mut_peer->set_store_id(task->target_store_id);
-    mut_peer->set_role(pb::common::PeerRole::VOTER);
-    *mut_peer->mutable_raft_location() = task->target_raft_location;
-    *mut_peer->mutable_server_location() = task->target_server_location;
-  }
-
-  std::shared_ptr<Context> ctx = std::make_shared<Context>();
-  ctx->SetRegionId(Constant::kMetaRegionId);
-
-  DINGO_LOG(INFO) << "[balance.leader] meta_increment: " << meta_increment.ShortDebugString();
-
-  auto status = raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
-  DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format("commit raft failed, error: {}", status.error_str());
 }
 
 std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::common::RegionMap& region_map,
@@ -431,6 +401,41 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
 
   return transfer_leader_tasks;
 }
+
+// commit transfer leader task to raft
+void BalanceLeaderScheduler::CommitTransferLeaderTaskList(const std::vector<TransferLeaderTaskPtr>& tasks) {
+  dingodb::pb::coordinator_internal::MetaIncrement meta_increment;
+  auto* task_list = coordinator_controller_->CreateTaskList(meta_increment);
+  for (const auto& task : tasks) {
+    auto* mut_task = task_list->add_tasks();
+
+    auto* mut_store_operation = mut_task->add_store_operations();
+    mut_store_operation->set_id(task->source_store_id);
+
+    auto* mut_region_cmd = mut_store_operation->add_region_cmds();
+    mut_region_cmd->set_id(
+        coordinator_controller_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    mut_region_cmd->set_job_id(task_list->id());
+    mut_region_cmd->set_region_id(task->region_id);
+    mut_region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
+
+    auto* mut_request = mut_region_cmd->mutable_transfer_leader_request();
+    auto* mut_peer = mut_request->mutable_peer();
+    mut_peer->set_store_id(task->target_store_id);
+    mut_peer->set_role(pb::common::PeerRole::VOTER);
+    *mut_peer->mutable_raft_location() = task->target_raft_location;
+    *mut_peer->mutable_server_location() = task->target_server_location;
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+
+  DINGO_LOG(INFO) << "[balance.leader] meta_increment: " << meta_increment.ShortDebugString();
+
+  auto status = raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format("commit raft failed, error: {}", status.error_str());
+}
+
 pb::common::Store BalanceLeaderScheduler::GetStore(const pb::common::StoreMap& store_map, int64_t store_id) {
   for (const auto& store : store_map.stores()) {
     if (store.id() == store_id) {
@@ -468,6 +473,12 @@ BalanceLeaderScheduler::StoreRegionMap BalanceLeaderScheduler::GenerateStoreRegi
     const pb::common::RegionMap& region_map) {
   StoreRegionMap store_region_id_map;
   for (const auto& region : region_map.regions()) {
+    if (region.leader_store_id() == 0) {
+      if (tracker_) {
+        tracker_->filter_records.push_back(fmt::format("[filter.region({})] unknown leader", region.id()));
+      }
+      continue;
+    }
     for (const auto& peer : region.definition().peers()) {
       if (store_region_id_map.find(peer.store_id()) == store_region_id_map.end()) {
         store_region_id_map.insert(

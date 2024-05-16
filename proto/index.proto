@@ -149,6 +149,7 @@ enum AlgorithmType {
 
 message VectorCalcDistanceRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 10;
 
   // which library algorithm to use
   AlgorithmType algorithm_type = 2;

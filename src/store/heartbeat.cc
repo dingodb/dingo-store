@@ -539,11 +539,23 @@ void BalanceLeaderTask::DoBalanceLeader() {
     return;
   }
 
-  auto tracker = balance::Tracker::New();
-  balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine, pb::common::NODE_TYPE_STORE,
-                                                       false, tracker);
-  balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine, pb::common::NODE_TYPE_INDEX,
-                                                       false, tracker);
+  {
+    // store
+    auto tracker = balance::Tracker::New();
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                       pb::common::NODE_TYPE_STORE, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] store process error: {}", status.error_str());
+    tracker->Print();
+  }
+
+  {
+    // index
+    auto tracker = balance::Tracker::New();
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                       pb::common::NODE_TYPE_INDEX, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] index process error: {}", status.error_str());
+    tracker->Print();
+  }
 }
 
 bool Heartbeat::Init() {
