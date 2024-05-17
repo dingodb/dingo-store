@@ -17,10 +17,19 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "proto/common.pb.h"
 
 namespace dingodb {
+
+enum TokenizerType {
+  kTokenizerTypeUnknown = 0,
+  kTokenizerTypeText = 1,
+  kTokenizerTypeI64 = 2,
+  kTokenizerTypeF64 = 3,
+  kTokenizerTypeBytes = 4,
+};
 
 class DocumentCodec {
  public:
@@ -42,6 +51,10 @@ class DocumentCodec {
   static bool IsValidKey(const std::string& key);
 
   static bool IsLegalDocumentId(int64_t document_id);
+
+  static bool IsValidTokenizerJsonParameter(const std::string& json_parameter,
+                                            std::map<std::string, TokenizerType>& column_tokenizer_parameter,
+                                            std::string& error_message);
 };
 
 }  // namespace dingodb

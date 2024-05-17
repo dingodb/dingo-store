@@ -17,6 +17,7 @@
 
 #include <filesystem>
 
+#include "document/codec.h"
 #include "tantivy_search.h"
 
 static size_t log_level = 1;
@@ -739,4 +740,99 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
   EXPECT_EQ(ret.result, true);
 
   std::cout << __func__ << " done" << '\n';
+}
+
+// bool ValidateTokenizerParameter(const std::string& json_parameter) {
+//   if (!nlohmann::json::accept(json_parameter)) {
+//     std::cout << "json_parameter is illegal" << '\n';
+//     return false;
+//   }
+
+//   nlohmann::json json = nlohmann::json::parse(json_parameter);
+//   for (const auto& item : json.items()) {
+//     std::cout << "key:" << item.key() << " value:" << item.value() << '\n';
+//     auto tokenizer = item.value();
+
+//     if (tokenizer.find("tokenizer") == tokenizer.end()) {
+//       std::cout << "not found tokenizer" << '\n';
+//       return false;
+//     }
+
+//     const auto& tokenizer_item = tokenizer.at("tokenizer");
+//     std::cout << "tokenizer: " << tokenizer << '\n';
+
+//     if (tokenizer_item.find("type") == tokenizer_item.end()) {
+//       std::cout << "not found tokenizer type" << '\n';
+//       return false;
+//     }
+
+//     const auto& tokenizer_type = tokenizer_item.at("type");
+//     std::cout << "tokenizer_type: " << tokenizer_type << '\n';
+
+//     if (tokenizer_type == "default" || tokenizer_type == "raw" || tokenizer_type == "simple" ||
+//         tokenizer_type == "stem" || tokenizer_type == "whitespace" || tokenizer_type == "ngram" ||
+//         tokenizer_type == "chinese") {
+//       std::cout << "text column" << '\n';
+//     } else if (tokenizer_type == "i64") {
+//       std::cout << "i64 column" << '\n';
+//     } else if (tokenizer_type == "f64") {
+//       std::cout << "f64 column" << '\n';
+//     } else if (tokenizer_type == "bytes") {
+//       std::cout << "bytes column" << '\n';
+//     } else {
+//       std::cout << "unknown column" << '\n';
+//       return false;
+//     }
+//   }
+
+//   return true;
+// }
+
+TEST(DingoTantivySearchTest, test_json_parse) {
+  std::string error_message;
+  std::map<std::string, dingodb::TokenizerType> column_tokenizer_parameter;
+
+  // normal json
+  EXPECT_EQ(
+      dingodb::DocumentCodec::IsValidTokenizerJsonParameter(
+          R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })",
+          column_tokenizer_parameter, error_message),
+      true);
+
+  EXPECT_EQ(column_tokenizer_parameter.size(), 4);
+  EXPECT_EQ(column_tokenizer_parameter.at("col1"), dingodb::TokenizerType::kTokenizerTypeText);
+  EXPECT_EQ(column_tokenizer_parameter.at("col4"), dingodb::TokenizerType::kTokenizerTypeText);
+  EXPECT_EQ(column_tokenizer_parameter.at("col2"), dingodb::TokenizerType::kTokenizerTypeI64);
+  EXPECT_EQ(column_tokenizer_parameter.at("col3"), dingodb::TokenizerType::kTokenizerTypeF64);
+
+  // bytes json
+  column_tokenizer_parameter.clear();
+  error_message.clear();
+  EXPECT_EQ(
+      dingodb::DocumentCodec::IsValidTokenizerJsonParameter(
+          R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "bytes", "indexed": true }} })",
+          column_tokenizer_parameter, error_message),
+      true);
+
+  EXPECT_EQ(column_tokenizer_parameter.size(), 5);
+  EXPECT_EQ(column_tokenizer_parameter.at("col1"), dingodb::TokenizerType::kTokenizerTypeText);
+  EXPECT_EQ(column_tokenizer_parameter.at("col4"), dingodb::TokenizerType::kTokenizerTypeText);
+  EXPECT_EQ(column_tokenizer_parameter.at("col2"), dingodb::TokenizerType::kTokenizerTypeI64);
+  EXPECT_EQ(column_tokenizer_parameter.at("col3"), dingodb::TokenizerType::kTokenizerTypeF64);
+  EXPECT_EQ(column_tokenizer_parameter.at("col5"), dingodb::TokenizerType::kTokenizerTypeBytes);
+
+  // illegal json
+  column_tokenizer_parameter.clear();
+  error_message.clear();
+  EXPECT_EQ(dingodb::DocumentCodec::IsValidTokenizerJsonParameter("test", column_tokenizer_parameter, error_message),
+            false);
+  std::cout << "error_message:" << error_message << '\n';
+
+  // illegal tokenizer type
+  column_tokenizer_parameter.clear();
+  error_message.clear();
+  EXPECT_EQ(dingodb::DocumentCodec::IsValidTokenizerJsonParameter(R"({"col1": {"tokenizer": {"type": "test"}} })",
+                                                                  column_tokenizer_parameter, error_message),
+            false);
+  std::cout << "error_message:" << error_message << '\n';
 }
