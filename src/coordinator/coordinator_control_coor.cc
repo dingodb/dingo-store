@@ -2175,8 +2175,18 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION && index_parameter.has_vector_index_parameter()) {
-    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (index_parameter.has_vector_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+    } else if (index_parameter.has_document_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+    } else {
+      DINGO_LOG(ERROR)
+          << "GetCreateRegionStoreIds index_parameter is not legal, not vector or document, index_parameter="
+          << index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "index_parameter is not legal, not vector or document");
+    }
   }
 
   // select store for region

@@ -765,7 +765,7 @@ void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::CreateIndexRequest request;
   dingodb::pb::meta::CreateIndexResponse response;
 
@@ -1015,6 +1015,127 @@ void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     field->set_key("key_bytes");
     field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
     field->set_enable_speed_up(false);
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+  if (response.error().errcode() == 0) {
+    DINGO_LOG(INFO) << "create index success, index_id==" << response.index_id().entity_id();
+  }
+}
+
+void SendCreateDocumentIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CreateIndexRequest request;
+  dingodb::pb::meta::CreateIndexResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 1 + FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 1 + FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_index_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "index_id = " << new_index_id;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = new_ids.at(1 + i);
+    part_ids.push_back(new_part_id);
+  }
+
+  for (const auto& id : part_ids) {
+    DINGO_LOG(INFO) << "part_id = " << id;
+  }
+
+  // setup index_id
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(schema_id->entity_id());
+  index_id->set_entity_id(new_index_id);
+
+  // string name = 1;
+  auto* index_definition = request.mutable_index_definition();
+  index_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    index_definition->set_replica(FLAGS_replica);
+  }
+
+  if (FLAGS_with_auto_increment) {
+    index_definition->set_with_auto_incrment(true);
+    index_definition->set_auto_increment(1024);
+  }
+
+  std::string multi_type_column_json =
+      R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+
+  // document index parameter
+  index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+  auto* document_index_parameter = index_definition->mutable_index_parameter()->mutable_document_index_parameter();
+  document_index_parameter->set_json_parameter(multi_type_column_json);
+  auto* scalar_schema = document_index_parameter->mutable_scalar_schema();
+  auto* field_col1 = scalar_schema->add_fields();
+  field_col1->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+  field_col1->set_key("col1");
+  auto* field_col2 = scalar_schema->add_fields();
+  field_col2->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+  field_col2->set_key("col2");
+  auto* field_col3 = scalar_schema->add_fields();
+  field_col3->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+  field_col3->set_key("col3");
+  auto* field_col4 = scalar_schema->add_fields();
+  field_col4->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+  field_col4->set_key("col4");
+
+  index_definition->set_version(1);
+
+  auto* partition_rule = index_definition->mutable_index_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_index_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  if (FLAGS_with_auto_increment) {
+    DINGO_LOG(INFO) << "with_auto_increment";
+    index_definition->set_auto_increment(100);
   }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();

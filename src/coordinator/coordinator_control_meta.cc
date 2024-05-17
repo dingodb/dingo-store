@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <utility>
@@ -33,12 +34,14 @@
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "nlohmann/json_fwd.hpp"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
+#include "tantivy_search.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -969,6 +972,42 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       DINGO_LOG(ERROR) << "scalar index cannot find column";
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index cannot find column.");
     }
+  } else if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
+    const auto& scalar_schema = index_parameter.document_index_parameter().scalar_schema();
+    const auto& json_parameter = index_parameter.document_index_parameter().json_parameter();
+
+    if (scalar_schema.fields_size() <= 0) {
+      DINGO_LOG(ERROR) << "scalar_schema is empty";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar_schema is empty");
+    }
+
+    for (const auto& field : scalar_schema.fields()) {
+      if (field.key().empty()) {
+        DINGO_LOG(ERROR) << "field name is empty";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field name is empty");
+      }
+
+      if (field.field_type() != pb::common::ScalarFieldType::BYTES &&
+          field.field_type() != pb::common::ScalarFieldType::STRING &&
+          field.field_type() != pb::common::ScalarFieldType::DOUBLE &&
+          field.field_type() != pb::common::ScalarFieldType::INT64) {
+        DINGO_LOG(ERROR) << "field type is NONE";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
+      }
+    }
+
+    if (!nlohmann::json::accept(json_parameter)) {
+      DINGO_LOG(ERROR) << "json_parameter is illegal";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "json_parameter is illegal");
+    }
+
+    nlohmann::json json = nlohmann::json::parse(json_parameter);
+    if (!json.is_array()) {
+      DINGO_LOG(ERROR) << "json_parameter is not array";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "json_parameter is not array");
+    }
+
+    return butil::Status::OK();
   }
 
   return butil::Status::OK();

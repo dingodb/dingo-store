@@ -122,7 +122,8 @@ void SendGetIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_i
 void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
-void SendCreateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateDocumentIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendGetIndexMetrics(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);

@@ -686,8 +686,14 @@ message IndexParameter {
 }
 
 message DocumentIndexParameter {
-  string json_parameter = 1;
-  ScalarSchema scalar_schema = 2;
+  // for default, String field will use "chinese" tokenizer.
+  // if user want to specialize tokenizer, user can use json_parameter to specify tokenizer.
+  // Only string[text], bytes[bytes], double[f64], int64[i64] is supported.
+  ScalarSchema scalar_schema = 1;
+
+  // if use json_parameter, user can use this field to specify tokenizer.
+  // the field in json_parameter must match the field in scalar_schema.
+  string json_parameter = 2;
 }
 
 message RegionStatus {

@@ -15,8 +15,10 @@
 #include "document/codec.h"
 
 #include <cstdint>
+#include <nlohmann/json.hpp>
 
 #include "butil/compiler_specific.h"
+#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -148,5 +150,50 @@ bool DocumentCodec::IsValidKey(const std::string& key) {
 }
 
 bool DocumentCodec::IsLegalDocumentId(int64_t document_id) { return document_id > 0 && document_id != INT64_MAX; }
+
+bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parameter,
+                                                  std::map<std::string, TokenizerType>& column_tokenizer_parameter,
+                                                  std::string& error_message) {
+  if (!nlohmann::json::accept(json_parameter)) {
+    error_message = "json_parameter is illegal json";
+    return false;
+  }
+
+  nlohmann::json json = nlohmann::json::parse(json_parameter);
+  for (const auto& item : json.items()) {
+    auto tokenizer = item.value();
+
+    if (tokenizer.find("tokenizer") == tokenizer.end()) {
+      error_message = "not found tokenizer";
+      return false;
+    }
+
+    const auto& tokenizer_item = tokenizer.at("tokenizer");
+
+    if (tokenizer_item.find("type") == tokenizer_item.end()) {
+      error_message = "not found tokenizer type";
+      return false;
+    }
+
+    const auto& tokenizer_type = tokenizer_item.at("type");
+
+    if (tokenizer_type == "default" || tokenizer_type == "raw" || tokenizer_type == "simple" ||
+        tokenizer_type == "stem" || tokenizer_type == "whitespace" || tokenizer_type == "ngram" ||
+        tokenizer_type == "chinese") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeText;
+    } else if (tokenizer_type == "i64") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeI64;
+    } else if (tokenizer_type == "f64") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeF64;
+    } else if (tokenizer_type == "bytes") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBytes;
+    } else {
+      error_message = "unknown column";
+      return false;
+    }
+  }
+
+  return true;
+}
 
 }  // namespace dingodb
