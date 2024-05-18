@@ -1220,11 +1220,48 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
 
-  if (index_parameter.has_vector_index_parameter() && region_type != pb::common::RegionType::INDEX_REGION) {
-    DINGO_LOG(WARNING) << "Create Region region_type is not INDEX_REGION, but index_parameter is not empty, request: "
+  if (index_parameter.has_vector_index_parameter()) {
+    if (region_type != pb::common::RegionType::INDEX_REGION) {
+      DINGO_LOG(WARNING) << "Create Region region_type is not INDEX_REGION, but index_parameter is not empty, request: "
+                         << request->ShortDebugString();
+      region_type = pb::common::RegionType::INDEX_REGION;
+      index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+    }
+  } else if (index_parameter.has_document_index_parameter()) {
+    if (region_type != pb::common::RegionType::DOCUMENT_REGION) {
+      DINGO_LOG(WARNING)
+          << "Create Region region_type is not DOCUMENT_REGION, but index_parameter is not empty, request: "
+          << request->ShortDebugString();
+      region_type = pb::common::RegionType::DOCUMENT_REGION;
+      index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+    }
+  }
+
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (!index_parameter.has_vector_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is INDEX_REGION, but index_parameter is empty, request: "
                        << request->ShortDebugString();
-    region_type = pb::common::RegionType::INDEX_REGION;
-    index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (!index_parameter.has_document_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is DOCUMENT_REGION, but index_parameter is empty, request: "
+                       << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else if (region_type == pb::common::RegionType::STORE_REGION) {
+    if (index_parameter.has_vector_index_parameter() || index_parameter.has_document_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is STORE_REGION, but index_parameter is not empty, request: "
+                       << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else {
+    DINGO_LOG(ERROR) << "Create Region region_type is invalid, request: " << request->ShortDebugString();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+    return;
   }
 
   if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key())) {

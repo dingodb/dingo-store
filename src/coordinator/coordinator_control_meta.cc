@@ -1303,8 +1303,15 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   pb::common::StorageEngine region_store_engine_type = table_definition.store_engine();
   GetStoreEngine(region_store_engine_type);
 
+  pb::common::RegionType region_type = pb::common::RegionType::STORE_REGION;
+  if (table_definition.index_parameter().has_vector_index_parameter()) {
+    region_type = pb::common::RegionType::INDEX_REGION;
+  } else if (table_definition.index_parameter().has_document_index_parameter()) {
+    region_type = pb::common::RegionType::DOCUMENT_REGION;
+  }
+
   std::vector<int64_t> store_ids;
-  auto ret4 = GetCreateRegionStoreIds(pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
+  auto ret4 = GetCreateRegionStoreIds(region_type, region_raw_engine_type, "", replica,
                                       table_definition.index_parameter(), store_ids);
   if (!ret4.ok()) {
     DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
@@ -1321,10 +1328,10 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
-                                 region_store_engine_type, "", replica, new_part_range, schema_id, 0, new_index_id,
-                                 new_part_id, tenant_id, table_definition.index_parameter(), store_ids, 0,
-                                 new_region_id, store_operations, meta_increment);
+    auto ret = CreateRegionFinal(region_name, region_type, region_raw_engine_type, region_store_engine_type, "",
+                                 replica, new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
+                                 table_definition.index_parameter(), store_ids, 0, new_region_id, store_operations,
+                                 meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
