@@ -176,7 +176,8 @@ class Server {
 
   static std::string GetRaftLogPath();
 
-  static std::string GetIndexPath();
+  static std::string GetVectorIndexPath();
+  static std::string GetDocumentIndexPath();
 
   bool IsClusterReadOnlyOrForceReadOnly() const;
 

@@ -35,13 +35,8 @@ raft:
 log:
   level: INFO
   path: $BASE_PATH$/log
-vector:
-  index_path: $BASE_PATH$/data/vector_index_snapshot
-  enable_follower_hold_index: false
-  operation_parallel_thread_num: 16 # vector index operation parallel thread num.
-  fast_background_worker_num: 8 # vector index fast load/build.
-  background_worker_num: 16 # vector index slow load/build/rebuild.
-  max_background_task_count: 16 # vector index slow load/build/rebuild max pending task count.
+document:
+  index_path: $BASE_PATH$/data/document_index
 store:
   path: $BASE_PATH$/data/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
