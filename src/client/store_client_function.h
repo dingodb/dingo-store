@@ -175,6 +175,7 @@ void SendTxnDump(int64_t region_id);
 
 void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
+void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
 
 // region
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);

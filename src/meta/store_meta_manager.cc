@@ -61,7 +61,12 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
       return nullptr;
     }
     region->SetVectorIndexWrapper(vector_index_wrapper);
+  } else if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_DOCUMENT) {
+    region->inner_region_.set_region_type(pb::common::DOCUMENT_REGION);
 
+    // TODO: create document index here
+    // auto document_index_wrapper = DocumentIndexWrapper::New(definition.id(),
+    // definition.index_parameter().document_index_parameter());
   } else {
     region->inner_region_.set_region_type(pb::common::STORE_REGION);
   }
@@ -80,6 +85,9 @@ bool Region::Recover() {
     }
     SetVectorIndexWrapper(vector_index_wrapper);
     return vector_index_wapper_->Recover();
+  } else if (Type() == pb::common::DOCUMENT_REGION) {
+    // TODO: load document index here
+    // auto document_index_wrapper = DocumentIndexWrapper::New(Id(),
   }
 
   return true;

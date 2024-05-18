@@ -176,6 +176,9 @@ std::string GetServiceName(const dingodb::pb::common::Region& region) {
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     service_name = "IndexService";
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    service_name = "DocumentService";
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
     exit(-1);
@@ -354,6 +357,156 @@ void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
 
 // index
 void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPrewriteRequest request;
+  dingodb::pb::store::TxnPrewriteResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_primary_lock.empty()) {
+    DINGO_LOG(ERROR) << "primary_lock is empty";
+    return;
+  }
+  request.set_primary_lock(FLAGS_primary_lock);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_lock_ttl == 0) {
+    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    return;
+  }
+  request.set_lock_ttl(FLAGS_lock_ttl);
+
+  if (FLAGS_txn_size == 0) {
+    DINGO_LOG(ERROR) << "txn_size is empty";
+    return;
+  }
+  request.set_txn_size(FLAGS_txn_size);
+
+  request.set_try_one_pc(FLAGS_try_one_pc);
+  request.set_max_commit_ts(FLAGS_max_commit_ts);
+
+  if (FLAGS_mutation_op.empty()) {
+    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    return;
+  }
+
+  if (FLAGS_vector_id == 0) {
+    DINGO_LOG(ERROR) << "vector_id is empty";
+    return;
+  }
+
+  int64_t part_id = region.definition().part_id();
+  int64_t vector_id = FLAGS_vector_id;
+  int64_t dimension = 0;
+
+  const auto& para = region.definition().index_parameter().vector_index_parameter();
+  if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT) {
+    dimension = para.flat_parameter().dimension();
+  } else if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT) {
+    dimension = para.ivf_flat_parameter().dimension();
+  } else if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+    dimension = para.ivf_pq_parameter().dimension();
+  } else if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    dimension = para.hnsw_parameter().dimension();
+  } else if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    dimension = para.diskann_parameter().dimension();
+  } else {
+    DINGO_LOG(ERROR) << "vector_index_type is empty";
+    return;
+  }
+
+  if (FLAGS_mutation_op == "put") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Put);
+
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+
+    dingodb::pb::common::VectorWithId vector_with_id;
+
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib(0.0, 1.0);
+
+    vector_with_id.set_id(vector_id);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (int j = 0; j < dimension; j++) {
+      vector_with_id.mutable_vector()->add_float_values(distrib(rng));
+    }
+    *mutation->mutable_vector() = vector_with_id;
+  } else if (FLAGS_mutation_op == "delete") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Delete);
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+  } else if (FLAGS_mutation_op == "check_not_exists") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+  } else if (FLAGS_mutation_op == "insert") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
+    mutation->set_key(
+        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+
+    dingodb::pb::common::VectorWithId vector_with_id;
+
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib(0.0, 1.0);
+
+    vector_with_id.set_id(vector_id);
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (int j = 0; j < dimension; j++) {
+      vector_with_id.mutable_vector()->add_float_values(distrib(rng));
+    }
+    *mutation->mutable_vector() = vector_with_id;
+  } else {
+    DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
+    return;
+  }
+
+  if (!FLAGS_extra_data.empty()) {
+    DINGO_LOG(INFO) << "extra_data is: " << FLAGS_extra_data;
+  }
+
+  if (FLAGS_for_update_ts > 0) {
+    DINGO_LOG(INFO) << "for_update_ts > 0, do pessimistic check : " << FLAGS_for_update_ts;
+    for (int i = 0; i < request.mutations_size(); i++) {
+      request.add_pessimistic_checks(::dingodb::pb::store::TxnPrewriteRequest_PessimisticCheck::
+                                         TxnPrewriteRequest_PessimisticCheck_DO_PESSIMISTIC_CHECK);
+      auto* for_update_ts_check = request.add_for_update_ts_checks();
+      for_update_ts_check->set_expected_for_update_ts(FLAGS_for_update_ts);
+      for_update_ts_check->set_index(i);
+
+      if (!FLAGS_extra_data.empty()) {
+        auto* extra_data = request.add_lock_extra_datas();
+        extra_data->set_index(i);
+        extra_data->set_extra_data(FLAGS_extra_data);
+      }
+    }
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPrewrite", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+// document
+void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region) {
   dingodb::pb::store::TxnPrewriteRequest request;
   dingodb::pb::store::TxnPrewriteResponse response;
 
@@ -725,6 +878,9 @@ void SendTxnPessimisticRollback(int64_t region_id) {
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     service_name = "IndexService";
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    service_name = "DocumentService";
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
     return;
@@ -782,6 +938,9 @@ void SendTxnPrewrite(int64_t region_id) {
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     IndexSendTxnPrewrite(region_id, region);
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    DocumentSendTxnPrewrite(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }

@@ -80,47 +80,12 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
   return butil::Status::OK();
 }
 
-butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool) {
-  return Add(document_with_ids);
-}
-
-butil::Status DocumentIndex::AddByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids,
-                                           bool is_priority) {
-  return Add(document_with_ids, is_priority);
-}
-
-butil::Status DocumentIndex::Upsert(const std::vector<pb::common::DocumentWithId>& /*document_with_ids*/) {
-  return butil::Status::OK();
-}
-
-butil::Status DocumentIndex::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool) {
-  return Upsert(document_with_ids);
-}
-
-butil::Status DocumentIndex::UpsertByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids,
-                                              bool is_priority) {
-  return Upsert(document_with_ids, is_priority);
-}
-
 butil::Status DocumentIndex::Delete(const std::vector<int64_t>& /*delete_ids*/) { return butil::Status::OK(); }
-
-butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids, bool) { return Delete(delete_ids); }
-
-butil::Status DocumentIndex::DeleteByParallel(const std::vector<int64_t>& delete_ids, bool is_priority) {
-  return Delete(delete_ids, is_priority);
-}
 
 butil::Status DocumentIndex::Search(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
                                     const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
                                     const pb::common::DocumentSearchParameter& parameter,
                                     std::vector<pb::document::DocumentWithScoreResult>& results) {
-  return butil::Status::OK();
-}
-
-butil::Status DocumentIndex::SearchByParallel(const std::vector<pb::common::DocumentWithId>& document_with_ids,
-                                              uint32_t topk, const std::vector<std::shared_ptr<FilterFunctor>>& filters,
-                                              bool reconstruct, const pb::common::DocumentSearchParameter& parameter,
-                                              std::vector<pb::document::DocumentWithScoreResult>& results) {
   return Search(document_with_ids, topk, filters, reconstruct, parameter, results);
 }
 
@@ -546,64 +511,14 @@ butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWi
   // Exist sibling document index, so need to separate add document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status =
-        sibling_document_index->AddByParallel(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()));
+    auto status = sibling_document_index->Add(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->AddByParallel(FilterDocumentWithId(document_with_ids, document_index->Range()));
+    status = document_index->Add(FilterDocumentWithId(document_with_ids, document_index->Range()));
     if (!status.ok()) {
-      sibling_document_index->DeleteByParallel(FilterDocumentId(document_with_ids, sibling_document_index->Range()),
-                                               true);
-      return status;
-    }
-
-    write_key_count_ += document_with_ids.size();
-
-    return status;
-  }
-
-  auto status = document_index->AddByParallel(document_with_ids);
-  if (status.ok()) {
-    write_key_count_ += document_with_ids.size();
-  }
-  return status;
-}
-
-butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids) {
-  if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
-    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
-  }
-
-  // Switch document index wait
-  int count = 0;
-  while (IsSwitchingDocumentIndex()) {
-    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] waiting document index switch, count({})",
-                                   Id(), ++count);
-    bthread_usleep(1000 * 100);
-  }
-
-  auto document_index = GetDocumentIndex();
-  if (document_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
-    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
-  }
-
-  // Exist sibling document index, so need to separate upsert document.
-  auto sibling_document_index = SiblingDocumentIndex();
-  if (sibling_document_index != nullptr) {
-    auto status = sibling_document_index->UpsertByParallel(
-        FilterDocumentWithId(document_with_ids, sibling_document_index->Range()));
-    if (!status.ok()) {
-      return status;
-    }
-
-    status = document_index->UpsertByParallel(FilterDocumentWithId(document_with_ids, document_index->Range()));
-    if (!status.ok()) {
-      sibling_document_index->DeleteByParallel(FilterDocumentId(document_with_ids, sibling_document_index->Range()),
-                                               true);
+      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range()));
       return status;
     }
 
@@ -612,7 +527,7 @@ butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::Documen
     return status;
   }
 
-  auto status = document_index->UpsertByParallel(document_with_ids);
+  auto status = document_index->Add(document_with_ids);
   if (status.ok()) {
     write_key_count_ += document_with_ids.size();
   }
@@ -642,20 +557,19 @@ butil::Status DocumentIndexWrapper::Delete(const std::vector<int64_t>& delete_id
   // Exist sibling document index, so need to separate delete document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status =
-        sibling_document_index->DeleteByParallel(FilterDocumentId(delete_ids, sibling_document_index->Range()), true);
+    auto status = sibling_document_index->Delete(FilterDocumentId(delete_ids, sibling_document_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->DeleteByParallel(FilterDocumentId(delete_ids, document_index->Range()), true);
+    status = document_index->Delete(FilterDocumentId(delete_ids, document_index->Range()));
     if (status.ok()) {
       write_key_count_ += delete_ids.size();
     }
     return status;
   }
 
-  auto status = document_index->DeleteByParallel(delete_ids, true);
+  auto status = document_index->Delete(delete_ids);
   if (status.ok()) {
     write_key_count_ += delete_ids.size();
   }
@@ -735,14 +649,13 @@ butil::Status DocumentIndexWrapper::Search(std::vector<pb::common::DocumentWithI
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
     std::vector<pb::document::DocumentWithScoreResult> results_1;
-    auto status =
-        sibling_document_index->SearchByParallel(document_with_ids, topk, filters, reconstruct, parameter, results_1);
+    auto status = sibling_document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results_1);
     if (!status.ok()) {
       return status;
     }
 
     std::vector<pb::document::DocumentWithScoreResult> results_2;
-    status = document_index->SearchByParallel(document_with_ids, topk, filters, reconstruct, parameter, results_2);
+    status = document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results_2);
     if (!status.ok()) {
       return status;
     }
@@ -764,7 +677,7 @@ butil::Status DocumentIndexWrapper::Search(std::vector<pb::common::DocumentWithI
     }
   }
 
-  return document_index->SearchByParallel(document_with_ids, topk, filters, reconstruct, parameter, results);
+  return document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results);
 }
 
 butil::Status DocumentIndexWrapper::SetDocumentIndexRangeFilter(

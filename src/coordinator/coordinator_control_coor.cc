@@ -1882,6 +1882,33 @@ butil::Status CoordinatorControl::CreateShadowRegion(
     }
   }
 
+  if (region_type == pb::common::RegionType::DOCUMENT_REGION && new_index_parameter.has_document_index_parameter()) {
+    store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+
+    // validate document index region range
+    // range's start_key and end_key must be less than 16 bytes
+    if (region_range.start_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+        region_range.start_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region range start_key size is not 8 or 16, start_key="
+                       << Helper::StringToHex(region_range.start_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "document index region range start_key size is not 8 or 16 bytes");
+    }
+
+    if (region_range.end_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+        region_range.end_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region range end_key size is not 8 or 16, end_key="
+                       << Helper::StringToHex(region_range.end_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "document index region range end_key size is not 8 or 16 bytes");
+    }
+
+    if (part_id <= 0) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region part_id is not legal, part_id=" << part_id;
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "document index region part_id is not legal");
+    }
+  }
+
   // select store for region
   butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
   store_map_copy.init(100);
@@ -2046,13 +2073,42 @@ butil::Status CoordinatorControl::CreateRegionFinal(
           return ret1;
         }
       }
-    } else if (new_index_parameter.has_document_index_parameter()) {
-      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
     } else {
-      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not vector or document, index_parameter="
+      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not vector, index_parameter="
                        << new_index_parameter.ShortDebugString();
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "index_parameter is not legal, not vector or document");
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not vector");
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (new_index_parameter.has_document_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+
+      // validate document index region range
+      // range's start_key and end_key must be less than 16 bytes
+      if (region_range.start_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+          region_range.start_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region range start_key size is not 8 or 16, start_key="
+                         << Helper::StringToHex(region_range.start_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "document index region range start_key size is not 8 or 16 bytes");
+      }
+
+      if (region_range.end_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+          region_range.end_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region range end_key size is not 8 or 16, end_key="
+                         << Helper::StringToHex(region_range.end_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "document index region range end_key size is not 8 or 16 bytes");
+      }
+
+      if (part_id <= 0) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region part_id is not legal, part_id=" << part_id;
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "document index region part_id is not legal");
+      }
+
+    } else {
+      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not document, index_parameter="
+                       << new_index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not document");
     }
   }
 
@@ -2187,14 +2243,18 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
   if (region_type == pb::common::RegionType::INDEX_REGION) {
     if (index_parameter.has_vector_index_parameter()) {
       store_type = pb::common::StoreType::NODE_TYPE_INDEX;
-    } else if (index_parameter.has_document_index_parameter()) {
+    } else {
+      DINGO_LOG(ERROR) << "GetCreateRegionStoreIds index_parameter is not legal, not vector, index_parameter="
+                       << index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not vector");
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (index_parameter.has_document_index_parameter()) {
       store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
     } else {
-      DINGO_LOG(ERROR)
-          << "GetCreateRegionStoreIds index_parameter is not legal, not vector or document, index_parameter="
-          << index_parameter.ShortDebugString();
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "index_parameter is not legal, not vector or document");
+      DINGO_LOG(ERROR) << "GetCreateRegionStoreIds index_parameter is not legal, not document, index_parameter="
+                       << index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not document");
     }
   }
 
