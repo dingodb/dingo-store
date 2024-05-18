@@ -836,3 +836,48 @@ TEST(DingoTantivySearchTest, test_json_parse) {
             false);
   std::cout << "error_message:" << error_message << '\n';
 }
+
+TEST(DingoTantivySearchTest, test_gen_default_json) {
+  std::map<std::string, dingodb::TokenizerType> column_tokenizer_parameter;
+  column_tokenizer_parameter.insert({"col1", dingodb::TokenizerType::kTokenizerTypeText});
+  column_tokenizer_parameter.insert({"col2", dingodb::TokenizerType::kTokenizerTypeI64});
+  column_tokenizer_parameter.insert({"col3", dingodb::TokenizerType::kTokenizerTypeF64});
+  column_tokenizer_parameter.insert({"col4", dingodb::TokenizerType::kTokenizerTypeText});
+  column_tokenizer_parameter.insert({"col5", dingodb::TokenizerType::kTokenizerTypeBytes});
+
+  std::string error_message;
+  std::string json_parameter;
+
+  EXPECT_EQ(dingodb::DocumentCodec::GenDefaultTokenizerJsonParameter(column_tokenizer_parameter, json_parameter,
+                                                                     error_message),
+            true);
+
+  std::cout << "json_parameter:" << json_parameter << '\n';
+
+  std::map<std::string, dingodb::TokenizerType> column_tokenizer_parameter2;
+  error_message.clear();
+
+  EXPECT_EQ(
+      dingodb::DocumentCodec::IsValidTokenizerJsonParameter(json_parameter, column_tokenizer_parameter2, error_message),
+      true);
+
+  EXPECT_EQ(column_tokenizer_parameter.size(), column_tokenizer_parameter2.size());
+
+  error_message.clear();
+  column_tokenizer_parameter.insert({"col6", dingodb::TokenizerType::kTokenizerTypeUnknown});
+  EXPECT_EQ(dingodb::DocumentCodec::GenDefaultTokenizerJsonParameter(column_tokenizer_parameter, json_parameter,
+                                                                     error_message),
+            false);
+  std::cout << "error_message:" << error_message << '\n';
+}
+
+TEST(DingoTantivySearchTest, GetTokenizerTypeString) {
+  dingodb::DocumentCodec codec;
+
+  EXPECT_EQ(codec.GetTokenizerTypeString(dingodb::TokenizerType::kTokenizerTypeText), "text");
+  EXPECT_EQ(codec.GetTokenizerTypeString(dingodb::TokenizerType::kTokenizerTypeI64), "i64");
+  EXPECT_EQ(codec.GetTokenizerTypeString(dingodb::TokenizerType::kTokenizerTypeF64), "f64");
+  EXPECT_EQ(codec.GetTokenizerTypeString(dingodb::TokenizerType::kTokenizerTypeBytes), "bytes");
+  EXPECT_EQ(codec.GetTokenizerTypeString(static_cast<dingodb::TokenizerType>(9999)),
+            "unknown");  // Test with an invalid value
+}

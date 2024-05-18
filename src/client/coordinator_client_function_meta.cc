@@ -62,6 +62,7 @@ DECLARE_bool(enable_rocks_engine);
 
 DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
+DEFINE_bool(use_json_parameter, false, "use json parameter");
 
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -1103,7 +1104,11 @@ void SendCreateDocumentIndex(std::shared_ptr<dingodb::CoordinatorInteraction> co
   // document index parameter
   index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
   auto* document_index_parameter = index_definition->mutable_index_parameter()->mutable_document_index_parameter();
-  document_index_parameter->set_json_parameter(multi_type_column_json);
+
+  if (FLAGS_use_json_parameter) {
+    document_index_parameter->set_json_parameter(multi_type_column_json);
+  }
+
   auto* scalar_schema = document_index_parameter->mutable_scalar_schema();
   auto* field_col1 = scalar_schema->add_fields();
   field_col1->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);

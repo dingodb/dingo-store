@@ -373,7 +373,7 @@ class CoordinatorControl : public MetaControl {
   // validate index definition
   // in: table_definition
   // return: errno
-  static butil::Status ValidateIndexDefinition(const pb::meta::TableDefinition &table_definition);
+  static butil::Status ValidateIndexDefinition(pb::meta::TableDefinition &table_definition);
   static butil::Status ValidateScalarIndexParameter(const pb::common::ScalarIndexParameter &scalar_index_parameter);
 
   butil::Status ValidateMaxTableCount();
@@ -386,7 +386,7 @@ class CoordinatorControl : public MetaControl {
   // out: new index_id
   // out: new region_ids
   // return: errno
-  butil::Status CreateIndex(int64_t schema_id, const pb::meta::TableDefinition &table_definition, int64_t table_id,
+  butil::Status CreateIndex(int64_t schema_id, const pb::meta::TableDefinition &table_definition_in, int64_t table_id,
                             int64_t &new_index_id, std::vector<int64_t> &region_ids,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
@@ -395,7 +395,8 @@ class CoordinatorControl : public MetaControl {
   // in: index_id
   // in: new_table_definition
   // return: errno
-  butil::Status UpdateIndex(int64_t schema_id, int64_t index_id, const pb::meta::TableDefinition &new_table_definition,
+  butil::Status UpdateIndex(int64_t schema_id, int64_t index_id,
+                            const pb::meta::TableDefinition &new_table_definition_in,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // generate table with part ids

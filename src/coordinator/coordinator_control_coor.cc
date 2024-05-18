@@ -2009,41 +2009,50 @@ butil::Status CoordinatorControl::CreateRegionFinal(
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
-    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (new_index_parameter.has_vector_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_INDEX;
 
-    // validate vector index region range
-    // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
-        region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
-                       << Helper::StringToHex(region_range.start_key());
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "vector index region range start_key size is not 8 or 16 bytes");
-    }
-
-    if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
-        region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
-                       << Helper::StringToHex(region_range.end_key());
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "vector index region range end_key size is not 8 or 16 bytes");
-    }
-
-    if (part_id <= 0) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
-    }
-
-    // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
-    if (new_index_parameter.vector_index_parameter().vector_index_type() ==
-        pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
-      auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
-        return ret1;
+      // validate vector index region range
+      // range's start_key and end_key must be less than 16 bytes
+      if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+          region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
+                         << Helper::StringToHex(region_range.start_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "vector index region range start_key size is not 8 or 16 bytes");
       }
+
+      if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+          region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
+                         << Helper::StringToHex(region_range.end_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "vector index region range end_key size is not 8 or 16 bytes");
+      }
+
+      if (part_id <= 0) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
+      }
+
+      // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
+      if (new_index_parameter.vector_index_parameter().vector_index_type() ==
+          pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+        auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
+        auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+        if (!ret1.ok()) {
+          DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
+          return ret1;
+        }
+      }
+    } else if (new_index_parameter.has_document_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+    } else {
+      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not vector or document, index_parameter="
+                       << new_index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "index_parameter is not legal, not vector or document");
     }
   }
 

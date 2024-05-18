@@ -23,8 +23,10 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "nlohmann/json_fwd.hpp"
 #include "serial/buf.h"
 #include "serial/schema/long_schema.h"
+#include "tantivy_search.h"
 
 namespace dingodb {
 
@@ -193,7 +195,69 @@ bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parame
     }
   }
 
+  // use ffi to validate json_parameter again for more tokenizer parameter
+  auto bool_result = ffi_varify_index_parameter(json_parameter);
+  if (!bool_result.result) {
+    DINGO_LOG(ERROR) << "ffi_varify_index_parameter failed, error_message:[" << bool_result.error_msg.c_str() << "]";
+    error_message = bool_result.error_msg.c_str();
+    column_tokenizer_parameter.clear();
+    return false;
+  }
+
   return true;
+}
+
+bool DocumentCodec::GenDefaultTokenizerJsonParameter(
+    const std::map<std::string, TokenizerType>& column_tokenizer_parameter, std::string& json_parameter,
+    std::string& error_message) {
+  if (column_tokenizer_parameter.empty()) {
+    error_message = "column_tokenizer_parameter is empty";
+    return false;
+  }
+
+  nlohmann::json json;
+
+  for (const auto& [field_name, field_type] : column_tokenizer_parameter) {
+    nlohmann::json tokenizer;
+    switch (field_type) {
+      case TokenizerType::kTokenizerTypeText:
+        tokenizer["type"] = "chinese";
+        break;
+      case TokenizerType::kTokenizerTypeI64:
+        tokenizer["type"] = "i64";
+        break;
+      case TokenizerType::kTokenizerTypeF64:
+        tokenizer["type"] = "f64";
+        break;
+      case TokenizerType::kTokenizerTypeBytes:
+        tokenizer["type"] = "bytes";
+        break;
+      default:
+        error_message = "unknown column";
+        return false;
+    }
+
+    json[field_name] = {{"tokenizer", tokenizer}};
+  }
+
+  json_parameter = json.dump();
+
+  return true;
+}
+
+std::string DocumentCodec::GetTokenizerTypeString(TokenizerType type) {
+  switch (type) {
+    case TokenizerType::kTokenizerTypeText:
+      return "text";
+    case TokenizerType::kTokenizerTypeI64:
+      return "i64";
+    case TokenizerType::kTokenizerTypeF64:
+      return "f64";
+    case TokenizerType::kTokenizerTypeBytes:
+      return "bytes";
+    default:
+      return "unknown";
+  }
 }
 
 }  // namespace dingodb
