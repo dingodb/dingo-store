@@ -456,45 +456,48 @@ TEST(DingoTantivySearchTest, test_multi_type_column) {
               << " seg_id:" << it.seg_id << '\n';
   }
 
-  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, {"col1"}).result;
+  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, false, 0, 0, {"col1"}).result;
   std::cout << "ffi_bm25_search_with_column_names col1 result size:" << result.size() << '\n';
   for (const auto& it : result) {
     std::cout << "ffi_bm25_search_with_column_names rowid:" << it.row_id << " score:" << it.score
               << " doc_id:" << it.doc_id << " seg_id:" << it.seg_id << '\n';
   }
 
-  result = ffi_bm25_search_with_column_names(index_path, "balance", 10, {}, false, {"col4"}).result;
+  result = ffi_bm25_search_with_column_names(index_path, "balance", 10, {}, false, false, 0, 0, {"col4"}).result;
   std::cout << "ffi_bm25_search_with_column_names col4 result size:" << result.size() << '\n';
   for (const auto& it : result) {
     std::cout << "ffi_bm25_search_with_column_names rowid:" << it.row_id << " score:" << it.score
               << " doc_id:" << it.doc_id << " seg_id:" << it.seg_id << '\n';
   }
 
-  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, {"col1", "col4"}).result;
+  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, false, 0, 0, {"col1", "col4"}).result;
   std::cout << "ffi_bm25_search_with_column_names col1,col4 result size:" << result.size() << '\n';
   for (const auto& it : result) {
     std::cout << "ffi_bm25_search_with_column_names rowid:" << it.row_id << " score:" << it.score
               << " doc_id:" << it.doc_id << " seg_id:" << it.seg_id << '\n';
   }
 
-  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, {"col11", "col44"}).result;
+  result = ffi_bm25_search_with_column_names(index_path, "社会", 10, {}, false, false, 0, 0, {"col11", "col44"}).result;
   std::cout << "ffi_bm25_search_with_column_names col11,col44 result size:" << result.size() << '\n';
 
-  result = ffi_bm25_search_with_column_names(index_path, "col2: IN [200 300 400]", 10, {}, false, {}).result;
+  result =
+      ffi_bm25_search_with_column_names(index_path, "col2: IN [200 300 400]", 10, {}, false, false, 0, 0, {}).result;
   std::cout << "ffi_bm25_search_with_column_names-1 parser result size:" << result.size() << '\n';
   for (const auto& it : result) {
     std::cout << "ffi_bm25_search_with_column_names rowid:" << it.row_id << " score:" << it.score
               << " doc_id:" << it.doc_id << " seg_id:" << it.seg_id << '\n';
   }
 
-  result = ffi_bm25_search_with_column_names(index_path, "col222: IN [200 300 400]", 10, {}, false, {}).result;
+  result =
+      ffi_bm25_search_with_column_names(index_path, "col222: IN [200 300 400]", 10, {}, false, false, 0, 0, {}).result;
   std::cout << "ffi_bm25_search_with_column_names-2 parser result size:" << result.size() << '\n';
   for (const auto& it : result) {
     std::cout << "ffi_bm25_search_with_column_names rowid:" << it.row_id << " score:" << it.score
               << " doc_id:" << it.doc_id << " seg_id:" << it.seg_id << '\n';
   }
 
-  auto bm25_result = ffi_bm25_search_with_column_names(index_path, "col2: IN [200 300 400]", 10, {}, false, {});
+  auto bm25_result =
+      ffi_bm25_search_with_column_names(index_path, "col2: IN [200 300 400]", 10, {}, false, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << "ffi_bm25_search_with_column_names2-1 error:" << bm25_result.error_msg.c_str() << '\n';
   } else {
@@ -505,8 +508,8 @@ TEST(DingoTantivySearchTest, test_multi_type_column) {
     }
   }
 
-  bm25_result =
-      ffi_bm25_search_with_column_names(index_path, "col222: IN [200 300 400 500 600 700 800]", 10, {}, false, {});
+  bm25_result = ffi_bm25_search_with_column_names(index_path, "col222: IN [200 300 400 500 600 700 800]", 10, {}, false,
+                                                  false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << "ffi_bm25_search_with_column_names2-2 error:" << bm25_result.error_msg.c_str() << '\n';
   } else {
@@ -530,8 +533,8 @@ TEST(DingoTantivySearchTest, test_multi_type_column) {
   alived_ids.push_back(5);
   alived_ids.push_back(6);
   alived_ids.push_back(7);
-  bm25_result =
-      ffi_bm25_search_with_column_names(index_path, "col2: IN [800 700 600 500 400 300 200]", 3, alived_ids, true, {});
+  bm25_result = ffi_bm25_search_with_column_names(index_path, "col2: IN [800 700 600 500 400 300 200]", 3, alived_ids,
+                                                  true, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << "ffi_bm25_search_with_column_names2-3 filter_ids error:" << bm25_result.error_msg.c_str() << '\n';
   } else {
@@ -604,7 +607,7 @@ TEST(DingoTantivySearchTest, test_load_multi_type_column) {
     std::cout << "ffi_index_reader_reload success" << '\n';
   }
 
-  auto bm25_result = ffi_bm25_search_with_column_names(index_path, "col2: IN [101]", 10, {}, false, {});
+  auto bm25_result = ffi_bm25_search_with_column_names(index_path, "col2: IN [101]", 10, {}, false, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << "ffi_bm25_search_with_column_names2-1 error:" << bm25_result.error_msg.c_str() << '\n';
     EXPECT_EQ(bm25_result.error_code, 0);
@@ -698,7 +701,8 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
   alived_ids.push_back(0);
   alived_ids.push_back(1);
   alived_ids.push_back(2);
-  auto bm25_result = ffi_bm25_search_with_column_names(index_path, "col2: IN [100 200]", 3, alived_ids, true, {});
+  auto bm25_result =
+      ffi_bm25_search_with_column_names(index_path, "col2: IN [100 200]", 3, alived_ids, true, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << __func__ << "test-1 filter_ids error:" << bm25_result.error_msg.c_str() << '\n';
     EXPECT_EQ(bm25_result.error_code, 0);
@@ -710,7 +714,7 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
     }
   }
 
-  bm25_result = ffi_bm25_search_with_column_names(index_path, "col3: > 101", 10, {}, false, {});
+  bm25_result = ffi_bm25_search_with_column_names(index_path, "col3: > 101", 10, {}, false, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << __func__ << "test-2 parser error:" << bm25_result.error_msg.c_str() << '\n';
     EXPECT_EQ(bm25_result.error_code, 0);
@@ -722,14 +726,29 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
     }
   }
 
-  bm25_result = ffi_bm25_search_with_column_names(index_path, "col5: IN [dGVzdDExMQ==]", 10, {}, false, {});
+  bm25_result =
+      ffi_bm25_search_with_column_names(index_path, "col5: IN [dGVzdDExMQ==]", 10, {}, false, false, 0, 0, {});
   if (bm25_result.error_code != 0) {
     std::cout << __func__ << "test-3 parser error:" << bm25_result.error_msg.c_str() << '\n';
     EXPECT_EQ(bm25_result.error_code, 0);
   } else {
     std::cout << __func__ << "test-3 parser result size:" << bm25_result.result.size() << '\n';
+    EXPECT_EQ(bm25_result.result.size(), 2);
     for (const auto& it : bm25_result.result) {
       std::cout << __func__ << "test-3 rowid:" << it.row_id << " score:" << it.score << " doc_id:" << it.doc_id
+                << " seg_id:" << it.seg_id << '\n';
+    }
+  }
+
+  bm25_result = ffi_bm25_search_with_column_names(index_path, "col5: IN [dGVzdDExMQ==]", 10, {}, false, true, 1, 2, {});
+  if (bm25_result.error_code != 0) {
+    std::cout << __func__ << "test-4 parser error:" << bm25_result.error_msg.c_str() << '\n';
+    EXPECT_EQ(bm25_result.error_code, 0);
+  } else {
+    std::cout << __func__ << "test-4 parser result size:" << bm25_result.result.size() << '\n';
+    EXPECT_EQ(bm25_result.result.size(), 1);
+    for (const auto& it : bm25_result.result) {
+      std::cout << __func__ << "test-4 rowid:" << it.row_id << " score:" << it.score << " doc_id:" << it.doc_id
                 << " seg_id:" << it.seg_id << '\n';
     }
   }
