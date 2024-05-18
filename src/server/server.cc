@@ -179,10 +179,28 @@ bool Server::InitDirectory() {
 
   // vector index path
   if (GetRole() == pb::common::INDEX) {
-    auto vector_index_path = config->GetString("vector.index_path");
+    auto vector_index_path = GetVectorIndexPath();
+    if (vector_index_path.empty()) {
+      DINGO_LOG(ERROR) << "Get vector index path failed";
+      return false;
+    }
     ret = Helper::CreateDirectories(vector_index_path);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "Create vector index directory failed: " << vector_index_path;
+      return false;
+    }
+  }
+
+  // document index path
+  if (GetRole() == pb::common::DOCUMENT) {
+    auto document_index_path = GetDocumentIndexPath();
+    if (document_index_path.empty()) {
+      DINGO_LOG(ERROR) << "Get document index path failed";
+      return false;
+    }
+    ret = Helper::CreateDirectories(document_index_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create document index directory failed: " << document_index_path;
       return false;
     }
   }
@@ -974,9 +992,14 @@ std::string Server::GetRaftLogPath() {
   return config == nullptr ? "" : config->GetString("raft.log_path");
 }
 
-std::string Server::GetIndexPath() {
+std::string Server::GetVectorIndexPath() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   return config == nullptr ? "" : config->GetString("vector.index_path");
+}
+
+std::string Server::GetDocumentIndexPath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("document.index_path");
 }
 
 bool Server::IsClusterReadOnlyOrForceReadOnly() const { return cluster_is_read_only_ || cluster_is_force_read_only_; }
