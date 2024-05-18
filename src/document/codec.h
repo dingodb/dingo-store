@@ -55,6 +55,10 @@ class DocumentCodec {
   static bool IsValidTokenizerJsonParameter(const std::string& json_parameter,
                                             std::map<std::string, TokenizerType>& column_tokenizer_parameter,
                                             std::string& error_message);
+  static bool GenDefaultTokenizerJsonParameter(const std::map<std::string, TokenizerType>& column_tokenizer_parameter,
+                                               std::string& json_parameter, std::string& error_message);
+
+  static std::string GetTokenizerTypeString(TokenizerType type);
 };
 
 }  // namespace dingodb
