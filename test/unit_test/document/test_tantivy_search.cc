@@ -50,6 +50,8 @@ class DingoTantivySearchTest : public testing::Test {
   void SetUp() override {
     // print test start info and current path
     std::cout << "tantivy_search test start, current_path: " << std::filesystem::current_path() << '\n';
+    std::filesystem::remove_all(kTantivySearchTestIndexPath);
+    std::filesystem::remove_all(kTantivySearchTestLogPath);
   }
   void TearDown() override {
     // remove kTantivySearchTestIndexPath and kTantivySearchTestLogPath
