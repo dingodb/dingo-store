@@ -945,13 +945,20 @@ message DocumentSearchParameter {
   // The query_string for search
   string query_string = 2;
 
-  bool without_scalar_data = 3;       // Default false, if true, response without scalar data.
-  repeated string selected_keys = 4;  // If without_scalar_data is false, selected_keys is used to select scalar data,
-                                      // if this parameter is null, all scalar data will be returned.
-
   // use id filter
-  bool use_id_filter = 5;
-  repeated int64 document_ids = 12;  // if use_id_filter = true, use this field
+  bool use_id_filter = 3;
+  repeated int64 document_ids = 4;  // if use_id_filter = true, use this field
+
+  // use column filter
+  // if query_string is simple string, use column_names to select columns
+  // if query_string is full functional expr, like "col1: value1 AND col2: value2", column_names is ignored
+  repeated string column_names = 5;
+
+  // for output, if only id is needed, set without_scalar_data = true
+  // else set without_scalar_data = false, and set selected_keys to select scalar data
+  bool without_scalar_data = 10;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 11;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                       // if this parameter is null, all scalar data will be returned.
 }
 
 message DocumentWithScore {

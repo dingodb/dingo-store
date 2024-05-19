@@ -24,6 +24,7 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/runnable.h"
+#include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/document.pb.h"
 
@@ -37,6 +38,9 @@ class DocumentIndex {
   DocumentIndex(int64_t id, const std::string& index_path,
                 const pb::common::DocumentIndexParameter& document_index_parameter,
                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+
+  static butil::Status RemoveIndexFiles(int64_t id, const std::string& index_path);
+
   ~DocumentIndex();
 
   DocumentIndex(const DocumentIndex& rhs) = delete;
@@ -54,9 +58,9 @@ class DocumentIndex {
 
   butil::Status Load(const std::string& path);
 
-  butil::Status Search(bool use_range_filter, int64_t start_id, int64_t end_id,
-                       const pb::common::DocumentSearchParameter& parameter,
-                       pb::document::DocumentWithScoreResult& results);
+  butil::Status Search(uint32_t topk, const std::string& query_string, bool use_range_filter, int64_t start_id,
+                       int64_t end_id, bool use_id_filter, const std::vector<uint64_t>& alive_ids,
+                       const std::vector<std::string>& column_names, pb::document::DocumentWithScoreResult& results);
 
   void LockWrite();
   void UnlockWrite();
@@ -83,6 +87,16 @@ class DocumentIndex {
   pb::common::Range Range() const;
   void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
+  void SetDestroyed() {
+    RWLockWriteGuard guard(&rw_lock_);
+    is_destroyed_ = true;
+  }
+
+  bool IsDestroyed() {
+    RWLockReadGuard guard(&rw_lock_);
+    return is_destroyed_;
+  }
+
  protected:
   // document index id
   int64_t id;
@@ -102,6 +116,7 @@ class DocumentIndex {
 
  private:
   RWLock rw_lock_;
+  bool is_destroyed_{false};
 };
 
 using DocumentIndexPtr = std::shared_ptr<DocumentIndex>;
