@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 ENV TZ=Asia/Shanghai \
     DEBIAN_FRONTEND=noninteractive

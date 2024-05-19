@@ -23,6 +23,10 @@ RUN dnf update -y  \
     && mv cmake-3.26.4-linux-x86_64 /opt/ \
     && rm -f cmake-3.26.4-linux-x86_64.tar.gz
 
+# install rust
+RUN wget https://sh.rustup.rs --content-disposition
+RUN sh rustup-init.sh -y
+
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 

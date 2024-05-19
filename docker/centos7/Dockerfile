@@ -27,6 +27,10 @@ RUN yum makecache  \
 RUN mv /tmp/oneAPI.repo /etc/yum.repos.d
 RUN yum -y install intel-oneapi-mkl-devel  && yum clean all
 
+# install rust
+RUN wget https://sh.rustup.rs --content-disposition
+RUN sh rustup-init.sh -y
+
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
