@@ -24,9 +24,6 @@
 #include "bthread/types.h"
 #include "butil/status.h"
 #include "common/runnable.h"
-#include "common/threadpool.h"
-#include "faiss/MetricType.h"
-#include "faiss/impl/IDSelector.h"
 #include "proto/common.pb.h"
 #include "proto/document.pb.h"
 
@@ -37,8 +34,9 @@ namespace dingodb {
 // But one region can refer other document index when region split.
 class DocumentIndex {
  public:
-  DocumentIndex(int64_t id, const pb::common::DocumentIndexParameter& document_index_parameter,
-                const pb::common::RegionEpoch& epoch, const pb::common::Range& range, ThreadPoolPtr thread_pool);
+  DocumentIndex(int64_t id, const std::string& index_path,
+                const pb::common::DocumentIndexParameter& document_index_parameter,
+                const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
   ~DocumentIndex();
 
   DocumentIndex(const DocumentIndex& rhs) = delete;
@@ -46,62 +44,19 @@ class DocumentIndex {
   DocumentIndex(DocumentIndex&& rhs) = delete;
   DocumentIndex& operator=(DocumentIndex&& rhs) = delete;
 
-  class FilterFunctor {
-   public:
-    virtual ~FilterFunctor() = default;
-    virtual void Build(std::vector<faiss::idx_t>& id_map) {}
-    virtual bool Check(int64_t document_id) = 0;
-  };
+  butil::Status GetCount(int64_t& count);
 
-  // Range filter
-  class RangeFilterFunctor : public FilterFunctor {
-   public:
-    RangeFilterFunctor(int64_t min_document_id, int64_t max_document_id)
-        : min_document_id_(min_document_id), max_document_id_(max_document_id) {}
-    bool Check(int64_t document_id) override {
-      return document_id >= min_document_id_ && document_id < max_document_id_;
-    }
+  butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader);
 
-   private:
-    int64_t min_document_id_;
-    int64_t max_document_id_;
-  };
+  butil::Status Delete(const std::vector<int64_t>& delete_ids);
 
-  class ConcreteFilterFunctor : public FilterFunctor, public faiss::IDSelectorBatch {
-   public:
-    ConcreteFilterFunctor(const ConcreteFilterFunctor&) = delete;
-    ConcreteFilterFunctor(ConcreteFilterFunctor&&) = delete;
-    ConcreteFilterFunctor& operator=(const ConcreteFilterFunctor&) = delete;
-    ConcreteFilterFunctor& operator=(ConcreteFilterFunctor&&) = delete;
+  butil::Status Save(const std::string& path);
 
-    explicit ConcreteFilterFunctor(const std::vector<int64_t>& document_ids, bool is_negation = false)
-        : IDSelectorBatch(document_ids.size(), document_ids.data()), is_negation_(is_negation) {}
+  butil::Status Load(const std::string& path);
 
-    ~ConcreteFilterFunctor() override = default;
-
-    bool Check(int64_t document_id) override {
-      bool exist = is_member(document_id);
-      return !is_negation_ ? exist : !exist;
-    }
-
-   private:
-    bool is_negation_{false};
-  };
-
-  static butil::Status GetCount(int64_t& count);
-
-  static butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids);
-
-  static butil::Status Delete(const std::vector<int64_t>& delete_ids);
-
-  static butil::Status Save(const std::string& path);
-
-  static butil::Status Load(const std::string& path);
-
-  static butil::Status Search(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
-                              const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
-                              const pb::common::DocumentSearchParameter& parameter,
-                              std::vector<pb::document::DocumentWithScoreResult>& results);
+  butil::Status Search(bool use_range_filter, int64_t start_id, int64_t end_id,
+                       const pb::common::DocumentSearchParameter& parameter,
+                       pb::document::DocumentWithScoreResult& results);
 
   void LockWrite();
   void UnlockWrite();
@@ -132,6 +87,9 @@ class DocumentIndex {
   // document index id
   int64_t id;
 
+  // tantivy index path
+  std::string index_path;
+
   // apply max log id
   std::atomic<int64_t> apply_log_id;
   // last snapshot log id
@@ -141,9 +99,6 @@ class DocumentIndex {
   pb::common::Range range;
 
   pb::common::DocumentIndexParameter document_index_parameter;
-
-  // document index thread pool
-  ThreadPoolPtr thread_pool;
 
  private:
   RWLock rw_lock_;
@@ -254,16 +209,13 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
 
   butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status Delete(const std::vector<int64_t>& delete_ids);
-  butil::Status Search(std::vector<pb::common::DocumentWithId> document_with_ids, uint32_t topk,
-                       const pb::common::Range& region_range,
-                       std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters, bool reconstruct,
-                       const pb::common::DocumentSearchParameter& parameter,
-                       std::vector<pb::document::DocumentWithScoreResult>& results);
+  butil::Status Search(const pb::common::Range& region_range, const pb::common::DocumentSearchParameter& parameter,
+                       pb::document::DocumentWithScoreResult& results);
 
-  static butil::Status SetDocumentIndexRangeFilter(
-      DocumentIndexPtr document_index,
-      std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,  // NOLINT
-      int64_t min_document_id, int64_t max_document_id);
+  // static butil::Status SetDocumentIndexRangeFilter(
+  //     DocumentIndexPtr document_index,
+  //     std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,  // NOLINT
+  //     int64_t min_document_id, int64_t max_document_id);
 
  private:
   // document index id

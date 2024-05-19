@@ -2,10 +2,7 @@ enable_testing()
 
 add_subdirectory(legacy)
 add_subdirectory(sdk)
-
-if(WITH_DOC)
-  add_subdirectory(document)
-endif()
+add_subdirectory(document)
 
 SET(UNIT_TEST_BIN "dingodb_unit_test")
 
@@ -21,11 +18,8 @@ set(UNIT_TEST_LIBS
   $<TARGET_OBJECTS:LEGACY_UNIT_TEST_OBJS>
   sdk
   $<TARGET_OBJECTS:SDK_UNIT_TEST_OBJS>
+  $<TARGET_OBJECTS:DOCUMENT_UNIT_TEST_OBJS>
 )
-
-if(WITH_DOC)
-  list(APPEND UNIT_TEST_LIBS $<TARGET_OBJECTS:DOCUMENT_UNIT_TEST_OBJS>)
-endif()
 
 set(UNIT_TEST_LIBS
   ${UNIT_TEST_LIBS}
