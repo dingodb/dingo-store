@@ -924,8 +924,8 @@ message DocumentValue {
   // data type of scalar field
   // for document, only INT64, DOUBLE and STRING is supported
   ScalarFieldType field_type = 1;
-  // scalar field, only one element in most cases
-  ScalarField fields = 2;
+  // scalar field
+  ScalarField field_value = 2;
 }
 
 message Document {

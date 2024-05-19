@@ -30,19 +30,21 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
+#include "tantivy_search.h"
+#include "tantivy_search_cxx.h"
 
 namespace dingodb {
 
-DocumentIndex::DocumentIndex(int64_t id, const pb::common::DocumentIndexParameter& document_index_parameter,
-                             const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
-                             ThreadPoolPtr thread_pool)
+DocumentIndex::DocumentIndex(int64_t id, const std::string& index_path,
+                             const pb::common::DocumentIndexParameter& document_index_parameter,
+                             const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
     : id(id),
+      index_path(index_path),
       apply_log_id(0),
       snapshot_log_id(0),
       document_index_parameter(document_index_parameter),
       epoch(epoch),
-      range(range),
-      thread_pool(thread_pool) {
+      range(range) {
   DINGO_LOG(DEBUG) << fmt::format("[new.DocumentIndex][id({})]", id);
 }
 
@@ -76,30 +78,190 @@ void DocumentIndex::LockWrite() { rw_lock_.LockWrite(); }
 
 void DocumentIndex::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
-butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& /*document_with_ids*/) {
+butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader) {
+  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] add document count({})", id, document_with_ids.size());
+
+  for (const auto& document_with_id : document_with_ids) {
+    std::vector<std::string> text_column_names;
+    std::vector<std::string> text_column_docs;
+    std::vector<std::string> i64_column_names;
+    std::vector<std::int64_t> i64_column_docs;
+    std::vector<std::string> f64_column_names;
+    std::vector<double> f64_column_docs;
+    std::vector<std::string> bytes_column_names;
+    std::vector<std::string> bytes_column_docs;
+
+    uint64_t document_id = document_with_id.id();
+
+    const auto& document = document_with_id.document();
+    for (const auto& [field_name, document_value] : document.document_data()) {
+      switch (document_value.field_type()) {
+        case pb::common::ScalarFieldType::STRING:
+          text_column_names.push_back(field_name);
+          text_column_docs.push_back(document_value.field_value().string_data());
+          break;
+        case pb::common::ScalarFieldType::INT64:
+          i64_column_names.push_back(field_name);
+          i64_column_docs.push_back(document_value.field_value().long_data());
+          break;
+        case pb::common::ScalarFieldType::DOUBLE:
+          f64_column_names.push_back(field_name);
+          f64_column_docs.push_back(document_value.field_value().double_data());
+          break;
+        case pb::common::ScalarFieldType::BYTES:
+          bytes_column_names.push_back(field_name);
+          bytes_column_docs.push_back(document_value.field_value().bytes_data());
+          break;
+        default:
+          std::string err_msg = fmt::format("[document_index.raw][id({})] document_id: ({}) unknown field type({})", id,
+                                            document_id, pb::common::ScalarFieldType_Name(document_value.field_type()));
+          DINGO_LOG(ERROR) << err_msg;
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+          break;
+      }
+    }
+
+    auto bool_result = ffi_index_multi_type_column_docs(index_path, document_id, text_column_names, text_column_docs,
+                                                        i64_column_names, i64_column_docs, f64_column_names,
+                                                        f64_column_docs, bytes_column_names, bytes_column_docs);
+    if (!bool_result.result) {
+      std::string err_msg =
+          fmt::format("[document_index.raw][id({})] document_id: ({}) add failed, error: {}, error_msg: {}", id,
+                      document_id, bool_result.error_code, bool_result.error_msg.c_str());
+      DINGO_LOG(ERROR) << err_msg;
+      return butil::Status(pb::error::EINTERNAL, err_msg);
+    }
+  }
+
+  auto bool_result = ffi_index_writer_commit(index_path);
+  if (!bool_result.result) {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] commit failed, error: {}, error_msg: {}", id,
+                                      bool_result.error_code, bool_result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
+
+  if (reload_reader) {
+    bool_result = ffi_index_reader_reload(index_path);
+    if (!bool_result.result) {
+      std::string err_msg = fmt::format("[document_index.raw][id({})] reload failed, error: {}, error_msg: {}", id,
+                                        bool_result.error_code, bool_result.error_msg.c_str());
+      DINGO_LOG(ERROR) << err_msg;
+      return butil::Status(pb::error::EINTERNAL, err_msg);
+    }
+  }
+
   return butil::Status::OK();
 }
 
-butil::Status DocumentIndex::Delete(const std::vector<int64_t>& /*delete_ids*/) { return butil::Status::OK(); }
+butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
+  std::vector<uint64_t> delete_ids_uint64;
 
-butil::Status DocumentIndex::Search(const std::vector<pb::common::DocumentWithId>& document_with_ids, uint32_t topk,
-                                    const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool reconstruct,
+  for (const auto& delete_id : delete_ids) {
+    if (delete_id < 0) {
+      std::string err_msg =
+          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) < 0", id, delete_id);
+      DINGO_LOG(ERROR) << err_msg;
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+    } else if (delete_id >= INT64_MAX) {
+      std::string err_msg =
+          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) >= INT64_MAX", id, delete_id);
+      DINGO_LOG(ERROR) << err_msg;
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+    }
+
+    delete_ids_uint64.push_back(delete_id);
+  }
+
+  auto bool_result = ffi_delete_row_ids(index_path, delete_ids_uint64);
+  if (!bool_result.result) {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] delete failed, error: {}, error_msg: {}", id,
+                                      bool_result.error_code, bool_result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status DocumentIndex::Search(bool use_range_filter, int64_t start_id, int64_t end_id,
                                     const pb::common::DocumentSearchParameter& parameter,
-                                    std::vector<pb::document::DocumentWithScoreResult>& results) {
-  return Search(document_with_ids, topk, filters, reconstruct, parameter, results);
+                                    pb::document::DocumentWithScoreResult& results) {
+  auto topk = parameter.top_n();
+
+  if (topk == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "topk must be greater than 0");
+  }
+
+  if (parameter.query_string().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "query string must not be empty");
+  }
+
+  std::vector<uint64_t> alive_ids;
+  if (parameter.use_id_filter()) {
+    for (const auto& id : parameter.document_ids()) {
+      if (id < 0 || id >= INT64_MAX) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "document id must be greater than 0 and lesser than INT64_MAX");
+      }
+
+      alive_ids.push_back(id);
+    }
+  }
+
+  std::vector<std::string> column_names;
+
+  auto search_result =
+      ffi_bm25_search_with_column_names(index_path, parameter.query_string(), topk, alive_ids,
+                                        parameter.use_id_filter(), use_range_filter, start_id, end_id, column_names);
+
+  if (search_result.error_code == 0) {
+    for (const auto& row_id_with_score : search_result.result) {
+      auto* result_doc = results.add_document_with_scores();
+      result_doc->mutable_document_with_id()->set_id(row_id_with_score.row_id);
+      result_doc->set_score(row_id_with_score.score);
+
+      DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] search result, row_id({}) score({})", id,
+                                     row_id_with_score.row_id, row_id_with_score.score);
+    }
+
+    return butil::Status::OK();
+  } else {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] search failed, error: {}, error_msg: {}", id,
+                                      search_result.error_code, search_result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
 }
 
 butil::Status DocumentIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
-  return butil::Status(pb::error::Errno::EDOCUMENT_NOT_SUPPORT, "this document index do not implement save");
+  auto result = ffi_index_writer_commit(index_path);
+  if (result.result) {
+    return butil::Status::OK();
+  } else {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] save failed, error: {}, error_msg: {}", id,
+                                      result.error_code, result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
 }
 
 butil::Status DocumentIndex::Load(const std::string& /*path*/) {
-  return butil::Status(pb::error::Errno::EDOCUMENT_NOT_SUPPORT, "this document index do not implement load");
+  auto result = ffi_index_reader_reload(index_path);
+  if (result.result) {
+    return butil::Status::OK();
+  } else {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] load failed, error: {}, error_msg: {}", id,
+                                      result.error_code, result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
 }
 
-butil::Status DocumentIndex::GetCount([[maybe_unused]] int64_t& count) {
-  return butil::Status(pb::error::Errno::EDOCUMENT_NOT_SUPPORT, "this document index do not implement get count");
+butil::Status DocumentIndex::GetCount(int64_t& count) {
+  count = ffi_get_indexed_doc_counts(index_path);
+  return butil::Status::OK();
 }
 
 DocumentIndexWrapper::DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter,
@@ -511,12 +673,13 @@ butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWi
   // Exist sibling document index, so need to separate add document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status = sibling_document_index->Add(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()));
+    auto status =
+        sibling_document_index->Add(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()), true);
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->Add(FilterDocumentWithId(document_with_ids, document_index->Range()));
+    status = document_index->Add(FilterDocumentWithId(document_with_ids, document_index->Range()), true);
     if (!status.ok()) {
       sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range()));
       return status;
@@ -527,7 +690,7 @@ butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWi
     return status;
   }
 
-  auto status = document_index->Add(document_with_ids);
+  auto status = document_index->Add(document_with_ids, true);
   if (status.ok()) {
     write_key_count_ += document_with_ids.size();
   }
@@ -586,15 +749,17 @@ static void MergeSearchResult(uint32_t topk, pb::document::DocumentWithScoreResu
   auto* document_with_scores_2 = input_2.mutable_document_with_scores();
 
   int i = 0, j = 0;
+
+  // for document, the bigger score mean more relative.
   while (i < input_1_size && j < input_2_size) {
-    auto& distance_1 = document_with_scores_1->at(i);
-    auto& distance_2 = document_with_scores_2->at(j);
-    if (distance_1.score() <= distance_2.score()) {
+    auto& score_1 = document_with_scores_1->at(i);
+    auto& score_2 = document_with_scores_2->at(j);
+    if (score_1.score() > score_2.score()) {
       ++i;
-      results.add_document_with_scores()->Swap(&distance_1);
+      results.add_document_with_scores()->Swap(&score_1);
     } else {
       ++j;
-      results.add_document_with_scores()->Swap(&distance_2);
+      results.add_document_with_scores()->Swap(&score_2);
     }
 
     if (results.document_with_scores_size() >= topk) {
@@ -619,22 +784,9 @@ static void MergeSearchResult(uint32_t topk, pb::document::DocumentWithScoreResu
   }
 }
 
-static void MergeSearchResults(uint32_t topk, std::vector<pb::document::DocumentWithScoreResult>& input_1,
-                               std::vector<pb::document::DocumentWithScoreResult>& input_2,
-                               std::vector<pb::document::DocumentWithScoreResult>& results) {
-  assert(input_1.size() == input_2.size());
-
-  results.resize(input_1.size());
-  for (int i = 0; i < input_1.size(); ++i) {
-    MergeSearchResult(topk, input_1[i], input_2[i], results[i]);
-  }
-}
-
-butil::Status DocumentIndexWrapper::Search(std::vector<pb::common::DocumentWithId> document_with_ids, uint32_t topk,
-                                           const pb::common::Range& region_range,
-                                           std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,
-                                           bool reconstruct, const pb::common::DocumentSearchParameter& parameter,
-                                           std::vector<pb::document::DocumentWithScoreResult>& results) {
+butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range,
+                                           const pb::common::DocumentSearchParameter& parameter,
+                                           pb::document::DocumentWithScoreResult& results) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
@@ -648,19 +800,19 @@ butil::Status DocumentIndexWrapper::Search(std::vector<pb::common::DocumentWithI
   // Exist sibling document index, so need to separate search document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    std::vector<pb::document::DocumentWithScoreResult> results_1;
-    auto status = sibling_document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results_1);
+    pb::document::DocumentWithScoreResult results_1;
+    auto status = sibling_document_index->Search(false, 0, INT64_MAX, parameter, results_1);
     if (!status.ok()) {
       return status;
     }
 
-    std::vector<pb::document::DocumentWithScoreResult> results_2;
-    status = document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results_2);
+    pb::document::DocumentWithScoreResult results_2;
+    status = document_index->Search(false, 0, INT64_MAX, parameter, results_2);
     if (!status.ok()) {
       return status;
     }
 
-    MergeSearchResults(topk, results_1, results_2, results);
+    MergeSearchResult(parameter.top_n(), results_1, results_2, results);
     return status;
   }
 
@@ -668,23 +820,28 @@ butil::Status DocumentIndexWrapper::Search(std::vector<pb::common::DocumentWithI
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_document_id = 0, max_document_id = 0;
     DocumentCodec::DecodeRangeToDocumentId(region_range, min_document_id, max_document_id);
-    auto ret =
-        DocumentIndexWrapper::SetDocumentIndexRangeFilter(document_index, filters, min_document_id, max_document_id);
-    if (!ret.ok()) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "[document_index.wrapper][index_id({})] set document index filter failed, error: {}", Id(), ret.error_str());
-      return ret;
-    }
+
+    // use range filter
+    return document_index->Search(true, min_document_id, max_document_id, parameter, results);
+
+    // auto ret =
+    //     DocumentIndexWrapper::SetDocumentIndexRangeFilter(document_index, filters, min_document_id, max_document_id);
+    // if (!ret.ok()) {
+    //   DINGO_LOG(ERROR) << fmt::format(
+    //       "[document_index.wrapper][index_id({})] set document index filter failed, error: {}", Id(),
+    //       ret.error_str());
+    //   return ret;
+    // }
   }
 
-  return document_index->Search(document_with_ids, topk, filters, reconstruct, parameter, results);
+  return document_index->Search(false, 0, INT64_MAX, parameter, results);
 }
 
-butil::Status DocumentIndexWrapper::SetDocumentIndexRangeFilter(
-    DocumentIndexPtr /*document_index*/, std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,
-    int64_t min_document_id, int64_t max_document_id) {
-  filters.push_back(std::make_shared<DocumentIndex::RangeFilterFunctor>(min_document_id, max_document_id));
-  return butil::Status::OK();
-}
+// butil::Status DocumentIndexWrapper::SetDocumentIndexRangeFilter(
+//     DocumentIndexPtr /*document_index*/, std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,
+//     int64_t min_document_id, int64_t max_document_id) {
+//   filters.push_back(std::make_shared<DocumentIndex::RangeFilterFunctor>(min_document_id, max_document_id));
+//   return butil::Status::OK();
+// }
 
 }  // namespace dingodb
