@@ -277,11 +277,19 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
   // Delete raft meta
   store_meta_manager->GetStoreRaftMeta()->DeleteRaftMeta(region_id);
 
-  // Index region
+  // index region
   if (GetRole() == pb::common::ClusterRole::INDEX) {
     auto vector_index_wrapper = region->VectorIndexWrapper();
     if (vector_index_wrapper != nullptr) {
       vector_index_wrapper->Destroy();
+    }
+  }
+
+  // document region
+  if (GetRole() == pb::common::ClusterRole::DOCUMENT) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper != nullptr) {
+      document_index_wrapper->Destroy();
     }
   }
 

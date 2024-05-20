@@ -152,6 +152,7 @@ struct DocumentAddDatum : public DatumAble {
     for (auto& document : documents) {
       document_add_request->add_documents()->Swap(&document);
     }
+    document_add_request->set_is_update(is_update);
 
     return request;
   };
@@ -160,6 +161,7 @@ struct DocumentAddDatum : public DatumAble {
 
   std::string cf_name;
   std::vector<pb::common::DocumentWithId> documents;
+  bool is_update{false};
 };
 
 struct DocumentDeleteDatum : public DatumAble {
@@ -169,7 +171,7 @@ struct DocumentDeleteDatum : public DatumAble {
   pb::raft::Request* TransformToRaft() override {
     auto* request = new pb::raft::Request();
 
-    request->set_cmd_type(pb::raft::CmdType::VECTOR_DELETE);
+    request->set_cmd_type(pb::raft::CmdType::DOCUMENT_DELETE);
     pb::raft::DocumentDeleteRequest* document_delete_request = request->mutable_document_delete();
     document_delete_request->set_cf_name(cf_name);
     for (const auto& id : ids) {
@@ -450,10 +452,12 @@ class WriteDataBuilder {
 
   // DocumentAddDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
-                                               const std::vector<pb::common::DocumentWithId>& documents) {
+                                               const std::vector<pb::common::DocumentWithId>& documents,
+                                               bool is_update) {
     auto datum = std::make_shared<DocumentAddDatum>();
     datum->cf_name = cf_name;
     datum->documents = documents;
+    datum->is_update = is_update;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

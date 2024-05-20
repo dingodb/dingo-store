@@ -406,7 +406,28 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendTxnDump(FLAGS_region_id);
     }
 
-    // Vector operation
+    // document operation
+    else if (method == "DocumentDelete") {
+      client::SendDocumentDelete(FLAGS_region_id, FLAGS_start_id, FLAGS_count);
+    } else if (method == "DocumentAdd") {
+      client::SendDocumentAdd(FLAGS_region_id);
+    } else if (method == "DocumentSearch") {
+      client::SendDocumentSearch(FLAGS_region_id);
+    } else if (method == "DocumentBatchQuery") {
+      client::SendDocumentBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_vector_id)});
+    } else if (method == "DocumentScanQuery") {
+      client::SendDocumentScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
+    } else if (method == "DocumentGetMaxId") {
+      client::SendDocumentGetMaxId(FLAGS_region_id);
+    } else if (method == "DocumentGetMinId") {
+      client::SendDocumentGetMinId(FLAGS_region_id);
+    } else if (method == "DocumentCount") {
+      client::SendDocumentCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+    } else if (method == "DocumentGetRegionMetrics") {
+      client::SendDocumentGetRegionMetrics(FLAGS_region_id);
+    }
+
+    // vector operation
     else if (method == "VectorSearch") {
       // We cant use FLAGS_vector_data to define the vector we want to search, the format is:
       // 1.0, 2.0, 3.0, 4.0

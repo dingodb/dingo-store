@@ -38,8 +38,8 @@ class DocumentReader {
     return std::make_shared<DocumentReader>(reader);
   }
 
-  butil::Status DocumentBatchSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
-                                    std::vector<pb::document::DocumentWithScoreResult>& results);
+  butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                               std::vector<pb::common::DocumentWithScore>& results);
 
   butil::Status DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
@@ -59,11 +59,8 @@ class DocumentReader {
   butil::Status QueryDocumentWithId(const pb::common::Range& region_range, int64_t partition_id, int64_t document_id,
                                     pb::common::DocumentWithId& document_with_id);
   butil::Status SearchDocument(int64_t partition_id, DocumentIndexWrapperPtr document_index,
-                               pb::common::Range region_range,
-                               const std::vector<pb::common::DocumentWithId>& document_with_ids,
-                               const pb::common::DocumentSearchParameter& parameter,
-                               const pb::common::ScalarSchema& scalar_schema,
-                               std::vector<pb::document::DocumentWithScoreResult>& document_with_score_results);
+                               pb::common::Range region_range, const pb::common::DocumentSearchParameter& parameter,
+                               std::vector<pb::common::DocumentWithScore>& document_with_score_results);
 
   butil::Status GetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& document_id);
   butil::Status ScanDocumentId(std::shared_ptr<Engine::DocumentReader::Context> ctx,

@@ -54,43 +54,35 @@ butil::Status DocumentReader::QueryDocumentWithId(const pb::common::Range& regio
   return butil::Status();
 }
 
-butil::Status DocumentReader::SearchDocument(
-    int64_t partition_id, DocumentIndexWrapperPtr document_index [[maybe_unused]], pb::common::Range region_range,
-    const std::vector<pb::common::DocumentWithId>& document_with_ids,
-    const pb::common::DocumentSearchParameter& parameter,
-    const pb::common::ScalarSchema& scalar_schema [[maybe_unused]],
-    std::vector<pb::document::DocumentWithScoreResult>& document_with_score_results) {
-  if (document_with_ids.empty()) {
-    DINGO_LOG(WARNING) << "Empty document with ids";
-    return butil::Status();
-  }
-
+butil::Status DocumentReader::SearchDocument(int64_t partition_id, DocumentIndexWrapperPtr document_index,
+                                             pb::common::Range region_range,
+                                             const pb::common::DocumentSearchParameter& parameter,
+                                             std::vector<pb::common::DocumentWithScore>& document_with_score_results) {
   bool with_scalar_data = !(parameter.without_scalar_data());
-  std::vector<pb::document::DocumentWithScoreResult> tmp_results;
 
-  // if document index does not support restruct document,we restruct it using RocksDB
+  auto ret = document_index->Search(region_range, parameter, document_with_score_results);
+
+  // document index does not support restruct document, we restruct it using kv store
   if (with_scalar_data) {
-    for (auto& result : document_with_score_results) {
-      for (auto& document_with_distance : *result.mutable_document_with_scores()) {
-        pb::common::DocumentWithId document_with_id;
-        auto status = QueryDocumentWithId(region_range, partition_id, document_with_distance.document_with_id().id(),
-                                          document_with_id);
-        if (!status.ok()) {
-          return status;
-        }
-        document_with_distance.mutable_document_with_id()->Swap(&document_with_id);
+    for (auto& document_with_score : document_with_score_results) {
+      pb::common::DocumentWithId document_with_id;
+      auto status = QueryDocumentWithId(region_range, partition_id, document_with_score.document_with_id().id(),
+                                        document_with_id);
+      if (!status.ok()) {
+        return status;
       }
+
+      document_with_score.mutable_document_with_id()->Swap(&document_with_id);
     }
   }
 
   return butil::Status();
 }
 
-butil::Status DocumentReader::DocumentBatchSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
-                                                  std::vector<pb::document::DocumentWithScoreResult>& results) {
+butil::Status DocumentReader::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                             std::vector<pb::common::DocumentWithScore>& results) {
   // Search documents by documents
-  auto status = SearchDocument(ctx->partition_id, ctx->document_index, ctx->region_range, ctx->document_with_ids,
-                               ctx->parameter, ctx->scalar_schema, results);
+  auto status = SearchDocument(ctx->partition_id, ctx->document_index, ctx->region_range, ctx->parameter, results);
   if (!status.ok()) {
     return status;
   }

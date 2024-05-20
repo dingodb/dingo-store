@@ -48,9 +48,9 @@ namespace dingodb {
 
 DEFINE_int64(document_max_batch_count, 1024, "document max batch count in one request");
 DEFINE_int64(document_max_request_size, 8388608, "document max batch count in one request");
-DEFINE_bool(enable_async_document_search, true, "enable async vector search");
-DEFINE_bool(enable_async_document_count, true, "enable async vector count");
-DEFINE_bool(enable_async_document_operation, true, "enable async vector operation");
+DEFINE_bool(enable_async_document_search, true, "enable async document search");
+DEFINE_bool(enable_async_document_count, true, "enable async document count");
+DEFINE_bool(enable_async_document_operation, true, "enable async document operation");
 
 extern bvar::LatencyRecorder g_txn_latches_recorder;
 
@@ -92,12 +92,12 @@ static butil::Status ValidateDocumentBatchQueryRequest(StoragePtr storage,
   }
 
   if (request->document_ids().empty()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_ids is error");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document_ids is error");
   }
 
   if (request->document_ids().size() > FLAGS_document_max_batch_count) {
     return butil::Status(pb::error::EDOCUMENT_EXCEED_MAX_BATCH_COUNT,
-                         fmt::format("Param vector_ids size {} is exceed max batch count {}",
+                         fmt::format("Param document_ids size {} is exceed max batch count {}",
                                      request->document_ids().size(), FLAGS_document_max_batch_count));
   }
 
@@ -106,7 +106,7 @@ static butil::Status ValidateDocumentBatchQueryRequest(StoragePtr storage,
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->document_ids()));
+  return ServiceHelper::ValidateDocumentRegion(region, Helper::PbRepeatedToVector(request->document_ids()));
 }
 
 void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -203,19 +203,14 @@ static butil::Status ValidateDocumentSearchRequest(StoragePtr storage,
   // we limit the max request size to 4M and max batch count to 1024
   // for response, the limit is 10 times of request, which may be 40M
   // this size is less than the default max message size 64M
-  if (request->parameter().top_n() * request->document_with_ids_size() > FLAGS_document_max_batch_count * 10) {
-    return butil::Status(
-        pb::error::EDOCUMENT_EXCEED_MAX_BATCH_COUNT,
-        fmt::format("Param top_n {} * document_with_ids_size {} is exceed max batch count {} * 10",
-                    request->parameter().top_n(), request->document_with_ids_size(), FLAGS_document_max_batch_count));
+  if (request->parameter().top_n() > FLAGS_document_max_batch_count * 10) {
+    return butil::Status(pb::error::EDOCUMENT_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param top_n {} is exceed max batch count {} * 10", request->parameter().top_n(),
+                                     FLAGS_document_max_batch_count));
   }
 
   if (request->parameter().top_n() < 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param top_n is error");
-  }
-
-  if (request->document_with_ids().empty()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document_with_ids is empty");
   }
 
   status = storage->ValidateLeader(region);
@@ -223,27 +218,16 @@ static butil::Status ValidateDocumentSearchRequest(StoragePtr storage,
     return status;
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
-  std::vector<int64_t> vector_ids;
-  if (request->document_with_ids_size() <= 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document_with_ids is empty");
-  } else {
-    for (const auto& vector : request->document_with_ids()) {
-      if (vector.id() > 0) {
-        vector_ids.push_back(vector.id());
-      }
-    }
-  }
-
-  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
+  return ServiceHelper::ValidateRegionState(region);
 }
 
 void DoDocumentSearch(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -282,33 +266,15 @@ void DoDocumentSearch(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
 
-  auto scalar_schema = region->ScalarSchema();
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      << fmt::format("vector search scalar schema: {}", scalar_schema.ShortDebugString());
-  if (0 != scalar_schema.fields_size()) {
-    ctx->scalar_schema = scalar_schema;
-  }
-
-  if (request->document_with_ids_size() <= 0) {
-    auto* err = response->mutable_error();
-    err->set_errcode(pb::error::EILLEGAL_PARAMTETERS);
-    err->set_errmsg("Param document_with_ids is empty");
-    return;
-  } else {
-    for (const auto& document : request->document_with_ids()) {
-      ctx->document_with_ids.push_back(document);
-    }
-  }
-
-  std::vector<pb::document::DocumentWithScoreResult> document_results;
-  status = storage->DocumentBatchSearch(ctx, document_results);
+  std::vector<pb::common::DocumentWithScore> document_results;
+  status = storage->DocumentSearch(ctx, document_results);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
 
-  for (auto& document_result : document_results) {
-    *(response->add_batch_results()) = document_result;
+  for (auto& document_with_score : document_results) {
+    *(response->add_document_with_scores()) = document_with_score;
   }
 }
 
@@ -370,16 +336,16 @@ static butil::Status ValidateDocumentAddRequest(StoragePtr storage, const pb::do
   if (!document_index_wrapper->IsReady()) {
     if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
   for (const auto& document : request->documents()) {
     if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(document.id()))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                           "Param vector id is not allowed to be zero, INT64_MAX or negative");
+                           "Param document id is not allowed to be zero, INT64_MAX or negative");
     }
   }
 
@@ -389,11 +355,11 @@ static butil::Status ValidateDocumentAddRequest(StoragePtr storage, const pb::do
   }
 
   std::vector<int64_t> documents_ids;
-  for (const auto& vector : request->documents()) {
-    documents_ids.push_back(vector.id());
+  for (const auto& document : request->documents()) {
+    documents_ids.push_back(document.id());
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, documents_ids);
+  return ServiceHelper::ValidateDocumentRegion(region, documents_ids);
 }
 
 void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -419,6 +385,26 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
+  // if (!request->ignore_check_exists()) {
+  //   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
+  //   ctx->partition_id = region->PartitionId();
+  //   ctx->region_id = region->Id();
+  //   ctx->region_range = region->Range();
+  //   for (const auto& document_with_id : request->documents()) {
+  //     ctx->document_ids.push_back(document_with_id.id());
+  //   }
+  //   ctx->with_scalar_data = false;
+  //   ctx->raw_engine_type = region->GetRawEngineType();
+  //   ctx->store_engine_type = region->GetStoreEngineType();
+
+  //   std::vector<pb::common::DocumentWithId> document_with_ids;
+  //   status = storage->DocumentBatchQuery(ctx, document_with_ids);
+  //   if (!status.ok()) {
+  //     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+  //     return;
+  //   }
+  // }
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -432,7 +418,7 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
     documents.push_back(document);
   }
 
-  status = storage->DocumentAdd(ctx, is_sync, documents);
+  status = storage->DocumentAdd(ctx, is_sync, documents, request->is_update());
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -498,17 +484,17 @@ static butil::Status ValidateDocumentDeleteRequest(StoragePtr storage,
     return status;
   }
 
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  if (!vector_index_wrapper->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  auto document_index_wrapper = region->DocumentIndexWrapper();
+  if (!document_index_wrapper->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
+  return ServiceHelper::ValidateDocumentRegion(region, Helper::PbRepeatedToVector(request->ids()));
 }
 
 void DoDocumentDelete(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -592,7 +578,7 @@ static butil::Status ValidateDocumentGetBorderIdRequest(StoragePtr storage,
     return status;
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, {});
+  return ServiceHelper::ValidateDocumentRegion(region, {});
 }
 
 void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -617,15 +603,15 @@ void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* 
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
-  int64_t vector_id = 0;
-  status = storage->DocumentGetBorderId(region, request->get_min(), vector_id);
+  int64_t document_id = 0;
+  status = storage->DocumentGetBorderId(region, request->get_min(), document_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     return;
   }
 
-  response->set_id(vector_id);
+  response->set_id(document_id);
 }
 
 void DocumentServiceImpl::DocumentGetBorderId(google::protobuf::RpcController* controller,
@@ -680,9 +666,9 @@ static butil::Status ValidateDocumentScanQueryRequest(StoragePtr storage,
     return status;
   }
 
-  // for DocumentScanQuery, client can do scan from any id, so we don't need to check vector id
+  // for DocumentScanQuery, client can do scan from any id, so we don't need to check document id
   // sdk will merge, sort, limit_cut of all the results for user.
-  return ServiceHelper::ValidateIndexRegion(region, {});
+  return ServiceHelper::ValidateDocumentRegion(region, {});
 }
 
 void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -772,17 +758,17 @@ static butil::Status ValidateDocumentGetRegionMetricsRequest(
     return status;
   }
 
-  auto vector_index_wrapper = region->VectorIndexWrapper();
-  if (!vector_index_wrapper->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  auto document_index_wrapper = region->DocumentIndexWrapper();
+  if (!document_index_wrapper->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, {});
+  return ServiceHelper::ValidateDocumentRegion(region, {});
 }
 
 void DoDocumentGetRegionMetrics(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -861,36 +847,35 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
     return status;
   }
 
-  std::vector<int64_t> vector_ids;
+  std::vector<int64_t> document_ids;
   if (request->document_id_start() != 0) {
-    vector_ids.push_back(request->document_id_start());
+    document_ids.push_back(request->document_id_start());
   }
   if (request->document_id_end() != 0) {
-    vector_ids.push_back(request->document_id_end() - 1);
+    document_ids.push_back(request->document_id_end() - 1);
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
+  return ServiceHelper::ValidateDocumentRegion(region, document_ids);
 }
 
-static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_vector_id,  // NOLINT
-                                       int64_t end_vector_id) {                           // NOLINT
+static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_document_id, int64_t end_document_id) {
   pb::common::Range range;
 
   auto region_start_key = region->Range().start_key();
   auto region_part_id = region->PartitionId();
-  if (start_vector_id == 0) {
+  if (start_document_id == 0) {
     range.set_start_key(region->Range().start_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, start_vector_id, key);
+    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, start_document_id, key);
     range.set_start_key(key);
   }
 
-  if (end_vector_id == 0) {
+  if (end_document_id == 0) {
     range.set_end_key(region->Range().end_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, end_vector_id, key);
+    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, end_document_id, key);
     range.set_end_key(key);
   }
 
@@ -1066,7 +1051,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
                                                  const pb::common::Range& req_range) {
   // check if limit is valid
   if (request->limit() > FLAGS_document_max_batch_count) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is exceed vector max batch count");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is exceed document max batch count");
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
@@ -1256,8 +1241,9 @@ void DocumentServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController
   }
 }
 
-static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const pb::store::TxnPrewriteRequest* request,
-                                                     store::RegionPtr region) {
+static butil::Status ValidateDocumentTxnPrewriteRequest(StoragePtr storage,
+                                                        const pb::store::TxnPrewriteRequest* request,
+                                                        store::RegionPtr region) {
   // check if region_epoch is match
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!epoch_ret.ok()) {
@@ -1323,82 +1309,57 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
     return status;
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
-  auto vector_index_wrapper = region->VectorIndexWrapper();
+  auto document_index_wrapper = region->DocumentIndexWrapper();
 
-  std::vector<int64_t> vector_ids;
-  auto dimension = vector_index_wrapper->GetDimension();
+  std::vector<int64_t> document_ids;
 
   for (const auto& mutation : request->mutations()) {
-    // check vector_id is correctly encoded in key of mutation
-    int64_t vector_id = DocumentCodec::DecodeDocumentId(mutation.key());
+    // check document_id is correctly encoded in key of mutation
+    int64_t document_id = DocumentCodec::DecodeDocumentId(mutation.key());
 
-    if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(vector_id))) {
+    if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(document_id))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                           "Param vector id is not allowed to be zero, INT64_MAX or negative, please check the "
-                           "vector_id encoded in mutation key");
+                           "Param document id is not allowed to be zero, INT64_MAX or negative, please check the "
+                           "document_id encoded in mutation key");
     }
 
-    vector_ids.push_back(vector_id);
+    document_ids.push_back(document_id);
 
-    // check if vector_id is legal
-    const auto& vector = mutation.vector();
+    // check if document_id is legal
+    const auto& document = mutation.document();
     if (mutation.op() == pb::store::Op::Put || mutation.op() == pb::store::PutIfAbsent) {
-      if (vector_index_wrapper->IsExceedsMaxElements()) {
-        return butil::Status(pb::error::EDOCUMENT_INDEX_EXCEED_MAX_ELEMENTS,
-                             fmt::format("Vector index {} exceeds max elements.", region->Id()));
-      }
-
-      if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(vector_id))) {
+      if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(document_id))) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
                              "Param  ector id is not allowed to be zero, INT64_MAX or negative, please check the "
-                             "vector_id in DocumentWithId");
+                             "document_id in DocumentWithId");
       }
 
-      if (BAIDU_UNLIKELY(vector.id() != vector_id)) {
+      if (BAIDU_UNLIKELY(document.id() != document_id)) {
         return butil::Status(
             pb::error::EILLEGAL_PARAMTETERS,
-            "Param vector id in DocumentWithId is not equal to vector_id in mutation key, please check "
+            "Param document id in DocumentWithId is not equal to document_id in mutation key, please check "
             "the mutation key and DocumentWithId");
       }
 
-      if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
-        return butil::Status(pb::error::EDOCUMENT_EMPTY, "Vector is empty");
-      }
-
-      // check vector dimension
-      if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
-        if (BAIDU_UNLIKELY(vector.vector().float_values().size() != dimension)) {
-          return butil::Status(
-              pb::error::EILLEGAL_PARAMTETERS,
-              "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
-        }
-      } else {
-        if (BAIDU_UNLIKELY(vector.vector().binary_values().size() != dimension)) {
-          return butil::Status(
-              pb::error::EILLEGAL_PARAMTETERS,
-              "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
-        }
+      if (BAIDU_UNLIKELY(document.document().document_data().empty())) {
+        return butil::Status(pb::error::EDOCUMENT_EMPTY, "document is empty");
       }
 
       // TODO: check schema before txn prewrite
       //   auto scalar_schema = region->ScalarSchema();
       //   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      //       << fmt::format("vector txn prewrite scalar schema: {}", scalar_schema.ShortDebugString());
+      //       << fmt::format("document txn prewrite scalar schema: {}", scalar_schema.ShortDebugString());
       //   if (0 != scalar_schema.fields_size()) {
-      //     status = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector.scalar_data());
+      //     status = DocumentIndexUtils::ValidateDocumentScalarData(scalar_schema, document.scalar_data());
       //     if (!status.ok()) {
       //       DINGO_LOG(ERROR) << status.error_cstr();
       //       return status;
@@ -1406,10 +1367,10 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
       //   }
 
     } else if (mutation.op() == pb::store::Op::Delete || mutation.op() == pb::store::Op::CheckNotExists) {
-      if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(vector_id))) {
+      if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(document_id))) {
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
-                             "Param vector id is not allowed to be zero, INT64_MAX or negative, please check the "
-                             "vector_id encoded in mutation key");
+                             "Param document id is not allowed to be zero, INT64_MAX or negative, please check the "
+                             "document_id encoded in mutation key");
       }
 
       continue;
@@ -1418,7 +1379,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
     }
   }
 
-  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
+  return ServiceHelper::ValidateDocumentRegion(region, document_ids);
 }
 
 void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -1437,7 +1398,7 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
     return;
   }
 
-  auto status = ValidateIndexTxnPrewriteRequest(storage, request, region);
+  auto status = ValidateDocumentTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
@@ -1448,7 +1409,7 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
-    keys_for_lock.push_back(std::to_string(mutation.vector().id()));
+    keys_for_lock.push_back(std::to_string(mutation.document().id()));
   }
   Lock lock(keys_for_lock);
   BthreadCond sync_cond;
@@ -1482,7 +1443,7 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
     pb::store::Mutation store_mutation;
     store_mutation.set_op(mutation.op());
     store_mutation.set_key(mutation.key());
-    store_mutation.set_value(mutation.vector().SerializeAsString());
+    store_mutation.set_value(mutation.document().SerializeAsString());
     mutations.push_back(store_mutation);
   }
 
@@ -1575,18 +1536,13 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
                                      FLAGS_document_max_request_size));
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
-  }
-
-  if (region->VectorIndexWrapper()->IsExceedsMaxElements()) {
-    return butil::Status(pb::error::EDOCUMENT_INDEX_EXCEED_MAX_ELEMENTS,
-                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
   auto status = ServiceHelper::ValidateClusterReadOnly();
@@ -1594,16 +1550,16 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
     return status;
   }
 
-  std::vector<int64_t> vector_ids;
+  std::vector<int64_t> document_ids;
   for (const auto& key : request->keys()) {
-    int64_t vector_id = DocumentCodec::DecodeDocumentId(key);
-    if (vector_id == 0) {
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
+    int64_t document_id = DocumentCodec::DecodeDocumentId(key);
+    if (document_id == 0) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document id is error");
     }
-    vector_ids.push_back(vector_id);
+    document_ids.push_back(document_id);
   }
 
-  auto ret1 = ServiceHelper::ValidateIndexRegion(region, vector_ids);
+  auto ret1 = ServiceHelper::ValidateDocumentRegion(region, document_ids);
   if (!ret1.ok()) {
     return ret1;
   }
@@ -1658,8 +1614,8 @@ void DocumentServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
   }
 }
 
-static butil::Status VectorValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckTxnStatusRequest* request,
-                                                            store::RegionPtr region) {
+static butil::Status DocumentValidateTxnCheckTxnStatusRequest(const pb::store::TxnCheckTxnStatusRequest* request,
+                                                              store::RegionPtr region) {
   // check if region_epoch is match
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
@@ -1694,13 +1650,13 @@ static butil::Status VectorValidateTxnCheckTxnStatusRequest(const pb::store::Txn
     return status;
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
   return butil::Status();
@@ -1739,7 +1695,7 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
     return;
   }
 
-  auto status = VectorValidateTxnCheckTxnStatusRequest(request, region);
+  auto status = DocumentValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
@@ -1757,8 +1713,8 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
   }
 }
 
-static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnResolveLockRequest* request,
-                                                         store::RegionPtr region) {
+static butil::Status DocumentValidateTxnResolveLockRequest(const pb::store::TxnResolveLockRequest* request,
+                                                           store::RegionPtr region) {
   // check if region_epoch is match
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!epoch_ret.ok()) {
@@ -1791,13 +1747,13 @@ static butil::Status VectorValidateTxnResolveLockRequest(const pb::store::TxnRes
     }
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
       return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
   auto status = ServiceHelper::ValidateClusterReadOnly();
@@ -1840,7 +1796,7 @@ void DocumentServiceImpl::TxnResolveLock(google::protobuf::RpcController* contro
     return;
   }
 
-  auto status = VectorValidateTxnResolveLockRequest(request, region);
+  auto status = DocumentValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;

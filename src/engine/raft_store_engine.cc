@@ -526,10 +526,10 @@ std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(pb::commo
 }
 
 // document
-butil::Status RaftStoreEngine::DocumentReader::DocumentBatchSearch(
-    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::document::DocumentWithScoreResult>& results) {
+butil::Status RaftStoreEngine::DocumentReader::DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
+                                                              std::vector<pb::common::DocumentWithScore>& results) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentBatchSearch(ctx, results);
+  return document_reader->DocumentSearch(ctx, results);
 }
 
 butil::Status RaftStoreEngine::DocumentReader::DocumentBatchQuery(

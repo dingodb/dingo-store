@@ -164,7 +164,6 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
       pb::common::Range region_range;
 
-      std::vector<pb::common::DocumentWithId> document_with_ids;
       std::vector<int64_t> document_ids;
       pb::common::DocumentSearchParameter parameter;
       std::vector<std::string> selected_scalar_keys;
@@ -181,8 +180,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
       pb::common::ScalarSchema scalar_schema;
     };
 
-    virtual butil::Status DocumentBatchSearch(std::shared_ptr<DocumentReader::Context> ctx,
-                                              std::vector<pb::document::DocumentWithScoreResult>& results) = 0;
+    virtual butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
+                                         std::vector<pb::common::DocumentWithScore>& results) = 0;
 
     virtual butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
                                              std::vector<pb::common::DocumentWithId>& vector_with_ids) = 0;

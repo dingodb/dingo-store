@@ -38,8 +38,10 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
+#include "proto/document.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
@@ -77,6 +79,12 @@ DECLARE_string(scalar_value);
 DEFINE_string(vector_data1, "", "vector data 1");
 DEFINE_string(vector_data2, "", "vector data 2");
 
+// for document
+DEFINE_int64(document_id, 0, "document id");
+DEFINE_string(document_text1, "", "document text 1");
+DEFINE_string(document_text2, "", "document text 2");
+DEFINE_string(query_string, "", "document query string");
+DECLARE_int32(topn);
 namespace client {
 
 /*
@@ -2103,6 +2111,231 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
                                  request.vectors().size());
 
   return response.error().errcode();
+}
+
+void SendDocumentAdd(int64_t region_id) {
+  dingodb::pb::document::DocumentAddRequest request;
+  dingodb::pb::document::DocumentAddResponse response;
+
+  if (FLAGS_document_id <= 0) {
+    DINGO_LOG(ERROR) << "document_id is invalid";
+    return;
+  }
+
+  if (FLAGS_document_text1.empty()) {
+    DINGO_LOG(ERROR) << "document_text1 is empty";
+    return;
+  }
+
+  if (FLAGS_document_text2.empty()) {
+    DINGO_LOG(ERROR) << "document_text2 is empty";
+    return;
+  }
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  auto* document = request.add_documents();
+  document->set_id(FLAGS_document_id);
+  auto* document_data = document->mutable_document()->mutable_document_data();
+
+  // col1 text
+  {
+    dingodb::pb::common::DocumentValue document_value1;
+    document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+    document_value1.mutable_field_value()->set_string_data(FLAGS_document_text1);
+    (*document_data)["col1"] = document_value1;
+  }
+
+  // col2 int64
+  {
+    dingodb::pb::common::DocumentValue document_value1;
+    document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::INT64);
+    document_value1.mutable_field_value()->set_long_data(FLAGS_document_id);
+    (*document_data)["col2"] = document_value1;
+  }
+
+  // col3 double
+  {
+    dingodb::pb::common::DocumentValue document_value1;
+    document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DOUBLE);
+    document_value1.mutable_field_value()->set_double_data(FLAGS_document_id * 1.0);
+    (*document_data)["col3"] = document_value1;
+  }
+
+  // col4 text
+  {
+    dingodb::pb::common::DocumentValue document_value1;
+    document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+    document_value1.mutable_field_value()->set_string_data(FLAGS_document_text2);
+    (*document_data)["col4"] = document_value1;
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentAdd", request, response);
+  int success_count = 0;
+  for (auto key_state : response.key_states()) {
+    if (key_state) {
+      ++success_count;
+    }
+  }
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+void SendDocumentDelete(int64_t region_id, uint32_t start_id, uint32_t count) {
+  dingodb::pb::document::DocumentDeleteRequest request;
+  dingodb::pb::document::DocumentDeleteResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  for (int i = 0; i < count; ++i) {
+    request.add_ids(i + start_id);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentDelete", request, response);
+  int success_count = 0;
+  for (auto key_state : response.key_states()) {
+    if (key_state) {
+      ++success_count;
+    }
+  }
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
+void SendDocumentSearch(int64_t region_id) {
+  dingodb::pb::document::DocumentSearchRequest request;
+  dingodb::pb::document::DocumentSearchResponse response;
+
+  if (FLAGS_query_string.empty()) {
+    DINGO_LOG(ERROR) << "query_string is empty";
+    return;
+  }
+
+  if (FLAGS_topn == 0) {
+    DINGO_LOG(ERROR) << "topn is 0";
+    return;
+  }
+
+  auto* parameter = request.mutable_parameter();
+  parameter->set_top_n(FLAGS_topn);
+  parameter->set_query_string(FLAGS_query_string);
+  parameter->set_without_scalar_data(FLAGS_without_scalar);
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentSearch", request, response);
+
+  DINGO_LOG(INFO) << "DocumentSearch response: " << response.DebugString();
+}
+
+void SendDocumentBatchQuery(int64_t region_id, std::vector<int64_t> document_ids) {
+  dingodb::pb::document::DocumentBatchQueryRequest request;
+  dingodb::pb::document::DocumentBatchQueryResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  for (auto document_id : document_ids) {
+    request.add_document_ids(document_id);
+  }
+
+  if (FLAGS_without_scalar) {
+    request.set_without_scalar_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentBatchQuery", request, response);
+
+  DINGO_LOG(INFO) << "DocumentBatchQuery response: " << response.DebugString();
+}
+
+void SendDocumentGetMaxId(int64_t region_id) {  // NOLINT
+  dingodb::pb::document::DocumentGetBorderIdRequest request;
+  dingodb::pb::document::DocumentGetBorderIdResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentGetBorderId", request, response);
+
+  DINGO_LOG(INFO) << "DocumentGetBorderId response: " << response.DebugString();
+}
+
+void SendDocumentGetMinId(int64_t region_id) {  // NOLINT
+  dingodb::pb::document::DocumentGetBorderIdRequest request;
+  dingodb::pb::document::DocumentGetBorderIdResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.set_get_min(true);
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentGetBorderId", request, response);
+
+  DINGO_LOG(INFO) << "DocumentGetBorderId response: " << response.DebugString();
+}
+
+void SendDocumentScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse) {
+  dingodb::pb::document::DocumentScanQueryRequest request;
+  dingodb::pb::document::DocumentScanQueryResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  request.set_document_id_start(start_id);
+  request.set_document_id_end(end_id);
+
+  if (limit > 0) {
+    request.set_max_scan_count(limit);
+  } else {
+    request.set_max_scan_count(10);
+  }
+
+  request.set_is_reverse_scan(is_reverse);
+
+  if (FLAGS_without_scalar) {
+    request.set_without_scalar_data(true);
+  }
+
+  if (!FLAGS_key.empty()) {
+    auto* key = request.mutable_selected_keys()->Add();
+    key->assign(FLAGS_key);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentScanQuery", request, response);
+
+  DINGO_LOG(INFO) << "DocumentScanQuery response: " << response.DebugString()
+                  << " documents count: " << response.documents_size();
+}
+
+int64_t SendDocumentCount(int64_t region_id, int64_t start_document_id, int64_t end_document_id) {
+  dingodb::pb::document::DocumentCountRequest request;
+  dingodb::pb::document::DocumentCountResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  if (start_document_id > 0) {
+    request.set_document_id_start(start_document_id);
+  }
+  if (end_document_id > 0) {
+    request.set_document_id_end(end_document_id);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentCount", request, response);
+
+  return response.error().errcode() != 0 ? 0 : response.count();
+}
+
+void SendDocumentGetRegionMetrics(int64_t region_id) {
+  dingodb::pb::document::DocumentGetRegionMetricsRequest request;
+  dingodb::pb::document::DocumentGetRegionMetricsResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentGetRegionMetrics", request,
+                                                           response);
+
+  DINGO_LOG(INFO) << "DocumentGetRegionMetrics response: " << response.DebugString();
 }
 
 int64_t DecodeVectorId(const std::string& value) {

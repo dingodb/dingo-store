@@ -21,6 +21,7 @@
 
 #include "butil/status.h"
 #include "common/helper.h"
+#include "document/codec.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/error.pb.h"
@@ -195,9 +196,30 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
   for (auto vector_id : vector_ids) {
     if (vector_id < min_vector_id || vector_id >= max_vector_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
-                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vecotr id {}",
+                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
                                        Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
                                        min_vector_id, max_vector_id, vector_id));
+    }
+  }
+
+  return butil::Status();
+}
+
+butil::Status ServiceHelper::ValidateDocumentRegion(store::RegionPtr region, const std::vector<int64_t>& document_ids) {
+  auto status = ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  const auto& range = region->Range();
+  int64_t min_document_id = 0, max_document_id = 0;
+  DocumentCodec::DecodeRangeToDocumentId(range, min_document_id, max_document_id);
+  for (auto document_id : document_ids) {
+    if (document_id < min_document_id || document_id >= max_document_id) {
+      return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
+                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
+                                       min_document_id, max_document_id, document_id));
     }
   }
 

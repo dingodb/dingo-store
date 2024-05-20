@@ -51,6 +51,8 @@ class DocumentIndex {
 
   butil::Status GetCount(int64_t& count);
 
+  butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader);
+
   butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader);
 
   butil::Status Delete(const std::vector<int64_t>& delete_ids);
@@ -61,7 +63,8 @@ class DocumentIndex {
 
   butil::Status Search(uint32_t topk, const std::string& query_string, bool use_range_filter, int64_t start_id,
                        int64_t end_id, bool use_id_filter, const std::vector<uint64_t>& alive_ids,
-                       const std::vector<std::string>& column_names, pb::document::DocumentWithScoreResult& results);
+                       const std::vector<std::string>& column_names,
+                       std::vector<pb::common::DocumentWithScore>& results);
 
   void LockWrite();
   void UnlockWrite();
@@ -238,9 +241,10 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   bool SupportSave();
 
   butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids);
+  butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status Delete(const std::vector<int64_t>& delete_ids);
   butil::Status Search(const pb::common::Range& region_range, const pb::common::DocumentSearchParameter& parameter,
-                       pb::document::DocumentWithScoreResult& results);
+                       std::vector<pb::common::DocumentWithScore>& results);
 
   // static butil::Status SetDocumentIndexRangeFilter(
   //     DocumentIndexPtr document_index,
