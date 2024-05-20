@@ -25,6 +25,7 @@
 #include "butil/status.h"
 #include "common/runnable.h"
 #include "common/synchronization.h"
+#include "document/document_index_snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/document.pb.h"
 
@@ -186,6 +187,18 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   bool IsSwitchingDocumentIndex();
   void SetIsSwitchingDocumentIndex(bool is_switching);
 
+  void SetIsTempHoldDocumentIndex(bool need);
+
+  // check temp hold vector index
+  bool IsTempHoldDocumentIndex() const;
+  // check permanent hold vector index
+  static bool IsPermanentHoldDocumentIndex(int64_t region_id);
+
+  document_index::SnapshotMetaSetPtr SnapshotSet() {
+    BAIDU_SCOPED_LOCK(document_index_mutex_);
+    return snapshot_set_;
+  }
+
   void UpdateDocumentIndex(DocumentIndexPtr document_index, const std::string& trace);
   void ClearDocumentIndex(const std::string& trace);
 
@@ -267,6 +280,9 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   // Protect document_index_/share_document_index_
   bthread_mutex_t document_index_mutex_;
 
+  // Snapshot set
+  document_index::SnapshotMetaSetPtr snapshot_set_;
+
   std::atomic<int32_t> pending_task_num_;
   // document index loadorbuilding num
   std::atomic<int32_t> loadorbuilding_num_;
@@ -280,6 +296,9 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t last_save_write_key_count_{0};
   // save snapshot threshold write key num
   int64_t save_snapshot_threshold_write_key_num_;
+
+  // need hold document index
+  std::atomic<bool> is_hold_document_index_;
 };
 
 using DocumentIndexWrapperPtr = std::shared_ptr<DocumentIndexWrapper>;

@@ -118,6 +118,11 @@ DECLARE_int32(vector_background_worker_num);
 DECLARE_int32(vector_fast_background_worker_num);
 DECLARE_int64(vector_max_background_task_count);
 DECLARE_int32(vector_operation_parallel_thread_num);
+
+DECLARE_int32(document_background_worker_num);
+DECLARE_int32(document_fast_background_worker_num);
+DECLARE_int64(document_max_background_task_count);
+DECLARE_int32(document_operation_parallel_thread_num);
 }  // namespace dingodb
 
 // Get server location from config
@@ -569,7 +574,7 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
   }
 
   // calc new bthread_concurrency by brpc_common_worker_num
-  if (role != dingodb::pb::common::ClusterRole::INDEX) {
+  if (role == dingodb::pb::common::ClusterRole::COORDINATOR || role == dingodb::pb::common::ClusterRole::STORE) {
     if (FLAGS_use_pthread_prior_worker_set) {
       if (FLAGS_brpc_common_worker_num > bthread::FLAGS_bthread_concurrency) {
         bthread::FLAGS_bthread_concurrency = FLAGS_brpc_common_worker_num;
@@ -591,7 +596,82 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
                         << bthread::FLAGS_bthread_concurrency << "]";
       }
     }
-  } else {
+  } else if (role == dingodb::pb::common::ClusterRole::DOCUMENT) {
+    // This is DocumentIndex process, need to calc document background worker num
+
+    // init document operation parallel thread num
+    auto document_operation_parallel_thread_num = config->GetInt("document.operation_parallel_thread_num");
+    if (document_operation_parallel_thread_num <= 0) {
+      document_operation_parallel_thread_num = dingodb::FLAGS_document_operation_parallel_thread_num;
+      DINGO_LOG(WARNING) << fmt::format(
+          "[config] document.document_operation_parallel_thread_num is too small, set default value({})",
+          dingodb::FLAGS_document_operation_parallel_thread_num);
+    }
+    dingodb::FLAGS_document_operation_parallel_thread_num = document_operation_parallel_thread_num;
+    DINGO_LOG(INFO) << "document.document_operation_parallel_thread_num is set to "
+                    << dingodb::FLAGS_document_operation_parallel_thread_num;
+
+    // init document index manager background worker num
+    auto document_background_worker_num = config->GetInt("document.background_worker_num");
+    if (document_background_worker_num <= 0) {
+      document_background_worker_num = dingodb::FLAGS_document_background_worker_num;
+      DINGO_LOG(WARNING) << fmt::format("[config] document.background_worker_num is too small, set default value({})",
+                                        dingodb::FLAGS_document_background_worker_num);
+    }
+    dingodb::FLAGS_document_background_worker_num = document_background_worker_num;
+
+    auto document_fast_background_worker_num = config->GetInt("document.fast_background_worker_num");
+    if (document_fast_background_worker_num <= 0) {
+      document_fast_background_worker_num = dingodb::FLAGS_document_fast_background_worker_num;
+      DINGO_LOG(WARNING) << fmt::format(
+          "[config] document.fast_background_worker_num is too small, set default value({})",
+          dingodb::FLAGS_document_fast_background_worker_num);
+    }
+    dingodb::FLAGS_document_fast_background_worker_num = document_fast_background_worker_num;
+
+    if (FLAGS_use_pthread_prior_worker_set) {
+      if (dingodb::FLAGS_document_fast_background_worker_num + dingodb::FLAGS_document_background_worker_num +
+              FLAGS_brpc_common_worker_num >
+          bthread::FLAGS_bthread_concurrency) {
+        bthread::FLAGS_bthread_concurrency = dingodb::FLAGS_document_fast_background_worker_num +
+                                             dingodb::FLAGS_document_background_worker_num +
+                                             FLAGS_brpc_common_worker_num;
+
+        DINGO_LOG(ERROR) << "document.fast_background_worker_num[" << dingodb::FLAGS_document_fast_background_worker_num
+                         << "] + document.background_worker_num[" << dingodb::FLAGS_document_background_worker_num
+                         << "] + server.brpc_common_worker_num[" << FLAGS_brpc_common_worker_num
+                         << "] is greater than server.worker_thread_num, bump up to ["
+                         << bthread::FLAGS_bthread_concurrency << "]";
+      }
+    } else {
+      if (FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num +
+              dingodb::FLAGS_document_fast_background_worker_num + dingodb::FLAGS_document_background_worker_num +
+              FLAGS_brpc_common_worker_num >
+          bthread::FLAGS_bthread_concurrency) {
+        bthread::FLAGS_bthread_concurrency =
+            FLAGS_read_worker_num + FLAGS_write_worker_num + FLAGS_raft_apply_worker_num +
+            dingodb::FLAGS_document_fast_background_worker_num + dingodb::FLAGS_document_background_worker_num +
+            FLAGS_brpc_common_worker_num;
+
+        DINGO_LOG(ERROR) << "server.read_worker_num[" << FLAGS_read_worker_num << "] + server.write_worker_num["
+                         << FLAGS_write_worker_num << "] + server.raft_apply_worker_num[" << FLAGS_raft_apply_worker_num
+                         << "] + document.fast_background_worker_num["
+                         << dingodb::FLAGS_document_fast_background_worker_num << "] + document.background_worker_num["
+                         << dingodb::FLAGS_document_background_worker_num << "] + server.brpc_common_worker_num["
+                         << FLAGS_brpc_common_worker_num << "] is greater than server.worker_thread_num, bump up to ["
+                         << bthread::FLAGS_bthread_concurrency << "]";
+      }
+    }
+
+    auto document_max_background_task_count = config->GetInt("document.max_background_task_count");
+    if (document_max_background_task_count <= 0) {
+      document_max_background_task_count = dingodb::FLAGS_document_max_background_task_count;
+      DINGO_LOG(WARNING) << fmt::format(
+          "[config] document.max_background_task_count is too small, set default value({})",
+          dingodb::FLAGS_document_max_background_task_count);
+    }
+    dingodb::FLAGS_document_max_background_task_count = document_max_background_task_count;
+  } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
     // This is VectorIndex process, need to calc vector background worker num
 
     // init vector operation parallel thread num
@@ -664,6 +744,9 @@ int InitServiceWorkerParameters(std::shared_ptr<dingodb::Config> config, dingodb
                                         dingodb::FLAGS_vector_max_background_task_count);
     }
     dingodb::FLAGS_vector_max_background_task_count = vector_max_background_task_count;
+  } else {
+    DINGO_LOG(ERROR) << "role is not supported, " << dingodb::pb::common::ClusterRole_Name(role);
+    return -1;
   }
 
   return 0;
@@ -1355,7 +1438,7 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
-    // workers to load index, so InitStoreMetaManager must be called before InitStoreMetaManager
+    // workers to load index, so InitVectorIndexManager must be called before InitStoreMetaManager
     if (!dingo_server.InitVectorIndexManager()) {
       DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
       return -1;
@@ -1498,13 +1581,13 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
-    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
-    // workers to load index, so InitStoreMetaManager must be called before InitStoreMetaManager
-    // if (!dingo_server.InitVectorIndexManager()) {
-    //   DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
-    //   return -1;
-    // }
-    // document_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
+    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
+    // workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
+    if (!dingo_server.InitDocumentIndexManager()) {
+      DINGO_LOG(ERROR) << "InitDocumentIndexManager failed!";
+      return -1;
+    }
+    document_service.SetDocumentIndexManager(dingo_server.GetDocumentIndexManager());
     if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;

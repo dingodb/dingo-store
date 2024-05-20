@@ -15,9 +15,9 @@
 #ifndef DINGODB_DOCUMENT_SERVICE_H_
 #define DINGODB_DOCUMENT_SERVICE_H_
 
+#include "document/document_index_manager.h"
 #include "engine/storage.h"
 #include "proto/document.pb.h"
-#include "vector/vector_index_manager.h"
 
 namespace dingodb {
 
@@ -30,7 +30,7 @@ class DocumentServiceImpl : public pb::document::DocumentService {
   void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::document::HelloRequest* request,
                      pb::document::HelloResponse* response, google::protobuf::Closure* done) override;
 
-  // vector read
+  // document read
   void DocumentBatchQuery(google::protobuf::RpcController* controller,
                           const pb::document::DocumentBatchQueryRequest* request,
                           pb::document::DocumentBatchQueryResponse* response, google::protobuf::Closure* done) override;
@@ -98,8 +98,8 @@ class DocumentServiceImpl : public pb::document::DocumentService {
   void SetReadWorkSet(SimpleWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
   void SetWriteWorkSet(SimpleWorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
   void SetRaftApplyWorkSet(SimpleWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
-  void SetVectorIndexManager(VectorIndexManagerPtr vector_index_manager) {
-    vector_index_manager_ = vector_index_manager;
+  void SetDocumentIndexManager(DocumentIndexManagerPtr document_index_manager) {
+    document_index_manager_ = document_index_manager;
   }
 
   bool IsRaftApplyPendingExceed();
@@ -111,7 +111,7 @@ class DocumentServiceImpl : public pb::document::DocumentService {
   SimpleWorkerSetPtr read_worker_set_;
   SimpleWorkerSetPtr write_worker_set_;
   SimpleWorkerSetPtr raft_apply_worker_set_;
-  VectorIndexManagerPtr vector_index_manager_;
+  DocumentIndexManagerPtr document_index_manager_;
 };
 
 }  // namespace dingodb

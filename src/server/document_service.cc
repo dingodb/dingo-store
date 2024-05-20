@@ -58,7 +58,7 @@ static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
 DECLARE_int64(max_scan_lock_limit);
-DECLARE_int64(vector_max_background_task_count);
+DECLARE_int64(document_max_background_task_count);
 
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
@@ -76,7 +76,7 @@ bool DocumentServiceImpl::IsRaftApplyPendingExceed() {
 }
 
 bool DocumentServiceImpl::IsBackgroundPendingTaskCountExceed() {
-  return vector_index_manager_->GetBackgroundPendingTaskCount() > FLAGS_vector_max_background_task_count;
+  return document_index_manager_->GetBackgroundPendingTaskCount() > FLAGS_document_max_background_task_count;
 }
 
 static butil::Status ValidateDocumentBatchQueryRequest(StoragePtr storage,

@@ -17,7 +17,6 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
 #include "proto/common.pb.h"
 

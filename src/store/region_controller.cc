@@ -167,6 +167,10 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
       auto vector_index_wrapper = region->VectorIndexWrapper();
       VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, true, 0, "region create");
     }
+    if (GetRole() == pb::common::DOCUMENT) {
+      auto document_index_wrapper = region->DocumentIndexWrapper();
+      DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, true, 0, "region create");
+    }
   } else {
     // not support
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");

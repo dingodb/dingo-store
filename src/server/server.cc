@@ -66,6 +66,7 @@ DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 DEFINE_int32(vector_operation_parallel_thread_num, 1, "vector operation parallel thread num");
+DEFINE_int32(document_operation_parallel_thread_num, 1, "document operation parallel thread num");
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
 DEFINE_int32(omp_num_threads, 1, "omp num threads");
@@ -728,6 +729,14 @@ bool Server::InitVectorIndexManager() {
   return vector_index_manager_->Init();
 }
 
+bool Server::InitDocumentIndexManager() {
+  document_index_thread_pool_ =
+      std::make_shared<ThreadPool>("document_index", FLAGS_document_operation_parallel_thread_num);
+
+  document_index_manager_ = DocumentIndexManager::New();
+  return document_index_manager_->Init();
+}
+
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
@@ -779,6 +788,10 @@ void Server::Destroy() {
 
   if (GetRole() == pb::common::INDEX && vector_index_manager_) {
     vector_index_manager_->Destroy();
+  }
+
+  if (GetRole() == pb::common::DOCUMENT && document_index_manager_) {
+    document_index_manager_->Destroy();
   }
 
   google::ShutdownGoogleLogging();
@@ -949,6 +962,11 @@ VectorIndexManagerPtr Server::GetVectorIndexManager() {
   return vector_index_manager_;
 }
 
+DocumentIndexManagerPtr Server::GetDocumentIndexManager() {
+  assert(document_index_manager_ != nullptr);
+  return document_index_manager_;
+}
+
 std::shared_ptr<CoordinatorControl> Server::GetCoordinatorControl() {
   assert(coordinator_control_ != nullptr);
   return coordinator_control_;
@@ -1099,6 +1117,20 @@ uint64_t Server::GetVectorIndexManagerBackgroundPendingTaskCount() {
     return 0;
   }
   return vector_index_manager_->GetBackgroundPendingTaskCount();
+}
+
+std::vector<std::vector<std::string>> Server::GetDocumentIndexBackgroundWorkerSetTrace() {
+  if (document_index_manager_ == nullptr) {
+    return {};
+  }
+  return document_index_manager_->GetPendingTaskTrace();
+}
+
+uint64_t Server::GetDocumentIndexManagerBackgroundPendingTaskCount() {
+  if (document_index_manager_ == nullptr) {
+    return 0;
+  }
+  return document_index_manager_->GetBackgroundPendingTaskCount();
 }
 
 std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {

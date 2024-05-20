@@ -18,7 +18,6 @@
 #include <nlohmann/json.hpp>
 
 #include "butil/compiler_specific.h"
-#include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"

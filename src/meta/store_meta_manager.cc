@@ -86,8 +86,13 @@ bool Region::Recover() {
     SetVectorIndexWrapper(vector_index_wrapper);
     return vector_index_wapper_->Recover();
   } else if (Type() == pb::common::DOCUMENT_REGION) {
-    // TODO: load document index here
-    // auto document_index_wrapper = DocumentIndexWrapper::New(Id(),
+    auto document_index_wrapper =
+        DocumentIndexWrapper::New(Id(), inner_region_.definition().index_parameter().document_index_parameter());
+    if (document_index_wrapper == nullptr) {
+      return false;
+    }
+    SetDocumentIndexWrapper(document_index_wrapper);
+    return document_index_wapper_->Recover();
   }
 
   return true;

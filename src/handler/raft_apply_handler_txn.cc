@@ -99,65 +99,132 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   }
 
   // check if need to commit to vector index
-  const auto &vector_add = request.vector_add();
-  if (vector_add.vectors_size() > 0) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
-        << ", commit to vector index count: " << vector_add.vectors_size()
-        << ", vector_add: " << vector_add.ShortDebugString();
+  {
+    const auto &vector_add = request.vector_add();
+    if (vector_add.vectors_size() > 0) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+          << ", commit to vector index count: " << vector_add.vectors_size()
+          << ", vector_add: " << vector_add.ShortDebugString();
 
-    auto handler = std::make_shared<VectorAddHandler>();
-    if (handler == nullptr) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
-                                      log_id)
-                       << ", new vector add handler failed, vector add count: " << vector_add.vectors_size();
+      auto handler = std::make_shared<VectorAddHandler>();
+      if (handler == nullptr) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", new vector add handler failed, vector add count: " << vector_add.vectors_size();
+      }
+
+      auto add_ctx = std::make_shared<Context>();
+      add_ctx->SetRegionId(region->Id());
+      add_ctx->SetCfName(Constant::kVectorDataCF);
+      add_ctx->SetRegionEpoch(region->Definition().epoch());
+
+      pb::raft::Request raft_request_for_vector_add;
+      for (const auto &vector : vector_add.vectors()) {
+        auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
+        *new_vector = vector;
+      }
+      raft_request_for_vector_add.mutable_vector_add()->set_cf_name(Constant::kVectorDataCF);
+
+      handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
+      if (!add_ctx->Status().ok() && ctx != nullptr) {
+        ctx->SetStatus(add_ctx->Status());
+      }
     }
 
-    auto add_ctx = std::make_shared<Context>();
-    add_ctx->SetRegionId(region->Id());
-    add_ctx->SetCfName(Constant::kVectorDataCF);
-    add_ctx->SetRegionEpoch(region->Definition().epoch());
+    const auto &vector_del = request.vector_del();
+    if (vector_del.ids_size() > 0) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+          << ", commit to vector index count: " << vector_del.ids_size()
+          << ", vector_del: " << vector_del.ShortDebugString();
+      auto handler = std::make_shared<VectorDeleteHandler>();
+      if (handler == nullptr) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", new vector delete handler failed, vector del count: " << vector_del.ids_size();
+      }
 
-    pb::raft::Request raft_request_for_vector_add;
-    for (const auto &vector : vector_add.vectors()) {
-      auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
-      *new_vector = vector;
-    }
-    raft_request_for_vector_add.mutable_vector_add()->set_cf_name(Constant::kVectorDataCF);
+      auto del_ctx = std::make_shared<Context>();
+      del_ctx->SetRegionId(region->Id());
+      del_ctx->SetCfName(Constant::kVectorDataCF);
+      del_ctx->SetRegionEpoch(region->Definition().epoch());
 
-    handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
-    if (!add_ctx->Status().ok() && ctx != nullptr) {
-      ctx->SetStatus(add_ctx->Status());
+      pb::raft::Request raft_request_for_vector_del;
+      for (const auto &id : vector_del.ids()) {
+        raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
+      }
+      raft_request_for_vector_del.mutable_vector_delete()->set_cf_name(Constant::kVectorDataCF);
+
+      handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
+      if (!del_ctx->Status().ok() && ctx != nullptr) {
+        ctx->SetStatus(del_ctx->Status());
+      }
     }
   }
 
-  const auto &vector_del = request.vector_del();
-  if (vector_del.ids_size() > 0) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
-        << ", commit to vector index count: " << vector_del.ids_size()
-        << ", vector_del: " << vector_del.ShortDebugString();
-    auto handler = std::make_shared<VectorDeleteHandler>();
-    if (handler == nullptr) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id,
-                                      log_id)
-                       << ", new vector delete handler failed, vector del count: " << vector_del.ids_size();
+  // check if need to commit to document index
+  {
+    const auto &document_add = request.document_add();
+    if (document_add.documents_size() > 0) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+          << ", commit to document index count: " << document_add.documents_size()
+          << ", document_add: " << document_add.ShortDebugString();
+
+      auto handler = std::make_shared<DocumentAddHandler>();
+      if (handler == nullptr) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", new document add handler failed, document add count: " << document_add.documents_size();
+      }
+
+      auto add_ctx = std::make_shared<Context>();
+      add_ctx->SetRegionId(region->Id());
+      add_ctx->SetCfName(Constant::kStoreDataCF);
+      add_ctx->SetRegionEpoch(region->Definition().epoch());
+
+      pb::raft::Request raft_request_for_document_add;
+      for (const auto &document : document_add.documents()) {
+        auto *new_document = raft_request_for_document_add.mutable_document_add()->add_documents();
+        *new_document = document;
+      }
+      raft_request_for_document_add.mutable_document_add()->set_cf_name(Constant::kStoreDataCF);
+
+      handler->Handle(add_ctx, region, engine, raft_request_for_document_add, region_metrics, term_id, log_id);
+      if (!add_ctx->Status().ok() && ctx != nullptr) {
+        ctx->SetStatus(add_ctx->Status());
+      }
     }
 
-    auto del_ctx = std::make_shared<Context>();
-    del_ctx->SetRegionId(region->Id());
-    del_ctx->SetCfName(Constant::kVectorDataCF);
-    del_ctx->SetRegionEpoch(region->Definition().epoch());
+    const auto &document_del = request.document_del();
+    if (document_del.ids_size() > 0) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(), term_id, log_id)
+          << ", commit to document index count: " << document_del.ids_size()
+          << ", document_del: " << document_del.ShortDebugString();
+      auto handler = std::make_shared<DocumentDeleteHandler>();
+      if (handler == nullptr) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(),
+                                        term_id, log_id)
+                         << ", new document delete handler failed, document del count: " << document_del.ids_size();
+      }
 
-    pb::raft::Request raft_request_for_vector_del;
-    for (const auto &id : vector_del.ids()) {
-      raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
-    }
-    raft_request_for_vector_del.mutable_vector_delete()->set_cf_name(Constant::kVectorDataCF);
+      auto del_ctx = std::make_shared<Context>();
+      del_ctx->SetRegionId(region->Id());
+      del_ctx->SetCfName(Constant::kStoreDataCF);
+      del_ctx->SetRegionEpoch(region->Definition().epoch());
 
-    handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
-    if (!del_ctx->Status().ok() && ctx != nullptr) {
-      ctx->SetStatus(del_ctx->Status());
+      pb::raft::Request raft_request_for_document_del;
+      for (const auto &id : document_del.ids()) {
+        raft_request_for_document_del.mutable_document_delete()->add_ids(id);
+      }
+      raft_request_for_document_del.mutable_document_delete()->set_cf_name(Constant::kStoreDataCF);
+
+      handler->Handle(del_ctx, region, engine, raft_request_for_document_del, region_metrics, term_id, log_id);
+      if (!del_ctx->Status().ok() && ctx != nullptr) {
+        ctx->SetStatus(del_ctx->Status());
+      }
     }
   }
 
