@@ -64,9 +64,12 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
   } else if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_DOCUMENT) {
     region->inner_region_.set_region_type(pb::common::DOCUMENT_REGION);
 
-    // TODO: create document index here
-    // auto document_index_wrapper = DocumentIndexWrapper::New(definition.id(),
-    // definition.index_parameter().document_index_parameter());
+    auto document_index_wrapper =
+        DocumentIndexWrapper::New(definition.id(), definition.index_parameter().document_index_parameter());
+    if (document_index_wrapper == nullptr) {
+      return nullptr;
+    }
+    region->SetDocumentIndexWrapper(document_index_wrapper);
   } else {
     region->inner_region_.set_region_type(pb::common::STORE_REGION);
   }

@@ -163,8 +163,8 @@ int DocumentIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Statu
     DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] document index wrapper is null.", region->Id());
     return -1;
   }
-  if (document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) ||
-      document_index_wrapper->IsTempHoldDocumentIndex()) {
+  if (document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /* ||
+      document_index_wrapper->IsTempHoldDocumentIndex()*/) {
     return 0;
   }
 
@@ -183,8 +183,8 @@ int DocumentIndexFollowerStartHandler::Handle(store::RegionPtr region, const bra
     DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] document index wrapper is null.", region->Id());
     return -1;
   }
-  if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) &&
-      !document_index_wrapper->IsTempHoldDocumentIndex()) {
+  if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /* &&
+      !document_index_wrapper->IsTempHoldDocumentIndex()*/) {
     return 0;
   }
 

@@ -857,7 +857,7 @@ int CoordinatorSender() {
     SendGetIndexesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndex") {
     SendCreateVectorIndex(coordinator_interaction_meta);
-  } else if (FLAGS_method == "CreateDocument") {
+  } else if (FLAGS_method == "CreateDocumentIndex") {
     SendCreateDocumentIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndexId") {
     SendCreateIndexId(coordinator_interaction_meta);

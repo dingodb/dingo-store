@@ -575,8 +575,8 @@ int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
       return -1;
     }
 
-    if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) &&
-        !document_index_wrapper->IsTempHoldDocumentIndex()) {
+    if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /*&&
+        !document_index_wrapper->IsTempHoldDocumentIndex()*/) {
       DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] document index is not hold, skip load.",
                                      region->Id());
       return 0;

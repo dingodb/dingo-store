@@ -56,9 +56,6 @@ class Constant {
   inline static const std::string kVectorScalarKeySpeedUpCF = "vector_scalar_key_speed_up";
   inline static const std::string kVectorTableCF = "vector_table";
 
-  // document cf names
-  inline static const std::string kDocumentDataCF = "default";
-
   // region range prefix
   inline static const char kExecutorRaw = 'r';
   inline static const char kExecutorTxn = 't';
@@ -166,6 +163,9 @@ class Constant {
   // vector limitations
   static const uint32_t kVectorMaxDimension = 32768;
   static constexpr int64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 100000;
+
+  // document limitations
+  static constexpr int64_t kDocumentIndexSaveSnapshotThresholdWriteKeyNum = 1000;
 
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 

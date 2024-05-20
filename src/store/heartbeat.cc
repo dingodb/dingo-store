@@ -519,6 +519,14 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
   }
 }
 
+// this is for document
+void DocumentIndexScrubTask::ScrubDocumentIndex() {
+  auto status = DocumentIndexManager::ScrubDocumentIndex();
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Scrub document index failed, error: {}", status.error_str());
+  }
+}
+
 bool Heartbeat::Init() {
   auto worker = Worker::New();
   if (!worker->Init()) {
@@ -607,6 +615,12 @@ void Heartbeat::TriggerCompactionTask(void*) {
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<VectorIndexScrubTask>();
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerScrubDocumentIndex(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<DocumentIndexScrubTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
