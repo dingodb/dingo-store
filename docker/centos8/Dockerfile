@@ -32,5 +32,5 @@ RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
 ENV PATH="/opt/intel/oneapi:$PATH"
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
-ENV PATH=/opt/rh/gcc-toolset-11/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
+ENV PATH=/root/.cargo/bin:/opt/rh/gcc-toolset-11/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
 WORKDIR /opt

@@ -23,7 +23,7 @@ RUN sh rustup-init.sh -y
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
-ENV PATH="/opt/intel/oneapi:$PATH"
+ENV PATH="/root/.cargo/bin:/opt/intel/oneapi:$PATH"
 
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
 
