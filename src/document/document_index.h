@@ -66,11 +66,11 @@ class DocumentIndex {
   void LockWrite();
   void UnlockWrite();
 
-  bool NeedToRebuild() { return false; }                           // NOLINT
-  bool NeedTrain() { return false; }                               // NOLINT
-  bool IsTrained() { return true; }                                // NOLINT
-  bool NeedToSave(int64_t last_save_log_behind) { return false; }  // NOLINT
-  bool SupportSave() { return false; }                             // NOLINT
+  bool NeedToRebuild() { return false; }                                               // NOLINT
+  bool NeedTrain() { return false; }                                                   // NOLINT
+  bool IsTrained() { return true; }                                                    // NOLINT
+  bool NeedToSave(int64_t last_save_log_behind) { return last_save_log_behind > 10; }  // NOLINT
+  bool SupportSave() { return false; }                                                 // NOLINT
 
   uint32_t WriteOpParallelNum() { return 1; }  // NOLINT
 
@@ -97,6 +97,8 @@ class DocumentIndex {
     RWLockReadGuard guard(&rw_lock_);
     return is_destroyed_;
   }
+
+  std::string IndexPath() { return index_path; }
 
  protected:
   // document index id
@@ -187,10 +189,10 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   bool IsSwitchingDocumentIndex();
   void SetIsSwitchingDocumentIndex(bool is_switching);
 
-  void SetIsTempHoldDocumentIndex(bool need);
+  // void SetIsTempHoldDocumentIndex(bool need);
 
   // check temp hold vector index
-  bool IsTempHoldDocumentIndex() const;
+  // bool IsTempHoldDocumentIndex() const;
   // check permanent hold vector index
   static bool IsPermanentHoldDocumentIndex(int64_t region_id);
 
@@ -298,7 +300,7 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t save_snapshot_threshold_write_key_num_;
 
   // need hold document index
-  std::atomic<bool> is_hold_document_index_;
+  // std::atomic<bool> is_hold_document_index_;
 };
 
 using DocumentIndexWrapperPtr = std::shared_ptr<DocumentIndexWrapper>;

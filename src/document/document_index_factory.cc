@@ -160,7 +160,7 @@ std::shared_ptr<DocumentIndex> DocumentIndexFactory::LoadOrCreateIndex(
     return document_index;
   }
 
-  document_index = CreateIndex(id, index_path, document_index_parameter, epoch, range, false, tmp_status);
+  document_index = CreateIndex(id, index_path, document_index_parameter, epoch, range, true, tmp_status);
   if (document_index != nullptr) {
     return document_index;
   } else {

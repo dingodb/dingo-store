@@ -31,6 +31,7 @@
 #include "document/codec.h"
 #include "document/document_index.h"
 #include "document/document_index_factory.h"
+#include "document/document_index_snapshot_manager.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -136,11 +137,34 @@ void RebuildDocumentIndexTask::Run() {
         return;
       }
     }
+
+    pb::store_internal::DocumentIndexSnapshotMeta meta;
+    auto ret1 = DocumentIndexSnapshotManager::GetLatestSnapshotMeta(document_index_wrapper_->Id(), meta);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[document_index.rebuild][index_id({})][trace({})] get document index snapshot meta failed, error: {}.",
+          document_index_wrapper_->Id(), trace_, Helper::PrintStatus(ret1));
+      return;
+    }
+
+    if (region->Epoch().version() <= meta.epoch().version()) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[document_index.rebuild][index_id({})][trace({})] document index snapshot epoch({}/{}) is latest, gave up "
+          "rebuild.",
+          document_index_wrapper_->Id(), trace_, Helper::RegionEpochToString(region->Epoch()),
+          Helper::RegionEpochToString(meta.epoch()));
+      return;
+    }
+  } else {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[document_index.rebuild][index_id({})][trace({})] force is not support now, gave up rebuild.",
+        document_index_wrapper_->Id(), trace_);
+    return;
   }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilding document index {}", region->Id()));
 
-  document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
+  // document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
   auto status = DocumentIndexManager::RebuildDocumentIndex(document_index_wrapper_, fmt::format("REBUILD-{}", trace_));
   if (!status.ok()) {
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuilded document index {}", region->Id()));
@@ -163,7 +187,7 @@ void RebuildDocumentIndexTask::Run() {
     }
   }
 
-  document_index_wrapper_->SetIsTempHoldDocumentIndex(false);
+  // document_index_wrapper_->SetIsTempHoldDocumentIndex(false);
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Saved document index {}", region->Id()));
 
   if (is_clear_) {
@@ -273,9 +297,9 @@ void LoadOrBuildDocumentIndexTask::Run() {
     return;
   }
 
-  if (is_temp_hold_document_index_) {
-    document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
-  }
+  // if (is_temp_hold_document_index_) {
+  //   document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
+  // }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuild document index {}", region->Id()));
 
@@ -382,9 +406,9 @@ void LoadAsyncBuildDocumentIndexTask::Run() {
     return;
   }
 
-  if (is_temp_hold_document_index_) {
-    document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
-  }
+  // if (is_temp_hold_document_index_) {
+  //   document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
+  // }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadasyncbuild document index {}", region->Id()));
 
@@ -523,9 +547,9 @@ void BuildDocumentIndexTask::Run() {
     return;
   }
 
-  if (is_temp_hold_document_index_) {
-    document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
-  }
+  // if (is_temp_hold_document_index_) {
+  //   document_index_wrapper_->SetIsTempHoldDocumentIndex(true);
+  // }
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("build document index {}", region->Id()));
 
@@ -895,9 +919,9 @@ void DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(DocumentIndexWrapperPt
                                                           const std::string& trace) {
   assert(document_index_wrapper != nullptr);
 
-  if (is_temp_hold_document_index) {
-    document_index_wrapper->SetIsTempHoldDocumentIndex(true);
-  }
+  // if (is_temp_hold_document_index) {
+  //   document_index_wrapper->SetIsTempHoldDocumentIndex(true);
+  // }
 
   if (document_index_wrapper->LoadorbuildingNum() > 0) {
     DINGO_LOG(INFO) << fmt::format(
@@ -929,9 +953,9 @@ void DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(DocumentIndexWrappe
                                                              int64_t job_id, const std::string& trace) {
   assert(document_index_wrapper != nullptr);
 
-  if (is_temp_hold_document_index) {
-    document_index_wrapper->SetIsTempHoldDocumentIndex(true);
-  }
+  // if (is_temp_hold_document_index) {
+  //   document_index_wrapper->SetIsTempHoldDocumentIndex(true);
+  // }
 
   if (document_index_wrapper->LoadorbuildingNum() > 0) {
     DINGO_LOG(INFO) << fmt::format(
@@ -1144,9 +1168,21 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   auto range = region->Range();
   butil::Status status;
 
-  // TODO: gen real index_path
+  auto document_index_path =
+      DocumentIndexSnapshotManager::GetSnapshotPath(document_index_id, region->Epoch().version());
+  if (document_index_path.empty()) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.build][index_id({})][trace({})] get document index path failed.",
+                                    document_index_id, trace);
+    return nullptr;
+  }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[document_index.build][index_id({})][trace({})] Build document index, range: [{}-{}), path:({})",
+      document_index_id, trace, Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
+      document_index_path);
+
   auto document_index = DocumentIndexFactory::LoadOrCreateIndex(
-      document_index_id, "/tmp", document_index_wrapper->IndexParameter(), region->Epoch(), range, status);
+      document_index_id, document_index_path, document_index_wrapper->IndexParameter(), region->Epoch(), range, status);
   if (!document_index) {
     DINGO_LOG(WARNING) << fmt::format(
         "[document_index.build][index_id({})][trace({})] New document index failed, error_code: {}, error_msg: {}.",
@@ -1388,41 +1424,39 @@ butil::Status DocumentIndexManager::RebuildDocumentIndex(DocumentIndexWrapperPtr
   return butil::Status();
 }
 
-butil::Status DocumentIndexManager::LoadDocumentIndex(DocumentIndexWrapperPtr /*document_index_wrapper*/,
-                                                      const pb::common::RegionEpoch& /*epoch*/,
-                                                      const std::string& /*trace*/) {
-  // int64_t document_index_id = document_index_wrapper->Id();
-  // int64_t start_time = Helper::TimestampMs();
+butil::Status DocumentIndexManager::LoadDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
+                                                      const pb::common::RegionEpoch& epoch, const std::string& trace) {
+  int64_t document_index_id = document_index_wrapper->Id();
+  int64_t start_time = Helper::TimestampMs();
 
-  // // try to load document index from snapshot
-  // auto document_index = DocumentIndexSnapshotManager::LoadDocumentIndexSnapshot(document_index_wrapper, epoch);
-  // if (document_index == nullptr) {
-  //   return butil::Status(pb::error::EDOCUMENT_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
-  // }
+  // try to load document index from snapshot
+  auto document_index = DocumentIndexSnapshotManager::LoadDocumentIndexSnapshot(document_index_wrapper, epoch);
+  if (document_index == nullptr) {
+    return butil::Status(pb::error::EDOCUMENT_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
+  }
 
-  // DINGO_LOG(INFO) << fmt::format(
-  //     "[document_index.load][index_id({})][trace({})] Load document index snapshot success, epoch: {} elapsed time: "
-  //     "{}ms.",
-  //     document_index_id, trace, Helper::RegionEpochToString(document_index->Epoch()),
-  //     Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[document_index.load][index_id({})][trace({})] Load document index snapshot success, epoch: {} elapsed time: "
+      "{}ms.",
+      document_index_id, trace, Helper::RegionEpochToString(document_index->Epoch()),
+      Helper::TimestampMs() - start_time);
 
-  // // catch up wal
-  // bvar_document_index_load_catchup_total_num << 1;
-  // bvar_document_index_load_catchup_running_num << 1;
-  // DEFER(bvar_document_index_load_catchup_running_num << -1;);
+  // catch up wal
+  bvar_document_index_load_catchup_total_num << 1;
+  bvar_document_index_load_catchup_running_num << 1;
+  DEFER(bvar_document_index_load_catchup_running_num << -1;);
 
-  // auto status = CatchUpLogToDocumentIndex(document_index_wrapper, document_index, trace);
-  // if (!status.ok()) {
-  //   DINGO_LOG(WARNING) << fmt::format("[document_index.load][index_id({})][trace({})] Catch up log failed, error:
-  //   {}.",
-  //                                     document_index_id, trace, Helper::PrintStatus(status));
-  //   return status;
-  // }
+  auto status = CatchUpLogToDocumentIndex(document_index_wrapper, document_index, trace);
+  if (!status.ok()) {
+    DINGO_LOG(WARNING) << fmt::format("[document_index.load][index_id({})][trace({})] Catch up log failed, error: {}.",
+                                      document_index_id, trace, Helper::PrintStatus(status));
+    return status;
+  }
 
-  // DINGO_LOG(INFO) << fmt::format(
-  //     "[document_index.load][index_id({})][trace({})] Load document index success, epoch: {} elapsed time: {}ms.",
-  //     document_index_id, trace, Helper::RegionEpochToString(document_index->Epoch()),
-  //     Helper::TimestampMs() - start_time);
+  DINGO_LOG(INFO) << fmt::format(
+      "[document_index.load][index_id({})][trace({})] Load document index success, epoch: {} elapsed time: {}ms.",
+      document_index_id, trace, Helper::RegionEpochToString(document_index->Epoch()),
+      Helper::TimestampMs() - start_time);
 
   return butil::Status::OK();
 }
@@ -1477,43 +1511,43 @@ butil::Status DocumentIndexManager::CatchUpLogToDocumentIndex(DocumentIndexWrapp
   return butil::Status();
 }
 
-butil::Status DocumentIndexManager::SaveDocumentIndex(DocumentIndexWrapperPtr /*document_index_wrapper*/,
-                                                      const std::string& /*trace*/) {
-  // assert(document_index_wrapper != nullptr);
-  // int64_t start_time = Helper::TimestampMs();
+butil::Status DocumentIndexManager::SaveDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
+                                                      const std::string& trace) {
+  assert(document_index_wrapper != nullptr);
+  int64_t start_time = Helper::TimestampMs();
 
-  // // Check document index is stop
-  // if (document_index_wrapper->IsStop()) {
-  //   DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({})][trace({})] document index is stop.",
-  //                                     document_index_wrapper->Id(), trace);
-  //   return butil::Status();
-  // }
+  // Check document index is stop
+  if (document_index_wrapper->IsStop()) {
+    DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({})][trace({})] document index is stop.",
+                                      document_index_wrapper->Id(), trace);
+    return butil::Status();
+  }
 
-  // DINGO_LOG(INFO) << fmt::format("[document_index.save][index_id({}_v{})][trace({})] Save document index.",
-  //                                document_index_wrapper->Id(), document_index_wrapper->Version(), trace);
+  DINGO_LOG(INFO) << fmt::format("[document_index.save][index_id({}_v{})][trace({})] Save document index.",
+                                 document_index_wrapper->Id(), document_index_wrapper->Version(), trace);
 
-  // int64_t snapshot_log_id = 0;
-  // auto status = DocumentIndexSnapshotManager::SaveDocumentIndexSnapshot(document_index_wrapper, snapshot_log_id);
-  // if (!status.ok()) {
-  //   DINGO_LOG(ERROR) << fmt::format(
-  //       "[document_index.save][index_id({})][trace({})] Save document index snapshot failed, errno: {}, errstr: {}",
-  //       document_index_wrapper->Id(), trace, status.error_code(), status.error_str());
-  //   return status;
-  // } else {
-  //   document_index_wrapper->SetSnapshotLogId(snapshot_log_id);
-  // }
+  int64_t snapshot_log_id = 0;
+  auto status = DocumentIndexSnapshotManager::SaveDocumentIndexSnapshot(document_index_wrapper, snapshot_log_id);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[document_index.save][index_id({})][trace({})] Save document index snapshot failed, errno: {}, errstr: {}",
+        document_index_wrapper->Id(), trace, status.error_code(), status.error_str());
+    return status;
+  } else {
+    document_index_wrapper->SetSnapshotLogId(snapshot_log_id);
+  }
 
-  // // Update document index status NORMAL
-  // DINGO_LOG(INFO) << fmt::format(
-  //     "[document_index.save][index_id({}_v{})][trace({})] Save document index success, elapsed time({}ms)",
-  //     document_index_wrapper->Id(), document_index_wrapper->Version(), trace, Helper::TimestampMs() - start_time);
+  // Update document index status NORMAL
+  DINGO_LOG(INFO) << fmt::format(
+      "[document_index.save][index_id({}_v{})][trace({})] Save document index success, elapsed time({}ms)",
+      document_index_wrapper->Id(), document_index_wrapper->Version(), trace, Helper::TimestampMs() - start_time);
 
-  // // Check document index is stop
-  // if (document_index_wrapper->IsStop()) {
-  //   DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({}_v{})][trace({})] document index is stop.",
-  //                                     document_index_wrapper->Id(), document_index_wrapper->Version(), trace);
-  //   return butil::Status();
-  // }
+  // Check document index is stop
+  if (document_index_wrapper->IsStop()) {
+    DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({}_v{})][trace({})] document index is stop.",
+                                      document_index_wrapper->Id(), document_index_wrapper->Version(), trace);
+    return butil::Status();
+  }
 
   return butil::Status::OK();
 }
@@ -1588,7 +1622,7 @@ butil::Status DocumentIndexManager::ScrubDocumentIndex() {
 
     std::string trace;
     bool need_save = document_index_wrapper->NeedToSave(trace);
-    if (need_save && document_index_wrapper->RebuildingNum() == 0 && document_index_wrapper->SavingNum() == 0) {
+    if (need_save && document_index_wrapper->RebuildingNum() == 0 && document_index_wrapper->SavingNum() < 128) {
       DINGO_LOG(INFO) << fmt::format("[document_index.scrub][index_id({})] need save, trace: {}.", document_index_id,
                                      trace);
 

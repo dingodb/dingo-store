@@ -437,6 +437,7 @@ DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch 
 DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
 DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
 DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
+DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
 DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
 DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
 DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
@@ -654,6 +655,17 @@ bool Server::InitCrontabManager() {
       "SCRUB_VECTOR_INDEX",
       {pb::common::INDEX},
       FLAGS_server_scrub_vector_index_interval_s * 1000,
+      true,
+      [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
+  });
+
+  // Add scrub document index crontab
+  FLAGS_server_scrub_document_index_interval_s =
+      GetInterval(config, "server.scrub_document_index_interval_s", FLAGS_server_scrub_document_index_interval_s);
+  crontab_configs_.push_back({
+      "SCRUB_DOCUMENT_INDEX",
+      {pb::common::INDEX},
+      FLAGS_server_scrub_document_index_interval_s * 1000,
       true,
       [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
   });
