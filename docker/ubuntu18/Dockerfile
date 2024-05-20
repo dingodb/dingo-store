@@ -22,6 +22,8 @@ RUN apt-get update  \
 RUN wget https://sh.rustup.rs --content-disposition
 RUN sh rustup-init.sh -y
 
+ENV PATH="/root/.cargo/bin:$PATH"
+
 ENV JAVA_HOME /usr/lib/jvm/java-8-openjdk-amd64/
 
 WORKDIR /opt
