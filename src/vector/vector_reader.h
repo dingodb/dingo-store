@@ -114,16 +114,16 @@ class VectorReader {
       const pb::common::ScalarSchema& scalar_schema,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
 
-  bool ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
-                         const pb::common::VectorScalardata& internal_vector_scalar);
+  static bool ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
+                                const pb::common::VectorScalardata& internal_vector_scalar);
 
   butil::Status InternalVectorSearchForScalarPreFilterWithScalarCF(
       pb::common::Range region_range, bool use_coprocessor, const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
       const pb::common::VectorScalardata& std_vector_scalar,
       std::vector<int64_t>& vector_ids);  // NOLINT
 
-  bool ScalarCompareWithCoprocessorCore(const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
-                                        const pb::common::VectorScalardata& internal_vector_scalar);
+  static bool ScalarCompareWithCoprocessorCore(const std::shared_ptr<RawCoprocessor>& scalar_coprocessor,
+                                               const pb::common::VectorScalardata& internal_vector_scalar);
 
   butil::Status InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
       pb::common::Range region_range, const std::set<std::string>& compare_keys, bool use_coprocessor,

@@ -932,7 +932,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
 
 bool VectorReader::ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
                                      const pb::common::VectorScalardata& internal_vector_scalar) {
-  for (const auto& [key, value] : std_vector_scalar.scalar_data()) {  // NOLINT(*static)
+  for (const auto& [key, value] : std_vector_scalar.scalar_data()) {
     auto it = internal_vector_scalar.scalar_data().find(key);
     if (it == internal_vector_scalar.scalar_data().end()) {
       return false;

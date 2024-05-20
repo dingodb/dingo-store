@@ -1362,7 +1362,8 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
         }
 
         auto start_time = Helper::TimestampNs();
-        auto status = document_index_wrapper->Add(document_with_ids);
+        auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
+                                          : document_index_wrapper->Add(document_with_ids);
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us",
                                         document_index_id, document_with_ids.size(),

@@ -104,8 +104,33 @@ void DocumentIndex::LockWrite() { rw_lock_.LockWrite(); }
 
 void DocumentIndex::UnlockWrite() { rw_lock_.UnlockWrite(); }
 
+butil::Status DocumentIndex::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids,
+                                    bool reload_reader) {
+  if (document_with_ids.empty()) {
+    return butil::Status::OK();
+  }
+
+  std::vector<int64_t> delete_ids;
+
+  delete_ids.reserve(document_with_ids.size());
+  for (const auto& document_with_id : document_with_ids) {
+    delete_ids.push_back(document_with_id.id());
+  }
+
+  auto status = Delete(delete_ids);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return Add(document_with_ids, reload_reader);
+}
+
 butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader) {
   DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] add document count({})", id, document_with_ids.size());
+
+  if (document_with_ids.empty()) {
+    return butil::Status::OK();
+  }
 
   RWLockWriteGuard guard(&rw_lock_);
 
@@ -191,6 +216,10 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
 butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
   DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] delete document count({})", id, delete_ids.size());
 
+  if (delete_ids.empty()) {
+    return butil::Status::OK();
+  }
+
   RWLockWriteGuard guard(&rw_lock_);
 
   if (is_destroyed_) {
@@ -232,7 +261,7 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
                                     int64_t start_id, int64_t end_id, bool use_id_filter,
                                     const std::vector<uint64_t>& alive_ids,
                                     const std::vector<std::string>& column_names,
-                                    pb::document::DocumentWithScoreResult& results) {
+                                    std::vector<pb::common::DocumentWithScore>& results) {
   RWLockReadGuard guard(&rw_lock_);
 
   if (is_destroyed_) {
@@ -263,9 +292,10 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
 
   if (search_result.error_code == 0) {
     for (const auto& row_id_with_score : search_result.result) {
-      auto* result_doc = results.add_document_with_scores();
-      result_doc->mutable_document_with_id()->set_id(row_id_with_score.row_id);
-      result_doc->set_score(row_id_with_score.score);
+      pb::common::DocumentWithScore result_doc;
+      result_doc.mutable_document_with_id()->set_id(row_id_with_score.row_id);
+      result_doc.set_score(row_id_with_score.score);
+      results.push_back(result_doc);
 
       DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] search result, row_id({}) score({})", id,
                                      row_id_with_score.row_id, row_id_with_score.score);
@@ -362,6 +392,9 @@ bool DocumentIndexWrapper::Init() { return true; }  // NOLINT
 void DocumentIndexWrapper::Destroy() {
   DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] document index destroy.", Id());
   stop_.store(true);
+
+  // destory document index
+  GetOwnDocumentIndex()->SetDestroyed();
 }
 
 bool DocumentIndexWrapper::Recover() {
@@ -704,6 +737,53 @@ static std::vector<pb::common::DocumentWithId> FilterDocumentWithId(
   return result;
 }
 
+butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
+  }
+
+  // Waiting switch document index
+  int count = 0;
+  while (IsSwitchingDocumentIndex()) {
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] waiting document index switch, count({})",
+                                   Id(), ++count);
+    bthread_usleep(1000 * 100);
+  }
+
+  auto document_index = GetDocumentIndex();
+  if (document_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
+  }
+
+  // Exist sibling document index, so need to separate add document.
+  auto sibling_document_index = SiblingDocumentIndex();
+  if (sibling_document_index != nullptr) {
+    auto status =
+        sibling_document_index->Upsert(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()), true);
+    if (!status.ok()) {
+      return status;
+    }
+
+    status = document_index->Upsert(FilterDocumentWithId(document_with_ids, document_index->Range()), true);
+    if (!status.ok()) {
+      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range()));
+      return status;
+    }
+
+    write_key_count_ += document_with_ids.size();
+
+    return status;
+  }
+
+  auto status = document_index->Upsert(document_with_ids, true);
+  if (status.ok()) {
+    write_key_count_ += document_with_ids.size();
+  }
+  return status;
+}
+
 butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
@@ -793,46 +873,46 @@ butil::Status DocumentIndexWrapper::Delete(const std::vector<int64_t>& delete_id
   return status;
 }
 
-static void MergeSearchResult(uint32_t topk, pb::document::DocumentWithScoreResult& input_1,
-                              pb::document::DocumentWithScoreResult& input_2,
-                              pb::document::DocumentWithScoreResult& results) {
+static void MergeSearchResult(uint32_t topk, std::vector<pb::common::DocumentWithScore>& input_1,
+                              std::vector<pb::common::DocumentWithScore>& input_2,
+                              std::vector<pb::common::DocumentWithScore>& results) {
   if (topk == 0) return;
-  int input_1_size = input_1.document_with_scores_size();
-  int input_2_size = input_2.document_with_scores_size();
-  auto* document_with_scores_1 = input_1.mutable_document_with_scores();
-  auto* document_with_scores_2 = input_2.mutable_document_with_scores();
+  int input_1_size = input_1.size();
+  int input_2_size = input_2.size();
+  const auto& document_with_scores_1 = input_1;
+  const auto& document_with_scores_2 = input_2;
 
   int i = 0, j = 0;
 
   // for document, the bigger score mean more relative.
   while (i < input_1_size && j < input_2_size) {
-    auto& score_1 = document_with_scores_1->at(i);
-    auto& score_2 = document_with_scores_2->at(j);
+    const auto& score_1 = document_with_scores_1.at(i);
+    const auto& score_2 = document_with_scores_2.at(j);
     if (score_1.score() > score_2.score()) {
       ++i;
-      results.add_document_with_scores()->Swap(&score_1);
+      results.push_back(score_1);
     } else {
       ++j;
-      results.add_document_with_scores()->Swap(&score_2);
+      results.push_back(score_2);
     }
 
-    if (results.document_with_scores_size() >= topk) {
+    if (results.size() >= topk) {
       return;
     }
   }
 
   for (; i < input_1_size; ++i) {
-    auto& distance = document_with_scores_1->at(i);
-    results.add_document_with_scores()->Swap(&distance);
-    if (results.document_with_scores_size() >= topk) {
+    const auto& distance = document_with_scores_1.at(i);
+    results.push_back(distance);
+    if (results.size() >= topk) {
       return;
     }
   }
 
   for (; j < input_2_size; ++j) {
-    auto& distance = document_with_scores_2->at(j);
-    results.add_document_with_scores()->Swap(&distance);
-    if (results.document_with_scores_size() >= topk) {
+    const auto& distance = document_with_scores_2.at(j);
+    results.push_back(distance);
+    if (results.size() >= topk) {
       return;
     }
   }
@@ -840,7 +920,7 @@ static void MergeSearchResult(uint32_t topk, pb::document::DocumentWithScoreResu
 
 butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range,
                                            const pb::common::DocumentSearchParameter& parameter,
-                                           pb::document::DocumentWithScoreResult& results) {
+                                           std::vector<pb::common::DocumentWithScore>& results) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
@@ -854,14 +934,16 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
   // Exist sibling document index, so need to separate search document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    pb::document::DocumentWithScoreResult results_1;
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] search document in sibling document index.",
+                                   Id());
+    std::vector<pb::common::DocumentWithScore> results_1;
     auto status = sibling_document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX,
                                                  false, {}, {}, results_1);
     if (!status.ok()) {
       return status;
     }
 
-    pb::document::DocumentWithScoreResult results_2;
+    std::vector<pb::common::DocumentWithScore> results_2;
     status = document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, false, {}, {},
                                     results_2);
     if (!status.ok()) {
@@ -877,6 +959,13 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
     int64_t min_document_id = 0, max_document_id = 0;
     DocumentCodec::DecodeRangeToDocumentId(region_range, min_document_id, max_document_id);
 
+    DINGO_LOG(INFO) << fmt::format(
+        "[document_index.wrapper][index_id({})] search document in document index with range_filter, range({}) "
+        "query_string({}) "
+        "top_n({}) min_document_id({}) max_document_id({})",
+        Id(), DocumentCodec::DecodeRangeToString(region_range), parameter.query_string(), parameter.top_n(),
+        min_document_id, max_document_id);
+
     // use range filter
     return document_index->Search(parameter.top_n(), parameter.query_string(), true, min_document_id, max_document_id,
                                   false, {}, {}, results);
@@ -891,6 +980,10 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
     //   return ret;
     // }
   }
+
+  DINGO_LOG(INFO) << fmt::format(
+      "[document_index.wrapper][index_id({})] search document in document index, range({}) query_string({}) top_n({})",
+      Id(), DocumentCodec::DecodeRangeToString(region_range), parameter.query_string(), parameter.top_n());
 
   return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, false, {}, {},
                                 results);

@@ -772,13 +772,13 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 // document
 
 butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
-                                   const std::vector<pb::common::DocumentWithId>& documents) {
+                                   const std::vector<pb::common::DocumentWithId>& documents, bool is_update) {
   if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
     if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents));
+      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update));
     }
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents),
+    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update),
                                     [](std::shared_ptr<Context> ctx, butil::Status status) {
                                       if (!status.ok()) {
                                         Helper::SetPbMessageError(status, ctx->Response());
@@ -786,10 +786,10 @@ butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
                                     });
   } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (is_sync) {
-      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents));
+      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update));
     }
 
-    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents),
+    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update),
                                     [](std::shared_ptr<Context> ctx, butil::Status status) {
                                       if (!status.ok()) {
                                         Helper::SetPbMessageError(status, ctx->Response());
@@ -854,20 +854,20 @@ butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader
   return butil::Status::OK();
 }
 
-butil::Status Storage::DocumentBatchSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
-                                           std::vector<pb::document::DocumentWithScoreResult>& results) {
+butil::Status Storage::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                      std::vector<pb::common::DocumentWithScore>& results) {
   auto status = ValidateLeader(ctx->region_id);
   if (!status.ok()) {
     return status;
   }
 
-  auto vector_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
-  if (vector_reader == nullptr) {
+  auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+  if (document_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
   }
 
-  status = vector_reader->DocumentBatchSearch(ctx, results);
+  status = document_reader->DocumentSearch(ctx, results);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found

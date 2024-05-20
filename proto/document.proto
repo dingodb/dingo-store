@@ -27,7 +27,7 @@ message DocumentAddRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   dingodb.pb.store.Context context = 2;
   repeated dingodb.pb.common.DocumentWithId documents = 3;
-  bool ignore_check_exists = 4;  // Default false, if true, ignore check exists, this flag is for initial data load
+  bool is_update = 4;
 }
 
 message DocumentAddResponse {
@@ -43,11 +43,9 @@ message DocumentBatchQueryRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   dingodb.pb.store.Context context = 2;
   repeated int64 document_ids = 3;
-  bool without_document_data = 4;     // Default false, if true, response without document data.
-  bool without_scalar_data = 5;       // Default false, if true, response without scalar data.
-  repeated string selected_keys = 6;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+  bool without_scalar_data = 4;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 5;  // If without_scalar_data is false, selected_keys is used to select scalar data,
                                       // if this parameter is null, all scalar data will be returned.
-  bool without_table_data = 7;        // Default false, if true, response without table data.
 }
 
 message DocumentBatchQueryResponse {
@@ -94,17 +92,12 @@ message DocumentSearchRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   dingodb.pb.store.Context context = 2;
   dingodb.pb.common.DocumentSearchParameter parameter = 3;
-  repeated dingodb.pb.common.DocumentWithId document_with_ids = 4;  // this field is used for batch search
-}
-
-message DocumentWithScoreResult {
-  repeated dingodb.pb.common.DocumentWithScore document_with_scores = 1;
 }
 
 message DocumentSearchResponse {
   dingodb.pb.common.ResponseInfo response_info = 1;
   dingodb.pb.error.Error error = 2;
-  repeated DocumentWithScoreResult batch_results = 3;  // this field is used for batch search
+  repeated dingodb.pb.common.DocumentWithScore document_with_scores = 3;
 }
 
 message DocumentDeleteRequest {
@@ -150,11 +143,10 @@ message DocumentCountResponse {
 
 message DocumentGetParameter {
   // the parameter below is inherited from DocumentBatchQueryRequest
-  bool without_document_data = 1;     // Default false, if true, response without document data.
-  bool without_scalar_data = 2;       // Default false, if true, response without scalar data.
-  repeated string selected_keys = 3;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+  bool without_scalar_data = 1;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 2;  // If without_scalar_data is false, selected_keys is used to select scalar data,
                                       // if this parameter is null, all scalar data will be returned.
-  bool without_table_data = 4;        // Default false, if true, response without table data.
+  bool without_table_data = 3;        // Default false, if true, response without table data.
 }
 
 message HelloRequest {
