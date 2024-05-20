@@ -149,7 +149,7 @@ class Server {
   std::shared_ptr<LogStorageManager> GetLogStorageManager();
 
   std::shared_ptr<Storage> GetStorage();
-  std::shared_ptr<Storage> GetRocksStorage();
+
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager();
 
   // Shortcut
@@ -284,8 +284,6 @@ class Server {
   // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;
 
-  // This is a Storage class, deal with all about rocks storage stuff.
-  std::shared_ptr<Storage> rocks_storage_;
   // This is manage store meta data, like store state and region state.
   std::shared_ptr<StoreMetaManager> store_meta_manager_;
   // This is manage store metric data, like store metric/region metric/rocksdb metric.

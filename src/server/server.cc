@@ -953,11 +953,6 @@ std::shared_ptr<Storage> Server::GetStorage() {
   return storage_;
 }
 
-std::shared_ptr<Storage> Server::GetRocksStorage() {
-  assert(rocks_storage_ != nullptr);
-  return rocks_storage_;
-}
-
 std::shared_ptr<StoreMetaManager> Server::GetStoreMetaManager() {
   assert(store_meta_manager_ != nullptr);
   return store_meta_manager_;
