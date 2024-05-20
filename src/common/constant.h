@@ -56,6 +56,9 @@ class Constant {
   inline static const std::string kVectorScalarKeySpeedUpCF = "vector_scalar_key_speed_up";
   inline static const std::string kVectorTableCF = "vector_table";
 
+  // document cf names
+  inline static const std::string kDocumentDataCF = "default";
+
   // region range prefix
   inline static const char kExecutorRaw = 'r';
   inline static const char kExecutorTxn = 't';
@@ -167,6 +170,8 @@ class Constant {
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
   static const uint32_t kBuildVectorIndexBatchSize = 32768;
+
+  static const uint32_t kBuildDocumentIndexBatchSize = 32768;
 
   static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
   static constexpr int32_t kSearchIvfFlatParamNprobe = 80;

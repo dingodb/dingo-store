@@ -1521,6 +1521,8 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<RollbackMergeHandler>());
   handler_collection->Register(std::make_shared<VectorAddHandler>());
   handler_collection->Register(std::make_shared<VectorDeleteHandler>());
+  handler_collection->Register(std::make_shared<DocumentAddHandler>());
+  handler_collection->Register(std::make_shared<DocumentDeleteHandler>());
   handler_collection->Register(std::make_shared<RebuildVectorIndexHandler>());
   handler_collection->Register(std::make_shared<SaveRaftSnapshotHandler>());
   handler_collection->Register(std::make_shared<TxnHandler>());

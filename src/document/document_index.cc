@@ -24,6 +24,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_manager.h"
 #include "document/codec.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
@@ -900,5 +901,38 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
 //   filters.push_back(std::make_shared<DocumentIndex::RangeFilterFunctor>(min_document_id, max_document_id));
 //   return butil::Status::OK();
 // }
+
+bool DocumentIndexWrapper::IsTempHoldDocumentIndex() const { return is_hold_document_index_.load(); }
+
+void DocumentIndexWrapper::SetIsTempHoldDocumentIndex(bool need) {
+  DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] set document index hold({}->{})", Id(),
+                                 IsTempHoldDocumentIndex(), need);
+  is_hold_document_index_.store(need);
+  SaveMeta();
+}
+
+bool DocumentIndexWrapper::IsPermanentHoldDocumentIndex(int64_t region_id) {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return true;
+  }
+
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] Not found region.", region_id);
+    return false;
+  }
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+    return true;
+  }
+
+  if (!config->GetBool("document.enable_follower_hold_index")) {
+    // If follower, delete document index.
+    if (!Server::GetInstance().IsLeader(region_id)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 }  // namespace dingodb

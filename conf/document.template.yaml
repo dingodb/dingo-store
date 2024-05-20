@@ -37,6 +37,11 @@ log:
   path: $BASE_PATH$/log
 document:
   index_path: $BASE_PATH$/data/document_index
+  enable_follower_hold_index: false
+  operation_parallel_thread_num: 16 # document index operation parallel thread num.
+  fast_background_worker_num: 8 # document index fast load/build.
+  background_worker_num: 16 # document index slow load/build/rebuild.
+  max_background_task_count: 16 # document index slow load/build/rebuild max pending task count.
 store:
   path: $BASE_PATH$/data/db
   background_thread_num: 16 # background_thread_num priority background_thread_ratio

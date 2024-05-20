@@ -57,6 +57,12 @@ bool MonoStoreEngine::Recover() {
                                                             "rocks engine recover");
         ++count;
       }
+      if (GetRole() == pb::common::DOCUMENT) {
+        auto document_index_wrapper = region->DocumentIndexWrapper();
+        DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, false, 0,
+                                                                "rocks engine recover");
+        ++count;
+      }
     }
   }
 
