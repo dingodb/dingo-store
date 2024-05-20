@@ -101,7 +101,7 @@ void RebuildDocumentIndexTask::Run() {
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Rebuild document index {}", region->Id()));
 
-  if (document_index_wrapper_->IsStop()) {
+  if (document_index_wrapper_->IsDestoryed()) {
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.rebuild][index_id({})][trace({})] document index is stop, gave up rebuild.",
         document_index_wrapper_->Id(), trace_);
@@ -229,7 +229,7 @@ void SaveDocumentIndexTask::Run() {
         DocumentIndexManager::GetDocumentIndexTaskRunningNum(), Helper::TimestampMs() - start_time);
   });
 
-  if (document_index_wrapper_->IsStop()) {
+  if (document_index_wrapper_->IsDestoryed()) {
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.save][index_id({})][trace({})] document index is stop, gave up save document index.",
         document_index_wrapper_->Id(), trace_);
@@ -303,7 +303,7 @@ void LoadOrBuildDocumentIndexTask::Run() {
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadorbuild document index {}", region->Id()));
 
-  if (document_index_wrapper_->IsStop()) {
+  if (document_index_wrapper_->IsDestoryed()) {
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.loadorbuild][index_id({})][trace({})] document index is stop, gave up loadorbuild document "
         "index.",
@@ -412,7 +412,7 @@ void LoadAsyncBuildDocumentIndexTask::Run() {
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("Loadasyncbuild document index {}", region->Id()));
 
-  if (document_index_wrapper_->IsStop()) {
+  if (document_index_wrapper_->IsDestoryed()) {
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.loadasyncbuild][index_id({})][trace({})] document index is stop, gave up loadasyncbuild "
         "document "
@@ -553,7 +553,7 @@ void BuildDocumentIndexTask::Run() {
 
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(job_id_, fmt::format("build document index {}", region->Id()));
 
-  if (document_index_wrapper_->IsStop()) {
+  if (document_index_wrapper_->IsDestoryed()) {
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.build][index_id({})][trace({})] document index is stop, gave up build document "
         "index.",
@@ -1391,7 +1391,7 @@ butil::Status DocumentIndexManager::RebuildDocumentIndex(DocumentIndexWrapperPtr
   }
 
   // Check document index is stop
-  if (document_index_wrapper->IsStop()) {
+  if (document_index_wrapper->IsDestoryed()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.rebuild][index_id({})][trace({})] document index is stop.",
                                       document_index_id, trace);
     document_index_wrapper->SetRebuildError();
@@ -1517,7 +1517,7 @@ butil::Status DocumentIndexManager::SaveDocumentIndex(DocumentIndexWrapperPtr do
   int64_t start_time = Helper::TimestampMs();
 
   // Check document index is stop
-  if (document_index_wrapper->IsStop()) {
+  if (document_index_wrapper->IsDestoryed()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({})][trace({})] document index is stop.",
                                       document_index_wrapper->Id(), trace);
     return butil::Status();
@@ -1543,7 +1543,7 @@ butil::Status DocumentIndexManager::SaveDocumentIndex(DocumentIndexWrapperPtr do
       document_index_wrapper->Id(), document_index_wrapper->Version(), trace, Helper::TimestampMs() - start_time);
 
   // Check document index is stop
-  if (document_index_wrapper->IsStop()) {
+  if (document_index_wrapper->IsDestoryed()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.save][index_id({}_v{})][trace({})] document index is stop.",
                                       document_index_wrapper->Id(), document_index_wrapper->Version(), trace);
     return butil::Status();
@@ -1606,7 +1606,7 @@ butil::Status DocumentIndexManager::ScrubDocumentIndex() {
                                      document_index_id);
       continue;
     }
-    if (document_index_wrapper->IsStop()) {
+    if (document_index_wrapper->IsDestoryed()) {
       DINGO_LOG(INFO) << fmt::format("[document_index.scrub][index_id({})] document index is stop, dont't scrub.",
                                      document_index_id);
       continue;

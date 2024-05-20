@@ -253,6 +253,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void Destroy();
   bool Recover();
 
+  butil::Status RemoveMeta() const;
   butil::Status SaveMeta();
   butil::Status LoadMeta();
 

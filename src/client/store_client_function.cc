@@ -80,11 +80,13 @@ DEFINE_string(vector_data1, "", "vector data 1");
 DEFINE_string(vector_data2, "", "vector data 2");
 
 // for document
-DEFINE_int64(document_id, 0, "document id");
+DECLARE_int64(document_id);
 DEFINE_string(document_text1, "", "document text 1");
 DEFINE_string(document_text2, "", "document text 2");
 DEFINE_string(query_string, "", "document query string");
 DECLARE_int32(topn);
+DEFINE_bool(is_update, false, "is update document");
+
 namespace client {
 
 /*
@@ -2168,6 +2170,10 @@ void SendDocumentAdd(int64_t region_id) {
     document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
     document_value1.mutable_field_value()->set_string_data(FLAGS_document_text2);
     (*document_data)["col4"] = document_value1;
+  }
+
+  if (FLAGS_is_update) {
+    request.set_is_update(true);
   }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();

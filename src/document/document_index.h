@@ -27,7 +27,6 @@
 #include "common/synchronization.h"
 #include "document/document_index_snapshot.h"
 #include "proto/common.pb.h"
-#include "proto/document.pb.h"
 
 namespace dingodb {
 
@@ -141,6 +140,7 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   void Destroy();
   bool Recover();
 
+  butil::Status RemoveMeta() const;
   butil::Status SaveMeta();
   butil::Status LoadMeta();
 
@@ -152,7 +152,7 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t LastBuildEpochVersion();
 
   bool IsReady() { return ready_.load(); }
-  bool IsStop() { return stop_.load(); }
+  bool IsDestoryed() { return destoryed_.load(); }
   bool IsOwnReady() { return GetOwnDocumentIndex() != nullptr; }
 
   bool IsBuildError() { return build_error_.load(); }
@@ -258,8 +258,8 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t version_{0};
   // document index is ready
   std::atomic<bool> ready_;
-  // stop document index
-  std::atomic<bool> stop_;
+  // destory document index
+  std::atomic<bool> destoryed_;
   // document index build status
   std::atomic<bool> build_error_{false};
   // document index rebuild status

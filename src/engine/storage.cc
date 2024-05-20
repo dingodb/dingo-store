@@ -835,13 +835,13 @@ butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader
     return status;
   }
 
-  auto vector_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
-  if (vector_reader == nullptr) {
+  auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+  if (document_reader == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("vector reader is nullptr, region_id : {}", ctx->region_id);
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "vector reader is nullptr");
   }
 
-  status = vector_reader->DocumentBatchQuery(ctx, document_with_ids);
+  status = document_reader->DocumentBatchQuery(ctx, document_with_ids);
   if (!status.ok()) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
