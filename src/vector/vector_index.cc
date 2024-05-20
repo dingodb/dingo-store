@@ -427,6 +427,19 @@ static std::string GenMetaKey(int64_t vector_index_id) {
   return fmt::format("{}_{}", Constant::kVectorIndexApplyLogIdPrefix, vector_index_id);
 }
 
+butil::Status VectorIndexWrapper::RemoveMeta() const {
+  auto meta_writer = Server::GetInstance().GetMetaWriter();
+  if (meta_writer == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
+  }
+
+  if (!meta_writer->Delete(GenMetaKey(id_))) {
+    return butil::Status(pb::error::EINTERNAL, "Delete vector index meta failed.");
+  }
+
+  return butil::Status();
+}
+
 butil::Status VectorIndexWrapper::SaveMeta() {
   auto meta_writer = Server::GetInstance().GetMetaWriter();
   if (meta_writer == nullptr) {

@@ -107,6 +107,7 @@ DEFINE_int64(start_id, 0, "start id");
 DEFINE_int64(end_id, 0, "end id");
 DEFINE_int64(count, 50, "count");
 DEFINE_int64(vector_id, 0, "vector_id");
+DEFINE_int64(document_id, 0, "document_id");
 DEFINE_int32(topn, 10, "top n");
 DEFINE_int32(batch_count, 5, "batch count");
 DEFINE_int64(part_id, 0, "part_id");
@@ -414,7 +415,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "DocumentSearch") {
       client::SendDocumentSearch(FLAGS_region_id);
     } else if (method == "DocumentBatchQuery") {
-      client::SendDocumentBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_vector_id)});
+      client::SendDocumentBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_document_id)});
     } else if (method == "DocumentScanQuery") {
       client::SendDocumentScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
     } else if (method == "DocumentGetMaxId") {

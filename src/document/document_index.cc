@@ -24,8 +24,8 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
-#include "config/config_manager.h"
 #include "document/codec.h"
+#include "document/document_index_snapshot_manager.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -351,7 +351,7 @@ DocumentIndexWrapper::DocumentIndexWrapper(int64_t id, pb::common::DocumentIndex
                                            int64_t save_snapshot_threshold_write_key_num)
     : id_(id),
       ready_(false),
-      stop_(false),
+      destoryed_(false),
       is_switching_document_index_(false),
       apply_log_id_(0),
       snapshot_log_id_(0),
@@ -369,7 +369,28 @@ DocumentIndexWrapper::~DocumentIndexWrapper() {
   ClearDocumentIndex("destruct");
 
   bthread_mutex_destroy(&document_index_mutex_);
-  DINGO_LOG(DEBUG) << fmt::format("[delete.DocumentIndexWrapper][id({})]", id_);
+  DINGO_LOG(INFO) << fmt::format("[delete.DocumentIndexWrapper][id({})]", id_);
+
+  if (IsDestoryed()) {
+    // remove document index dir from disk
+    auto region_document_index_path = DocumentIndexSnapshotManager::GetSnapshotParentPath(id_);
+    if (!region_document_index_path.empty()) {
+      auto ret = Helper::RemoveAllFileOrDirectory(region_document_index_path);
+      if (!ret) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[document_index.wrapper][index_id({})] remove document index dir failed, dir: ({}).", Id(),
+            region_document_index_path);
+      } else {
+        DINGO_LOG(INFO) << fmt::format(
+            "[document_index.wrapper][index_id({})] remove document index dir success, dir: ({}).", Id(),
+            region_document_index_path);
+      }
+    } else {
+      DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] get document index dir failed.", Id());
+    }
+
+    RemoveMeta();
+  }
 }
 
 std::shared_ptr<DocumentIndexWrapper> DocumentIndexWrapper::New(int64_t id,
@@ -391,7 +412,7 @@ bool DocumentIndexWrapper::Init() { return true; }  // NOLINT
 
 void DocumentIndexWrapper::Destroy() {
   DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] document index destroy.", Id());
-  stop_.store(true);
+  destoryed_.store(true);
 
   // destory document index
   GetOwnDocumentIndex()->SetDestroyed();
@@ -429,6 +450,20 @@ butil::Status DocumentIndexWrapper::SaveMeta() {
   kv->set_value(meta.SerializeAsString());
   if (!meta_writer->Put(kv)) {
     return butil::Status(pb::error::EINTERNAL, "Write document index meta failed.");
+  }
+
+  return butil::Status();
+}
+
+butil::Status DocumentIndexWrapper::RemoveMeta() const {
+  auto meta_writer = Server::GetInstance().GetMetaWriter();
+  if (meta_writer == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
+  }
+
+  if (!meta_writer->Delete(GenMetaKeyDocument(id_))) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] delete document index meta failed.", Id());
+    return butil::Status(pb::error::EINTERNAL, "Delete document index meta failed.");
   }
 
   return butil::Status();
@@ -492,7 +527,7 @@ void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, 
       Helper::RegionEpochToString(document_index->Epoch()),
       DocumentCodec::DecodeRangeToString(document_index->Range()));
   // Check document index is stop
-  if (IsStop()) {
+  if (IsDestoryed()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is stop.", Id());
     return;
   }

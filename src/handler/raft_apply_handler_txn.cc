@@ -125,6 +125,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         *new_vector = vector;
       }
       raft_request_for_vector_add.mutable_vector_add()->set_cf_name(Constant::kVectorDataCF);
+      raft_request_for_vector_add.mutable_vector_add()->set_is_update(true);
 
       handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
       if (!add_ctx->Status().ok() && ctx != nullptr) {
@@ -190,6 +191,8 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         *new_document = document;
       }
       raft_request_for_document_add.mutable_document_add()->set_cf_name(Constant::kStoreDataCF);
+      // for doucment txn, use upsert now.
+      raft_request_for_document_add.mutable_document_add()->set_is_update(true);
 
       handler->Handle(add_ctx, region, engine, raft_request_for_document_add, region_metrics, term_id, log_id);
       if (!add_ctx->Status().ok() && ctx != nullptr) {
