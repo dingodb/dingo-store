@@ -24,13 +24,14 @@ RUN dnf update -y  \
     && rm -f cmake-3.26.4-linux-x86_64.tar.gz
 
 # install rust
-RUN wget https://sh.rustup.rs --content-disposition
-RUN sh rustup-init.sh -y
+# RUN wget https://sh.rustup.rs --content-disposition
+# RUN sh rustup-init.sh -y
+RUN wget https://static.rust-lang.org/dist/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && xz -d rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && tar -xf rust-1.78.0-x86_64-unknown-linux-gnu.tar && cd rust-1.78.0-x86_64-unknown-linux-gnu && sh install.sh --prefix=/opt/rust/
 
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
 
 ENV PATH="/opt/intel/oneapi:$PATH"
 ENV JAVA_HOME /usr/lib/jvm/java-1.8.0-openjdk
-ENV PATH=/root/.cargo/bin:/opt/rh/gcc-toolset-13/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
+ENV PATH=/opt/rust/bin:/opt/rh/gcc-toolset-13/root/usr/bin:/opt/cmake-3.26.4-linux-x86_64/bin:$PATH
 WORKDIR /opt
