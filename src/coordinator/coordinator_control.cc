@@ -77,6 +77,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   executor_user_meta_ = new MetaMemMapStd<pb::coordinator_internal::ExecutorUserInternal>(
       &executor_user_map_, kPrefixExecutorUser, raw_engine_of_meta);
   task_list_meta_ = new MetaMemMapFlat<pb::coordinator::TaskList>(&task_list_map_, kPrefixTaskList, raw_engine_of_meta);
+  task_list_archive_ = new MetaDiskMap<pb::coordinator::TaskList>(kPrefixTaskListArchive, raw_engine_of_meta);
+
   index_meta_ =
       new MetaMemMapFlat<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex, raw_engine_of_meta);
   deleted_index_meta_ =
@@ -273,12 +275,6 @@ bool CoordinatorControl::Recover() {
   if (!meta_reader_->Scan(deleted_region_meta_->Prefix(), kvs)) {
     return false;
   }
-  {
-    // BAIDU_SCOPED_LOCK(region_map_mutex_);
-    // if (!deleted_region_meta_->Recover(kvs)) {
-    //   return false;
-    // }
-  }
   DINGO_LOG(INFO) << "Recover deleted_region_meta, count=" << kvs.size();
   kvs.clear();
 
@@ -293,19 +289,6 @@ bool CoordinatorControl::Recover() {
     }
   }
   DINGO_LOG(INFO) << "Recover table_meta, count=" << kvs.size();
-  kvs.clear();
-
-  // 6.1 deleted_table map
-  if (!meta_reader_->Scan(deleted_table_meta_->Prefix(), kvs)) {
-    return false;
-  }
-  {
-    // BAIDU_SCOPED_LOCK(table_map_mutex_);
-    // if (!deleted_table_meta_->Recover(kvs)) {
-    //   return false;
-    // }
-  }
-  DINGO_LOG(INFO) << "Recover deleted_table_meta, count=" << kvs.size();
   kvs.clear();
 
   // 8.table_metrics map
@@ -362,6 +345,13 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover task_list_meta_, count=" << kvs.size();
   kvs.clear();
 
+  // 11.1 task_list archive
+  if (!meta_reader_->Scan(task_list_archive_->Prefix(), kvs)) {
+    return false;
+  }
+  DINGO_LOG(INFO) << "Recover task_list_archive, count=" << kvs.size();
+  kvs.clear();
+
   // 12.index map
   if (!meta_reader_->Scan(index_meta_->Prefix(), kvs)) {
     return false;
@@ -378,12 +368,6 @@ bool CoordinatorControl::Recover() {
   // 12.1 deleted_index map
   if (!meta_reader_->Scan(deleted_index_meta_->Prefix(), kvs)) {
     return false;
-  }
-  {
-    // BAIDU_SCOPED_LOCK(index_map_mutex_);
-    // if (!deleted_index_meta_->Recover(kvs)) {
-    //   return false;
-    // }
   }
   DINGO_LOG(INFO) << "Recover deleted_index_meta, count=" << kvs.size();
   kvs.clear();

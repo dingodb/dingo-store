@@ -41,6 +41,7 @@ inline static const std::string kPrefixStoreOperation = "STOREOP";
 inline static const std::string kPrefixRegionCmd = "REGICMD";
 inline static const std::string kPrefixExecutorUser = "EXECUSR";
 inline static const std::string kPrefixTaskList = "TASKLST";
+inline static const std::string kPrefixTaskListArchive = "DTASKLST_";
 inline static const std::string kPrefixIndex = "INDEX__";
 inline static const std::string kPrefixIndexMetrics = "INDEXME";
 inline static const std::string kPrefixTableIndex = "TBLINDE";

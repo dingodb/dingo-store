@@ -1795,7 +1795,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
   auto store_id = request->store_id();
   auto region_cmd_id = request->region_cmd_id();
 
-  auto ret = coordinator_control->RemoveRegionCmd(store_id, region_cmd_id, meta_increment);
+  auto ret = coordinator_control->RemoveRegionCmd(store_id, 0, region_cmd_id, {}, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "RemoveStoreOperation failed, store_id:" << store_id << ", region_cmd_id:" << region_cmd_id
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -1895,9 +1895,35 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
         }
       }
     }
+
+    // history
+    if (request->include_archive()) {
+      int32_t limit = request->archive_limit() > 0 ? request->archive_limit() : INT32_MAX;
+      if (request->get_task_list_id_only()) {
+        std::vector<int64_t> task_list_ids;
+        coordinator_control->GetArchiveTaskListIds(task_list_ids, request->archive_start_id(), limit);
+        for (const auto &task_list_id : task_list_ids) {
+          response->add_task_lists()->set_id(task_list_id);
+        }
+      } else {
+        std::vector<pb::coordinator::TaskList> task_lists;
+        coordinator_control->GetArchiveTaskList(task_lists, request->archive_start_id(), limit);
+        for (auto &task_list : task_lists) {
+          for (int i = 0; i < task_list.tasks_size(); ++i) {
+            task_list.mutable_tasks(i)->set_step(i);
+          }
+          *response->add_task_lists() = task_list;
+        }
+      }
+    }
   } else {
     pb::coordinator::TaskList task_list;
     coordinator_control->GetTaskList(request->task_list_id(), task_list);
+    // take task_list from archive
+    if (task_list.id() == 0 && request->include_archive()) {
+      coordinator_control->GetArchiveTaskList(request->task_list_id(), task_list);
+    }
+
     *response->add_task_lists() = task_list;
     for (int i = 0; i < task_list.tasks_size(); ++i) {
       response->mutable_task_lists(0)->mutable_tasks(i)->set_step(i);

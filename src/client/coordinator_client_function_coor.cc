@@ -106,6 +106,8 @@ DEFINE_bool(create_document_region, false, "create_document_region");
 DECLARE_bool(use_json_parameter);
 DECLARE_bool(dryrun);
 DECLARE_int32(store_type);
+DECLARE_bool(include_archive);
+DECLARE_bool(pretty_show);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -1897,12 +1899,20 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     request.set_task_list_id(std::stoll(FLAGS_id));
   }
 
+  request.set_include_archive(FLAGS_include_archive);
+  if (FLAGS_start_id > 0) {
+    request.set_archive_start_id(FLAGS_start_id);
+  }
+  if (FLAGS_limit > 0) {
+    request.set_archive_limit(FLAGS_limit);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << "error: " << response.error().ShortDebugString();
+  DINGO_LOG_IF(INFO, !status.ok()) << "SendRequest status=" << status;
+  DINGO_LOG_IF(INFO, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
 
   for (const auto& task_list : response.task_lists()) {
-    DINGO_LOG(INFO) << "task_list_id=" << task_list.id() << " task_list is " << task_list.DebugString();
+    DINGO_LOG(INFO) << "task_list: " << (FLAGS_pretty_show ? task_list.DebugString() : task_list.ShortDebugString());
   }
 }
 

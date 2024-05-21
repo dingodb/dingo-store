@@ -165,11 +165,21 @@ int ConfigHelper::GetRocksDBStatsDumpPeriodSec() {
 uint32_t ConfigHelper::GetLeaderNumWeight() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
-    return Constant::kStatsDumpPeriodSecDefault;
+    return Constant::kLeaderNumWeightDefaultValue;
   }
 
   int num = config->GetInt("raft.leader_num_weight");
   return (num <= 0) ? Constant::kLeaderNumWeightDefaultValue : num;
+}
+
+uint32_t ConfigHelper::GetReserveTaskListRecentDay() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kReserveTaskListRecentDayDefaultValue;
+  }
+
+  int num = config->GetInt("coordinator.reserve_task_list_recent_day");
+  return (num <= 0) ? Constant::kReserveTaskListRecentDayDefaultValue : num;
 }
 
 }  // namespace dingodb

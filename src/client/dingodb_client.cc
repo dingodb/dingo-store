@@ -207,6 +207,10 @@ DEFINE_bool(enable_rocks_engine, false, "create table with rocks engine");
 DEFINE_bool(dryrun, true, "dryrun");
 DEFINE_int32(store_type, 0, "store type");
 
+DEFINE_bool(include_archive, false, "include history archive");
+
+DEFINE_bool(pretty_show, false, "pretty show");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {

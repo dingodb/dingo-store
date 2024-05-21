@@ -554,9 +554,9 @@ class MetaDiskMap {
     return butil::Status::OK();
   }
 
-  butil::Status GetAllIds(std::vector<int64_t> &ids) {
+  butil::Status GetAllIds(std::vector<int64_t> &ids, int64_t start_id = 0, int32_t limit = INT32_MAX) {
     std::vector<std::string> str_ids;
-    auto ret = GetAllIds(str_ids);
+    auto ret = GetAllIds(str_ids, start_id, limit);
     if (!ret.ok()) {
       return ret;
     }
@@ -568,8 +568,8 @@ class MetaDiskMap {
     return butil::Status::OK();
   }
 
-  butil::Status GetAllIds(std::vector<std::string> &ids) {
-    std::string start_key = GenKey("");
+  butil::Status GetAllIds(std::vector<std::string> &ids, int64_t start_id = 0, int32_t limit = INT32_MAX) {
+    std::string start_key = start_id == 0 ? GenKey("") : GenKey(start_id);
     std::string end_key = internal_prefix + "~";
 
     std::vector<pb::common::KeyValue> kvs;
@@ -582,6 +582,9 @@ class MetaDiskMap {
 
     for (const auto &kv : kvs) {
       ids.push_back(ParseId(kv.key()));
+      if (ids.size() >= limit) {
+        break;
+      }
     }
 
     return butil::Status::OK();
@@ -626,8 +629,8 @@ class MetaDiskMap {
     return butil::Status::OK();
   }
 
-  butil::Status GetAllElements(std::vector<T> &elements) {
-    std::string start_key = GenKey("");
+  butil::Status GetAllElements(std::vector<T> &elements, int64_t start_id = 0, int32_t limit = INT32_MAX) {
+    std::string start_key = start_id == 0 ? GenKey("") : GenKey(start_id);
     std::string end_key = internal_prefix + "~";
 
     std::vector<pb::common::KeyValue> kvs;
@@ -646,6 +649,9 @@ class MetaDiskMap {
       }
 
       elements.push_back(element);
+      if (elements.size() >= limit) {
+        break;
+      }
     }
 
     return butil::Status::OK();

@@ -980,7 +980,8 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
     }
 
     if (!node->IsLeader()) {
-      return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+      return butil::Status(pb::error::EINTERNAL,
+                           fmt::format("Not leader, leader is {}", node->GetLeaderId().to_string()));
     }
 
     auto raft_status = node->GetStatus();

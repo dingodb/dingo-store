@@ -88,6 +88,7 @@ class Filter {
   // true reserve, false filter
   virtual bool Check(dingodb::pb::common::Store&) { return true; }
   virtual bool Check(int64_t) { return true; }
+  virtual bool Check(const dingodb::pb::common::Store&, int64_t) { return true; }
 };
 using FilterPtr = std::shared_ptr<Filter>;
 
@@ -100,6 +101,19 @@ class StoreStateFilter : public Filter {
   bool Check(dingodb::pb::common::Store& store) override;
 
  private:
+  TrackerPtr tracker_;
+};
+
+class ResourceFilter : public Filter {
+ public:
+  ResourceFilter(std::shared_ptr<CoordinatorControl> coordinator_controller, TrackerPtr tracker)
+      : coordinator_controller_(coordinator_controller), tracker_(tracker){};
+  ~ResourceFilter() override = default;
+
+  bool Check(const dingodb::pb::common::Store&, int64_t) override;
+
+ private:
+  std::shared_ptr<CoordinatorControl> coordinator_controller_;
   TrackerPtr tracker_;
 };
 
@@ -215,21 +229,22 @@ class BalanceLeaderScheduler {
   BalanceLeaderScheduler(std::shared_ptr<CoordinatorControl> coordinator_controller,
                          std::shared_ptr<Engine> raft_engine, std::vector<FilterPtr>& store_filters,
                          std::vector<FilterPtr>& region_filters, std::vector<FilterPtr>& task_filters,
-                         TrackerPtr tracker)
+                         std::vector<FilterPtr>& resource_filters, TrackerPtr tracker)
       : coordinator_controller_(coordinator_controller),
         raft_engine_(raft_engine),
         store_filters_(store_filters),
         region_filters_(region_filters),
         task_filters_(task_filters),
+        resource_filters_(resource_filters),
         tracker_(tracker){};
   ~BalanceLeaderScheduler() = default;
 
   static BalanceLeaderSchedulerPtr New(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                        std::shared_ptr<Engine> raft_engine, std::vector<FilterPtr>& store_filters,
                                        std::vector<FilterPtr>& region_filters, std::vector<FilterPtr>& task_filters,
-                                       TrackerPtr tracker) {
+                                       std::vector<FilterPtr>& resource_filters, TrackerPtr tracker) {
     return std::make_shared<BalanceLeaderScheduler>(coordinator_controller, raft_engine, store_filters, region_filters,
-                                                    task_filters, tracker);
+                                                    task_filters, resource_filters, tracker);
   }
 
   static butil::Status LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
@@ -272,14 +287,19 @@ class BalanceLeaderScheduler {
   TransferLeaderTaskPtr GenerateTransferInLeaderTask(CandidateStoresPtr candidate_stores,
                                                      const std::set<int64_t>& used_regions);
 
-  // filter
+  // filter true: eliminate false: reserve
   bool FilterStore(dingodb::pb::common::Store& store);
 
+  // true: eliminate false: reserve
   bool FilterRegion(int64_t region_id);
   std::vector<int64_t> FilterRegion(std::vector<int64_t> region_ids);
 
+  // true: eliminate false: reserve
   bool FilterTask(int64_t region_id);
   std::vector<TransferLeaderTaskPtr> FilterTask(std::vector<TransferLeaderTaskPtr>& transfer_leader_tasks);
+
+  bool FilterResource(const dingodb::pb::common::Store& store, int64_t region_id);
+  std::vector<StoreEntryPtr> FilterResource(const std::vector<StoreEntryPtr>& store_entries, int64_t region_id);
 
   std::shared_ptr<CoordinatorControl> coordinator_controller_;
   std::shared_ptr<Engine> raft_engine_;
@@ -287,6 +307,7 @@ class BalanceLeaderScheduler {
   std::vector<FilterPtr> store_filters_;
   std::vector<FilterPtr> region_filters_;
   std::vector<FilterPtr> task_filters_;
+  std::vector<FilterPtr> resource_filters_;
 
   TrackerPtr tracker_;
 };
