@@ -1070,8 +1070,8 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
     return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", document_index->Id()));
   }
 
-  auto log_stroage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(document_index->Id());
-  if (log_stroage == nullptr) {
+  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(document_index->Id());
+  if (log_storage == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", document_index->Id()));
   }
 
@@ -1084,7 +1084,7 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   ids.reserve(Constant::kBuildDocumentIndexBatchSize);
 
   int64_t last_log_id = document_index->ApplyLogId();
-  auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
+  auto log_entrys = log_storage->GetEntrys(start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     butil::IOBufAsZeroCopyInputStream wrapper(log_entry->data);
@@ -1216,9 +1216,11 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   const std::string& end_key = range.end_key();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.build][index_id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {}",
+      "[document_index.build][index_id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: "
+      "({})",
       document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::DecodeDocumentId(start_key),
-      Helper::StringToHex(end_key), DocumentCodec::DecodeDocumentId(end_key), document_index->WriteOpParallelNum());
+      Helper::StringToHex(end_key), DocumentCodec::DecodeDocumentId(end_key), document_index->WriteOpParallelNum(),
+      document_index_path);
 
   int64_t start_time = Helper::TimestampMs();
   // load document data to document index

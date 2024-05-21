@@ -340,7 +340,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
 
-  if (to_region->Type() == pb::common::INDEX_REGION) {
+  if (to_region->Type() == pb::common::RegionType::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -389,6 +389,23 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
                                          fmt::format("Clear follower vector index {}", from_region->Id()));
     }
+  } else if (to_region->Type() == pb::common::RegionType::DOCUMENT_REGION) {
+    // Set child share document index
+    auto document_index = from_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+    if (document_index != nullptr) {
+      to_region->DocumentIndexWrapper()->SetShareDocumentIndex(document_index);
+    } else {
+      DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent document index.",
+                                     request.job_id(), from_region->Id(), to_region->Id());
+    }
+
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+    // Rebuild document index
+    DocumentIndexManager::LaunchRebuildDocumentIndex(to_region->DocumentIndexWrapper(), request.job_id(), false, false,
+                                                     true, "child split");
+
+    DocumentIndexManager::LaunchRebuildDocumentIndex(from_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                     false, true, "parent split");
   }
 
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
@@ -551,7 +568,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   store_region_meta->UpdateState(parent_region, pb::common::StoreRegionState::NORMAL);
   store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::NORMAL);
 
-  if (parent_region->Type() == pb::common::INDEX_REGION) {
+  if (parent_region->Type() == pb::common::RegionType::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = parent_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -599,6 +616,23 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
                                          fmt::format("Clear follower vector index {}", parent_region->Id()));
     }
+  } else if (parent_region->Type() == pb::common::RegionType::DOCUMENT_REGION) {
+    // Set child share document index
+    auto document_index = parent_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+    if (document_index != nullptr) {
+      child_region->DocumentIndexWrapper()->SetShareDocumentIndex(document_index);
+    } else {
+      DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent document index.",
+                                     request.job_id(), parent_region->Id(), child_region->Id());
+    }
+
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+    // Rebuild document index
+    DocumentIndexManager::LaunchRebuildDocumentIndex(child_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                     false, true, "child split");
+
+    DocumentIndexManager::LaunchRebuildDocumentIndex(parent_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                     false, true, "parent split");
   }
 
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
@@ -895,7 +929,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save target region snapshot finish");
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save snapshot finish");
 
-  if (target_region->Type() == pb::common::INDEX_REGION) {
+  if (target_region->Type() == pb::common::RegionType::INDEX_REGION) {
     // Set child share vector index
     auto vector_index = source_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -927,6 +961,22 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
       ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(),
                                          fmt::format("Clear follower vector index {}", target_region->Id()));
     }
+  } else if (target_region->Type() == pb::common::RegionType::DOCUMENT_REGION) {
+    // Set child share document index
+    auto document_index = source_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+    if (document_index != nullptr) {
+      target_region->DocumentIndexWrapper()->SetSiblingDocumentIndex(document_index);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[merge.merging][job_id({}).region({}/{})] merge region get document index failed.", request.job_id(),
+          source_region->Id(), target_region->Id());
+    }
+
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild document index");
+    ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+    // Rebuild document index
+    DocumentIndexManager::LaunchRebuildDocumentIndex(target_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                     false, true, "merge");
   } else {
     store_region_meta->UpdateTemporaryDisableChange(target_region, false);
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge finish");

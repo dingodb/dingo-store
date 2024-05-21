@@ -469,7 +469,10 @@ void DocumentIndexWrapper::Destroy() {
   destoryed_.store(true);
 
   // destory document index
-  GetOwnDocumentIndex()->SetDestroyed();
+  auto own_index = GetOwnDocumentIndex();
+  if (own_index != nullptr) {
+    own_index->SetDestroyed();
+  }
 }
 
 bool DocumentIndexWrapper::Recover() {
@@ -590,6 +593,12 @@ void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, 
     BAIDU_SCOPED_LOCK(document_index_mutex_);
 
     auto old_index = document_index_;
+
+    // for document index, after update, the old index should be destroyed explicitly
+    if (old_index != nullptr) {
+      old_index->SetDestroyed();
+    }
+
     document_index_ = document_index;
 
     share_document_index_ = nullptr;
@@ -605,12 +614,14 @@ void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, 
 
     int64_t apply_log_id = ApplyLogId();
     int64_t snapshot_log_id = SnapshotLogId();
+    int64_t apply_log_id_new = document_index->ApplyLogId();
+
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.wrapper][index_id({})][trace({})] update document index, apply_log_id({}/{}) "
         "snapshot_log_id({}/{}).",
-        Id(), trace, apply_log_id, document_index->ApplyLogId(), snapshot_log_id, document_index->SnapshotLogId());
-    if (apply_log_id < document_index->ApplyLogId()) {
-      SetApplyLogId(document_index->ApplyLogId());
+        Id(), trace, apply_log_id, apply_log_id_new, snapshot_log_id, document_index->SnapshotLogId());
+    if (apply_log_id < apply_log_id_new) {
+      SetApplyLogId(apply_log_id_new);
     }
     if (snapshot_log_id < document_index->SnapshotLogId()) {
       SetSnapshotLogId(document_index->SnapshotLogId());
@@ -627,6 +638,11 @@ void DocumentIndexWrapper::ClearDocumentIndex(const std::string& trace) {
   BAIDU_SCOPED_LOCK(document_index_mutex_);
 
   ready_.store(false);
+
+  if (document_index_ != nullptr) {
+    document_index_->SetDestroyed();
+  }
+
   document_index_ = nullptr;
   share_document_index_ = nullptr;
   sibling_document_index_ = nullptr;
@@ -656,6 +672,9 @@ void DocumentIndexWrapper::SetShareDocumentIndex(DocumentIndexPtr document_index
   BAIDU_SCOPED_LOCK(document_index_mutex_);
 
   share_document_index_ = document_index;
+  if (share_document_index_ != nullptr) {
+    share_document_index_->SetDestroyed();
+  }
 
   // During split, there may occur leader change, set ready_ to true can improve the availablidy of document index
   // Because follower is also do force rebuild too, so in this scenario follower is equivalent to leader
@@ -670,6 +689,9 @@ DocumentIndexPtr DocumentIndexWrapper::SiblingDocumentIndex() {
 void DocumentIndexWrapper::SetSiblingDocumentIndex(DocumentIndexPtr document_index) {
   BAIDU_SCOPED_LOCK(document_index_mutex_);
   sibling_document_index_ = document_index;
+  if (sibling_document_index_ != nullptr) {
+    sibling_document_index_->SetDestroyed();
+  }
 }
 
 int32_t DocumentIndexWrapper::PendingTaskNum() { return pending_task_num_.load(std::memory_order_relaxed); }

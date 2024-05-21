@@ -131,6 +131,7 @@ std::vector<std::string> DocumentIndexSnapshotManager::GetSnapshotList(int64_t d
   paths.reserve(dir_names.size());
   for (const auto& dir_name : dir_names) {
     paths.push_back(fmt::format("{}/{}", snapshot_parent_path, dir_name));
+    DINGO_LOG(INFO) << fmt::format("[document_index.snapshot] GetSnapshotList get snapshot path: {}", paths.back());
   }
 
   return paths;
@@ -209,6 +210,7 @@ butil::Status DocumentIndexSnapshotManager::GetLatestSnapshotMeta(int64_t docume
   auto index_path_list = GetSnapshotList(document_index_id);
 
   if (index_path_list.empty()) {
+    DINGO_LOG(INFO) << fmt::format("[document_index.snapshot][index_id({})] Not found snapshot", document_index_id);
     return butil::Status::OK();
   }
 
@@ -225,10 +227,17 @@ butil::Status DocumentIndexSnapshotManager::GetLatestSnapshotMeta(int64_t docume
       continue;
     }
 
+    DINGO_LOG(INFO) << "meta_on_disk.epoch().version(): " << meta_on_disk.epoch().version()
+                    << ", latest_epoch: " << latest_epoch << ", path: " << path;
+
     if (meta_on_disk.epoch().version() >= latest_epoch) {
       latest_path = path;
       latest_epoch = meta_on_disk.epoch().version();
       meta = meta_on_disk;
+
+      DINGO_LOG(INFO) << fmt::format(
+          "[document_index.snapshot][index_id({})] Get latest snapshot meta, epoch version: {}, path: {}",
+          document_index_id, latest_epoch, latest_path);
     }
   }
 
@@ -267,7 +276,8 @@ butil::Status DocumentIndexSnapshotManager::SaveDocumentIndexSnapshot(DocumentIn
 
   document_index->LockWrite();
 
-  snapshot_log_index = document_index->ApplyLogId();
+  snapshot_log_index = document_index_wrapper->ApplyLogId();
+  document_index->SetApplyLogId(snapshot_log_index);
 
   // Write meta to meta_file
   pb::store_internal::DocumentIndexSnapshotMeta meta;
@@ -287,9 +297,15 @@ butil::Status DocumentIndexSnapshotManager::SaveDocumentIndexSnapshot(DocumentIn
 
   document_index->UnlockWrite();
 
+  // Set truncate wal log index.
+  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(document_index_id);
+  if (log_storage != nullptr) {
+    log_storage->TruncateVectorIndexPrefix(snapshot_log_index);
+  }
+
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.save_snapshot][index_id({})] Save vector index snapshot snapshot_{:020} elapsed(2) time {}ms",
-      document_index->Id(), document_index->ApplyLogId(), Helper::TimestampMs() - start_time);
+      document_index->Id(), snapshot_log_index, Helper::TimestampMs() - start_time);
 
   return butil::Status::OK();
 }
