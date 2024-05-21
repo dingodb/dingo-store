@@ -1555,6 +1555,34 @@ std::string Helper::EncodeVectorIndexRegionHeader(char prefix, int64_t partition
   return buf.GetString();
 }
 
+std::string Helper::EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode document key failed, prefix is 0, partition_id:[" << partition_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kDocumentKeyMaxLenWithPrefix - 8);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id, int64_t document_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode document key failed, prefix is 0, partition_id:[" << partition_id << "], document_id:["
+                     << document_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kDocumentKeyMaxLenWithPrefix);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, document_id);
+  return buf.GetString();
+}
+
 std::string Helper::EncodeTableRegionHeader(char prefix, const std::string& user_key) {
   if (BAIDU_UNLIKELY(prefix == 0)) {
     // prefix == 0 is not allowed

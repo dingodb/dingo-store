@@ -31,6 +31,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coprocessor/coprocessor_v2.h"
+#include "document/codec.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -2255,12 +2256,6 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
 
-  // for vector index region, commit to vector index
-  pb::raft::Request raft_request_for_vector_add;
-  pb::raft::Request raft_request_for_vector_del;
-  auto *vector_add = raft_request_for_vector_add.mutable_vector_add();
-  auto *vector_del = raft_request_for_vector_del.mutable_vector_delete();
-
   // for every key, check and do commit, if primary key is failed, the whole commit is failed
   std::vector<pb::store::LockInfo> lock_infos;
   for (const auto &key : keys) {
@@ -2441,11 +2436,16 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
 
-  // for vector index region, commit to vector index
   pb::raft::TxnRaftRequest txn_raft_request;
   auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  // for vector index region, commit to vector index
   auto *vector_add = cf_put_delete->mutable_vector_add();
   auto *vector_del = cf_put_delete->mutable_vector_del();
+
+  // for document index region, commit to document index
+  auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
 
   // for every key, check and do commit, if primary key is failed, the whole commit is failed
   for (const auto &lock_info : lock_infos) {
@@ -2513,6 +2513,39 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
           }
 
           vector_del->add_ids(vector_id);
+        } else {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+      }
+
+      if (region->Type() == pb::common::DOCUMENT_REGION &&
+          region->Definition().index_parameter().has_document_index_parameter()) {
+        if (lock_info.lock_type() == pb::store::Op::Put) {
+          pb::common::DocumentWithId document_with_id;
+          auto ret = document_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", data_value: " << Helper::StringToHex(data_value)
+                             << ", lock_info: " << lock_info.ShortDebugString();
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+          }
+
+          *(document_add->add_documents()) = document_with_id;
+        } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+          auto document_id = DocumentCodec::DecodeDocumentId(lock_info.key());
+          if (document_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                            start_ts, commit_ts)
+                             << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
+                             << ", lock_info: " << lock_info.ShortDebugString();
+          }
+
+          document_del->add_ids(document_id);
         } else {
           DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
                                           start_ts, commit_ts)
@@ -3051,12 +3084,6 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   }
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
-
-  // for vector index region, commit to vector index
-  pb::raft::Request raft_request_for_vector_add;
-  pb::raft::Request raft_request_for_vector_del;
-  auto *vector_add = raft_request_for_vector_add.mutable_vector_add();
-  auto *vector_del = raft_request_for_vector_del.mutable_vector_delete();
 
   std::vector<std::string> keys_to_rollback;
 

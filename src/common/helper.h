@@ -310,6 +310,9 @@ class Helper {
   // for vector index region, encode range
   static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id);
   static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id, int64_t vector_id);
+  // for document index region, encode range
+  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id);
+  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id, int64_t document_id);
   // for table region, encode range
   static std::string EncodeTableRegionHeader(char prefix, const std::string& user_key);
   static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id);
