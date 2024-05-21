@@ -50,10 +50,69 @@ bool StoreStateFilter::Check(dingodb::pb::common::Store& store) {
   return true;
 }
 
+bool ResourceFilter::Check(const dingodb::pb::common::Store& store, int64_t region_id) {
+  // store metric
+  std::vector<pb::common::StoreMetrics> store_metrics;
+  coordinator_controller_->GetStoreRegionMetrics(store.id(), store_metrics);
+  if (store_metrics.empty()) {
+    if (tracker_) {
+      tracker_->GetLastRecord()->filter_records.push_back(
+          fmt::format("[filter.follower({}).region({})] not found store metric", store.id(), region_id));
+    }
+    return false;
+  }
+  auto& store_metric = store_metrics[0];
+
+  // region metric
+  std::vector<pb::common::RegionMetrics> region_metrics;
+  coordinator_controller_->GetRegionMetrics(region_id, region_metrics);
+  if (region_metrics.empty()) {
+    if (tracker_) {
+      tracker_->GetLastRecord()->filter_records.push_back(
+          fmt::format("[filter.follower({}).region({})] not found region metric", store.id(), region_id));
+    }
+    return false;
+  }
+  auto& region_metric = region_metrics[0];
+
+  bool result = true;
+  std::string record;
+
+  // check store free memory and vector index region need memory
+  if (region_metric.region_definition().index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
+    int64_t free_memory = store_metric.store_own_metrics().system_free_memory();
+    int64_t memory_bytes = region_metric.vector_index_metrics().memory_bytes();
+    if (free_memory <= 0) {
+      record = fmt::format("[filter.resource({}).region({})] missing store free memory", store.id(), region_id);
+      result = false;
+    } else if (memory_bytes <= 0) {
+      record = fmt::format("[filter.resource({}).region({})] missing vector index memory size", store.id(), region_id);
+      result = false;
+    } else if (free_memory <= memory_bytes) {
+      record = fmt::format("[filter.resource({}).region({})] store free memory is not enough({}/{})", store.id(),
+                           region_id, free_memory, memory_bytes);
+      result = false;
+    }
+  }
+
+  if (tracker_ && !record.empty()) {
+    tracker_->GetLastRecord()->filter_records.push_back(record);
+  }
+
+  return result;
+}
+
 bool RegionHealthFilter::Check(int64_t region_id) {
-  std::vector<pb::common::RegionMetrics> region_metrics_array;
-  coordinator_controller_->GetRegionMetrics(region_id, region_metrics_array);
-  auto& region_metric = region_metrics_array[0];
+  std::vector<pb::common::RegionMetrics> region_metrics;
+  coordinator_controller_->GetRegionMetrics(region_id, region_metrics);
+  if (region_metrics.empty()) {
+    if (tracker_) {
+      tracker_->GetLastRecord()->filter_records.push_back(
+          fmt::format("[filter.region({})] not found region metric", region_id));
+    }
+    return false;
+  }
+  auto& region_metric = region_metrics[0];
 
   bool result = true;
   std::string record;
@@ -116,26 +175,29 @@ bool TaskFilter::Check(int64_t region_id) {
 }
 
 void Tracker::Print() {
-  DINGO_LOG(INFO) << fmt::format("[balance.tracker] ==========================={}===============================",
-                                 pb::common::StoreType_Name(store_type));
+  std::string store_type_name = pb::common::StoreType_Name(store_type);
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] ==========================================================",
+                                 store_type_name);
   for (auto& record : records) {
-    DINGO_LOG(INFO) << fmt::format("[balance.tracker] record {} {} {} {} {}", record->round, record->region_id,
-                                   record->source_store_id, record->target_store_id, record->leader_score);
     for (auto& filter_record : record->filter_records) {
-      DINGO_LOG(INFO) << fmt::format("[balance.tracker]{}", filter_record);
+      DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] round({}) {}", store_type_name, record->round, filter_record);
     }
+
+    DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] round({}) region({} {}->{}) score({})", store_type_name,
+                                   record->round, record->region_id, record->source_store_id, record->target_store_id,
+                                   record->leader_score);
   }
 
   for (auto& filter_record : filter_records) {
-    DINGO_LOG(INFO) << fmt::format("[balance.tracker]{}", filter_record);
+    DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] {}", store_type_name, filter_record);
   }
 
-  DINGO_LOG(INFO) << fmt::format("[balance.tracker] leader score {}", leader_score);
-  DINGO_LOG(INFO) << fmt::format("[balance.tracker] expect leader score {}", expect_leader_score);
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] leader score {}", store_type_name, leader_score);
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] expect leader score {}", store_type_name, expect_leader_score);
 
-  DINGO_LOG(INFO) << fmt::format("[balance.tracker] transfer task count {}", tasks.size());
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] transfer task count {}", store_type_name, tasks.size());
 
-  DINGO_LOG(INFO) << fmt::format("[balance.tracker] ========================={} end=================================",
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] =========================end=================================",
                                  pb::common::StoreType_Name(store_type));
 }
 
@@ -246,14 +308,18 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
   // ready filters
   std::vector<FilterPtr> store_filters;
   store_filters.push_back(std::make_shared<StoreStateFilter>(tracker));
+
   std::vector<FilterPtr> region_filters;
   region_filters.push_back(std::make_shared<RegionHealthFilter>(coordinator_controller, tracker));
 
   std::vector<FilterPtr> task_filters;
   task_filters.push_back(std::make_shared<TaskFilter>(coordinator_controller, tracker));
 
+  std::vector<FilterPtr> resource_filters;
+  resource_filters.push_back(std::make_shared<ResourceFilter>(coordinator_controller, tracker));
+
   auto balance_leader_scheduler = std::make_shared<BalanceLeaderScheduler>(
-      coordinator_controller, raft_engine, store_filters, region_filters, task_filters, tracker);
+      coordinator_controller, raft_engine, store_filters, region_filters, task_filters, resource_filters, tracker);
 
   // get all region and store
   pb::common::RegionMap region_map;
@@ -311,11 +377,6 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
   auto source_candidate_stores = CandidateStores::New(store_entries, false);
   auto target_candidate_stores = CandidateStores::New(store_entries, true);
 
-  DINGO_LOG(INFO) << fmt::format("[balance.leader] source_candidate_stores size: {}",
-                                 source_candidate_stores->StoreSize());
-  DINGO_LOG(INFO) << fmt::format("[balance.leader] target_candidate_stores size: {}",
-                                 target_candidate_stores->StoreSize());
-
   if (tracker_) {
     tracker_->leader_score = source_candidate_stores->ToString();
   }
@@ -324,20 +385,15 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
   std::set<int64_t> used_regions;
   std::vector<TransferLeaderTaskPtr> transfer_leader_tasks;
   while (source_candidate_stores->HasStore() || target_candidate_stores->HasStore()) {
-    auto record = tracker_ != nullptr ? tracker_->AddRecord() : nullptr;
-    DINGO_LOG(INFO) << "[balance.leader] round: " << ++round;
-    DINGO_LOG(INFO) << "[balance.leader] source_candidate_stores: " << source_candidate_stores->ToString();
-    if (record) {
-      record->round = round;
-      record->leader_score = source_candidate_stores->ToString();
-    }
-
     if (source_candidate_stores->HasStore()) {
+      auto record = tracker_ != nullptr ? tracker_->AddRecord() : nullptr;
+      if (record) {
+        record->round = ++round;
+        record->leader_score = source_candidate_stores->ToString();
+      }
+
       auto transfer_leader_task = GenerateTransferOutLeaderTask(source_candidate_stores, used_regions);
       if (transfer_leader_task != nullptr) {
-        DINGO_LOG(INFO) << fmt::format("[balance.leader] transfer leader task: {} {} {}",
-                                       transfer_leader_task->region_id, transfer_leader_task->source_store_id,
-                                       transfer_leader_task->target_store_id);
         if (record) {
           record->region_id = transfer_leader_task->region_id;
           record->source_store_id = transfer_leader_task->source_store_id;
@@ -350,25 +406,23 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
         ReadjustLeaderScore(source_candidate_stores, target_candidate_stores, transfer_leader_task);
 
         if (transfer_leader_tasks.size() >= FLAGS_balacne_leader_task_batch_size) {
-          DINGO_LOG(INFO) << fmt::format("[balance.leader] beyond batch size({})",
-                                         FLAGS_balacne_leader_task_batch_size);
           break;
         }
 
       } else {
-        DINGO_LOG(INFO) << "[balance.leader] source next...";
         source_candidate_stores->Next();
       }
     }
 
     if (target_candidate_stores->HasStore()) {
-      DINGO_LOG(INFO) << "[balance.leader] target_candidate_stores: " << target_candidate_stores->ToString();
+      auto record = tracker_ != nullptr ? tracker_->AddRecord() : nullptr;
+      if (record) {
+        record->round = ++round;
+        record->leader_score = source_candidate_stores->ToString();
+      }
+
       auto transfer_leader_task = GenerateTransferInLeaderTask(target_candidate_stores, used_regions);
       if (transfer_leader_task != nullptr) {
-        DINGO_LOG(INFO) << fmt::format("[balance.leader] transfer leader task: {} {} {}",
-                                       transfer_leader_task->region_id, transfer_leader_task->source_store_id,
-                                       transfer_leader_task->target_store_id);
-
         if (record) {
           record->region_id = transfer_leader_task->region_id;
           record->source_store_id = transfer_leader_task->source_store_id;
@@ -381,12 +435,9 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
         ReadjustLeaderScore(source_candidate_stores, target_candidate_stores, transfer_leader_task);
 
         if (transfer_leader_tasks.size() >= FLAGS_balacne_leader_task_batch_size) {
-          DINGO_LOG(INFO) << fmt::format("[balance.leader] beyond batch size({})",
-                                         FLAGS_balacne_leader_task_batch_size);
           break;
         }
       } else {
-        DINGO_LOG(INFO) << "[balance.leader] target next...";
         target_candidate_stores->Next();
       }
     }
@@ -405,7 +456,7 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
 // commit transfer leader task to raft
 void BalanceLeaderScheduler::CommitTransferLeaderTaskList(const std::vector<TransferLeaderTaskPtr>& tasks) {
   dingodb::pb::coordinator_internal::MetaIncrement meta_increment;
-  auto* task_list = coordinator_controller_->CreateTaskList(meta_increment);
+  auto* task_list = coordinator_controller_->CreateTaskList(meta_increment, "BalanceLeader");
   for (const auto& task : tasks) {
     auto* mut_task = task_list->add_tasks();
 
@@ -530,8 +581,6 @@ std::vector<int64_t> BalanceLeaderScheduler::FilterUsedRegion(std::vector<int64_
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("[balance.leader] reserve_region_ids: {}", Helper::VectorToString(reserve_region_ids));
-
   return reserve_region_ids;
 }
 
@@ -611,13 +660,18 @@ TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferLeaderTask(int64_t
 TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferOutLeaderTask(CandidateStoresPtr candidate_stores,
                                                                             const std::set<int64_t>& used_regions) {
   auto source_store_entry = candidate_stores->GetStore();
-  DINGO_LOG(INFO) << fmt::format("[balance.leader] select source store: {}", source_store_entry->Id());
   auto region = PickOneRegion(FilterRegion(FilterUsedRegion(source_store_entry->LeaderRegionIds(), used_regions)));
   if (region.id() == 0) {
     return nullptr;
   }
 
   auto follower_store_entries = GetFollowerStores(candidate_stores, region, source_store_entry->Id());
+  if (follower_store_entries.empty()) {
+    return nullptr;
+  }
+
+  // filter store has enough resource
+  follower_store_entries = FilterResource(follower_store_entries, region.id());
   if (follower_store_entries.empty()) {
     return nullptr;
   }
@@ -641,9 +695,13 @@ TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferOutLeaderTask(Cand
 TransferLeaderTaskPtr BalanceLeaderScheduler::GenerateTransferInLeaderTask(CandidateStoresPtr candidate_stores,
                                                                            const std::set<int64_t>& used_regions) {
   auto target_store_entry = candidate_stores->GetStore();
-  DINGO_LOG(INFO) << fmt::format("[balance.leader] select target store: {}", target_store_entry->Id());
   auto region = PickOneRegion(FilterRegion(FilterUsedRegion(target_store_entry->FollowerRegionIds(), used_regions)));
   if (region.id() == 0) {
+    return nullptr;
+  }
+
+  // check store has enough resource
+  if (!FilterResource(target_store_entry->Store(), region.id())) {
     return nullptr;
   }
 
@@ -711,6 +769,28 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::FilterTask(
   }
 
   return reserve_tasks;
+}
+
+bool BalanceLeaderScheduler::FilterResource(const dingodb::pb::common::Store& store, int64_t region_id) {
+  for (auto& filter : resource_filters_) {
+    if (!filter->Check(store, region_id)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+std::vector<StoreEntryPtr> BalanceLeaderScheduler::FilterResource(const std::vector<StoreEntryPtr>& store_entries,
+                                                                  int64_t region_id) {
+  std::vector<StoreEntryPtr> reserve_store_entries;
+  for (const auto& store_entry : store_entries) {
+    if (!FilterResource(store_entry->Store(), region_id)) {
+      reserve_store_entries.push_back(store_entry);
+    }
+  }
+
+  return reserve_store_entries;
 }
 
 }  // namespace balance

@@ -2317,7 +2317,13 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd UPDATE, [id=" << region_cmd.id() << "] success";
         }
 
+        UpdateTaskListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
+                            region_cmd.region_cmd().error());
+
       } else if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+        UpdateTaskListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
+                            region_cmd.region_cmd().error());
+
         auto ret = region_cmd_meta_->Erase(region_cmd.id());
         if (!ret.ok()) {
           DINGO_LOG(FATAL) << "ApplyMetaIncrement region_cmd DELETE, [id=" << region_cmd.id()
@@ -2442,7 +2448,21 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           }
         }
       } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        auto ret = task_list_meta_->Erase(task_list.id());
+        // archive task list
+        pb::coordinator::TaskList temp_task_list;
+        auto ret = task_list_meta_->Get(task_list.id(), temp_task_list);
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but Get failed, [id=" << task_list.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        }
+        temp_task_list.set_finish_time(Helper::NowTime());
+        ret = task_list_archive_->Put(task_list.id(), temp_task_list);
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but archive Put failed, [id=" << task_list.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
+        }
+
+        ret = task_list_meta_->Erase(task_list.id());
         if (!ret.ok()) {
           DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but Delete failed, [id=" << task_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();

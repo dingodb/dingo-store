@@ -90,9 +90,12 @@ message Task {
 }
 
 message TaskList {
-  int64 id = 1;         // this is the id of coordinator task list
-  int64 next_step = 2;  // the next index of tasks to execute
-  repeated Task tasks = 3;
+  int64 id = 1;  // this is the id of coordinator task list
+  string name = 2;
+  int64 next_step = 3;  // the next index of tasks to execute
+  repeated Task tasks = 4;
+  string create_time = 10;
+  string finish_time = 11;
 }
 
 message CreateRequest {
@@ -755,6 +758,9 @@ message GetTaskListRequest {
   int64 cluster_id = 2;
   int64 task_list_id = 3;
   bool get_task_list_id_only = 4;
+  bool include_archive = 5;
+  int64 archive_start_id = 6;  // task_list range [archive_start_id, ~)
+  int32 archive_limit = 7;     // return task_list num
 }
 
 message GetTaskListResponse {

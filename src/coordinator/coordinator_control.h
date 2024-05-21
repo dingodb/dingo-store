@@ -545,8 +545,8 @@ class CoordinatorControl : public MetaControl {
                              pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status UpdateRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
                                 const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status RemoveRegionCmd(int64_t store_id, int64_t region_cmd_id,
-                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status RemoveRegionCmd(int64_t store_id, int64_t task_list_id, int64_t region_cmd_id,
+                                const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetRegionCmd(int64_t store_id, int64_t start_region_cmd_id, int64_t end_region_cmd_id,
                              std::vector<pb::coordinator::RegionCmd> &region_cmds,
                              std::vector<pb::error::Error> &region_cmd_errors);
@@ -804,8 +804,16 @@ class CoordinatorControl : public MetaControl {
 
   void GetTaskListAll(butil::FlatMap<int64_t, pb::coordinator::TaskList> &task_lists);
   void GetTaskList(int64_t task_list_id, pb::coordinator::TaskList &task_list);
+  void GetArchiveTaskListIds(std::vector<int64_t> &task_list_ids, int64_t task_list_id, int32_t limit);
+  void GetArchiveTaskList(std::vector<pb::coordinator::TaskList> &task_lists, int64_t task_list_id, int32_t limit);
+  void GetArchiveTaskList(int64_t task_list_id, pb::coordinator::TaskList &task_list);
 
-  pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment);
+  void UpdateTaskListError(int64_t task_list_id, int64_t region_cmd_id, pb::error::Error error);
+
+  void RecycleArchiveTaskList();
+
+  pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment,
+                                            const std::string &name);
   void AddCreateTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                      const pb::common::RegionDefinition &region_definition,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -1001,6 +1009,7 @@ class CoordinatorControl : public MetaControl {
   // 11.task_list
   DingoSafeMap<int64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
   MetaMemMapFlat<pb::coordinator::TaskList> *task_list_meta_;       // need construct
+  MetaDiskMap<pb::coordinator::TaskList> *task_list_archive_;
 
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;

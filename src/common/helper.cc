@@ -1022,6 +1022,8 @@ int64_t Helper::Timestamp() {
 
 std::string Helper::NowTime() { return FormatMsTime(TimestampMs(), "%Y-%m-%d %H:%M:%S"); }
 
+std::string Helper::PastDate(int64_t day) { return FormatTime(Timestamp() - day * 86400, "%Y-%m-%d"); }
+
 std::string Helper::FormatMsTime(int64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
       (std::chrono::milliseconds(timestamp)));

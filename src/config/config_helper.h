@@ -39,6 +39,8 @@ class ConfigHelper {
   static int GetRocksDBStatsDumpPeriodSec();
 
   static uint32_t GetLeaderNumWeight();
+
+  static uint32_t GetReserveTaskListRecentDay();
 };
 
 }  // namespace dingodb
