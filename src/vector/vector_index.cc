@@ -387,6 +387,11 @@ void VectorIndexWrapper::Destroy() {
   if (snapshot_set_ != nullptr) {
     snapshot_set_->Destroy();
   }
+
+  auto status = DeleteMeta();
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] delete meta failed.", Id());
+  }
 }
 
 bool VectorIndexWrapper::Recover() {
@@ -492,6 +497,19 @@ butil::Status VectorIndexWrapper::LoadMeta() {
   SetIsTempHoldVectorIndex(meta.is_hold_vector_index());
 
   return butil::Status();
+}
+
+butil::Status VectorIndexWrapper::DeleteMeta() {
+  auto meta_writer = Server::GetInstance().GetMetaWriter();
+  if (meta_writer == nullptr) {
+    return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
+  }
+
+  if (!meta_writer->Delete(GenMetaKey(id_))) {
+    return butil::Status(pb::error::EINTERNAL, "Delete vector index meta failed.");
+  }
+
+  return butil::Status::OK();
 }
 
 int64_t VectorIndexWrapper::LastBuildEpochVersion() {

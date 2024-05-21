@@ -4842,6 +4842,7 @@ void CoordinatorControl::RecycleArchiveTaskList() {
     return;
   }
   is_running.store(true);
+  DEFER(is_running.store(false));
 
   std::vector<pb::coordinator::TaskList> task_lists;
   task_list_archive_->GetAllElements(task_lists);
@@ -4861,7 +4862,6 @@ void CoordinatorControl::RecycleArchiveTaskList() {
 
   DINGO_LOG(INFO) << fmt::format("recycle task list total_count({}) recycle_count({}) recycle_ids({})", total_count,
                                  recycle_ids.size(), Helper::VectorToString(recycle_ids));
-  is_running.store(false);
 }
 
 void CoordinatorControl::GetArchiveTaskListIds(std::vector<int64_t>& task_list_ids, int64_t task_list_id,

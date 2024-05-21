@@ -15,6 +15,7 @@
 #include "coordinator/balance_leader.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -28,6 +29,7 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 #include "server/server.h"
 
 DEFINE_uint32(balacne_leader_task_batch_size, 4, "balance leader task batch size");
@@ -192,10 +194,14 @@ void Tracker::Print() {
     DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] {}", store_type_name, filter_record);
   }
 
-  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] leader score {}", store_type_name, leader_score);
-  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] expect leader score {}", store_type_name, expect_leader_score);
+  DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] leader score {} -> {}", store_type_name, leader_score,
+                                 expect_leader_score);
 
   DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] transfer task count {}", store_type_name, tasks.size());
+  for (auto& task : tasks) {
+    DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] transfer task region({}) {}->{}", store_type_name,
+                                   task->region_id, task->source_store_id, task->target_store_id);
+  }
 
   DINGO_LOG(INFO) << fmt::format("[balance.leader.{}] =========================end=================================",
                                  pb::common::StoreType_Name(store_type));
@@ -301,6 +307,14 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
                                                           std::shared_ptr<Engine> raft_engine,
                                                           pb::common::StoreType store_type, bool dryrun,
                                                           TrackerPtr tracker) {
+  // not allow parallel running
+  static std::atomic<bool> is_running = false;
+  if (is_running.load()) {
+    return butil::Status(pb::error::EINTERNAL, "already exist balance leader running.");
+  }
+  is_running.store(true);
+  DEFER(is_running.store(false));
+
   DINGO_LOG(INFO) << fmt::format("[balance.leader] launch balance leader store_type({}) dryrun({})",
                                  pb::common::StoreType_Name(store_type), dryrun);
   if (tracker) tracker->store_type = store_type;
