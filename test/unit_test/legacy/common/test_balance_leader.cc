@@ -295,8 +295,9 @@ TEST_F(BalanceLeaderSchedulerTest, Schedule) {
     std::vector<dingodb::balance::FilterPtr> store_filters;
     std::vector<dingodb::balance::FilterPtr> region_filters;
     std::vector<dingodb::balance::FilterPtr> task_filters;
+    std::vector<dingodb::balance::FilterPtr> resource_filters;
     auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(
-        coordinator_control, nullptr, store_filters, region_filters, task_filters, nullptr);
+        coordinator_control, nullptr, store_filters, region_filters, task_filters, resource_filters, nullptr);
 
     balance_leader_scheduler->Schedule(region_map, store_map);
 
@@ -336,8 +337,9 @@ TEST_F(BalanceLeaderSchedulerTest, Schedule) {
     std::vector<dingodb::balance::FilterPtr> store_filters;
     std::vector<dingodb::balance::FilterPtr> region_filters;
     std::vector<dingodb::balance::FilterPtr> task_filters;
+    std::vector<dingodb::balance::FilterPtr> resource_filters;
     auto balance_leader_scheduler = dingodb::balance::BalanceLeaderScheduler::New(
-        coordinator_control, nullptr, store_filters, region_filters, task_filters, nullptr);
+        coordinator_control, nullptr, store_filters, region_filters, task_filters, resource_filters, nullptr);
 
     balance_leader_scheduler->Schedule(region_map, store_map);
 

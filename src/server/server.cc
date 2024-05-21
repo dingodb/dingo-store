@@ -97,6 +97,8 @@ DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
 DEFINE_int32(balance_leader_interval_s, 60, "balance leader interval seconds");
 DEFINE_int32(recycle_task_list_interval_s, 60, "recycle task list interval seconds");
 
+DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
+
 DEFINE_bool(enable_balance_leader, true, "enable balance leader");
 
 extern "C" {
