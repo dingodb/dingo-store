@@ -23,6 +23,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
+#include "document/codec.h"
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -65,6 +66,7 @@ DECLARE_bool(store_create_region);
 DECLARE_int64(start_region_cmd_id);
 DECLARE_int64(end_region_cmd_id);
 DECLARE_int64(vector_id);
+DECLARE_int64(document_id);
 DECLARE_string(key);
 DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
@@ -1492,12 +1494,21 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     const auto& end_key = query_response.region().definition().range().end_key();
 
     std::string real_mid;
-    if (query_response.region().definition().index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+    if (query_response.region().definition().index_parameter().index_type() ==
+        dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
         int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
         dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
+      }
+    } else if (query_response.region().definition().index_parameter().index_type() ==
+               dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
+      if (FLAGS_document_id > 0) {
+        int64_t partition_id = dingodb::DocumentCodec::DecodePartitionId(start_key);
+        dingodb::DocumentCodec::EncodeDocumentKey(start_key[0], partition_id, FLAGS_document_id, real_mid);
+      } else {
+        real_mid = client::Helper::CalculateDocumentMiddleKey(start_key, end_key);
       }
     } else {
       real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
