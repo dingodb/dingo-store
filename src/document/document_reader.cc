@@ -183,9 +183,11 @@ butil::Status DocumentReader::DocumentScanQuery(std::shared_ptr<Engine::Document
 butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, const pb::common::Range& region_range,
                                                        DocumentIndexWrapperPtr document_index,
                                                        pb::common::DocumentIndexMetrics& region_metrics) {
-  int64_t total_document_count = 0;
+  int64_t total_doc_count = 0;
+  int64_t total_token_count = 0;
   int64_t max_id = 0;
   int64_t min_id = 0;
+  std::string meta_json, json_parameter;
 
   auto inner_document_index = document_index->GetOwnDocumentIndex();
   if (inner_document_index == nullptr) {
@@ -193,7 +195,12 @@ butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, co
                          document_index->Id());
   }
 
-  auto status = inner_document_index->GetCount(total_document_count);
+  auto status = inner_document_index->GetDocCount(total_doc_count);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = inner_document_index->GetTokenCount(total_token_count);
   if (!status.ok()) {
     return status;
   }
@@ -208,6 +215,8 @@ butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, co
     return status;
   }
 
+  region_metrics.set_total_num_docs(total_doc_count);
+  region_metrics.set_total_num_tokens(total_token_count);
   region_metrics.set_max_id(max_id);
   region_metrics.set_min_id(min_id);
 

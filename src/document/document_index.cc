@@ -335,7 +335,7 @@ butil::Status DocumentIndex::Load(const std::string& /*path*/) {
   }
 }
 
-butil::Status DocumentIndex::GetCount(int64_t& count) {
+butil::Status DocumentIndex::GetDocCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
   if (is_destroyed_) {
     std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
@@ -344,6 +344,60 @@ butil::Status DocumentIndex::GetCount(int64_t& count) {
   }
 
   count = ffi_get_indexed_doc_counts(index_path);
+  return butil::Status::OK();
+}
+
+butil::Status DocumentIndex::GetTokenCount(int64_t& count) {
+  RWLockReadGuard guard(&rw_lock_);
+  if (is_destroyed_) {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+  }
+
+  count = ffi_get_total_num_tokens(index_path);
+  return butil::Status::OK();
+}
+
+butil::Status DocumentIndex::GetMetaJson(std::string& json) {
+  RWLockReadGuard guard(&rw_lock_);
+  if (is_destroyed_) {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+  }
+
+  auto string_result = ffi_get_index_meta_json(index_path);
+  if (string_result.error_code != 0) {
+    std::string err_msg = fmt::format("ffi_get_index_meta_json faild for ({}), error_code: ({}), error_msg: ({})",
+                                      index_path, string_result.error_code, string_result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
+
+  json = std::string(string_result.result.c_str());
+
+  return butil::Status::OK();
+}
+
+butil::Status DocumentIndex::GetJsonParameter(std::string& json) {
+  RWLockReadGuard guard(&rw_lock_);
+  if (is_destroyed_) {
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
+  }
+
+  auto string_result = ffi_get_index_json_parameter(index_path);
+  if (string_result.error_code != 0) {
+    std::string err_msg = fmt::format("ffi_get_index_json_parameter faild for ({}), error_code: ({}), error_msg: ({})",
+                                      index_path, string_result.error_code, string_result.error_msg.c_str());
+    DINGO_LOG(ERROR) << err_msg;
+    return butil::Status(pb::error::EINTERNAL, err_msg);
+  }
+
+  json = std::string(string_result.result.c_str());
+
   return butil::Status::OK();
 }
 
@@ -634,14 +688,14 @@ int32_t DocumentIndexWrapper::SavingNum() { return saving_num_.load(std::memory_
 void DocumentIndexWrapper::IncSavingNum() { saving_num_.fetch_add(1, std::memory_order_relaxed); }
 void DocumentIndexWrapper::DecSavingNum() { saving_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-butil::Status DocumentIndexWrapper::GetCount(int64_t& count) {
+butil::Status DocumentIndexWrapper::GetDocCount(int64_t& count) {
   auto document_index = GetOwnDocumentIndex();
   if (document_index == nullptr) {
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
   int64_t own_count = 0;
-  auto status = document_index->GetCount(own_count);
+  auto status = document_index->GetDocCount(own_count);
   if (!status.ok()) {
     return status;
   }
@@ -649,7 +703,7 @@ butil::Status DocumentIndexWrapper::GetCount(int64_t& count) {
   int64_t sibling_count = 0;
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    status = sibling_document_index->GetCount(sibling_count);
+    status = sibling_document_index->GetDocCount(sibling_count);
     if (!status.ok()) {
       return status;
     }
@@ -657,6 +711,49 @@ butil::Status DocumentIndexWrapper::GetCount(int64_t& count) {
 
   count = own_count + sibling_count;
   return status;
+}
+
+butil::Status DocumentIndexWrapper::GetTokenCount(int64_t& count) {
+  auto document_index = GetOwnDocumentIndex();
+  if (document_index == nullptr) {
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
+  }
+
+  int64_t own_count = 0;
+  auto status = document_index->GetTokenCount(own_count);
+  if (!status.ok()) {
+    return status;
+  }
+
+  int64_t sibling_count = 0;
+  auto sibling_document_index = SiblingDocumentIndex();
+  if (sibling_document_index != nullptr) {
+    status = sibling_document_index->GetTokenCount(sibling_count);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  count = own_count + sibling_count;
+  return status;
+}
+
+butil::Status DocumentIndexWrapper::GetMetaJson(std::string& json) {
+  auto document_index = GetOwnDocumentIndex();
+  if (document_index == nullptr) {
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
+  }
+
+  return document_index->GetMetaJson(json);
+}
+
+butil::Status DocumentIndexWrapper::GetJsonParameter(std::string& json) {
+  auto document_index = GetOwnDocumentIndex();
+  if (document_index == nullptr) {
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
+  }
+
+  return document_index->GetJsonParameter(json);
 }
 
 bool DocumentIndexWrapper::NeedToRebuild() {
