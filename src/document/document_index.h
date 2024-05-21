@@ -48,7 +48,13 @@ class DocumentIndex {
   DocumentIndex(DocumentIndex&& rhs) = delete;
   DocumentIndex& operator=(DocumentIndex&& rhs) = delete;
 
-  butil::Status GetCount(int64_t& count);
+  butil::Status GetDocCount(int64_t& count);
+
+  butil::Status GetTokenCount(int64_t& count);
+
+  butil::Status GetMetaJson(std::string& json);
+
+  butil::Status GetJsonParameter(std::string& json);
 
   butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader);
 
@@ -234,7 +240,10 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   void IncSavingNum();
   void DecSavingNum();
 
-  butil::Status GetCount(int64_t& count);
+  butil::Status GetDocCount(int64_t& count);
+  butil::Status GetTokenCount(int64_t& count);
+  butil::Status GetMetaJson(std::string& json);
+  butil::Status GetJsonParameter(std::string& json);
 
   bool NeedToRebuild();
   bool NeedToSave(std::string& reason);
