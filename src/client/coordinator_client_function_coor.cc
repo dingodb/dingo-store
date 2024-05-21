@@ -100,6 +100,9 @@ DEFINE_bool(get_coordinator_map, false, "get_coordinator_map");
 DEFINE_bool(use_filter_store_type, false, "use filter_store_type");
 DEFINE_int32(filter_store_type, 0, "filter_store_type");
 
+DEFINE_bool(create_document_region, false, "create_document_region");
+DECLARE_bool(use_json_parameter);
+
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
     return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
@@ -533,6 +536,8 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
   int32_t store_count_available = 0;
   int32_t index_count_available = 0;
+  int32_t document_count_available = 0;
+
   for (auto const& [first, store] : store_map_by_type_id) {
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
@@ -541,6 +546,10 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
       index_count_available++;
+    }
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT) {
+      document_count_available++;
     }
     std::cout << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
               << " addr={" << store.server_location().ShortDebugString()
@@ -556,6 +565,9 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
   if (index_count_available > 0) {
     std::cout << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available << "\n";
+  }
+  if (document_count_available > 0) {
+    std::cout << "DINGODB_HAVE_DOCUMENT_AVAILABLE, document_count=" << document_count_available << "\n";
   }
 }
 
@@ -1141,7 +1153,69 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
 
-  if (FLAGS_vector_index_type.empty()) {
+  if (FLAGS_create_document_region) {
+    DINGO_LOG(INFO) << "create a document region";
+    if (FLAGS_region_prefix.size() != 1) {
+      DINGO_LOG(ERROR) << "region_prefix must be 1";
+      return;
+    }
+
+    // document index region must have a part_id
+    if (FLAGS_part_id == 0) {
+      DINGO_LOG(ERROR) << "part_id is empty";
+      return;
+    }
+    request.set_part_id(FLAGS_part_id);
+
+    std::string start_key;
+    std::string end_key;
+
+    if (FLAGS_start_id > 0 && FLAGS_end_id > 0 && FLAGS_start_id < FLAGS_end_id) {
+      DINGO_LOG(INFO) << "use start_id " << FLAGS_start_id << ", end_id " << FLAGS_end_id << " to create region range";
+      start_key =
+          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
+      end_key =
+          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
+    } else {
+      DINGO_LOG(INFO) << "use part_id " << FLAGS_part_id << " to create region range";
+      start_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id);
+      end_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
+    }
+    DINGO_LOG(INFO) << "region range is : " << dingodb::Helper::StringToHex(start_key) << " to "
+                    << dingodb::Helper::StringToHex(end_key);
+
+    request.mutable_range()->set_start_key(start_key);
+    request.mutable_range()->set_end_key(end_key);
+
+    // set index_type for vector index
+    request.mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+
+    std::string multi_type_column_json =
+        R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+
+    // document index parameter
+    request.mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+    auto* document_index_parameter = request.mutable_index_parameter()->mutable_document_index_parameter();
+
+    if (FLAGS_use_json_parameter) {
+      document_index_parameter->set_json_parameter(multi_type_column_json);
+    }
+
+    auto* scalar_schema = document_index_parameter->mutable_scalar_schema();
+    auto* field_col1 = scalar_schema->add_fields();
+    field_col1->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field_col1->set_key("col1");
+    auto* field_col2 = scalar_schema->add_fields();
+    field_col2->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field_col2->set_key("col2");
+    auto* field_col3 = scalar_schema->add_fields();
+    field_col3->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field_col3->set_key("col3");
+    auto* field_col4 = scalar_schema->add_fields();
+    field_col4->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field_col4->set_key("col4");
+
+  } else if (FLAGS_vector_index_type.empty()) {
     DINGO_LOG(WARNING) << "vector_index_type is empty, so create a store region";
     if (FLAGS_start_key.empty()) {
       DINGO_LOG(ERROR) << "start_key is empty";

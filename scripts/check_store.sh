@@ -27,6 +27,13 @@ while [ "${DINGODB_HAVE_INDEX_AVAILABLE}" -eq 0 ]; do
     DINGODB_HAVE_INDEX_AVAILABLE=$(./dingodb_client GetStoreMap |grep -c DINGODB_HAVE_INDEX_AVAILABLE)
 done
 
+DINGODB_HAVE_DOCUMENT_AVAILABLE=$(./dingodb_client GetStoreMap |grep -c DINGODB_HAVE_DOCUMENT_AVAILABLE)
+while [ "${DINGODB_HAVE_DOCUMENT_AVAILABLE}" -eq 0 ]; do
+    echo "DINGODB_HAVE_DOCUMENT_AVAILABLE == 0, wait 2 second"
+    sleep 2
+    DINGODB_HAVE_DOCUMENT_AVAILABLE=$(./dingodb_client GetStoreMap |grep -c DINGODB_HAVE_DOCUMENT_AVAILABLE)
+done
+
 ./dingodb_client GetStoreMap
 
 echo "dingo-store is READY"
