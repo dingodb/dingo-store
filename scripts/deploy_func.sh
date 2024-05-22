@@ -167,5 +167,4 @@ function start_program() {
   echo "${root_dir}/bin/dingodb_server -role=${role}"
 
   nohup ${root_dir}/bin/dingodb_server -role=${role} 2>&1 >./log/out &
-  sleep 10
 }

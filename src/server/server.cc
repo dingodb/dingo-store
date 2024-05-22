@@ -719,10 +719,7 @@ bool Server::InitCrontabManager() {
         {pb::common::COORDINATOR},
         FLAGS_balance_leader_interval_s * 1000,
         true,
-        [](void*) {
-          auto coordinator_control = Server::GetInstance().GetCoordinatorControl();
-          coordinator_control->RecycleArchiveTaskList();
-        },
+        [](void*) { Heartbeat::TriggerBalanceLeader(nullptr); },
     });
   }
 
@@ -734,7 +731,10 @@ bool Server::InitCrontabManager() {
       {pb::common::COORDINATOR},
       FLAGS_recycle_task_list_interval_s * 1000,
       true,
-      [](void*) { Heartbeat::TriggerBalanceLeader(nullptr); },
+      [](void*) {
+        auto coordinator_control = Server::GetInstance().GetCoordinatorControl();
+        coordinator_control->RecycleArchiveTaskList();
+      },
   });
   crontab_manager_->AddCrontab(crontab_configs_);
 
