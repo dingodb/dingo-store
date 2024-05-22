@@ -256,7 +256,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   butil::Status RemoveMeta() const;
   butil::Status SaveMeta();
   butil::Status LoadMeta();
-  butil::Status DeleteMeta();
+  butil::Status DeleteMeta() const;
 
   int64_t Id() const { return id_; }
 

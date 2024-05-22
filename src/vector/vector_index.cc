@@ -499,7 +499,7 @@ butil::Status VectorIndexWrapper::LoadMeta() {
   return butil::Status();
 }
 
-butil::Status VectorIndexWrapper::DeleteMeta() {
+butil::Status VectorIndexWrapper::DeleteMeta() const {
   auto meta_writer = Server::GetInstance().GetMetaWriter();
   if (meta_writer == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "meta writer is nullptr.");
@@ -1219,6 +1219,7 @@ bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
       return false;
     }
   }
+
   return true;
 }
 
