@@ -44,6 +44,39 @@ class VectorIndexUtilsTest : public testing::Test {
   void TearDown() override {}
 };
 
+TEST_F(VectorIndexUtilsTest, CheckVectorIdDuplicated) {
+  butil::Status ok;
+
+  // empty ok
+  {
+    std::unique_ptr<faiss::idx_t[]> ids;
+    size_t size = 0;
+    ok = VectorIndexUtils::CheckVectorIdDuplicated(ids, size);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+
+  // duplicated
+  {
+    size_t size = 10;
+    std::unique_ptr<faiss::idx_t[]> ids = std::make_unique<faiss::idx_t[]>(10);
+    for (size_t i = 0; i < size; i++) {
+      ids[i] = (i % (size / 2));
+    }
+    ok = VectorIndexUtils::CheckVectorIdDuplicated(ids, size);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_ID_DUPLICATED);
+  }
+
+  {
+    size_t size = 10;
+    std::unique_ptr<faiss::idx_t[]> ids = std::make_unique<faiss::idx_t[]>(10);
+    for (size_t i = 0; i < size; i++) {
+      ids[i] = i;
+    }
+    ok = VectorIndexUtils::CheckVectorIdDuplicated(ids, size);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+  }
+}
+
 TEST_F(VectorIndexUtilsTest, ValidateVectorScalarSchema) {
   butil::Status ok;
 
@@ -897,8 +930,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -912,8 +944,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -938,8 +969,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -953,8 +983,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -968,8 +997,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1021,8 +1049,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1036,8 +1063,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1062,8 +1088,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1077,8 +1102,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1092,8 +1116,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1145,8 +1168,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1160,8 +1182,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1186,8 +1207,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1201,8 +1221,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1216,8 +1235,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1269,8 +1287,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1284,8 +1301,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1310,8 +1326,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1325,8 +1340,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1340,8 +1354,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1393,8 +1406,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1408,8 +1420,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1434,8 +1445,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1449,8 +1459,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1464,8 +1473,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1517,8 +1525,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1532,8 +1539,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1558,8 +1564,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1573,8 +1578,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1588,8 +1592,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1641,8 +1644,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1656,8 +1658,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1720,8 +1721,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1735,8 +1735,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1799,8 +1798,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1814,8 +1812,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceEntry) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1902,8 +1899,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1917,8 +1913,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1938,8 +1933,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -1953,8 +1947,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -1968,8 +1961,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2019,8 +2011,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2034,8 +2025,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2055,8 +2045,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2070,8 +2059,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2085,8 +2073,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2136,8 +2123,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2151,8 +2137,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2172,8 +2157,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2187,8 +2171,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2202,8 +2185,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2253,8 +2235,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2268,8 +2249,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2327,8 +2307,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2342,8 +2321,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2363,8 +2341,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2378,8 +2355,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2393,8 +2369,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2444,8 +2419,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2459,8 +2433,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2480,8 +2453,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2495,8 +2467,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2510,8 +2481,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2561,8 +2531,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2576,8 +2545,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2597,8 +2565,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2612,8 +2579,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2627,8 +2593,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2678,8 +2643,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2693,8 +2657,7 @@ TEST_F(VectorIndexUtilsTest, CalcDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2751,8 +2714,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2766,8 +2728,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2787,8 +2748,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2802,8 +2762,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2817,8 +2776,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2867,8 +2825,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2882,8 +2839,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2903,8 +2859,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -2918,8 +2873,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2933,8 +2887,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -2985,8 +2938,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3000,8 +2952,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3021,8 +2972,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3036,8 +2986,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3051,8 +3000,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3101,8 +3049,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3116,8 +3063,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3137,8 +3083,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3152,8 +3097,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3167,8 +3111,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3219,8 +3162,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3234,8 +3176,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3255,8 +3196,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3270,8 +3210,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3285,8 +3224,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3335,8 +3273,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3350,8 +3287,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3371,8 +3307,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3386,8 +3321,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3401,8 +3335,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByFaiss) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3453,8 +3386,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3468,8 +3400,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3489,8 +3420,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3504,8 +3434,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3519,8 +3448,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3569,8 +3497,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3584,8 +3511,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3605,8 +3531,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3620,8 +3545,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3635,8 +3559,7 @@ TEST_F(VectorIndexUtilsTest, CalcL2DistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3687,8 +3610,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3702,8 +3624,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3723,8 +3644,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3738,8 +3658,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3753,8 +3672,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3803,8 +3721,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3818,8 +3735,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3839,8 +3755,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3854,8 +3769,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3869,8 +3783,7 @@ TEST_F(VectorIndexUtilsTest, CalcIpDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3921,8 +3834,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3936,8 +3848,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3957,8 +3868,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -3972,8 +3882,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -3987,8 +3896,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -4037,8 +3945,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -4052,8 +3959,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -4073,8 +3979,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& distance : distances) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (auto dis : distance) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << dis << " ";
         }
@@ -4088,8 +3993,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_left_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }
@@ -4103,8 +4007,7 @@ TEST_F(VectorIndexUtilsTest, CalcCosineDistanceByHnswlib) {
     {
       size_t i = 0;
       for (const auto& vector : result_op_right_vectors) {
-        LOG(INFO) << "[" << i << "]"
-                  << " ";
+        LOG(INFO) << "[" << i << "]" << " ";
         for (const auto& elem : vector.float_values()) {
           LOG(INFO) << std::setiosflags(std::ios::left) << std::setw(10) << std::setfill(' ') << elem << " ";
         }

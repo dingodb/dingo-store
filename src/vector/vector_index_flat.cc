@@ -100,6 +100,11 @@ butil::Status VectorIndexFlat::AddOrUpsert(const std::vector<pb::common::VectorW
   }
 
   const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
+  status = VectorIndexUtils::CheckVectorIdDuplicated(ids, vector_with_ids.size());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
   const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   BvarLatencyGuard bvar_guard(&g_flat_upsert_latency);
@@ -402,8 +407,6 @@ bool VectorIndexFlat::NeedToSave(int64_t last_save_log_behind) {
 
   return false;
 }
-
-
 
 template <typename T>
 std::vector<faiss::idx_t> VectorIndexFlat::GetExistVectorIds(const T& ids, size_t size) {
