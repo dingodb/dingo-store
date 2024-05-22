@@ -346,3 +346,68 @@ TEST_F(BalanceLeaderSchedulerTest, Schedule) {
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
 }
+
+TEST_F(BalanceLeaderSchedulerTest, ParseTimePeriod) {
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,3");
+    ASSERT_EQ(1, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(3, time_periods[0].second);
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,");
+    ASSERT_EQ(1, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(23, time_periods[0].second);
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,3;4,7");
+    ASSERT_EQ(2, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(3, time_periods[0].second);
+    ASSERT_EQ(4, time_periods[1].first);
+    ASSERT_EQ(7, time_periods[1].second);
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,3;4,18");
+    ASSERT_EQ(2, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(3, time_periods[0].second);
+    ASSERT_EQ(4, time_periods[1].first);
+    ASSERT_EQ(18, time_periods[1].second);
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,;4,7");
+    ASSERT_EQ(2, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(23, time_periods[0].second);
+    ASSERT_EQ(4, time_periods[1].first);
+    ASSERT_EQ(7, time_periods[1].second);
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("");
+    ASSERT_EQ(0, time_periods.size());
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("a,");
+    ASSERT_EQ(0, time_periods.size());
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod("2,a");
+    ASSERT_EQ(0, time_periods.size());
+  }
+
+  {
+    auto time_periods = dingodb::balance::BalanceLeaderScheduler::TestParseTimePeriod(" 2 , 4 ");
+    ASSERT_EQ(1, time_periods.size());
+    ASSERT_EQ(2, time_periods[0].first);
+    ASSERT_EQ(4, time_periods[0].second);
+  }
+}

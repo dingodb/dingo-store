@@ -16,6 +16,7 @@
 #define DINGODB_CONFIG_HELPER_H_
 
 #include <cstdint>
+#include <string>
 
 #include "proto/raft.pb.h"
 
@@ -41,6 +42,8 @@ class ConfigHelper {
   static uint32_t GetLeaderNumWeight();
 
   static uint32_t GetReserveTaskListRecentDay();
+
+  static std::string GetBalanceLeaderInspectionTimePeriod();
 };
 
 }  // namespace dingodb

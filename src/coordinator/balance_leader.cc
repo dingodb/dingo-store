@@ -25,6 +25,7 @@
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_helper.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "proto/common.pb.h"
@@ -327,10 +328,77 @@ static pb::common::IndexType GetIndexTypeByRegionType(pb::common::StoreType stor
   return pb::common::INDEX_TYPE_NONE;
 }
 
+// parse time period, format start_hour1,end_hour1;start_hour2,end_hour2
+// e.g. str=1,3;4,5 parsed [1,3] [4,5]
+std::vector<std::pair<int, int>> BalanceLeaderScheduler::ParseTimePeriod(const std::string& time_period) {
+  std::vector<std::pair<int, int>> result;
+
+  std::vector<std::string> parts;
+  Helper::SplitString(time_period, ';', parts);
+  for (auto& part : parts) {
+    std::vector<std::string> sub_parts;
+    Helper::SplitString(part, ',', sub_parts);
+    if (sub_parts.empty()) {
+      continue;
+    }
+
+    bool is_valid = true;
+    int start_hour = 0;
+    if (!sub_parts[0].empty()) {
+      char* endptr = nullptr;
+      start_hour = std::strtol(sub_parts[0].c_str(), &endptr, 10);
+      if (endptr != nullptr && (endptr - sub_parts[0].c_str()) != sub_parts[0].size()) {
+        is_valid = false;
+      }
+    }
+
+    int end_hour = 23;
+    if (sub_parts.size() > 1 && !sub_parts[1].empty()) {
+      char* endptr = nullptr;
+      end_hour = std::strtol(sub_parts[1].c_str(), &endptr, 10);
+      if (endptr != nullptr && (endptr - sub_parts[1].c_str()) != sub_parts[1].size()) {
+        is_valid = false;
+      }
+    }
+    if (is_valid) {
+      result.push_back(std::make_pair(start_hour, end_hour));
+    }
+  }
+
+  return result;
+}
+
+bool BalanceLeaderScheduler::ShouldRun() {
+  std::string time_period_value = ConfigHelper::GetBalanceLeaderInspectionTimePeriod();
+  if (time_period_value.empty()) {
+    return false;
+  }
+  auto time_periods = ParseTimePeriod(time_period_value);
+  if (time_periods.empty()) {
+    return false;
+  }
+
+  int current_hour = Helper::NowHour();
+  DINGO_LOG(INFO) << fmt::format("[balance.leader] time_period({}), current hour({})", time_period_value, current_hour);
+
+  for (auto time_period : time_periods) {
+    if (current_hour >= time_period.first && current_hour <= time_period.second) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                                           std::shared_ptr<Engine> raft_engine,
                                                           pb::common::StoreType store_type, bool dryrun,
                                                           TrackerPtr tracker) {
+  // check run timing
+  if (!ShouldRun()) {
+    return butil::Status(pb::error::EINTERNAL, "current time not should run.");
+  }
+
   // not allow parallel running
   static std::atomic<bool> is_running = false;
   if (is_running.load()) {

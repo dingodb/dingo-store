@@ -30,6 +30,7 @@ coordinator:
   compaction_retention_rev_count: 1000
   recycle_task_list_interval_s: 600
   reserve_task_list_recent_day: 7
+  balance_leader_inspection_time_period: 0,23 # format: start_hour,end_hour;start_hour,end_hour e.g. 2,4;5,6;8,9
 raft:
   listen_host: $RAFT_LISTEN_HOST$
   host: $RAFT_HOST$

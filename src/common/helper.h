@@ -248,6 +248,7 @@ class Helper {
   // second timestamp
   static int64_t Timestamp();
   static std::string NowTime();
+  static int NowHour();
   static std::string PastDate(int64_t day);
 
   // format millisecond timestamp
