@@ -28,6 +28,7 @@
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "coordinator/balance_leader.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
@@ -149,19 +150,37 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
         }
       }
 
-      auto vector_index_wrapper = region_meta->VectorIndexWrapper();
-      if (vector_index_wrapper != nullptr) {
-        auto* vector_index_status = tmp_region_metrics.mutable_vector_index_status();
-        vector_index_status->set_is_stop(vector_index_wrapper->IsStop());
-        vector_index_status->set_is_ready(vector_index_wrapper->IsReady());
-        vector_index_status->set_is_own_ready(vector_index_wrapper->IsOwnReady());
-        vector_index_status->set_is_build_error(vector_index_wrapper->IsBuildError());
-        vector_index_status->set_is_rebuild_error(vector_index_wrapper->IsRebuildError());
-        vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
-        vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsOwnReady());
-        vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
-        vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
-        vector_index_status->set_last_build_epoch_version(vector_index_wrapper->LastBuildEpochVersion());
+      auto role = dingodb::GetRole();
+      if (role == pb::common::ClusterRole::INDEX) {
+        auto vector_index_wrapper = region_meta->VectorIndexWrapper();
+        if (vector_index_wrapper != nullptr) {
+          auto* vector_index_status = tmp_region_metrics.mutable_vector_index_status();
+          vector_index_status->set_is_stop(vector_index_wrapper->IsStop());
+          vector_index_status->set_is_ready(vector_index_wrapper->IsReady());
+          vector_index_status->set_is_own_ready(vector_index_wrapper->IsOwnReady());
+          vector_index_status->set_is_build_error(vector_index_wrapper->IsBuildError());
+          vector_index_status->set_is_rebuild_error(vector_index_wrapper->IsRebuildError());
+          vector_index_status->set_is_switching(vector_index_wrapper->IsSwitchingVectorIndex());
+          vector_index_status->set_is_hold_vector_index(vector_index_wrapper->IsOwnReady());
+          vector_index_status->set_apply_log_id(vector_index_wrapper->ApplyLogId());
+          vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
+          vector_index_status->set_last_build_epoch_version(vector_index_wrapper->LastBuildEpochVersion());
+        }
+      } else if (role == pb::common::ClusterRole::DOCUMENT) {
+        auto document_index_wrapper = region_meta->DocumentIndexWrapper();
+        if (document_index_wrapper != nullptr) {
+          auto* document_index_status = tmp_region_metrics.mutable_document_index_status();
+          document_index_status->set_is_stop(document_index_wrapper->IsDestoryed());
+          document_index_status->set_is_ready(document_index_wrapper->IsReady());
+          document_index_status->set_is_own_ready(document_index_wrapper->IsOwnReady());
+          document_index_status->set_is_build_error(document_index_wrapper->IsBuildError());
+          document_index_status->set_is_rebuild_error(document_index_wrapper->IsRebuildError());
+          document_index_status->set_is_switching(document_index_wrapper->IsSwitchingDocumentIndex());
+          document_index_status->set_is_hold_document_index(document_index_wrapper->IsOwnReady());
+          document_index_status->set_apply_log_id(document_index_wrapper->ApplyLogId());
+          document_index_status->set_snapshot_log_id(document_index_wrapper->SnapshotLogId());
+          document_index_status->set_last_build_epoch_version(document_index_wrapper->LastBuildEpochVersion());
+        }
       }
 
       mut_region_metrics_map->insert({inner_region.id(), tmp_region_metrics});

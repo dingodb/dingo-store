@@ -182,10 +182,10 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("REGION_ID");
   table_header.push_back("METIRCS_INDEX");
   table_header.push_back("REGION_SIZE");
-  table_header.push_back("VECTOR_TYPE");
-  table_header.push_back("VECTOR_SNAPSHOT_LOG_ID");
-  table_header.push_back("VECTOR_APPLY_LOG_ID");
-  table_header.push_back("VECTOR_BUILD_EPOCH");
+  table_header.push_back("INDEX_TYPE");
+  table_header.push_back("INDEX_SNAPSHOT_LOG_ID");
+  table_header.push_back("INDEX_APPLY_LOG_ID");
+  table_header.push_back("INDEX_BUILD_EPOCH");
   table_header.push_back("IS_STOP");
   table_header.push_back("IS_READY");
   table_header.push_back("IS_OWN_READY");
@@ -231,10 +231,10 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // REGION_ID
   min_widths.push_back(10);  // METIRCS_INDEX
   min_widths.push_back(10);  // REGION_SIZE
-  min_widths.push_back(10);  // VECTOR_TYPE
-  min_widths.push_back(10);  // VECTOR_SNAPSHOT_LOG_ID
-  min_widths.push_back(10);  // VECTOR_APPLY_LOG_ID
-  min_widths.push_back(10);  // VECTOR_BUILD_EPOCH
+  min_widths.push_back(10);  // INDEX_TYPE
+  min_widths.push_back(10);  // INDEX_SNAPSHOT_LOG_ID
+  min_widths.push_back(10);  // INDEX_APPLY_LOG_ID
+  min_widths.push_back(10);  // INDEX_BUILD_EPOCH
   min_widths.push_back(10);  // IS_STOP
   min_widths.push_back(10);  // IS_READY
   min_widths.push_back(10);  // IS_OWN_READY
@@ -420,18 +420,18 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
     auto vector_index_type = region.definition().index_parameter().vector_index_parameter().vector_index_type();
     if (vector_index_type != pb::common::VECTOR_INDEX_TYPE_NONE) {
-      line.push_back(pb::common::VectorIndexType_Name(vector_index_type));  // VECTOR_TYPE
+      line.push_back(pb::common::VectorIndexType_Name(vector_index_type));  // INDEX_TYPE
       url_line.push_back(std::string());
 
       line.push_back(
-          std::to_string(region.metrics().vector_index_status().snapshot_log_id()));  // VECTOR_SNAPSHOT_LOG_ID
+          std::to_string(region.metrics().vector_index_status().snapshot_log_id()));  // INDEX_SNAPSHOT_LOG_ID
       url_line.push_back(std::string());
 
-      line.push_back(std::to_string(region.metrics().vector_index_status().apply_log_id()));  // VECTOR_APPLY_LOG_ID
+      line.push_back(std::to_string(region.metrics().vector_index_status().apply_log_id()));  // INDEX_APPLY_LOG_ID
       url_line.push_back(std::string());
 
       line.push_back(
-          std::to_string(region.metrics().vector_index_status().last_build_epoch_version()));  // VECTOR_BUILD_EPOCH
+          std::to_string(region.metrics().vector_index_status().last_build_epoch_version()));  // INDEX_BUILD_EPOCH
       url_line.push_back(std::string());
 
       line.push_back(std::to_string(region.metrics().vector_index_status().is_stop()));  // IS_STOP
@@ -452,17 +452,50 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
       line.push_back(std::to_string(region.metrics().vector_index_status().is_rebuild_error()));  // REBUILD_ERROR
       url_line.push_back(std::string());
 
+    } else if (region.definition().index_parameter().has_document_index_parameter()) {
+      line.push_back("DOCUMENT");  // INDEX_TYPE
+      url_line.push_back(std::string());
+
+      line.push_back(
+          std::to_string(region.metrics().document_index_status().snapshot_log_id()));  // INDEX_SNAPSHOT_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().apply_log_id()));  // INDEX_APPLY_LOG_ID
+      url_line.push_back(std::string());
+
+      line.push_back(
+          std::to_string(region.metrics().document_index_status().last_build_epoch_version()));  // INDEX_BUILD_EPOCH
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_stop()));  // IS_STOP
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_ready()));  // IS_READY
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_own_ready()));  // IS_OWN_READY
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_switching()));  // IS_SWITCHING
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_build_error()));  // BUILD_ERROR
+      url_line.push_back(std::string());
+
+      line.push_back(std::to_string(region.metrics().document_index_status().is_rebuild_error()));  // REBUILD_ERROR
+      url_line.push_back(std::string());
+
     } else {
-      line.push_back("N/A");  // VECTOR_TYPE
+      line.push_back("N/A");  // INDEX_TYPE
       url_line.push_back(std::string());
 
-      line.push_back("N/A");  // VECTOR_SNAPSHOT_LOG_ID
+      line.push_back("N/A");  // INDEX_SNAPSHOT_LOG_ID
       url_line.push_back(std::string());
 
-      line.push_back("N/A");  // VECTOR_APPLY_LOG_ID
+      line.push_back("N/A");  // INDEX_APPLY_LOG_ID
       url_line.push_back(std::string());
 
-      line.push_back("N/A");  // VECTOR_BUILD_EPOCH
+      line.push_back("N/A");  // INDEX_BUILD_EPOCH
       url_line.push_back(std::string());
 
       line.push_back("N/A");  // IS_STOP

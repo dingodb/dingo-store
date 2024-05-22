@@ -729,11 +729,12 @@ message Region {
 // RegionMetrics
 message RegionMetrics {
   int64 id = 1;
-  int64 leader_store_id = 2;                  // leader store id
-  StoreRegionState store_region_state = 3;    // region state defined by store
-  BRaftStatus braft_status = 4;               // region braft status defined by store
-  RegionDefinition region_definition = 5;     // region definition
-  VectorIndexStatus vector_index_status = 6;  // vector index status
+  int64 leader_store_id = 2;                      // leader store id
+  StoreRegionState store_region_state = 3;        // region state defined by store
+  BRaftStatus braft_status = 4;                   // region braft status defined by store
+  RegionDefinition region_definition = 5;         // region definition
+  VectorIndexStatus vector_index_status = 6;      // vector index status
+  DocumentIndexStatus document_index_status = 7;  // document index status
 
   int64 row_count = 11;                      // row count of this region
   bytes min_key = 12;                        // the min key of this region now exist
@@ -835,6 +836,19 @@ message VectorIndexStatus {
   bool is_rebuild_error = 5;
   bool is_switching = 6;
   bool is_hold_vector_index = 7;  // is hold vector index
+  int64 apply_log_id = 8;
+  int64 snapshot_log_id = 9;
+  int64 last_build_epoch_version = 10;
+}
+
+message DocumentIndexStatus {
+  bool is_stop = 1;
+  bool is_ready = 2;
+  bool is_own_ready = 3;
+  bool is_build_error = 4;
+  bool is_rebuild_error = 5;
+  bool is_switching = 6;
+  bool is_hold_document_index = 7;  // is hold document index
   int64 apply_log_id = 8;
   int64 snapshot_log_id = 9;
   int64 last_build_epoch_version = 10;
