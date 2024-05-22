@@ -90,9 +90,12 @@ message Task {
 }
 
 message TaskList {
-  int64 id = 1;         // this is the id of coordinator task list
-  int64 next_step = 2;  // the next index of tasks to execute
-  repeated Task tasks = 3;
+  int64 id = 1;  // this is the id of coordinator task list
+  string name = 2;
+  int64 next_step = 3;  // the next index of tasks to execute
+  repeated Task tasks = 4;
+  string create_time = 10;
+  string finish_time = 11;
 }
 
 message CreateRequest {
@@ -123,6 +126,7 @@ message ChangePeerRequest {
 
 message TransferLeaderRequest {
   dingodb.pb.common.Peer peer = 1;  // transfer leadership to the peer
+  bool is_force = 2;
 }
 
 message SnapshotVectorIndexRequest {
@@ -754,6 +758,9 @@ message GetTaskListRequest {
   int64 cluster_id = 2;
   int64 task_list_id = 3;
   bool get_task_list_id_only = 4;
+  bool include_archive = 5;
+  int64 archive_start_id = 6;  // task_list range [archive_start_id, ~)
+  int32 archive_limit = 7;     // return task_list num
 }
 
 message GetTaskListResponse {
@@ -1048,6 +1055,27 @@ message GetGCSafePointResponse {
   map<int64, int64> tenant_safe_points = 5;  // for other tenants that are not default tenant
 }
 
+message BalanceLeaderRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.StoreType store_type = 5;
+  bool dryrun = 6;
+}
+
+message BalanceLeaderResponse {
+  message TransferLeaderTask {
+    int64 region_id = 1;
+    int64 source_store_id = 2;
+    int64 target_store_id = 3;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  string leader_score = 10;
+  string expect_leader_score = 11;
+  repeated TransferLeaderTask tasks = 12;
+}
+
 service CoordinatorService {
   // Hello, this is for coordinator and meta
   rpc Hello(HelloRequest) returns (HelloResponse);
@@ -1116,4 +1144,7 @@ service CoordinatorService {
   // Gc
   rpc UpdateGCSafePoint(UpdateGCSafePointRequest) returns (UpdateGCSafePointResponse);
   rpc GetGCSafePoint(GetGCSafePointRequest) returns (GetGCSafePointResponse);
+
+  // Balance leader
+  rpc BalanceLeader(BalanceLeaderRequest) returns (BalanceLeaderResponse);
 }

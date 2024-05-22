@@ -16,6 +16,7 @@
 #define DINGODB_STORE_META_MANAGER_H_
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -30,6 +31,7 @@
 #include "common/constant.h"
 #include "common/latch.h"
 #include "common/safe_map.h"
+#include "document/document_index.h"
 #include "engine/gc_safe_point.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -47,6 +49,10 @@ namespace store {
 // Warp pb region for atomic/metux
 class Region {
  public:
+  struct Statistics {
+    std::atomic<int32_t> serving_request_count{0};
+  };
+
   Region(int64_t region_id);
   ~Region();
 
@@ -127,6 +133,11 @@ class Region {
   VectorIndexWrapperPtr VectorIndexWrapper() { return vector_index_wapper_; }
   void SetVectorIndexWrapper(VectorIndexWrapperPtr vector_index_wapper) { vector_index_wapper_ = vector_index_wapper; }
 
+  DocumentIndexWrapperPtr DocumentIndexWrapper() { return document_index_wapper_; }
+  void SetDocumentIndexWrapper(DocumentIndexWrapperPtr document_index_wapper) {
+    document_index_wapper_ = document_index_wapper;
+  }
+
   scoped_refptr<braft::FileSystemAdaptor> snapshot_adaptor = nullptr;
 
   void SetLastChangeJobId(int64_t job_id);
@@ -139,6 +150,10 @@ class Region {
 
   pb::common::ScalarSchema ScalarSchema();
 
+  int32_t GetServingRequestCount() { return statistics_.serving_request_count.load(std::memory_order_relaxed); }
+  void IncServingRequestCount() { statistics_.serving_request_count.fetch_add(1, std::memory_order_relaxed); }
+  void DecServingRequestCount() { statistics_.serving_request_count.fetch_sub(1, std::memory_order_relaxed); }
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
@@ -147,9 +162,12 @@ class Region {
   pb::raft::SplitStrategy split_strategy_{};
 
   VectorIndexWrapperPtr vector_index_wapper_{nullptr};
+  DocumentIndexWrapperPtr document_index_wapper_{nullptr};
 
   // latches is for multi request concurrency control
   Latches latches_;
+
+  Statistics statistics_;
 };
 
 using RegionPtr = std::shared_ptr<Region>;

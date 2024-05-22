@@ -23,6 +23,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/coordinator_interaction.h"
+#include "document/codec.h"
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -65,6 +66,7 @@ DECLARE_bool(store_create_region);
 DECLARE_int64(start_region_cmd_id);
 DECLARE_int64(end_region_cmd_id);
 DECLARE_int64(vector_id);
+DECLARE_int64(document_id);
 DECLARE_string(key);
 DECLARE_bool(key_is_hex);
 DECLARE_string(range_end);
@@ -99,6 +101,13 @@ DEFINE_bool(get_coordinator_map, false, "get_coordinator_map");
 
 DEFINE_bool(use_filter_store_type, false, "use filter_store_type");
 DEFINE_int32(filter_store_type, 0, "filter_store_type");
+
+DEFINE_bool(create_document_region, false, "create_document_region");
+DECLARE_bool(use_json_parameter);
+DECLARE_bool(dryrun);
+DECLARE_int32(store_type);
+DECLARE_bool(include_archive);
+DECLARE_bool(pretty_show);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -533,6 +542,8 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
   int32_t store_count_available = 0;
   int32_t index_count_available = 0;
+  int32_t document_count_available = 0;
+
   for (auto const& [first, store] : store_map_by_type_id) {
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
@@ -541,6 +552,10 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
         store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
       index_count_available++;
+    }
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT) {
+      document_count_available++;
     }
     std::cout << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
               << " addr={" << store.server_location().ShortDebugString()
@@ -556,6 +571,9 @@ void SendGetStoreMap(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   }
   if (index_count_available > 0) {
     std::cout << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available << "\n";
+  }
+  if (document_count_available > 0) {
+    std::cout << "DINGODB_HAVE_DOCUMENT_AVAILABLE, document_count=" << document_count_available << "\n";
   }
 }
 
@@ -1141,7 +1159,69 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
   request.set_raw_engine(GetRawEngine(FLAGS_raw_engine));
 
-  if (FLAGS_vector_index_type.empty()) {
+  if (FLAGS_create_document_region) {
+    DINGO_LOG(INFO) << "create a document region";
+    if (FLAGS_region_prefix.size() != 1) {
+      DINGO_LOG(ERROR) << "region_prefix must be 1";
+      return;
+    }
+
+    // document index region must have a part_id
+    if (FLAGS_part_id == 0) {
+      DINGO_LOG(ERROR) << "part_id is empty";
+      return;
+    }
+    request.set_part_id(FLAGS_part_id);
+
+    std::string start_key;
+    std::string end_key;
+
+    if (FLAGS_start_id > 0 && FLAGS_end_id > 0 && FLAGS_start_id < FLAGS_end_id) {
+      DINGO_LOG(INFO) << "use start_id " << FLAGS_start_id << ", end_id " << FLAGS_end_id << " to create region range";
+      start_key =
+          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
+      end_key =
+          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
+    } else {
+      DINGO_LOG(INFO) << "use part_id " << FLAGS_part_id << " to create region range";
+      start_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id);
+      end_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
+    }
+    DINGO_LOG(INFO) << "region range is : " << dingodb::Helper::StringToHex(start_key) << " to "
+                    << dingodb::Helper::StringToHex(end_key);
+
+    request.mutable_range()->set_start_key(start_key);
+    request.mutable_range()->set_end_key(end_key);
+
+    // set index_type for vector index
+    request.mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+
+    std::string multi_type_column_json =
+        R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+
+    // document index parameter
+    request.mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+    auto* document_index_parameter = request.mutable_index_parameter()->mutable_document_index_parameter();
+
+    if (FLAGS_use_json_parameter) {
+      document_index_parameter->set_json_parameter(multi_type_column_json);
+    }
+
+    auto* scalar_schema = document_index_parameter->mutable_scalar_schema();
+    auto* field_col1 = scalar_schema->add_fields();
+    field_col1->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field_col1->set_key("col1");
+    auto* field_col2 = scalar_schema->add_fields();
+    field_col2->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field_col2->set_key("col2");
+    auto* field_col3 = scalar_schema->add_fields();
+    field_col3->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field_col3->set_key("col3");
+    auto* field_col4 = scalar_schema->add_fields();
+    field_col4->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field_col4->set_key("col4");
+
+  } else if (FLAGS_vector_index_type.empty()) {
     DINGO_LOG(WARNING) << "vector_index_type is empty, so create a store region";
     if (FLAGS_start_key.empty()) {
       DINGO_LOG(ERROR) << "start_key is empty";
@@ -1418,12 +1498,21 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     const auto& end_key = query_response.region().definition().range().end_key();
 
     std::string real_mid;
-    if (query_response.region().definition().index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+    if (query_response.region().definition().index_parameter().index_type() ==
+        dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
         int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
         dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
+      }
+    } else if (query_response.region().definition().index_parameter().index_type() ==
+               dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
+      if (FLAGS_document_id > 0) {
+        int64_t partition_id = dingodb::DocumentCodec::DecodePartitionId(start_key);
+        dingodb::DocumentCodec::EncodeDocumentKey(start_key[0], partition_id, FLAGS_document_id, real_mid);
+      } else {
+        real_mid = client::Helper::CalculateDocumentMiddleKey(start_key, end_key);
       }
     } else {
       real_mid = dingodb::Helper::CalculateMiddleKey(start_key, end_key);
@@ -1810,12 +1899,20 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     request.set_task_list_id(std::stoll(FLAGS_id));
   }
 
+  request.set_include_archive(FLAGS_include_archive);
+  if (FLAGS_start_id > 0) {
+    request.set_archive_start_id(FLAGS_start_id);
+  }
+  if (FLAGS_limit > 0) {
+    request.set_archive_limit(FLAGS_limit);
+  }
+
   auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << "error: " << response.error().ShortDebugString();
+  DINGO_LOG_IF(INFO, !status.ok()) << "SendRequest status=" << status;
+  DINGO_LOG_IF(INFO, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
 
   for (const auto& task_list : response.task_lists()) {
-    DINGO_LOG(INFO) << "task_list_id=" << task_list.id() << " task_list is " << task_list.DebugString();
+    DINGO_LOG(INFO) << "task_list: " << (FLAGS_pretty_show ? task_list.DebugString() : task_list.ShortDebugString());
   }
 }
 
@@ -1961,6 +2058,21 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendBalanceLeader(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::BalanceLeaderRequest request;
+  dingodb::pb::coordinator::BalanceLeaderResponse response;
+
+  request.set_dryrun(FLAGS_dryrun);
+  request.set_store_type(dingodb::pb::common::StoreType(FLAGS_store_type));
+
+  auto status = coordinator_interaction->SendRequest("BalanceLeader", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+  }
 }
 
 void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {

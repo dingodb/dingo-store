@@ -901,7 +901,7 @@ bool Helper::Link(const std::string& old_path, const std::string& new_path) {
 std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     return {Constant::kStoreDataCF, Constant::kStoreMetaCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
             Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
@@ -921,7 +921,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
 std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     return {Constant::kStoreDataCF,  Constant::kTxnDataCF,      Constant::kTxnLockCF,
@@ -935,7 +935,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
 std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
     }
@@ -958,7 +958,7 @@ void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::strin
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     raw_cf_names.push_back(Constant::kStoreDataCF);
     return;
-  } else if (GetRole() == pb::common::ClusterRole::STORE) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       txn_cf_names.push_back(Constant::kTxnDataCF);
       txn_cf_names.push_back(Constant::kTxnLockCF);
@@ -1021,6 +1021,8 @@ int64_t Helper::Timestamp() {
 }
 
 std::string Helper::NowTime() { return FormatMsTime(TimestampMs(), "%Y-%m-%d %H:%M:%S"); }
+
+std::string Helper::PastDate(int64_t day) { return FormatTime(Timestamp() - day * 86400, "%Y-%m-%d"); }
 
 std::string Helper::FormatMsTime(int64_t timestamp, const std::string& format) {
   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp(
@@ -1555,6 +1557,34 @@ std::string Helper::EncodeVectorIndexRegionHeader(char prefix, int64_t partition
   return buf.GetString();
 }
 
+std::string Helper::EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode document key failed, prefix is 0, partition_id:[" << partition_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kDocumentKeyMaxLenWithPrefix - 8);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  return buf.GetString();
+}
+
+std::string Helper::EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id, int64_t document_id) {
+  if (BAIDU_UNLIKELY(prefix == 0)) {
+    // prefix == 0 is not allowed
+    DINGO_LOG(FATAL) << "Encode document key failed, prefix is 0, partition_id:[" << partition_id << "], document_id:["
+                     << document_id << "]";
+  }
+
+  // Buf buf(17);
+  Buf buf(Constant::kDocumentKeyMaxLenWithPrefix);
+  buf.Write(prefix);
+  buf.WriteLong(partition_id);
+  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, document_id);
+  return buf.GetString();
+}
+
 std::string Helper::EncodeTableRegionHeader(char prefix, const std::string& user_key) {
   if (BAIDU_UNLIKELY(prefix == 0)) {
     // prefix == 0 is not allowed
@@ -1960,15 +1990,6 @@ float Helper::DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_
     res += t * t;
   }
   return (res);
-}
-
-std::string Helper::VectorToString(const std::vector<float>& vec) {
-  std::stringstream ss;
-  for (size_t i = 0; i < vec.size(); ++i) {
-    if (i != 0) ss << ", ";
-    ss << vec[i];
-  }
-  return ss.str();
 }
 
 std::vector<float> Helper::StringToVector(const std::string& str) {

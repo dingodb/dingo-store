@@ -38,6 +38,7 @@ DECLARE_bool(is_reverse);
 DECLARE_string(start_key);
 DECLARE_string(end_key);
 DECLARE_int64(vector_id);
+DECLARE_int64(document_id);
 DEFINE_int64(start_ts, 0, "start_ts");
 DEFINE_int64(resolve_locks, 0, "resolve_locks");
 DEFINE_int64(end_ts, 0, "end_ts");
@@ -66,6 +67,9 @@ DECLARE_int64(dimension);
 DEFINE_string(extra_data, "", "extra_data");
 DECLARE_bool(key_is_hex);
 DECLARE_bool(value_is_hex);
+DECLARE_string(document_text1);
+DECLARE_string(document_text2);
+DECLARE_bool(is_update);
 
 namespace client {
 std::string OctalToHex(const std::string& str) {
@@ -171,11 +175,14 @@ bool TxnGetRegion(int64_t region_id, dingodb::pb::common::Region& region) {
 
 std::string GetServiceName(const dingodb::pb::common::Region& region) {
   std::string service_name;
-  if (!region.definition().index_parameter().has_vector_index_parameter()) {
+  if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
     service_name = "StoreService";
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     service_name = "IndexService";
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    service_name = "DocumentService";
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
     exit(-1);
@@ -502,6 +509,223 @@ void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
+// document
+void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region) {
+  dingodb::pb::store::TxnPrewriteRequest request;
+  dingodb::pb::store::TxnPrewriteResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  if (FLAGS_primary_lock.empty()) {
+    DINGO_LOG(ERROR) << "primary_lock is empty";
+    return;
+  }
+  request.set_primary_lock(FLAGS_primary_lock);
+
+  if (FLAGS_start_ts == 0) {
+    DINGO_LOG(ERROR) << "start_ts is empty";
+    return;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_lock_ttl == 0) {
+    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    return;
+  }
+  request.set_lock_ttl(FLAGS_lock_ttl);
+
+  if (FLAGS_txn_size == 0) {
+    DINGO_LOG(ERROR) << "txn_size is empty";
+    return;
+  }
+  request.set_txn_size(FLAGS_txn_size);
+
+  request.set_try_one_pc(FLAGS_try_one_pc);
+  request.set_max_commit_ts(FLAGS_max_commit_ts);
+
+  if (FLAGS_mutation_op.empty()) {
+    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    return;
+  }
+
+  if (FLAGS_document_id == 0) {
+    DINGO_LOG(ERROR) << "document_id is empty";
+    return;
+  }
+
+  int64_t part_id = region.definition().part_id();
+  int64_t document_id = FLAGS_document_id;
+  int64_t dimension = 0;
+
+  if (region.region_type() != dingodb::pb::common::RegionType::DOCUMENT_REGION) {
+    DINGO_LOG(ERROR) << "region_type is invalid, only document region can use this function";
+    return;
+  }
+
+  if (FLAGS_mutation_op == "put") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Put);
+
+    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
+                                                                       part_id, document_id));
+
+    dingodb::pb::common::DocumentWithId document_with_id;
+
+    document_with_id.set_id(document_id);
+    auto* document = document_with_id.mutable_document();
+
+    document_with_id.set_id(FLAGS_document_id);
+    auto* document_data = document_with_id.mutable_document()->mutable_document_data();
+
+    if (FLAGS_document_text1.empty()) {
+      DINGO_LOG(ERROR) << "document_text1 is empty";
+      return;
+    }
+
+    if (FLAGS_document_text2.empty()) {
+      DINGO_LOG(ERROR) << "document_text2 is empty";
+      return;
+    }
+
+    // col1 text
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      document_value1.mutable_field_value()->set_string_data(FLAGS_document_text1);
+      (*document_data)["col1"] = document_value1;
+    }
+
+    // col2 int64
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::INT64);
+      document_value1.mutable_field_value()->set_long_data(FLAGS_document_id);
+      (*document_data)["col2"] = document_value1;
+    }
+
+    // col3 double
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DOUBLE);
+      document_value1.mutable_field_value()->set_double_data(FLAGS_document_id * 1.0);
+      (*document_data)["col3"] = document_value1;
+    }
+
+    // col4 text
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      document_value1.mutable_field_value()->set_string_data(FLAGS_document_text2);
+      (*document_data)["col4"] = document_value1;
+    }
+
+    *mutation->mutable_document() = document_with_id;
+  } else if (FLAGS_mutation_op == "delete") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::Delete);
+    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
+                                                                       part_id, document_id));
+  } else if (FLAGS_mutation_op == "check_not_exists") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
+    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
+                                                                       part_id, document_id));
+  } else if (FLAGS_mutation_op == "insert") {
+    auto* mutation = request.add_mutations();
+    mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
+    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
+                                                                       part_id, document_id));
+
+    dingodb::pb::common::DocumentWithId document_with_id;
+
+    document_with_id.set_id(document_id);
+    auto* document = document_with_id.mutable_document();
+
+    document_with_id.set_id(FLAGS_document_id);
+    auto* document_data = document_with_id.mutable_document()->mutable_document_data();
+
+    if (FLAGS_document_text1.empty()) {
+      DINGO_LOG(ERROR) << "document_text1 is empty";
+      return;
+    }
+
+    if (FLAGS_document_text2.empty()) {
+      DINGO_LOG(ERROR) << "document_text2 is empty";
+      return;
+    }
+
+    // col1 text
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      document_value1.mutable_field_value()->set_string_data(FLAGS_document_text1);
+      (*document_data)["col1"] = document_value1;
+    }
+
+    // col2 int64
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::INT64);
+      document_value1.mutable_field_value()->set_long_data(FLAGS_document_id);
+      (*document_data)["col2"] = document_value1;
+    }
+
+    // col3 double
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DOUBLE);
+      document_value1.mutable_field_value()->set_double_data(FLAGS_document_id * 1.0);
+      (*document_data)["col3"] = document_value1;
+    }
+
+    // col4 text
+    {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+      document_value1.mutable_field_value()->set_string_data(FLAGS_document_text2);
+      (*document_data)["col4"] = document_value1;
+    }
+
+    *mutation->mutable_document() = document_with_id;
+  } else {
+    DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
+    return;
+  }
+
+  if (!FLAGS_extra_data.empty()) {
+    DINGO_LOG(INFO) << "extra_data is: " << FLAGS_extra_data;
+  }
+
+  if (FLAGS_for_update_ts > 0) {
+    DINGO_LOG(INFO) << "for_update_ts > 0, do pessimistic check : " << FLAGS_for_update_ts;
+    for (int i = 0; i < request.mutations_size(); i++) {
+      request.add_pessimistic_checks(::dingodb::pb::store::TxnPrewriteRequest_PessimisticCheck::
+                                         TxnPrewriteRequest_PessimisticCheck_DO_PESSIMISTIC_CHECK);
+      auto* for_update_ts_check = request.add_for_update_ts_checks();
+      for_update_ts_check->set_expected_for_update_ts(FLAGS_for_update_ts);
+      for_update_ts_check->set_index(i);
+
+      if (!FLAGS_extra_data.empty()) {
+        auto* extra_data = request.add_lock_extra_datas();
+        extra_data->set_index(i);
+        extra_data->set_extra_data(FLAGS_extra_data);
+      }
+    }
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "TxnPrewrite", request, response);
+
+  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+}
+
 // unified
 
 void SendTxnGet(int64_t region_id) {
@@ -720,11 +944,14 @@ void SendTxnPessimisticRollback(int64_t region_id) {
   }
 
   std::string service_name;
-  if (!region.definition().index_parameter().has_vector_index_parameter()) {
+  if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
     service_name = "StoreService";
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     service_name = "IndexService";
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    service_name = "DocumentService";
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
     return;
@@ -777,11 +1004,14 @@ void SendTxnPrewrite(int64_t region_id) {
     return;
   }
 
-  if (!region.definition().index_parameter().has_vector_index_parameter()) {
+  if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
     StoreSendTxnPrewrite(region_id, region);
   } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
              region.definition().index_parameter().has_vector_index_parameter()) {
     IndexSendTxnPrewrite(region_id, region);
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    DocumentSendTxnPrewrite(region_id, region);
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }

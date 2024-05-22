@@ -213,6 +213,10 @@ class VectorIndex {
   pb::common::Range Range() const;
   void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
+  static void SetSimdHook();
+  static void SetSimdHookForFaiss();
+  static void SetSimdHookForHnswlib();
+
  protected:
   // vector index id
   int64_t id;
@@ -249,8 +253,10 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   void Destroy();
   bool Recover();
 
+  butil::Status RemoveMeta() const;
   butil::Status SaveMeta();
   butil::Status LoadMeta();
+  butil::Status DeleteMeta();
 
   int64_t Id() const { return id_; }
 

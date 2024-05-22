@@ -464,6 +464,9 @@ message Mutation {
 
   // for vector index region, executor must use the VectorWithId to do put/putifabsent
   dingodb.pb.common.VectorWithId vector = 4;
+
+  // for document index region, executor must use the DocumentWithId to do put/putifabsent
+  dingodb.pb.common.DocumentWithId document = 5;
 }
 
 message WriteConflict {
@@ -551,8 +554,13 @@ message TxnGetResponse {
   // The vector value associated with the key, if not found, is empty and error is NOT_FOUND
   // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
   dingodb.pb.common.VectorWithId vector = 5;
+  // for document index region:
+  // The document value associated with the key, if not found, is empty and error is NOT_FOUND
+  // dingo-store do not accept NULL value, so if value is NULL, it means the key is not exist
+  dingodb.pb.common.DocumentWithId document = 6;
+
   // True if the key does not exist in the database.
-  // bool not_found = 6;
+  // bool not_found = 10;
 }
 
 // TxnScan fetches values for a range of keys in the transaction with start_ts.
@@ -601,6 +609,9 @@ message TxnScanResponse {
   // the last iteratered key of this scan response.
   // if end_key is null, means scan do not successfully iterate any key.
   bytes end_key = 7;
+
+  // for document index region, documents is the return value of the scan request
+  repeated dingodb.pb.common.DocumentWithId documents = 8;
 }
 
 // Lock a set of keys to prepare to write to them.
@@ -862,6 +873,12 @@ message TxnBatchGetResponse {
   // all keys. In this case, `vectors` should be empty and the client should redo
   // batch get all the keys after resolving the lock.
   repeated dingodb.pb.common.VectorWithId vectors = 5;
+
+  // for document index region:
+  // When some key is locked but we cannot check locks of
+  // all keys. In this case, `documents` should be empty and the client should redo
+  // batch get all the keys after resolving the lock.
+  repeated dingodb.pb.common.DocumentWithId documents = 6;
 }
 
 // Rollback a prewritten transaction. This will remove the preliminary data from

@@ -86,6 +86,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":ScanWithCoprocessor.*";
     default_run_case += ":ScanWithCoprocessorV2.*";
 
+    default_run_case += ":CandidateStoresTest.*";
+
     // default_run_case += ":StoreRegionMetaTest.*";
     // default_run_case += ":StoreRegionMetricsTest.*";
 

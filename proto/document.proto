@@ -1,0 +1,204 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "error.proto";
+import "store.proto";
+
+package dingodb.pb.document;
+
+option java_package = "io.dingodb.document";
+option cc_generic_services = true;
+
+message DocumentAddRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated dingodb.pb.common.DocumentWithId documents = 3;
+  bool is_update = 4;
+}
+
+message DocumentAddResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // return the execution status of each key
+  // key_states[index] = true, add success
+  // key_states[index] = false, add failed
+  repeated bool key_states = 3;
+}
+
+message DocumentBatchQueryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated int64 document_ids = 3;
+  bool without_scalar_data = 4;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 5;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+}
+
+message DocumentBatchQueryResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.DocumentWithId doucments = 3;
+}
+
+message DocumentScanQueryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  int64 document_id_start = 3;
+  bool is_reverse_scan = 4;
+  int64 max_scan_count = 5;   // the max count user want to scan
+  int64 document_id_end = 6;  // the end id of scan, if is_reverse_scan is true, document_id_end must be less than
+                              // document_id_start, if is_reverse_scan is false, document_id_end must be greater than
+                              // document_id_start
+                              // the real range is [start, end], include start and end
+                              // if document_id_end == 0, scan to the end of the region
+
+  bool without_scalar_data = 12;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 13;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                       // if this parameter is null, all scalar data will be returned.
+}
+
+message DocumentScanQueryResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.DocumentWithId documents = 3;
+}
+
+message DocumentGetRegionMetricsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+}
+
+message DocumentGetRegionMetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.DocumentIndexMetrics metrics = 3;
+}
+
+message DocumentSearchRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  dingodb.pb.common.DocumentSearchParameter parameter = 3;
+}
+
+message DocumentSearchResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.DocumentWithScore document_with_scores = 3;
+}
+
+message DocumentDeleteRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  repeated int64 ids = 3;
+}
+
+message DocumentDeleteResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  // return the execution status of each key
+  // key_states[index] = true, delete success
+  // key_states[index] = false, key not exist
+  repeated bool key_states = 3;
+}
+
+message DocumentGetBorderIdRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  bool get_min = 3;  // if true, get min id, else get max id
+}
+
+message DocumentGetBorderIdResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 id = 3;
+}
+
+message DocumentCountRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  // [document_id_start, document_id_end)
+  int64 document_id_start = 3;  // default region range start_key
+  int64 document_id_end = 4;    // default region range end_key, not include
+}
+
+message DocumentCountResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 count = 3;
+}
+
+message DocumentGetParameter {
+  // the parameter below is inherited from DocumentBatchQueryRequest
+  bool without_scalar_data = 1;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 2;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+  bool without_table_data = 3;        // Default false, if true, response without table data.
+}
+
+message HelloRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.store.Context context = 2;
+  bool get_region_metrics = 3;
+  bool is_just_version_info = 4;
+}
+
+message HelloResponse {
+  // response info
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  // error code
+  dingodb.pb.error.Error error = 2;
+  int64 region_count = 3;
+  int64 region_leader_count = 4;
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 5;
+  dingodb.pb.common.VersionInfo version_info = 6;
+  dingodb.pb.common.StoreOwnMetrics store_own_metrics = 7;
+}
+
+service DocumentService {
+  rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
+
+  // document index
+  rpc DocumentAdd(DocumentAddRequest) returns (DocumentAddResponse);
+  rpc DocumentBatchQuery(DocumentBatchQueryRequest) returns (DocumentBatchQueryResponse);
+  rpc DocumentSearch(DocumentSearchRequest) returns (DocumentSearchResponse);
+  rpc DocumentDelete(DocumentDeleteRequest) returns (DocumentDeleteResponse);
+  rpc DocumentGetBorderId(DocumentGetBorderIdRequest) returns (DocumentGetBorderIdResponse);
+  rpc DocumentScanQuery(DocumentScanQueryRequest) returns (DocumentScanQueryResponse);
+  rpc DocumentGetRegionMetrics(DocumentGetRegionMetricsRequest) returns (DocumentGetRegionMetricsResponse);
+  rpc DocumentCount(DocumentCountRequest) returns (DocumentCountResponse);
+
+  // txn rpcs
+  rpc TxnGet(dingodb.pb.store.TxnGetRequest) returns (dingodb.pb.store.TxnGetResponse);
+  rpc TxnBatchGet(dingodb.pb.store.TxnBatchGetRequest) returns (dingodb.pb.store.TxnBatchGetResponse);
+  rpc TxnScan(dingodb.pb.store.TxnScanRequest) returns (dingodb.pb.store.TxnScanResponse);
+  rpc TxnScanLock(dingodb.pb.store.TxnScanLockRequest) returns (dingodb.pb.store.TxnScanLockResponse);
+  rpc TxnDump(dingodb.pb.store.TxnDumpRequest) returns (dingodb.pb.store.TxnDumpResponse);
+
+  rpc TxnPessimisticLock(dingodb.pb.store.TxnPessimisticLockRequest)
+      returns (dingodb.pb.store.TxnPessimisticLockResponse);
+  rpc TxnPessimisticRollback(dingodb.pb.store.TxnPessimisticRollbackRequest)
+      returns (dingodb.pb.store.TxnPessimisticRollbackResponse);
+  rpc TxnPrewrite(dingodb.pb.store.TxnPrewriteRequest) returns (dingodb.pb.store.TxnPrewriteResponse);
+  rpc TxnCommit(dingodb.pb.store.TxnCommitRequest) returns (dingodb.pb.store.TxnCommitResponse);
+  rpc TxnCheckTxnStatus(dingodb.pb.store.TxnCheckTxnStatusRequest) returns (dingodb.pb.store.TxnCheckTxnStatusResponse);
+  rpc TxnResolveLock(dingodb.pb.store.TxnResolveLockRequest) returns (dingodb.pb.store.TxnResolveLockResponse);
+  rpc TxnBatchRollback(dingodb.pb.store.TxnBatchRollbackRequest) returns (dingodb.pb.store.TxnBatchRollbackResponse);
+  rpc TxnHeartBeat(dingodb.pb.store.TxnHeartBeatRequest) returns (dingodb.pb.store.TxnHeartBeatResponse);
+  rpc TxnGc(dingodb.pb.store.TxnGcRequest) returns (dingodb.pb.store.TxnGcResponse);
+  rpc TxnDeleteRange(dingodb.pb.store.TxnDeleteRangeRequest) returns (dingodb.pb.store.TxnDeleteRangeResponse);
+};

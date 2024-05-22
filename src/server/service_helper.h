@@ -53,6 +53,7 @@ class ServiceHelper {
   static butil::Status ValidateRangeInRange(const pb::common::Range& region_range, const pb::common::Range& req_range);
   static butil::Status ValidateRegion(store::RegionPtr region, const std::vector<std::string_view>& keys);
   static butil::Status ValidateIndexRegion(store::RegionPtr region, const std::vector<int64_t>& vector_ids);
+  static butil::Status ValidateDocumentRegion(store::RegionPtr region, const std::vector<int64_t>& document_ids);
   static butil::Status ValidateClusterReadOnly();
 };
 
@@ -115,12 +116,15 @@ class TrackClosure : public google::protobuf::Closure {
 
   TrackerPtr Tracker() { return tracker; };
 
+  store::RegionPtr GetRegion() { return region; }
+
  protected:
   TrackerPtr tracker;
+  store::RegionPtr region;
 };
 
 // Wrapper brpc service closure for log.
-template <typename T, typename U>
+template <typename T, typename U, bool need_region = true>
 class ServiceClosure : public TrackClosure {
  public:
   ServiceClosure(const std::string& method_name, google::protobuf::Closure* done, const T* request, U* response)
@@ -131,6 +135,16 @@ class ServiceClosure : public TrackClosure {
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+    if (BAIDU_LIKELY(need_region)) {
+      int64_t region_id = request->context().region_id();
+      region = Server::GetInstance().GetRegion(region_id);
+      if (BAIDU_UNLIKELY(region == nullptr)) {
+        ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
+                                fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
+      } else {
+        region->IncServingRequestCount();
+      }
+    }
   }
   ~ServiceClosure() override = default;
 
@@ -173,9 +187,9 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_raft_apply_time_ns(tracker->RaftApplyTime());
 }
 
-template <typename T, typename U>
-void ServiceClosure<T, U>::Run() {
-  std::unique_ptr<ServiceClosure<T, U>> self_guard(this);
+template <typename T, typename U, bool need_region>
+void ServiceClosure<T, U, need_region>::Run() {
+  std::unique_ptr<ServiceClosure<T, U, need_region>> self_guard(this);
   brpc::ClosureGuard done_guard(done_);
 
   tracker->SetTotalRpcTime();
@@ -213,6 +227,10 @@ void ServiceClosure<T, U>::Run() {
           response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
           request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
     }
+  }
+
+  if (region) {
+    region->DecServingRequestCount();
   }
 }
 

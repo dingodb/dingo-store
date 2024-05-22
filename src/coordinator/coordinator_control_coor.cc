@@ -15,6 +15,7 @@
 #include <sys/types.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -30,6 +31,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_helper.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -154,6 +156,30 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
       *tmp_region = element.second;
     }
   }
+}
+
+void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map, pb::common::StoreType store_type) {
+  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  store_map.set_epoch(store_map_epoch);
+
+  {
+    // BAIDU_SCOPED_LOCK(store_map_mutex_);
+    butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
+    store_map_copy.init(100);
+    store_map_.GetRawMapCopy(store_map_copy);
+
+    for (auto& [_, store] : store_map_copy) {
+      if (store.store_type() == store_type) {
+        *store_map.add_stores() = store;
+      }
+    }
+  }
+}
+
+pb::common::Store CoordinatorControl::GetStore(int64_t store_id) {
+  pb::common::Store store;
+  store_map_.Get(store_id, store);
+  return store;
 }
 
 void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
@@ -519,17 +545,25 @@ int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
         *(store_increment_store->mutable_raft_location()) = store.raft_location();
         store_increment_store->set_state(pb::common::StoreState::STORE_NORMAL);
         store_increment_store->set_last_seen_timestamp(butil::gettimeofday_ms());
+        store_increment_store->set_leader_num_weight(store.leader_num_weight());
       } else if (store_to_update.server_location().host() != store.server_location().host() ||
                  store_to_update.server_location().port() != store.server_location().port() ||
                  store_to_update.raft_location().host() != store.raft_location().host() ||
                  store_to_update.raft_location().port() != store.raft_location().port() ||
                  store_to_update.resource_tag() != store.resource_tag() ||
-                 store_to_update.keyring() != store.keyring()) {
+                 store_to_update.keyring() != store.keyring() ||
+                 store_to_update.leader_num_weight() != store.leader_num_weight()) {
         // this is normal heartbeat, with state change or location change
         // so only need to update state & last_seen_timestamp, no need to update epoch
         auto* store_increment = meta_increment.add_stores();
         store_increment->set_id(store.id());
         store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+        store_to_update.set_resource_tag(store.resource_tag());
+        store_to_update.set_keyring(store.keyring());
+        *store_to_update.mutable_server_location() = store.server_location();
+        *store_to_update.mutable_raft_location() = store.raft_location();
+        store_to_update.set_leader_num_weight(store.leader_num_weight());
 
         auto* store_increment_store = store_increment->mutable_store();
         *store_increment_store = store_to_update;  // only update server_location & raft_location & state
@@ -879,9 +913,6 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
     region_internal_map_copy.init(30000);
     region_map_.GetRawMapCopy(region_internal_map_copy);
-    butil::FlatMap<int64_t, pb::common::RegionMetrics> region_metrics_map_copy;
-    region_metrics_map_copy.init(30000);
-    region_metrics_map_.GetRawMapCopy(region_metrics_map_copy);
 
     for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
@@ -901,6 +932,25 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
     for (auto& element : region_internal_map_copy) {
       auto* tmp_region = region_map.add_regions();
       GenRegionFull(element.second, *tmp_region);
+    }
+  }
+}
+
+void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb::common::RegionType region_type,
+                                          pb::common::IndexType index_type) {
+  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  {
+    // BAIDU_SCOPED_LOCK(region_map_mutex_);
+    butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
+    region_internal_map_copy.init(30000);
+    region_map_.GetRawMapCopy(region_internal_map_copy);
+
+    for (auto& element : region_internal_map_copy) {
+      const auto& region = element.second;
+      if (region.region_type() == region_type && region.definition().index_parameter().index_type() == index_type) {
+        auto* tmp_region = region_map.add_regions();
+        GenRegionFull(region, *tmp_region);
+      }
     }
   }
 }
@@ -1003,6 +1053,12 @@ butil::Status CoordinatorControl::CleanDeletedRegionMap(int64_t region_id) {
   }
 
   return butil::Status::OK();
+}
+
+pb::coordinator_internal::RegionInternal CoordinatorControl::GetRegion(int64_t region_id) {
+  pb::coordinator_internal::RegionInternal region;
+  region_map_.Get(region_id, region);
+  return region;
 }
 
 void CoordinatorControl::GetRegionCount(int64_t& region_count) { region_count = region_map_.Size(); }
@@ -1166,7 +1222,7 @@ void CoordinatorControl::RecycleOrphanRegionOnStore() {
 
         DINGO_LOG(INFO) << "RecycleOrphanRegionOnStore delete store_id:" << ids.first << " region_id: " << region_id;
 
-        auto* increment_task_list = CreateTaskList(meta_increment);
+        auto* increment_task_list = CreateTaskList(meta_increment, "RecycleOrphanRegion");
 
         // this is delete_region task
         AddDeleteTask(increment_task_list, ids.first, region_id, nullptr, meta_increment);
@@ -1882,6 +1938,33 @@ butil::Status CoordinatorControl::CreateShadowRegion(
     }
   }
 
+  if (region_type == pb::common::RegionType::DOCUMENT_REGION && new_index_parameter.has_document_index_parameter()) {
+    store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+
+    // validate document index region range
+    // range's start_key and end_key must be less than 16 bytes
+    if (region_range.start_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+        region_range.start_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region range start_key size is not 8 or 16, start_key="
+                       << Helper::StringToHex(region_range.start_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "document index region range start_key size is not 8 or 16 bytes");
+    }
+
+    if (region_range.end_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+        region_range.end_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region range end_key size is not 8 or 16, end_key="
+                       << Helper::StringToHex(region_range.end_key());
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                           "document index region range end_key size is not 8 or 16 bytes");
+    }
+
+    if (part_id <= 0) {
+      DINGO_LOG(ERROR) << "CreateRegion document index region part_id is not legal, part_id=" << part_id;
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "document index region part_id is not legal");
+    }
+  }
+
   // select store for region
   butil::FlatMap<int64_t, pb::common::Store> store_map_copy;
   store_map_copy.init(100);
@@ -2009,41 +2092,79 @@ butil::Status CoordinatorControl::CreateRegionFinal(
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION && new_index_parameter.has_vector_index_parameter()) {
-    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (new_index_parameter.has_vector_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_INDEX;
 
-    // validate vector index region range
-    // range's start_key and end_key must be less than 16 bytes
-    if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
-        region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
-                       << Helper::StringToHex(region_range.start_key());
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "vector index region range start_key size is not 8 or 16 bytes");
-    }
-
-    if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
-        region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
-                       << Helper::StringToHex(region_range.end_key());
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
-                           "vector index region range end_key size is not 8 or 16 bytes");
-    }
-
-    if (part_id <= 0) {
-      DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
-      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
-    }
-
-    // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
-    if (new_index_parameter.vector_index_parameter().vector_index_type() ==
-        pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
-      auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
-      auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
-      if (!ret1.ok()) {
-        DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
-        return ret1;
+      // validate vector index region range
+      // range's start_key and end_key must be less than 16 bytes
+      if (region_range.start_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+          region_range.start_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region range start_key size is not 8 or 16, start_key="
+                         << Helper::StringToHex(region_range.start_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "vector index region range start_key size is not 8 or 16 bytes");
       }
+
+      if (region_range.end_key().size() != Constant::kVectorKeyMinLenWithPrefix &&
+          region_range.end_key().size() != Constant::kVectorKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region range end_key size is not 8 or 16, end_key="
+                         << Helper::StringToHex(region_range.end_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "vector index region range end_key size is not 8 or 16 bytes");
+      }
+
+      if (part_id <= 0) {
+        DINGO_LOG(ERROR) << "CreateRegion vector index region part_id is not legal, part_id=" << part_id;
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "vector index region part_id is not legal");
+      }
+
+      // if vector index is hnsw, need to limit max_elements of each region to less than 512MB / dimenstion / 4
+      if (new_index_parameter.vector_index_parameter().vector_index_type() ==
+          pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+        auto* hnsw_parameter = new_index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
+        auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+        if (!ret1.ok()) {
+          DINGO_LOG(ERROR) << "CreateRegion vector index region hnsw parameter is not legal, ret=" << ret1;
+          return ret1;
+        }
+      }
+    } else {
+      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not vector, index_parameter="
+                       << new_index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not vector");
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (new_index_parameter.has_document_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+
+      // validate document index region range
+      // range's start_key and end_key must be less than 16 bytes
+      if (region_range.start_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+          region_range.start_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region range start_key size is not 8 or 16, start_key="
+                         << Helper::StringToHex(region_range.start_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "document index region range start_key size is not 8 or 16 bytes");
+      }
+
+      if (region_range.end_key().size() != Constant::kDocumentKeyMinLenWithPrefix &&
+          region_range.end_key().size() != Constant::kDocumentKeyMaxLenWithPrefix) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region range end_key size is not 8 or 16, end_key="
+                         << Helper::StringToHex(region_range.end_key());
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                             "document index region range end_key size is not 8 or 16 bytes");
+      }
+
+      if (part_id <= 0) {
+        DINGO_LOG(ERROR) << "CreateRegion document index region part_id is not legal, part_id=" << part_id;
+        return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "document index region part_id is not legal");
+      }
+
+    } else {
+      DINGO_LOG(ERROR) << "CreateRegionFinal index_parameter is not legal, not document, index_parameter="
+                       << new_index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not document");
     }
   }
 
@@ -2175,8 +2296,22 @@ butil::Status CoordinatorControl::GetCreateRegionStoreIds(pb::common::RegionType
 
   // setup store_type
   pb::common::StoreType store_type = pb::common::StoreType::NODE_TYPE_STORE;
-  if (region_type == pb::common::RegionType::INDEX_REGION && index_parameter.has_vector_index_parameter()) {
-    store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (index_parameter.has_vector_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_INDEX;
+    } else {
+      DINGO_LOG(ERROR) << "GetCreateRegionStoreIds index_parameter is not legal, not vector, index_parameter="
+                       << index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not vector");
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (index_parameter.has_document_index_parameter()) {
+      store_type = pb::common::StoreType::NODE_TYPE_DOCUMENT;
+    } else {
+      DINGO_LOG(ERROR) << "GetCreateRegionStoreIds index_parameter is not legal, not document, index_parameter="
+                       << index_parameter.ShortDebugString();
+      return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "index_parameter is not legal, not document");
+    }
   }
 
   // select store for region
@@ -2244,7 +2379,7 @@ butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
 
         // use TaskList to drop & purge region
         for (const auto& peer : region_to_delete.definition().peers()) {
-          auto* increment_task_list = CreateTaskList(meta_increment);
+          auto* increment_task_list = CreateTaskList(meta_increment, "DropRegion");
 
           // this is delete_region task
           pb::coordinator::StoreOperation store_operation;
@@ -2558,7 +2693,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
   }
 
   // create task list
-  auto* new_task_list = CreateTaskList(meta_increment);
+  auto* new_task_list = CreateTaskList(meta_increment, "SplitRegion");
 
   // check if need to send load vector index to store
   if (split_from_region.region_type() == pb::common::RegionType::INDEX_REGION &&
@@ -2850,7 +2985,7 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
   }
 
   // build task list
-  auto* new_task_list = CreateTaskList(meta_increment);
+  auto* new_task_list = CreateTaskList(meta_increment, "MergeRegion");
 
   // check if need to send load vector index to store
   if (merge_from_is_vector_index) {
@@ -3067,7 +3202,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     }
 
     // build new task_list
-    auto* increment_task_list = CreateTaskList(meta_increment);
+    auto* increment_task_list = CreateTaskList(meta_increment, "ChangePeer");
 
     // this is change_peer task
     AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition, meta_increment);
@@ -3135,7 +3270,7 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     }
 
     // build new task_list
-    auto* increment_task_list = CreateTaskList(meta_increment);
+    auto* increment_task_list = CreateTaskList(meta_increment, "ChangePeer");
 
     // this create region task
     AddCreateTask(increment_task_list, new_store_ids_diff_more.at(0), region_id, new_region_definition, meta_increment);
@@ -3239,7 +3374,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   }
 
   // build new task_list
-  auto* increment_task_list = CreateTaskList(meta_increment);
+  auto* increment_task_list = CreateTaskList(meta_increment, "TransferLeader");
 
   // this transfer leader task
   AddTransferLeaderTask(increment_task_list, leader_store_id, region_id, new_leader_peer, meta_increment);
@@ -3484,7 +3619,8 @@ butil::Status CoordinatorControl::UpdateRegionCmd(int64_t store_id, const pb::co
 }
 
 // RemoveRegionCmd
-butil::Status CoordinatorControl::RemoveRegionCmd(int64_t store_id, int64_t region_cmd_id,
+butil::Status CoordinatorControl::RemoveRegionCmd(int64_t store_id, int64_t task_list_id, int64_t region_cmd_id,
+                                                  const pb::error::Error& error,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
   // validate store id
   int ret = store_map_.Exists(store_id);
@@ -3511,6 +3647,8 @@ butil::Status CoordinatorControl::RemoveRegionCmd(int64_t store_id, int64_t regi
   region_cmd_increment->set_id(region_cmd_id);
   region_cmd_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
   region_cmd_increment->mutable_region_cmd()->set_id(region_cmd_id);
+  region_cmd_increment->mutable_region_cmd()->mutable_region_cmd()->set_job_id(task_list_id);
+  *(region_cmd_increment->mutable_region_cmd()->mutable_error()) = error;
 
   return butil::Status::OK();
 }
@@ -4620,10 +4758,6 @@ int CoordinatorControl::GetStoreOperationOfNotCreateForSend(int64_t store_id,
       continue;
     }
 
-    if (region_cmd.region_cmd().region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
-      continue;
-    }
-
     *(store_operation.add_region_cmds()) = region_cmd.region_cmd();
 
     region_cmd_count++;
@@ -4686,12 +4820,77 @@ void CoordinatorControl::GetTaskList(int64_t task_list_id, pb::coordinator::Task
   task_list_map_.Get(task_list_id, task_list);
 }
 
-pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_internal::MetaIncrement& meta_increment) {
+void CoordinatorControl::UpdateTaskListError(int64_t task_list_id, int64_t region_cmd_id, pb::error::Error error) {
+  DINGO_LOG(INFO) << fmt::format("update task list error: {} {}", task_list_id, region_cmd_id);
+  pb::coordinator::TaskList task_list;
+  task_list_map_.Get(task_list_id, task_list);
+  for (auto& mut_task : *task_list.mutable_tasks()) {
+    for (auto& store_operation : *mut_task.mutable_store_operations()) {
+      for (auto& region_cmd : *store_operation.mutable_region_cmds()) {
+        if (region_cmd.id() == region_cmd_id) {
+          *region_cmd.mutable_error() = error;
+        }
+      }
+    }
+  }
+}
+
+void CoordinatorControl::RecycleArchiveTaskList() {
+  static std::atomic<bool> is_running = false;
+  if (is_running.load()) {
+    DINGO_LOG(WARNING) << "recycle archive task list already running.";
+    return;
+  }
+  is_running.store(true);
+  DEFER(is_running.store(false));
+
+  std::vector<pb::coordinator::TaskList> task_lists;
+  task_list_archive_->GetAllElements(task_lists);
+
+  uint64_t total_count = task_lists.size();
+  std::vector<int64_t> recycle_ids;
+
+  uint32_t recent_day = ConfigHelper::GetReserveTaskListRecentDay();
+  for (const auto& task_list : task_lists) {
+    if (task_list.create_time().empty() || task_list.create_time().substr(0, 10) < Helper::PastDate(recent_day)) {
+      recycle_ids.push_back(task_list.id());
+      task_list_archive_->Erase(task_list.id());
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("recycle task list total_count({}) recycle_count({}) recycle_ids({})", total_count,
+                                 recycle_ids.size(), Helper::VectorToString(recycle_ids));
+}
+
+void CoordinatorControl::GetArchiveTaskListIds(std::vector<int64_t>& task_list_ids, int64_t task_list_id,
+                                               int32_t limit) {
+  if (task_list_archive_ != nullptr) {
+    task_list_archive_->GetAllIds(task_list_ids, task_list_id, limit);
+  }
+}
+
+void CoordinatorControl::GetArchiveTaskList(std::vector<pb::coordinator::TaskList>& task_lists, int64_t task_list_id,
+                                            int32_t limit) {
+  if (task_list_archive_ != nullptr) {
+    task_list_archive_->GetAllElements(task_lists, task_list_id, limit);
+  }
+}
+
+void CoordinatorControl::GetArchiveTaskList(int64_t task_list_id, pb::coordinator::TaskList& task_list) {
+  if (task_list_archive_ != nullptr) {
+    task_list_archive_->Get(task_list_id, task_list);
+  }
+}
+
+pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_internal::MetaIncrement& meta_increment,
+                                                              const std::string& name) {
   auto* task_list_increment = meta_increment.add_task_lists();
   task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
   task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
   auto* increment_task_list = task_list_increment->mutable_task_list();
   increment_task_list->set_id(task_list_increment->id());
+  increment_task_list->set_name(name);
+  increment_task_list->set_create_time(Helper::NowTime());
 
   return increment_task_list;
 }
@@ -5219,7 +5418,6 @@ butil::Status CoordinatorControl::ProcessSingleTaskList(const pb::coordinator::T
   // do task, send all store_operations
   for (const auto& it : task.store_operations()) {
     for (const auto& region_cmd : it.region_cmds()) {
-      DINGO_LOG(INFO) << "====task_list_id: " << task_list.id();
       auto ret = AddRegionCmd(it.id(), task_list.id(), region_cmd, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "AddRegionCmd failed, store_id=" << it.id()
@@ -5633,6 +5831,10 @@ bool CoordinatorControl::CheckStoreOperationResult(pb::coordinator::RegionCmdTyp
         return true;
       }
       break;
+    case RegionCmdType::CMD_TRANSFER_LEADER:
+      DINGO_LOG(ERROR) << "CheckStoreOperationResult... transfer leader failed, errcode=" << errcode;
+      return true;
+      break;
     default:
       DINGO_LOG(ERROR) << "CheckStoreOperationResult... unknown region cmd type " << cmd_type
                        << ", errcode=" << errcode;
@@ -5709,7 +5911,7 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
                     << " all success, will delete these region_cmds, count: " << store_operation.region_cmds_size();
     // delete region_cmd
     for (const auto& region_cmd : store_operation.region_cmds()) {
-      auto ret = RemoveRegionCmd(store_operation.id(), region_cmd.id(), meta_increment);
+      auto ret = RemoveRegionCmd(store_operation.id(), region_cmd.job_id(), region_cmd.id(), {}, meta_increment);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "... region_cmd is success, but remove region_cmd failed, store_id=" << store.id()
                          << " region_cmd_id=" << region_cmd.id();
@@ -5718,10 +5920,6 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
                         << " region_cmd_id=" << region_cmd.id();
       }
     }
-
-    // if (meta_increment.ByteSizeLong() > 0) {
-    //   SubmitMetaIncrementSync(meta_increment);
-    // }
 
     return;
   }
@@ -5781,23 +5979,6 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
                             << " new_store_id=" << it_cmd.error().store_id();
           }
 
-          // auto ret = AddRegionCmd(it_cmd.error().store_id(), region_cmd.job_id(), region_cmd, meta_increment);
-          // if (!ret.ok()) {
-          //   DINGO_LOG(ERROR) << "... add region_cmd failed for NOTLEADER re-routing, store_id=" << store.id()
-          //                    << " region_cmd_id=" << region_cmd.id();
-          // } else {
-          //   // delete store_operation
-          //   auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
-          //   if (!ret.ok()) {
-          //     DINGO_LOG(ERROR) << "... remove store_operation failed for NOTLEADER re-routing, store_id=" <<
-          //     store.id()
-          //                      << " region_cmd_id=" << it_cmd.region_cmd_id();
-          //   } else {
-          //     DINGO_LOG(INFO) << "... remove store_operation success for NOTLEADER re-routing, store_id=" <<
-          //     store.id()
-          //                     << " region_cmd_id=" << it_cmd.region_cmd_id();
-          //   }
-          // }
           break;
         }
       }
@@ -5827,10 +6008,15 @@ void CoordinatorControl::SendStoreOperation(const pb::common::Store& store,
                       << pb::error::Errno_Name(it_cmd.error().errcode()) << " success, will delete this region_cmd";
 
       // delete store_operation
-      auto ret = RemoveRegionCmd(store.id(), it_cmd.region_cmd_id(), meta_increment);
-      if (!ret.ok()) {
-        DINGO_LOG(ERROR) << "... remove store_operation failed, store_id=" << store.id()
-                         << " region_cmd_id=" << it_cmd.region_cmd_id();
+      for (const auto& region_cmd : store_operation.region_cmds()) {
+        if (region_cmd.id() == it_cmd.region_cmd_id()) {
+          auto ret = RemoveRegionCmd(store.id(), region_cmd.job_id(), region_cmd.id(), it_cmd.error(), meta_increment);
+          if (!ret.ok()) {
+            DINGO_LOG(ERROR) << "... remove store_operation failed, store_id=" << store.id()
+                             << " region_cmd_id=" << it_cmd.region_cmd_id();
+          }
+          break;
+        }
       }
     }
   }

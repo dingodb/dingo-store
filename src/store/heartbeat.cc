@@ -28,6 +28,7 @@
 #include "butil/time.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/balance_leader.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -519,6 +520,44 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
   }
 }
 
+// this is for document
+void DocumentIndexScrubTask::ScrubDocumentIndex() {
+  auto status = DocumentIndexManager::ScrubDocumentIndex();
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("Scrub document index failed, error: {}", status.error_str());
+  }
+}
+
+void BalanceLeaderTask::DoBalanceLeader() {
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return;
+  }
+
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    return;
+  }
+
+  {
+    // store
+    auto tracker = balance::Tracker::New();
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                       pb::common::NODE_TYPE_STORE, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] store process error: {}", status.error_str());
+    tracker->Print();
+  }
+
+  {
+    // index
+    auto tracker = balance::Tracker::New();
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                       pb::common::NODE_TYPE_INDEX, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] index process error: {}", status.error_str());
+    tracker->Print();
+  }
+}
+
 bool Heartbeat::Init() {
   auto worker = Worker::New();
   if (!worker->Init()) {
@@ -607,6 +646,18 @@ void Heartbeat::TriggerCompactionTask(void*) {
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<VectorIndexScrubTask>();
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerScrubDocumentIndex(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<DocumentIndexScrubTask>();
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
+void Heartbeat::TriggerBalanceLeader(void*) {
+  // Free at ExecuteRoutine()
+  auto task = std::make_shared<BalanceLeaderTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

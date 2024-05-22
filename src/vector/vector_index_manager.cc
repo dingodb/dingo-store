@@ -44,7 +44,6 @@
 
 namespace dingodb {
 
-DEFINE_int64(catchup_log_min_gap, 8, "catch up log min gap");
 DEFINE_int32(vector_background_worker_num, 16, "vector index background worker num");
 DEFINE_int32(vector_fast_background_worker_num, 8, "vector index fast background worker num");
 DEFINE_int64(vector_fast_build_log_gap, 50, "vector index fast build log gap");
@@ -735,6 +734,8 @@ bool VectorIndexManager::Init() {
     DINGO_LOG(ERROR) << "Init vector index manager fast background worker set failed!";
     return false;
   }
+
+  VectorIndex::SetSimdHook();
 
   return true;
 }

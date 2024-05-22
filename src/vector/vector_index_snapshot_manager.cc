@@ -141,7 +141,7 @@ std::vector<std::string> VectorIndexSnapshotManager::GetSnapshotList(int64_t vec
 }
 
 std::string VectorIndexSnapshotManager::GetSnapshotParentPath(int64_t vector_index_id) {
-  return fmt::format("{}/{}", Server::GetInstance().GetIndexPath(), vector_index_id);
+  return fmt::format("{}/{}", Server::GetInstance().GetVectorIndexPath(), vector_index_id);
 }
 
 std::string VectorIndexSnapshotManager::GetSnapshotTmpPath(int64_t vector_index_id) {

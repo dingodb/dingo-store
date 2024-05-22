@@ -1,0 +1,53 @@
+cluster:
+  name: dingodb
+  instance_id: $INSTANCE_ID$
+  keyring: TO_BE_CONTINUED
+server:
+  listen_host: $SERVER_LISTEN_HOST$
+  host: $SERVER_HOST$
+  port: $SERVER_PORT$
+  heartbeat_interval_s: 6
+  metrics_collect_interval_s: 300
+  approximate_size_metrics_collect_interval_s: 300
+  scrub_document_index_interval_s: 60
+  # worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
+  # worker_thread_ratio: 2 # cpu core * ratio
+  brpc_common_worker_num: 32 # must > 4, the totol bthread_concurrency of brpc is sum of all other worker_num + brpc_common_worker_num
+  read_worker_num: 32 # the number of read worker used by index_service
+  read_worker_max_pending_num: 1024 # 0 is unlimited
+  write_worker_num: 32 # the number of write worker used by index_service
+  write_worker_max_pending_num: 1024 # 0 is unlimited
+  raft_apply_worker_num: 16 # the number of raft apply worker used by store_state_machine
+  raft_apply_worker_max_pending_num: 1024 # 0 is unlimited
+region:
+  region_max_size: 536870912 # 512MB
+  enable_auto_split: true
+  split_check_interval_s: 120
+raft:
+  listen_host: $RAFT_LISTEN_HOST$
+  host: $RAFT_HOST$
+  port: $RAFT_PORT$
+  path: $BASE_PATH$/data/raft_data
+  log_path: $BASE_PATH$/data/raft_log
+  election_timeout_s: 20
+  snapshot_interval_s: 120
+  segmentlog_max_segment_size: 33554432 # 32MB
+log:
+  level: INFO
+  path: $BASE_PATH$/log
+document:
+  index_path: $BASE_PATH$/data/document_index
+  enable_follower_hold_index: false
+  operation_parallel_thread_num: 16 # document index operation parallel thread num.
+  fast_background_worker_num: 8 # document index fast load/build.
+  background_worker_num: 16 # document index slow load/build/rebuild.
+  max_background_task_count: 16 # document index slow load/build/rebuild max pending task count.
+store:
+  path: $BASE_PATH$/data/db
+  background_thread_num: 16 # background_thread_num priority background_thread_ratio
+  fast_background_thread_num: 8 # background_thread_num priority background_thread_ratio
+  # background_thread_ratio: 0.5 # cpu core * ratio
+  stats_dump_period_s: 120
+gc:
+  update_safe_point_interval_s: 60
+  do_gc_interval_s: 60

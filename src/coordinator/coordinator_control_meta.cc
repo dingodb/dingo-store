@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <nlohmann/json.hpp>
 #include <set>
 #include <string>
 #include <utility>
@@ -31,14 +32,17 @@
 #include "common/synchronization.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
+#include "document/codec.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "nlohmann/json_fwd.hpp"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
+#include "tantivy_search.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -909,30 +913,30 @@ butil::Status CoordinatorControl::ValidateScalarIndexParameter(
 // validate index definition
 // in: table_definition
 // return: errno
-butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableDefinition& table_definition) {
+butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinition& table_definition) {
   // validate index name
   if (table_definition.name().empty()) {
     DINGO_LOG(ERROR) << "index name is empty";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index name is empty");
   }
 
-  const auto& index_parameter = table_definition.index_parameter();
+  auto* index_parameter = table_definition.mutable_index_parameter();
 
   // check index_type is not NONE
-  if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_NONE) {
+  if (index_parameter->index_type() == pb::common::IndexType::INDEX_TYPE_NONE) {
     DINGO_LOG(ERROR) << "index_type is NONE";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_type is NONE");
   }
 
   // if index_type is INDEX_TYPE_VECTOR, check vector_index_parameter
-  if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
-    if (!index_parameter.has_vector_index_parameter()) {
+  if (index_parameter->index_type() == pb::common::IndexType::INDEX_TYPE_VECTOR) {
+    if (!index_parameter->has_vector_index_parameter()) {
       DINGO_LOG(ERROR) << "index_type is INDEX_TYPE_VECTOR, but vector_index_parameter is not set";
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "index_type is INDEX_TYPE_VECTOR, but vector_index_parameter is not set");
     }
 
-    const auto& vector_index_parameter = index_parameter.vector_index_parameter();
+    const auto& vector_index_parameter = index_parameter->vector_index_parameter();
 
     auto ret = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter);
     if (!ret.ok()) {
@@ -942,15 +946,15 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 
     return butil::Status::OK();
 
-  } else if (index_parameter.index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR) {
+  } else if (index_parameter->index_type() == pb::common::IndexType::INDEX_TYPE_SCALAR) {
     // check if scalar_index_parameter is set
-    if (!index_parameter.has_scalar_index_parameter()) {
+    if (!index_parameter->has_scalar_index_parameter()) {
       DINGO_LOG(ERROR) << "index_type is SCALAR, but scalar_index_parameter is not set";
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "index_type is SCALAR, but scalar_index_parameter is not set");
     }
 
-    const auto& scalar_index_parameter = index_parameter.scalar_index_parameter();
+    const auto& scalar_index_parameter = index_parameter->scalar_index_parameter();
 
     auto ret = ValidateScalarIndexParameter(scalar_index_parameter);
     if (!ret.ok()) {
@@ -969,6 +973,136 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
       DINGO_LOG(ERROR) << "scalar index cannot find column";
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar index cannot find column.");
     }
+  } else if (index_parameter->index_type() == pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
+    const auto& scalar_schema = index_parameter->document_index_parameter().scalar_schema();
+    const auto& json_parameter = index_parameter->document_index_parameter().json_parameter();
+
+    if (scalar_schema.fields_size() <= 0) {
+      DINGO_LOG(ERROR) << "scalar_schema is empty";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scalar_schema is empty");
+    }
+
+    for (const auto& field : scalar_schema.fields()) {
+      if (field.key().empty()) {
+        DINGO_LOG(ERROR) << "field name is empty";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field name is empty");
+      }
+
+      if (field.field_type() != pb::common::ScalarFieldType::BYTES &&
+          field.field_type() != pb::common::ScalarFieldType::STRING &&
+          field.field_type() != pb::common::ScalarFieldType::DOUBLE &&
+          field.field_type() != pb::common::ScalarFieldType::INT64) {
+        DINGO_LOG(ERROR) << "field type is NONE";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
+      }
+    }
+
+    // validate json parameter
+    if (!json_parameter.empty()) {
+      std::map<std::string, TokenizerType> column_tokenizer_parameter;
+      std::string error_message;
+
+      auto json_valid =
+          DocumentCodec::IsValidTokenizerJsonParameter(json_parameter, column_tokenizer_parameter, error_message);
+
+      if (!json_valid) {
+        DINGO_LOG(ERROR) << "json_parameter is illegal, error_message:" << error_message;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_message);
+      }
+
+      // check if json_parameter is consistent with scalar_schema
+      for (const auto& field : scalar_schema.fields()) {
+        if (column_tokenizer_parameter.find(field.key()) == column_tokenizer_parameter.end()) {
+          std::string error_msg =
+              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}", field.key());
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+
+        if (column_tokenizer_parameter[field.key()] == dingodb::TokenizerType::kTokenizerTypeUnknown) {
+          std::string error_msg = fmt::format(
+              "json_parameter is not consistent with scalar_schema, field_name:{}, type unknown", field.key());
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+
+        switch (field.field_type()) {
+          case pb::common::ScalarFieldType::BYTES:
+            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeBytes) {
+              std::string error_msg = fmt::format(
+                  "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:BYTES vs {}",
+                  field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+              DINGO_LOG(ERROR) << error_msg;
+              return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+            }
+            break;
+          case pb::common::ScalarFieldType::STRING:
+            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeText) {
+              std::string error_msg = fmt::format(
+                  "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:STRING vs {}",
+                  field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+              DINGO_LOG(ERROR) << error_msg;
+              return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+            }
+            break;
+          case pb::common::ScalarFieldType::INT64:
+            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeI64) {
+              std::string error_msg = fmt::format(
+                  "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:INT64 vs {}",
+                  field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+              DINGO_LOG(ERROR) << error_msg;
+              return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+            }
+            break;
+          case pb::common::ScalarFieldType::DOUBLE:
+            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeF64) {
+              std::string error_msg = fmt::format(
+                  "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:DOUBLE vs {}",
+                  field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+              DINGO_LOG(ERROR) << error_msg;
+              return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+            }
+            break;
+          default:
+            DINGO_LOG(ERROR) << "field type is NONE";
+            return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
+            break;
+        }
+      }
+    } else {
+      // generate default json_parameter and update table_definition
+      std::string error_message, json_parameter;
+      std::map<std::string, dingodb::TokenizerType> column_tokenizer_parameter;
+
+      for (const auto& field : scalar_schema.fields()) {
+        if (field.field_type() == pb::common::ScalarFieldType::STRING) {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeText;
+        } else if (field.field_type() == pb::common::ScalarFieldType::INT64) {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeI64;
+        } else if (field.field_type() == pb::common::ScalarFieldType::DOUBLE) {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeF64;
+        } else if (field.field_type() == pb::common::ScalarFieldType::BYTES) {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeBytes;
+        } else {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeText;
+        }
+      }
+
+      auto json_valid =
+          DocumentCodec::GenDefaultTokenizerJsonParameter(column_tokenizer_parameter, json_parameter, error_message);
+
+      if (!json_valid) {
+        DINGO_LOG(ERROR) << "gen default json_parameter is illegal, error_message:" << error_message;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_message);
+      }
+
+      index_parameter->mutable_document_index_parameter()->set_json_parameter(json_parameter);
+    }
+
+    return butil::Status::OK();
+  } else {
+    DINGO_LOG(ERROR) << "index_type is illegal " << index_parameter->index_type();
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "index_type is illegal");
   }
 
   return butil::Status::OK();
@@ -978,13 +1112,14 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(const pb::meta::TableD
 // in: schema_id, table_definition
 // out: new_index_id, new_region_ids meta_increment
 // return: 0 success, -1 failed
-butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta::TableDefinition& table_definition,
+butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta::TableDefinition& table_definition_in,
                                               int64_t table_id, int64_t& new_index_id, std::vector<int64_t>& region_ids,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   // check max index limit
   auto ret1 = ValidateMaxIndexCount();
   if (!ret1.ok()) {
-    DINGO_LOG(ERROR) << "create index exceed max index limit, index_definition:" << table_definition.ShortDebugString();
+    DINGO_LOG(ERROR) << "create index exceed max index limit, index_definition:"
+                     << table_definition_in.ShortDebugString();
     return ret1;
   }
 
@@ -1001,12 +1136,14 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     auto ret = schema_map_.Get(schema_id, schema_internal);
     if (ret < 0) {
       DINGO_LOG(ERROR) << "schema_id is illegal " << schema_id
-                       << ", table_definition:" << table_definition.ShortDebugString();
+                       << ", table_definition:" << table_definition_in.ShortDebugString();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "schema_id is illegal");
     }
 
     tenant_id = schema_internal.tenant_id();
   }
+
+  pb::meta::TableDefinition table_definition = table_definition_in;
 
   // validate index definition
   auto status = ValidateIndexDefinition(table_definition);
@@ -1166,8 +1303,15 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   pb::common::StorageEngine region_store_engine_type = table_definition.store_engine();
   GetStoreEngine(region_store_engine_type);
 
+  pb::common::RegionType region_type = pb::common::RegionType::STORE_REGION;
+  if (table_definition.index_parameter().has_vector_index_parameter()) {
+    region_type = pb::common::RegionType::INDEX_REGION;
+  } else if (table_definition.index_parameter().has_document_index_parameter()) {
+    region_type = pb::common::RegionType::DOCUMENT_REGION;
+  }
+
   std::vector<int64_t> store_ids;
-  auto ret4 = GetCreateRegionStoreIds(pb::common::RegionType::INDEX_REGION, region_raw_engine_type, "", replica,
+  auto ret4 = GetCreateRegionStoreIds(region_type, region_raw_engine_type, "", replica,
                                       table_definition.index_parameter(), store_ids);
   if (!ret4.ok()) {
     DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
@@ -1184,10 +1328,10 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
                                     table_definition.name() + std::string("_part_") + std::to_string(new_part_id);
 
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    auto ret = CreateRegionFinal(region_name, pb::common::RegionType::INDEX_REGION, region_raw_engine_type,
-                                 region_store_engine_type, "", replica, new_part_range, schema_id, 0, new_index_id,
-                                 new_part_id, tenant_id, table_definition.index_parameter(), store_ids, 0,
-                                 new_region_id, store_operations, meta_increment);
+    auto ret = CreateRegionFinal(region_name, region_type, region_raw_engine_type, region_store_engine_type, "",
+                                 replica, new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
+                                 table_definition.index_parameter(), store_ids, 0, new_region_id, store_operations,
+                                 meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
@@ -1252,7 +1396,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
 // return: errno
 // TODO: now only support update hnsw index's max_elements
 butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_id,
-                                              const pb::meta::TableDefinition& new_table_definition,
+                                              const pb::meta::TableDefinition& new_table_definition_in,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "UpdateIndex in control schema_id=" << schema_id;
 
@@ -1290,6 +1434,8 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
     DINGO_LOG(ERROR) << "ERRROR: cannot update index created by new interface." << index_id;
     return butil::Status(pb::error::Errno::EINDEX_COMPATIBILITY, "cannot update index created by new interface.");
   }
+
+  pb::meta::TableDefinition new_table_definition = new_table_definition_in;
 
   // validate new_table_definition
   auto status = ValidateIndexDefinition(new_table_definition);

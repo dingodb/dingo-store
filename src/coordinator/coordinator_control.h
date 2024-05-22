@@ -373,7 +373,7 @@ class CoordinatorControl : public MetaControl {
   // validate index definition
   // in: table_definition
   // return: errno
-  static butil::Status ValidateIndexDefinition(const pb::meta::TableDefinition &table_definition);
+  static butil::Status ValidateIndexDefinition(pb::meta::TableDefinition &table_definition);
   static butil::Status ValidateScalarIndexParameter(const pb::common::ScalarIndexParameter &scalar_index_parameter);
 
   butil::Status ValidateMaxTableCount();
@@ -386,7 +386,7 @@ class CoordinatorControl : public MetaControl {
   // out: new index_id
   // out: new region_ids
   // return: errno
-  butil::Status CreateIndex(int64_t schema_id, const pb::meta::TableDefinition &table_definition, int64_t table_id,
+  butil::Status CreateIndex(int64_t schema_id, const pb::meta::TableDefinition &table_definition_in, int64_t table_id,
                             int64_t &new_index_id, std::vector<int64_t> &region_ids,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
@@ -395,7 +395,8 @@ class CoordinatorControl : public MetaControl {
   // in: index_id
   // in: new_table_definition
   // return: errno
-  butil::Status UpdateIndex(int64_t schema_id, int64_t index_id, const pb::meta::TableDefinition &new_table_definition,
+  butil::Status UpdateIndex(int64_t schema_id, int64_t index_id,
+                            const pb::meta::TableDefinition &new_table_definition_in,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // generate table with part ids
@@ -499,6 +500,8 @@ class CoordinatorControl : public MetaControl {
 
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
+  void GetStoreMap(pb::common::StoreMap &store_map, pb::common::StoreType store_type);
+  pb::common::Store GetStore(int64_t store_id);
 
   // get store metrics
   void GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
@@ -542,8 +545,8 @@ class CoordinatorControl : public MetaControl {
                              pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status UpdateRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
                                 const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status RemoveRegionCmd(int64_t store_id, int64_t region_cmd_id,
-                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status RemoveRegionCmd(int64_t store_id, int64_t task_list_id, int64_t region_cmd_id,
+                                const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetRegionCmd(int64_t store_id, int64_t start_region_cmd_id, int64_t end_region_cmd_id,
                              std::vector<pb::coordinator::RegionCmd> &region_cmds,
                              std::vector<pb::error::Error> &region_cmd_errors);
@@ -596,9 +599,12 @@ class CoordinatorControl : public MetaControl {
 
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
+  void GetRegionMapFull(pb::common::RegionMap &region_map, pb::common::RegionType region_type,
+                        pb::common::IndexType index_type);
   void GetDeletedRegionMap(pb::common::RegionMap &region_map);
   butil::Status AddDeletedRegionMap(int64_t region_id, bool force);
   butil::Status CleanDeletedRegionMap(int64_t region_id);
+  virtual pb::coordinator_internal::RegionInternal GetRegion(int64_t region_id);
   void GetRegionCount(int64_t &region_count);
   void GetRegionIdsInMap(std::vector<int64_t> &region_ids);
   void RecycleDeletedTableAndIndex();
@@ -798,8 +804,16 @@ class CoordinatorControl : public MetaControl {
 
   void GetTaskListAll(butil::FlatMap<int64_t, pb::coordinator::TaskList> &task_lists);
   void GetTaskList(int64_t task_list_id, pb::coordinator::TaskList &task_list);
+  void GetArchiveTaskListIds(std::vector<int64_t> &task_list_ids, int64_t task_list_id, int32_t limit);
+  void GetArchiveTaskList(std::vector<pb::coordinator::TaskList> &task_lists, int64_t task_list_id, int32_t limit);
+  void GetArchiveTaskList(int64_t task_list_id, pb::coordinator::TaskList &task_list);
 
-  pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment);
+  void UpdateTaskListError(int64_t task_list_id, int64_t region_cmd_id, pb::error::Error error);
+
+  void RecycleArchiveTaskList();
+
+  pb::coordinator::TaskList *CreateTaskList(pb::coordinator_internal::MetaIncrement &meta_increment,
+                                            const std::string &name);
   void AddCreateTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                      const pb::common::RegionDefinition &region_definition,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -995,6 +1009,7 @@ class CoordinatorControl : public MetaControl {
   // 11.task_list
   DingoSafeMap<int64_t, pb::coordinator::TaskList> task_list_map_;  // task_list_id -> task_list
   MetaMemMapFlat<pb::coordinator::TaskList> *task_list_meta_;       // need construct
+  MetaDiskMap<pb::coordinator::TaskList> *task_list_archive_;
 
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;

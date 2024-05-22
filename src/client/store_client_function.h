@@ -98,6 +98,17 @@ dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
 dingodb::pb::common::Region SendQueryRegion(int64_t region_id);
 dingodb::pb::store::Context GetRegionContext(int64_t region_id);
 
+// document
+void SendDocumentAdd(int64_t region_id);
+void SendDocumentDelete(int64_t region_id, uint32_t start_id, uint32_t count);
+void SendDocumentSearch(int64_t region_id);
+void SendDocumentBatchQuery(int64_t region_id, std::vector<int64_t> document_ids);
+void SendDocumentGetMaxId(int64_t region_id);
+void SendDocumentGetMinId(int64_t region_id);
+void SendDocumentScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
+int64_t SendDocumentCount(int64_t region_id, int64_t start_document_id, int64_t end_document_id);
+void SendDocumentGetRegionMetrics(int64_t region_id);
+
 // vector
 void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn);
 void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
@@ -175,6 +186,7 @@ void SendTxnDump(int64_t region_id);
 
 void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
+void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
 
 // region
 void SendAddRegion(int64_t region_id, const std::string& raft_group, std::vector<std::string> raft_addrs);

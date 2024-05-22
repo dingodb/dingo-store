@@ -23,6 +23,7 @@
 #include "brpc/controller.h"
 #include "brpc/server.h"
 #include "common/helper.h"
+#include "document/codec.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "vector/codec.h"
@@ -294,6 +295,12 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
       VectorCodec::DecodeRangeToVectorId(region.definition().range(), min_vector_id, max_vector_id);
       start_key += fmt::format("({})", min_vector_id);
       end_key += fmt::format("({})", max_vector_id);
+    } else if (region.region_type() == pb::common::DOCUMENT_REGION &&
+               region.definition().index_parameter().has_document_index_parameter()) {
+      int64_t min_document_id = 0, max_document_id = 0;
+      DocumentCodec::DecodeRangeToDocumentId(region.definition().range(), min_document_id, max_document_id);
+      start_key += fmt::format("({})", min_document_id);
+      end_key += fmt::format("({})", max_document_id);
     }
     line.push_back(start_key);  // START_KEY
     url_line.push_back(std::string());

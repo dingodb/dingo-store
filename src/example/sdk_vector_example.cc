@@ -24,10 +24,6 @@
 #include "sdk/status.h"
 #include "sdk/types.h"
 #include "sdk/vector.h"
-#include "sdk/vector/vector_common.h"
-#include "sdk/vector/vector_get_index_metrics_task.h"
-#include "sdk/vector/vector_index.h"
-#include "sdk/vector/vector_index_cache.h"
 
 using dingodb::sdk::Status;
 

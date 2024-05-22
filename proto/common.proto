@@ -17,7 +17,6 @@ syntax = "proto3";
 package dingodb.pb.common;
 
 option java_package = "io.dingodb.common";
-option cc_generic_services = true;
 
 enum ClusterRole {
   ILLEGAL = 0;
@@ -25,6 +24,7 @@ enum ClusterRole {
   STORE = 2;
   EXECUTOR = 3;
   INDEX = 4;
+  DOCUMENT = 5;
 };
 
 enum Engine {
@@ -253,6 +253,7 @@ message ExecutorMap {
 enum StoreType {
   NODE_TYPE_STORE = 0;
   NODE_TYPE_INDEX = 1;
+  NODE_TYPE_DOCUMENT = 2;
 }
 
 // Store
@@ -270,6 +271,8 @@ message Store {
 
   // store type
   StoreType store_type = 11;  // only updated by coordinator
+
+  int32 leader_num_weight = 20;
 }
 
 message StoreMap {
@@ -319,12 +322,14 @@ message RegionDefinition {
 enum RegionType {
   STORE_REGION = 0;
   INDEX_REGION = 1;
+  DOCUMENT_REGION = 2;
 }
 
 enum IndexType {
   INDEX_TYPE_NONE = 0;  // this is not index, for store region only
   INDEX_TYPE_VECTOR = 1;
   INDEX_TYPE_SCALAR = 2;
+  INDEX_TYPE_DOCUMENT = 3;
 }
 
 enum VectorIndexType {
@@ -364,16 +369,17 @@ enum VectorFilterType {
 }
 
 enum ScalarFieldType {
-  NONE = 0;
-  BOOL = 1;
-  INT8 = 2;
-  INT16 = 3;
-  INT32 = 4;
-  INT64 = 5;
-  FLOAT32 = 6;
-  DOUBLE = 7;
-  STRING = 8;
-  BYTES = 9;
+  NONE = 0;     // just a placeholder
+  BOOL = 1;     // not used now
+  INT8 = 2;     // not used now
+  INT16 = 3;    // not used now
+  INT32 = 4;    // not used now
+  INT64 = 5;    // for vector and document
+  FLOAT32 = 6;  // not used now
+  DOUBLE = 7;   // for vector and document
+  STRING = 8;   // for vector is string, for document is text with tokenizer
+  BYTES = 9;  // for document only, is binary data, no tokenizer is used, not implemented now, will be used in the near
+              // future
 }
 
 message ScalarField {
@@ -678,6 +684,18 @@ message IndexParameter {
   IndexType index_type = 1;
   VectorIndexParameter vector_index_parameter = 2;
   ScalarIndexParameter scalar_index_parameter = 3;
+  DocumentIndexParameter document_index_parameter = 4;
+}
+
+message DocumentIndexParameter {
+  // for default, String field will use "chinese" tokenizer.
+  // if user want to specialize tokenizer, user can use json_parameter to specify tokenizer.
+  // Only string[text], bytes[bytes], double[f64], int64[i64] is supported.
+  ScalarSchema scalar_schema = 1;
+
+  // if use json_parameter, user can use this field to specify tokenizer.
+  // the field in json_parameter must match the field in scalar_schema.
+  string json_parameter = 2;
 }
 
 message RegionStatus {
@@ -726,8 +744,9 @@ message RegionMetrics {
   int64 last_update_metrics_timestamp = 17;  // last update metrics timestamp
 
   // bool is_hold_vector_index = 29;                // is hold vector index
-  VectorIndexMetrics vector_index_metrics = 20;  // vector index  metrics
-  int64 snapshot_epoch_version = 21;             // latest region raft snapshot epoch version
+  VectorIndexMetrics vector_index_metrics = 20;      // vector index  metrics
+  int64 snapshot_epoch_version = 21;                 // latest region raft snapshot epoch version
+  DocumentIndexMetrics document_index_metrics = 22;  // document index metrics
 
   // region's info
   RegionStatus region_status = 30;
@@ -901,4 +920,71 @@ message VersionInfo {
   bool use_tcmalloc = 90;
   bool use_profiler = 100;
   bool use_sanitizer = 110;
+}
+
+message DocumentValue {
+  // data type of scalar field
+  // for document, only INT64, DOUBLE and STRING is supported
+  ScalarFieldType field_type = 1;
+  // scalar field
+  ScalarField field_value = 2;
+}
+
+message Document {
+  // scalar data of this document, key: scalar key, value: scalar value data.
+  map<string, DocumentValue> document_data = 1;
+}
+
+message DocumentWithId {
+  int64 id = 1;
+  Document document = 2;  // document data
+}
+
+message DocumentSearchParameter {
+  // The number of top results to return.
+  uint32 top_n = 1;
+
+  // The query_string for search
+  string query_string = 2;
+
+  // use id filter
+  bool use_id_filter = 3;
+  repeated int64 document_ids = 4;  // if use_id_filter = true, use this field
+
+  // use column filter
+  // if query_string is simple string, use column_names to select columns
+  // if query_string is full functional expr, like "col1: value1 AND col2: value2", column_names is ignored
+  repeated string column_names = 5;
+
+  // for output, if only id is needed, set without_scalar_data = true
+  // else set without_scalar_data = false, and set selected_keys to select scalar data
+  bool without_scalar_data = 10;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 11;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                       // if this parameter is null, all scalar data will be returned.
+}
+
+message DocumentWithScore {
+  DocumentWithId document_with_id = 1;
+  float score = 2;
+}
+
+// document index metrics
+message DocumentIndexMetrics {
+  // total num docs
+  int64 total_num_docs = 1;
+
+  // total num tokens
+  int64 total_num_tokens = 2;
+
+  // max id
+  int64 max_id = 3;
+
+  // min id
+  int64 min_id = 4;
+
+  // meta json
+  string meta_json = 5;
+
+  // json parameter
+  string json_parameter = 6;
 }

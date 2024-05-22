@@ -88,6 +88,23 @@ message VectorIndexSnapshotMeta {
   dingodb.pb.common.Range range = 4;
 }
 
+message DocumentIndexMeta {
+  int64 id = 1;
+  int64 version = 2;
+  int32 type = 3;
+  int32 status = 4;
+  int64 apply_log_id = 5;
+  int64 snapshot_log_id = 6;
+  bool is_hold_vector_index = 10;
+}
+
+message DocumentIndexSnapshotMeta {
+  int64 document_index_id = 1;
+  int64 snapshot_log_id = 2;
+  dingodb.pb.common.RegionEpoch epoch = 3;
+  dingodb.pb.common.Range range = 4;
+}
+
 // raft snapshot carry region meta, e.g. epoch/range
 message RaftSnapshotRegionMeta {
   dingodb.pb.common.RegionEpoch epoch = 1;

@@ -29,6 +29,7 @@
 #include "coordinator/kv_control.h"
 #include "coordinator/tso_control.h"
 #include "crontab/crontab.h"
+#include "document/document_index_manager.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
 #include "log/log_storage_manager.h"
@@ -96,6 +97,9 @@ class Server {
   // Init vector index manager
   bool InitVectorIndexManager();
 
+  // Init document index manager
+  bool InitDocumentIndexManager();
+
   static pb::node::LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
 
   // Init Heartbeat
@@ -160,6 +164,7 @@ class Server {
   std::shared_ptr<RegionController> GetRegionController();
   std::shared_ptr<RegionCommandManager> GetRegionCommandManager();
   VectorIndexManagerPtr GetVectorIndexManager();
+  DocumentIndexManagerPtr GetDocumentIndexManager();
   std::shared_ptr<CoordinatorControl> GetCoordinatorControl();
   std::shared_ptr<AutoIncrementControl> GetAutoIncrementControl();
   std::shared_ptr<TsoControl> GetTsoControl();
@@ -176,7 +181,8 @@ class Server {
 
   static std::string GetRaftLogPath();
 
-  static std::string GetIndexPath();
+  static std::string GetVectorIndexPath();
+  static std::string GetDocumentIndexPath();
 
   bool IsClusterReadOnlyOrForceReadOnly() const;
 
@@ -205,6 +211,9 @@ class Server {
   std::vector<std::vector<std::string>> GetIndexServiceWriteWorkerSetTrace();
   std::vector<std::vector<std::string>> GetVectorIndexBackgroundWorkerSetTrace();
   uint64_t GetVectorIndexManagerBackgroundPendingTaskCount();
+
+  std::vector<std::vector<std::string>> GetDocumentIndexBackgroundWorkerSetTrace();
+  uint64_t GetDocumentIndexManagerBackgroundPendingTaskCount();
 
   std::vector<std::vector<std::string>> GetRaftApplyWorkerSetTrace();
 
@@ -294,6 +303,9 @@ class Server {
   // This is vector index manager.
   VectorIndexManagerPtr vector_index_manager_;
 
+  // This is document index manager.
+  DocumentIndexManagerPtr document_index_manager_;
+
   // This is manage coordinator meta data, like store state and region state.
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 
@@ -338,6 +350,9 @@ class Server {
 
   // vector index thread pool
   ThreadPoolPtr vector_index_thread_pool_;
+
+  // document index thread pool
+  ThreadPoolPtr document_index_thread_pool_;
 
   // RaftApply worker queue
   SimpleWorkerSetPtr raft_apply_worker_set_{nullptr};

@@ -248,6 +248,7 @@ class Helper {
   // second timestamp
   static int64_t Timestamp();
   static std::string NowTime();
+  static std::string PastDate(int64_t day);
 
   // format millisecond timestamp
   static std::string FormatMsTime(int64_t timestamp, const std::string& format);
@@ -310,6 +311,9 @@ class Helper {
   // for vector index region, encode range
   static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id);
   static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id, int64_t vector_id);
+  // for document index region, encode range
+  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id);
+  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id, int64_t document_id);
   // for table region, encode range
   static std::string EncodeTableRegionHeader(char prefix, const std::string& user_key);
   static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id);
@@ -377,8 +381,6 @@ class Helper {
   static float DingoHnswInnerProductDistance(const float* p_vect1, const float* p_vect2, size_t d);
 
   static float DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d);
-
-  static std::string VectorToString(const std::vector<float>& vec);
 
   static std::vector<float> StringToVector(const std::string& str);
 

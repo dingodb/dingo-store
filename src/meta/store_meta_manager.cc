@@ -29,6 +29,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "common/synchronization.h"
+#include "config/config_helper.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -61,7 +62,15 @@ std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definiti
       return nullptr;
     }
     region->SetVectorIndexWrapper(vector_index_wrapper);
+  } else if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_DOCUMENT) {
+    region->inner_region_.set_region_type(pb::common::DOCUMENT_REGION);
 
+    auto document_index_wrapper =
+        DocumentIndexWrapper::New(definition.id(), definition.index_parameter().document_index_parameter());
+    if (document_index_wrapper == nullptr) {
+      return nullptr;
+    }
+    region->SetDocumentIndexWrapper(document_index_wrapper);
   } else {
     region->inner_region_.set_region_type(pb::common::STORE_REGION);
   }
@@ -80,6 +89,14 @@ bool Region::Recover() {
     }
     SetVectorIndexWrapper(vector_index_wrapper);
     return vector_index_wapper_->Recover();
+  } else if (Type() == pb::common::DOCUMENT_REGION) {
+    auto document_index_wrapper =
+        DocumentIndexWrapper::New(Id(), inner_region_.definition().index_parameter().document_index_parameter());
+    if (document_index_wrapper == nullptr) {
+      return false;
+    }
+    SetDocumentIndexWrapper(document_index_wrapper);
+    return document_index_wapper_->Recover();
   }
 
   return true;
@@ -645,11 +662,14 @@ bool StoreServerMeta::Init() {
   store->mutable_keyring()->assign(server.Keyring());
   store->set_epoch(0);
   store->set_state(pb::common::STORE_NORMAL);
+  store->set_leader_num_weight(ConfigHelper::GetLeaderNumWeight());
 
   if (GetRole() == pb::common::ClusterRole::STORE) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_INDEX);
+  } else if (GetRole() == pb::common::ClusterRole::DOCUMENT) {
+    store->set_store_type(::dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT);
   } else {
     DINGO_LOG(FATAL) << "[store.meta] unknown server role: " << GetRole();
   }

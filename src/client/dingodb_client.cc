@@ -107,6 +107,7 @@ DEFINE_int64(start_id, 0, "start id");
 DEFINE_int64(end_id, 0, "end id");
 DEFINE_int64(count, 50, "count");
 DEFINE_int64(vector_id, 0, "vector_id");
+DEFINE_int64(document_id, 0, "document_id");
 DEFINE_int32(topn, 10, "top n");
 DEFINE_int32(batch_count, 5, "batch count");
 DEFINE_int64(part_id, 0, "part_id");
@@ -202,6 +203,13 @@ DEFINE_bool(get_all_tenant, false, "get all tenant");
 DEFINE_bool(with_scalar_schema, false, "create vector index with scalar schema");
 
 DEFINE_bool(enable_rocks_engine, false, "create table with rocks engine");
+
+DEFINE_bool(dryrun, true, "dryrun");
+DEFINE_int32(store_type, 0, "store type");
+
+DEFINE_bool(include_archive, false, "include history archive");
+
+DEFINE_bool(pretty_show, false, "pretty show");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -406,7 +414,28 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendTxnDump(FLAGS_region_id);
     }
 
-    // Vector operation
+    // document operation
+    else if (method == "DocumentDelete") {
+      client::SendDocumentDelete(FLAGS_region_id, FLAGS_start_id, FLAGS_count);
+    } else if (method == "DocumentAdd") {
+      client::SendDocumentAdd(FLAGS_region_id);
+    } else if (method == "DocumentSearch") {
+      client::SendDocumentSearch(FLAGS_region_id);
+    } else if (method == "DocumentBatchQuery") {
+      client::SendDocumentBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_document_id)});
+    } else if (method == "DocumentScanQuery") {
+      client::SendDocumentScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
+    } else if (method == "DocumentGetMaxId") {
+      client::SendDocumentGetMaxId(FLAGS_region_id);
+    } else if (method == "DocumentGetMinId") {
+      client::SendDocumentGetMinId(FLAGS_region_id);
+    } else if (method == "DocumentCount") {
+      client::SendDocumentCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+    } else if (method == "DocumentGetRegionMetrics") {
+      client::SendDocumentGetRegionMetrics(FLAGS_region_id);
+    }
+
+    // vector operation
     else if (method == "VectorSearch") {
       // We cant use FLAGS_vector_data to define the vector we want to search, the format is:
       // 1.0, 2.0, 3.0, 4.0
@@ -856,7 +885,9 @@ int CoordinatorSender() {
   } else if (FLAGS_method == "GetIndexsCount") {
     SendGetIndexesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndex") {
-    SendCreateIndex(coordinator_interaction_meta);
+    SendCreateVectorIndex(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateDocumentIndex") {
+    SendCreateDocumentIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndexId") {
     SendCreateIndexId(coordinator_interaction_meta);
   } else if (FLAGS_method == "UpdateIndex") {
@@ -968,6 +999,10 @@ int CoordinatorSender() {
     SendGetGCSafePoint(coordinator_interaction);
   }
 
+  // balance leader
+  else if (FLAGS_method == "BalanceLeader") {
+    SendBalanceLeader(coordinator_interaction);
+  }
   // force_read_only
   else if (FLAGS_method == "UpdateForceReadOnly") {
     SendUpdateForceReadOnly(coordinator_interaction);

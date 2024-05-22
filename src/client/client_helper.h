@@ -26,6 +26,7 @@
 #include "butil/strings/string_split.h"
 #include "common/constant.h"
 #include "common/logging.h"
+#include "document/codec.h"
 #include "serial/buf.h"
 #include "vector/codec.h"
 
@@ -176,6 +177,19 @@ class Helper {
     DINGO_LOG(INFO) << "mid_vector_id: " << mid_vector_id;
     std::string result;
     dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, mid_vector_id, result);
+    return result;
+  }
+
+  static std::string CalculateDocumentMiddleKey(const std::string& start_key, const std::string& end_key) {
+    int64_t partition_id = dingodb::DocumentCodec::DecodePartitionId(start_key);
+    int64_t min_document_id = dingodb::DocumentCodec::DecodeDocumentId(start_key);
+    int64_t max_document_id = dingodb::DocumentCodec::DecodeDocumentId(end_key);
+    max_document_id = max_document_id > 0 ? max_document_id : INT64_MAX;
+    int64_t mid_document_id = min_document_id + (max_document_id - min_document_id) / 2;
+
+    DINGO_LOG(INFO) << "mid_document_id: " << mid_document_id;
+    std::string result;
+    dingodb::DocumentCodec::EncodeDocumentKey(start_key[0], partition_id, mid_document_id, result);
     return result;
   }
 };

@@ -40,6 +40,7 @@
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
+#include "coordinator/balance_leader.h"
 #include "engine/mono_store_engine.h"
 #include "engine/txn_engine_helper.h"
 #include "gflags/gflags.h"
@@ -66,9 +67,39 @@ DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
 DEFINE_int32(vector_operation_parallel_thread_num, 1, "vector operation parallel thread num");
+DEFINE_int32(document_operation_parallel_thread_num, 1, "document operation parallel thread num");
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
 DEFINE_int32(omp_num_threads, 1, "omp num threads");
+
+DEFINE_int32(server_heartbeat_interval_s, 10, "heartbeat interval seconds");
+DEFINE_int32(server_metrics_collect_interval_s, 300, "metrics collect interval seconds");
+DEFINE_int32(server_store_metrics_collect_interval_s, 30, "store metrics collect interval seconds");
+DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
+             "approximate size metrics collect interval seconds");
+DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
+DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
+DEFINE_bool(region_enable_auto_split, true, "enable auto split");
+DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
+DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
+DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
+DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
+DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
+DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
+DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
+DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
+DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
+DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
+DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
+DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
+DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
+DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
+DEFINE_int32(balance_leader_interval_s, 60, "balance leader interval seconds");
+DEFINE_int32(recycle_task_list_interval_s, 60, "recycle task list interval seconds");
+
+DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
+
+DEFINE_bool(enable_balance_leader, true, "enable balance leader");
 
 extern "C" {
 extern void omp_set_num_threads(int) noexcept;  // NOLINT
@@ -179,10 +210,28 @@ bool Server::InitDirectory() {
 
   // vector index path
   if (GetRole() == pb::common::INDEX) {
-    auto vector_index_path = config->GetString("vector.index_path");
+    auto vector_index_path = GetVectorIndexPath();
+    if (vector_index_path.empty()) {
+      DINGO_LOG(ERROR) << "Get vector index path failed";
+      return false;
+    }
     ret = Helper::CreateDirectories(vector_index_path);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "Create vector index directory failed: " << vector_index_path;
+      return false;
+    }
+  }
+
+  // document index path
+  if (GetRole() == pb::common::DOCUMENT) {
+    auto document_index_path = GetDocumentIndexPath();
+    if (document_index_path.empty()) {
+      DINGO_LOG(ERROR) << "Get document index path failed";
+      return false;
+    }
+    ret = Helper::CreateDirectories(document_index_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create document index directory failed: " << document_index_path;
       return false;
     }
   }
@@ -399,29 +448,6 @@ static int32_t GetInterval(std::shared_ptr<Config> config, const std::string& co
   return interval_s > 0 ? interval_s : default_value;
 }
 
-DEFINE_int32(server_heartbeat_interval_s, 10, "heartbeat interval seconds");
-DEFINE_int32(server_metrics_collect_interval_s, 300, "metrics collect interval seconds");
-DEFINE_int32(server_store_metrics_collect_interval_s, 30, "store metrics collect interval seconds");
-DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
-             "approximate size metrics collect interval seconds");
-DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
-DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
-DEFINE_bool(region_enable_auto_split, true, "enable auto split");
-DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
-DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
-DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
-DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
-DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
-DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
-DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
-DEFINE_int32(coordinator_remove_watch_interval_s, 10, "coordinator remove watch interval seconds");
-DEFINE_int32(coordinator_lease_interval_s, 1, "coordinator lease interval seconds");
-DEFINE_int32(coordinator_compaction_interval_s, 300, "coordinator compaction interval seconds");
-DEFINE_int32(server_scrub_vector_index_interval_s, 60, "scrub vector index interval seconds");
-DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
-DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
-DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
-
 bool Server::InitCrontabManager() {
   crontab_manager_ = std::make_shared<CrontabManager>();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
@@ -431,7 +457,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.heartbeat_interval_s", FLAGS_server_heartbeat_interval_s);
   crontab_configs_.push_back({
       "HEARTBEA",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_heartbeat_interval_s * 1000,
       true,
       [](void*) { Heartbeat::TriggerStoreHeartbeat({}, true); },
@@ -442,7 +468,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.metrics_collect_interval_s", FLAGS_server_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_REGION_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreRegionMetrics(); },
@@ -453,7 +479,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "server.store_metrics_collect_interval_s", FLAGS_server_store_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "STORE_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_store_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectStoreMetrics(); },
@@ -465,7 +491,7 @@ bool Server::InitCrontabManager() {
                   FLAGS_server_approximate_size_metrics_collect_interval_s);
   crontab_configs_.push_back({
       "APPROXIMATE_SIZE_METRICS",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_server_approximate_size_metrics_collect_interval_s * 1000,
       true,
       [](void*) { Server::GetInstance().GetStoreMetricsManager()->CollectApproximateSizeMetrics(); },
@@ -500,6 +526,7 @@ bool Server::InitCrontabManager() {
   }
 
   // Add split checker crontab
+  // CAUTION: Do not split region for DOCUMENT
   if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
     FLAGS_region_enable_auto_split = config->GetBool("region.enable_auto_split");
     if (FLAGS_region_enable_auto_split) {
@@ -638,13 +665,24 @@ bool Server::InitCrontabManager() {
       [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
   });
 
+  // Add scrub document index crontab
+  FLAGS_server_scrub_document_index_interval_s =
+      GetInterval(config, "server.scrub_document_index_interval_s", FLAGS_server_scrub_document_index_interval_s);
+  crontab_configs_.push_back({
+      "SCRUB_DOCUMENT_INDEX",
+      {pb::common::INDEX},
+      FLAGS_server_scrub_document_index_interval_s * 1000,
+      true,
+      [](void*) { Heartbeat::TriggerScrubVectorIndex(nullptr); },
+  });
+
   auto raft_store_engine = GetRaftStoreEngine();
   if (raft_store_engine != nullptr) {
     // Add raft snapshot controller crontab
     FLAGS_raft_snapshot_interval_s = GetInterval(config, "raft.snapshot_interval_s", FLAGS_raft_snapshot_interval_s);
     crontab_configs_.push_back({
         "RAFT_SNAPSHOT_CONTROLLER",
-        {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX},
+        {pb::common::COORDINATOR, pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
         FLAGS_raft_snapshot_interval_s * 1000,
         true,
         [](void*) { Server::GetInstance().GetRaftStoreEngine()->DoSnapshotPeriodicity(); },
@@ -656,7 +694,7 @@ bool Server::InitCrontabManager() {
       GetInterval(config, "gc.update_safe_point_interval_s", FLAGS_gc_update_safe_point_interval_s);
   crontab_configs_.push_back({
       "GC_UPDATE_SAFE_POINT",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_gc_update_safe_point_interval_s * 1000,
       true,
       [](void*) { TxnEngineHelper::RegularUpdateSafePointTsHandler(nullptr); },
@@ -666,12 +704,38 @@ bool Server::InitCrontabManager() {
   FLAGS_gc_do_gc_interval_s = GetInterval(config, "gc.do_gc_interval_s", FLAGS_gc_do_gc_interval_s);
   crontab_configs_.push_back({
       "GC_DO_GC",
-      {pb::common::STORE, pb::common::INDEX},
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
       FLAGS_gc_do_gc_interval_s * 1000,
       true,
       [](void*) { TxnEngineHelper::RegularDoGcHandler(nullptr); },
   });
 
+  if (FLAGS_enable_balance_leader) {
+    // Add balance leader crontab
+    FLAGS_balance_leader_interval_s =
+        GetInterval(config, "raft.balance_leader_interval_s", FLAGS_balance_leader_interval_s);
+    crontab_configs_.push_back({
+        "BALANCE_LEADER",
+        {pb::common::COORDINATOR},
+        FLAGS_balance_leader_interval_s * 1000,
+        true,
+        [](void*) { Heartbeat::TriggerBalanceLeader(nullptr); },
+    });
+  }
+
+  // recycle
+  FLAGS_recycle_task_list_interval_s =
+      GetInterval(config, "coordinator.recycle_task_list_interval_s", FLAGS_recycle_task_list_interval_s);
+  crontab_configs_.push_back({
+      "RECYCLE_TASK_LIST",
+      {pb::common::COORDINATOR},
+      FLAGS_recycle_task_list_interval_s * 1000,
+      true,
+      [](void*) {
+        auto coordinator_control = Server::GetInstance().GetCoordinatorControl();
+        coordinator_control->RecycleArchiveTaskList();
+      },
+  });
   crontab_manager_->AddCrontab(crontab_configs_);
 
   return true;
@@ -709,6 +773,14 @@ bool Server::InitVectorIndexManager() {
   return vector_index_manager_->Init();
 }
 
+bool Server::InitDocumentIndexManager() {
+  document_index_thread_pool_ =
+      std::make_shared<ThreadPool>("document_index", FLAGS_document_operation_parallel_thread_num);
+
+  document_index_manager_ = DocumentIndexManager::New();
+  return document_index_manager_->Init();
+}
+
 bool Server::InitPreSplitChecker() {
   pre_split_checker_ = std::make_shared<PreSplitChecker>();
   auto config = ConfigManager::GetInstance().GetRoleConfig();
@@ -719,7 +791,7 @@ bool Server::InitPreSplitChecker() {
 }
 
 bool Server::Recover() {
-  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
+  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX || GetRole() == pb::common::DOCUMENT) {
     // Recover engine state.
     if (!raft_engine_->Recover()) {
       DINGO_LOG(ERROR) << "Recover engine failed, engine " << raft_engine_->GetName();
@@ -760,6 +832,10 @@ void Server::Destroy() {
 
   if (GetRole() == pb::common::INDEX && vector_index_manager_) {
     vector_index_manager_->Destroy();
+  }
+
+  if (GetRole() == pb::common::DOCUMENT && document_index_manager_) {
+    document_index_manager_->Destroy();
   }
 
   google::ShutdownGoogleLogging();
@@ -930,6 +1006,11 @@ VectorIndexManagerPtr Server::GetVectorIndexManager() {
   return vector_index_manager_;
 }
 
+DocumentIndexManagerPtr Server::GetDocumentIndexManager() {
+  assert(document_index_manager_ != nullptr);
+  return document_index_manager_;
+}
+
 std::shared_ptr<CoordinatorControl> Server::GetCoordinatorControl() {
   assert(coordinator_control_ != nullptr);
   return coordinator_control_;
@@ -973,9 +1054,14 @@ std::string Server::GetRaftLogPath() {
   return config == nullptr ? "" : config->GetString("raft.log_path");
 }
 
-std::string Server::GetIndexPath() {
+std::string Server::GetVectorIndexPath() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   return config == nullptr ? "" : config->GetString("vector.index_path");
+}
+
+std::string Server::GetDocumentIndexPath() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  return config == nullptr ? "" : config->GetString("document.index_path");
 }
 
 bool Server::IsClusterReadOnlyOrForceReadOnly() const { return cluster_is_read_only_ || cluster_is_force_read_only_; }
@@ -1075,6 +1161,20 @@ uint64_t Server::GetVectorIndexManagerBackgroundPendingTaskCount() {
     return 0;
   }
   return vector_index_manager_->GetBackgroundPendingTaskCount();
+}
+
+std::vector<std::vector<std::string>> Server::GetDocumentIndexBackgroundWorkerSetTrace() {
+  if (document_index_manager_ == nullptr) {
+    return {};
+  }
+  return document_index_manager_->GetPendingTaskTrace();
+}
+
+uint64_t Server::GetDocumentIndexManagerBackgroundPendingTaskCount() {
+  if (document_index_manager_ == nullptr) {
+    return 0;
+  }
+  return document_index_manager_->GetBackgroundPendingTaskCount();
 }
 
 std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {

@@ -1,6 +1,6 @@
-FROM rockylinux/rockylinux:8.9
+FROM rockylinux/rockylinux:8
 
-ENV TZ=Asia/Shanghai 
+ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
 
 RUN dnf update -y  \
@@ -8,7 +8,7 @@ RUN dnf update -y  \
     && dnf clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
-    && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY 
+    && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY
 
 COPY ./dingo-store.tar.gz  /opt
 

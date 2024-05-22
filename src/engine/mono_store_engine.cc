@@ -14,6 +14,7 @@
 #include "engine/mono_store_engine.h"
 
 #include "common/role.h"
+#include "document/document_reader.h"
 #include "engine/engine.h"
 #include "engine/raft_store_engine.h"
 #include "engine/txn_engine_helper.h"
@@ -54,6 +55,12 @@ bool MonoStoreEngine::Recover() {
         auto vector_index_wrapper = region->VectorIndexWrapper();
         VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0,
                                                             "rocks engine recover");
+        ++count;
+      }
+      if (GetRole() == pb::common::DOCUMENT) {
+        auto document_index_wrapper = region->DocumentIndexWrapper();
+        DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, false, 0,
+                                                                "rocks engine recover");
         ++count;
       }
     }
@@ -196,6 +203,7 @@ std::shared_ptr<Engine::Reader> MonoStoreEngine::NewReader(pb::common::RawEngine
   return std::make_shared<MonoStoreEngine::Reader>(GetRawEngine(type)->Reader());
 }
 
+// vector
 butil::Status MonoStoreEngine::VectorReader::VectorBatchSearch(
     std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
@@ -241,6 +249,45 @@ butil::Status MonoStoreEngine::VectorReader::VectorBatchSearchDebug(
   return vector_reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us,
                                                search_time_us);
 }
+
+// document
+butil::Status MonoStoreEngine::DocumentReader::DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
+                                                              std::vector<pb::common::DocumentWithScore>& results) {
+  auto vector_reader = dingodb::DocumentReader::New(reader_);
+  return vector_reader->DocumentSearch(ctx, results);
+}
+
+butil::Status MonoStoreEngine::DocumentReader::DocumentBatchQuery(
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& document_with_ids) {
+  auto vector_reader = dingodb::DocumentReader::New(reader_);
+  return vector_reader->DocumentBatchQuery(ctx, document_with_ids);
+}
+
+butil::Status MonoStoreEngine::DocumentReader::DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
+                                                                   int64_t& document_id) {
+  auto vector_reader = dingodb::DocumentReader::New(reader_);
+  return vector_reader->DocumentGetBorderId(region_range, get_min, document_id);
+}
+
+butil::Status MonoStoreEngine::DocumentReader::DocumentScanQuery(
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& document_with_ids) {
+  auto vector_reader = dingodb::DocumentReader::New(reader_);
+  return vector_reader->DocumentScanQuery(ctx, document_with_ids);
+}
+
+butil::Status MonoStoreEngine::DocumentReader::DocumentGetRegionMetrics(
+    int64_t region_id, const pb::common::Range& region_range, DocumentIndexWrapperPtr document_index,
+    pb::common::DocumentIndexMetrics& region_metrics) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentGetRegionMetrics(region_id, region_range, document_index, region_metrics);
+}
+
+butil::Status MonoStoreEngine::DocumentReader::DocumentCount(const pb::common::Range& range, int64_t& count) {
+  auto document_reader = dingodb::DocumentReader::New(reader_);
+  return document_reader->DocumentCount(range, count);
+}
+
+// normal
 
 std::shared_ptr<Engine::Writer> MonoStoreEngine::NewWriter(pb::common::RawEngine type) {
   return std::make_shared<MonoStoreEngine::Writer>(GetRawEngine(type), GetSelfPtr());
@@ -410,6 +457,10 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
 
 std::shared_ptr<Engine::VectorReader> MonoStoreEngine::NewVectorReader(pb::common::RawEngine type) {
   return std::make_shared<MonoStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
+}
+
+std::shared_ptr<Engine::DocumentReader> MonoStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::DocumentReader>(GetRawEngine(type)->Reader());
 }
 
 std::shared_ptr<Engine::TxnReader> MonoStoreEngine::NewTxnReader(pb::common::RawEngine type) {

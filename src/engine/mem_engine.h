@@ -45,6 +45,7 @@ class MemEngine : public Engine {
   std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::DocumentReader> NewDocumentReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
 

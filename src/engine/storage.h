@@ -45,6 +45,8 @@ class Storage {
                                                         pb::common::RawEngine raw_engine_type);
   std::shared_ptr<Engine::VectorReader> GetEngineVectorReader(pb::common::StorageEngine store_engine_type,
                                                               pb::common::RawEngine raw_engine_type);
+  std::shared_ptr<Engine::DocumentReader> GetEngineDocumentReader(pb::common::StorageEngine store_engine_type,
+                                                                  pb::common::RawEngine raw_engine_type);
   std::shared_ptr<RawEngine> GetRawEngine(pb::common::StorageEngine store_engine_type,
                                           pb::common::RawEngine raw_engine_type);
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
@@ -164,6 +166,24 @@ class Storage {
                                        int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
                                        int64_t& search_time_us);
 
+  // document index
+  butil::Status DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
+                            const std::vector<pb::common::DocumentWithId>& documents, bool is_update);
+  butil::Status DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids);
+
+  butil::Status DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                   std::vector<pb::common::DocumentWithId>& document_with_ids);
+  butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                               std::vector<pb::common::DocumentWithScore>& results);
+  butil::Status DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t& document_id);
+  butil::Status DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                  std::vector<pb::common::DocumentWithId>& document_with_ids);
+  butil::Status DocumentGetRegionMetrics(store::RegionPtr region, DocumentIndexWrapperPtr document_index_wrapper,
+                                         pb::common::DocumentIndexMetrics& region_metrics);
+
+  butil::Status DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t& count);
+
+  // common functions
   butil::Status ValidateLeader(int64_t region_id);
   butil::Status ValidateLeader(store::RegionPtr region);
   bool IsLeader(int64_t region_id);

@@ -35,6 +35,7 @@
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/debug.pb.h"
+#include "proto/document.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/meta.pb.h"
@@ -97,6 +98,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     method = dingodb::pb::store::StoreService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "IndexService") {
     method = dingodb::pb::index::IndexService::descriptor()->FindMethodByName(api_name);
+  } else if (service_name == "DocumentService") {
+    method = dingodb::pb::document::DocumentService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "UtilService") {
     method = dingodb::pb::util::UtilService::descriptor()->FindMethodByName(api_name);
   } else if (service_name == "DebugService") {

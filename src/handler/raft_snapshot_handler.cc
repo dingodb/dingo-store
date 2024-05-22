@@ -562,6 +562,35 @@ int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
 
     // use slow load
     VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0, "load raft snapshot");
+  } else if (region->Definition().index_parameter().has_document_index_parameter()) {
+    DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot to document_engine.", region->Id());
+
+    if (region == nullptr) {
+      return 0;
+    }
+
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper == nullptr) {
+      DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] document index wrapper is null.", region->Id());
+      return -1;
+    }
+
+    if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /*&&
+        !document_index_wrapper->IsTempHoldDocumentIndex()*/) {
+      DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] document index is not hold, skip load.",
+                                     region->Id());
+      return 0;
+    }
+
+    if (document_index_wrapper->IsReady()) {
+      DINGO_LOG(WARNING) << fmt::format(
+          "[raft.handle][region({})] document index is ready, clear index and do load again.", region->Id());
+      document_index_wrapper->ClearDocumentIndex("load raft snapshot");
+    }
+
+    // use slow load
+    DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, false, 0,
+                                                            "load raft snapshot");
   }
 
   return 0;

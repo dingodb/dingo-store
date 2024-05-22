@@ -66,6 +66,10 @@ class Constant {
   inline static const uint32_t kVectorKeyMinLenWithPrefix = 9;
   inline static const uint32_t kVectorKeyMaxLenWithPrefix = 17;
 
+  // document key len
+  inline static const uint32_t kDocumentKeyMinLenWithPrefix = 9;
+  inline static const uint32_t kDocumentKeyMaxLenWithPrefix = 17;
+
   // Define store meta prefix.
   inline static const std::string kStoreRegionMetaPrefix = "META_REGION";
   // Define region change record.
@@ -80,6 +84,11 @@ class Constant {
   inline static const std::string kVectorIndexApplyLogIdPrefix = "VECTOR_INDEX_APPLY_LOG";
   // Define vector index snapshot max log prefix.
   inline static const std::string kVectorIndexSnapshotLogIdPrefix = "VECTOR_INDEX_SNAPSHOT_LOG";
+
+  // Define document index apply max log prefix.
+  inline static const std::string kDocumentIndexApplyLogIdPrefix = "DOCUMENT_INDEX_APPLY_LOG";
+  // Define document index snapshot max log prefix.
+  inline static const std::string kDocumentIndexSnapshotLogIdPrefix = "DOCUMENT_INDEX_SNAPSHOT_LOG";
 
   // Define default raft snapshot policy
   inline static const std::string kDefaultRaftSnapshotPolicy = "checkpoint";
@@ -155,9 +164,14 @@ class Constant {
   static const uint32_t kVectorMaxDimension = 32768;
   static constexpr int64_t kVectorIndexSaveSnapshotThresholdWriteKeyNum = 100000;
 
+  // document limitations
+  static constexpr int64_t kDocumentIndexSaveSnapshotThresholdWriteKeyNum = 1000;
+
   static const uint32_t kLoadOrBuildVectorIndexConcurrency = 5;
 
   static const uint32_t kBuildVectorIndexBatchSize = 32768;
+
+  static const uint32_t kBuildDocumentIndexBatchSize = 32768;
 
   static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
   static constexpr int32_t kSearchIvfFlatParamNprobe = 80;
@@ -182,6 +196,7 @@ class Constant {
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
   static const int32_t kRaftLogFallBehindThreshold = 1000;
+  static const int32_t kTransferLeaderRaftLogFallBehindThreshold = 16;
 
   static constexpr int64_t kLockVer = INT64_MAX;
   static constexpr int64_t kMaxVer = INT64_MAX;
@@ -220,6 +235,10 @@ class Constant {
 
   static const uint32_t kRandomElectionTimeoutMinDeltaMs = 2000;
   static const uint32_t kRandomElectionTimeoutMaxDeltaMs = 7000;
+
+  static const uint32_t kLeaderNumWeightDefaultValue = 1;
+
+  static const uint32_t kReserveTaskListRecentDayDefaultValue = 7;
 };
 
 }  // namespace dingodb

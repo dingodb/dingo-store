@@ -33,7 +33,9 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "coordinator/auto_increment_control.h"
+#include "coordinator/balance_leader.h"
 #include "coordinator/coordinator_control.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
@@ -1220,11 +1222,48 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
 
-  if (index_parameter.has_vector_index_parameter() && region_type != pb::common::RegionType::INDEX_REGION) {
-    DINGO_LOG(WARNING) << "Create Region region_type is not INDEX_REGION, but index_parameter is not empty, request: "
+  if (index_parameter.has_vector_index_parameter()) {
+    if (region_type != pb::common::RegionType::INDEX_REGION) {
+      DINGO_LOG(WARNING) << "Create Region region_type is not INDEX_REGION, but index_parameter is not empty, request: "
+                         << request->ShortDebugString();
+      region_type = pb::common::RegionType::INDEX_REGION;
+      index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+    }
+  } else if (index_parameter.has_document_index_parameter()) {
+    if (region_type != pb::common::RegionType::DOCUMENT_REGION) {
+      DINGO_LOG(WARNING)
+          << "Create Region region_type is not DOCUMENT_REGION, but index_parameter is not empty, request: "
+          << request->ShortDebugString();
+      region_type = pb::common::RegionType::DOCUMENT_REGION;
+      index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_DOCUMENT);
+    }
+  }
+
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    if (!index_parameter.has_vector_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is INDEX_REGION, but index_parameter is empty, request: "
                        << request->ShortDebugString();
-    region_type = pb::common::RegionType::INDEX_REGION;
-    index_parameter.set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    if (!index_parameter.has_document_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is DOCUMENT_REGION, but index_parameter is empty, request: "
+                       << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else if (region_type == pb::common::RegionType::STORE_REGION) {
+    if (index_parameter.has_vector_index_parameter() || index_parameter.has_document_index_parameter()) {
+      DINGO_LOG(ERROR) << "Create Region region_type is STORE_REGION, but index_parameter is not empty, request: "
+                       << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      return;
+    }
+  } else {
+    DINGO_LOG(ERROR) << "Create Region region_type is invalid, request: " << request->ShortDebugString();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+    return;
   }
 
   if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key())) {
@@ -1756,7 +1795,7 @@ void DoRemoveStoreOperation(google::protobuf::RpcController * /*controller*/,
   auto store_id = request->store_id();
   auto region_cmd_id = request->region_cmd_id();
 
-  auto ret = coordinator_control->RemoveRegionCmd(store_id, region_cmd_id, meta_increment);
+  auto ret = coordinator_control->RemoveRegionCmd(store_id, 0, region_cmd_id, {}, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "RemoveStoreOperation failed, store_id:" << store_id << ", region_cmd_id:" << region_cmd_id
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -1856,9 +1895,35 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
         }
       }
     }
+
+    // history
+    if (request->include_archive()) {
+      int32_t limit = request->archive_limit() > 0 ? request->archive_limit() : INT32_MAX;
+      if (request->get_task_list_id_only()) {
+        std::vector<int64_t> task_list_ids;
+        coordinator_control->GetArchiveTaskListIds(task_list_ids, request->archive_start_id(), limit);
+        for (const auto &task_list_id : task_list_ids) {
+          response->add_task_lists()->set_id(task_list_id);
+        }
+      } else {
+        std::vector<pb::coordinator::TaskList> task_lists;
+        coordinator_control->GetArchiveTaskList(task_lists, request->archive_start_id(), limit);
+        for (auto &task_list : task_lists) {
+          for (int i = 0; i < task_list.tasks_size(); ++i) {
+            task_list.mutable_tasks(i)->set_step(i);
+          }
+          *response->add_task_lists() = task_list;
+        }
+      }
+    }
   } else {
     pb::coordinator::TaskList task_list;
     coordinator_control->GetTaskList(request->task_list_id(), task_list);
+    // take task_list from archive
+    if (task_list.id() == 0 && request->include_archive()) {
+      coordinator_control->GetArchiveTaskList(request->task_list_id(), task_list);
+    }
+
     *response->add_task_lists() = task_list;
     for (int i = 0; i < task_list.tasks_size(); ++i) {
       response->mutable_task_lists(0)->mutable_tasks(i)->set_step(i);
@@ -3587,6 +3652,41 @@ void CoordinatorServiceImpl::UpdateRegionCmdStatus(google::protobuf::RpcControll
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
+  }
+}
+
+void CoordinatorServiceImpl::BalanceLeader(google::protobuf::RpcController *,
+                                           const pb::coordinator::BalanceLeaderRequest *request,
+                                           pb::coordinator::BalanceLeaderResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive BalanceLeader Request:" << request->ShortDebugString();
+
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND, "Not found raft engine.");
+    return;
+  }
+
+  auto tracker = balance::Tracker::New();
+  auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                     request->store_type(), request->dryrun(), tracker);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  response->set_leader_score(tracker->leader_score);
+  response->set_expect_leader_score(tracker->expect_leader_score);
+  for (auto &transfer_leader_task : tracker->tasks) {
+    auto *task = response->add_tasks();
+    task->set_region_id(transfer_leader_task->region_id);
+    task->set_source_store_id(transfer_leader_task->source_store_id);
+    task->set_target_store_id(transfer_leader_task->target_store_id);
   }
 }
 

@@ -146,24 +146,44 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
    public:
     VectorReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
 
-    butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,                           // NOLINT
-                                    std::vector<pb::index::VectorWithDistanceResult>& results) override;  // NOLINT
-    butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,                            // NOLINT
-                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;      // NOLINT
-    butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min,                  // NOLINT
-                                    int64_t& vector_id) override;                                         // NOLINT
-    butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,                             // NOLINT
-                                  std::vector<pb::common::VectorWithId>& vector_with_ids) override;       // NOLINT
-    butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,        // NOLINT
-                                         VectorIndexWrapperPtr vector_index,                              // NOLINT
-                                         pb::common::VectorIndexMetrics& region_metrics) override;        // NOLINT
+    butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
+                                    std::vector<pb::index::VectorWithDistanceResult>& results) override;
+    butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
+                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+    butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) override;
+    butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
+                                  std::vector<pb::common::VectorWithId>& vector_with_ids) override;
+    butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
+                                         VectorIndexWrapperPtr vector_index,
+                                         pb::common::VectorIndexMetrics& region_metrics) override;
 
-    butil::Status VectorCount(const pb::common::Range& range, int64_t& count) override;  // NOLINT
+    butil::Status VectorCount(const pb::common::Range& range, int64_t& count) override;
 
-    butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
+    butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
                                          std::vector<pb::index::VectorWithDistanceResult>& results,
                                          int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
-                                         int64_t& search_time_us) override;  // NOLINT
+                                         int64_t& search_time_us) override;
+
+   private:
+    RawEngine::ReaderPtr reader_;
+  };
+
+  // Document reader
+  class DocumentReader : public Engine::DocumentReader {
+   public:
+    DocumentReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+
+    butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
+                                 std::vector<pb::common::DocumentWithScore>& results) override;
+    butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
+                                     std::vector<pb::common::DocumentWithId>& vector_with_ids) override;
+    butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) override;
+    butil::Status DocumentScanQuery(std::shared_ptr<DocumentReader::Context> ctx,
+                                    std::vector<pb::common::DocumentWithId>& vector_with_ids) override;
+    butil::Status DocumentGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
+                                           DocumentIndexWrapperPtr vector_index,
+                                           pb::common::DocumentIndexMetrics& region_metrics) override;
+    butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) override;
 
    private:
     RawEngine::ReaderPtr reader_;
@@ -227,6 +247,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
+  std::shared_ptr<Engine::DocumentReader> NewDocumentReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
 
