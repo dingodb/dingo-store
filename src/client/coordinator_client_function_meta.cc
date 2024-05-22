@@ -503,16 +503,24 @@ void SendCreateTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 }
 
 void SendDropTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  DINGO_LOG(INFO) << "para: -id=[table_id] -schema-id=[schema_id]";
+
   dingodb::pb::meta::DropTableRequest request;
   dingodb::pb::meta::DropTableResponse response;
 
-  auto* table_id = request.mutable_table_id();
-  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   if (FLAGS_id.empty()) {
     DINGO_LOG(WARNING) << "id is empty";
     return;
   }
+
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema_id is empty";
+    return;
+  }
+
+  auto* table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("DropTable", request, response);
@@ -524,14 +532,15 @@ void SendDropSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   dingodb::pb::meta::DropSchemaRequest request;
   dingodb::pb::meta::DropSchemaResponse response;
 
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema_id is 0, please check schema_id";
+    return;
+  }
+
   auto* schema_id = request.mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  if (FLAGS_id.empty()) {
-    DINGO_LOG(WARNING) << "id is empty";
-    return;
-  }
-  schema_id->set_entity_id(std::stol(FLAGS_id));
+  schema_id->set_entity_id(FLAGS_schema_id);
 
   auto status = coordinator_interaction->SendRequest("DropSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -1406,13 +1415,19 @@ void SendDropTables(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   dingodb::pb::meta::DropTablesRequest request;
   dingodb::pb::meta::DropTablesResponse response;
 
-  auto* table_id = request.add_table_ids();
-  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   if (FLAGS_id.empty()) {
     DINGO_LOG(WARNING) << "id is empty";
     return;
   }
+
+  if (FLAGS_schema_id == 0) {
+    DINGO_LOG(WARNING) << "schema_id is empty";
+    return;
+  }
+
+  auto* table_id = request.add_table_ids();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(FLAGS_schema_id);
   table_id->set_entity_id(std::stol(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("DropTables", request, response);

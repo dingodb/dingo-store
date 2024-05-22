@@ -669,6 +669,27 @@ void DoDropTable(google::protobuf::RpcController * /*controller*/, const pb::met
     return;
   }
 
+  // check if this is a table_index
+  {
+    pb::meta::GetTablesResponse get_tables_response;
+    auto ret = coordinator_control->GetTableIndexes(request->table_id().parent_entity_id(),
+                                                    request->table_id().entity_id(), &get_tables_response);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+
+    if (get_tables_response.table_definition_with_ids_size() > 0) {
+      DINGO_LOG(ERROR) << "DropTable failed in meta_service, table_id=" << request->table_id().entity_id()
+                       << " is a table_index";
+      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("table_id is a table_index, please use DropTables to drop this table");
+      return;
+    }
+  }
+
   pb::coordinator_internal::MetaIncrement meta_increment;
 
   auto ret = coordinator_control->DropTable(request->table_id().parent_entity_id(), request->table_id().entity_id(),
