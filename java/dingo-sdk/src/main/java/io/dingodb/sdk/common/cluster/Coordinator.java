@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.cluster;
 import io.dingodb.sdk.common.Location;
 
 public interface Coordinator {
+    int state();
     Location location();
 
     boolean isLeader();
