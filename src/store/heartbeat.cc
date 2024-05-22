@@ -575,6 +575,15 @@ void BalanceLeaderTask::DoBalanceLeader() {
     DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] index process error: {}", status.error_str());
     tracker->Print();
   }
+
+  {
+    // document
+    auto tracker = balance::Tracker::New();
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
+                                                                       pb::common::NODE_TYPE_DOCUMENT, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] document process error: {}", status.error_str());
+    tracker->Print();
+  }
 }
 
 bool Heartbeat::Init() {
