@@ -303,6 +303,30 @@ std::string CandidateStores::ToString() {
   return str;
 }
 
+static pb::common::RegionType GetRegionTypeByStoreType(pb::common::StoreType store_type) {
+  if (store_type == pb::common::NODE_TYPE_STORE) {
+    return pb::common::RegionType::STORE_REGION;
+  } else if (store_type == pb::common::NODE_TYPE_INDEX) {
+    return pb::common::RegionType::INDEX_REGION;
+  } else if (store_type == pb::common::NODE_TYPE_DOCUMENT) {
+    return pb::common::RegionType::DOCUMENT_REGION;
+  }
+
+  return pb::common::RegionType::STORE_REGION;
+}
+
+static pb::common::IndexType GetIndexTypeByRegionType(pb::common::StoreType store_type) {
+  if (store_type == pb::common::NODE_TYPE_STORE) {
+    return pb::common::INDEX_TYPE_NONE;
+  } else if (store_type == pb::common::NODE_TYPE_INDEX) {
+    return pb::common::INDEX_TYPE_VECTOR;
+  } else if (store_type == pb::common::NODE_TYPE_DOCUMENT) {
+    return pb::common::INDEX_TYPE_DOCUMENT;
+  }
+
+  return pb::common::INDEX_TYPE_NONE;
+}
+
 butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                                           std::shared_ptr<Engine> raft_engine,
                                                           pb::common::StoreType store_type, bool dryrun,
@@ -337,10 +361,8 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
 
   // get all region and store
   pb::common::RegionMap region_map;
-  auto region_type = store_type == pb::common::NODE_TYPE_INDEX ? pb::common::RegionType::INDEX_REGION
-                                                               : pb::common::RegionType::STORE_REGION;
-  auto index_type =
-      store_type == pb::common::NODE_TYPE_INDEX ? pb::common::INDEX_TYPE_VECTOR : pb::common::INDEX_TYPE_NONE;
+  auto region_type = GetRegionTypeByStoreType(store_type);
+  auto index_type = GetIndexTypeByRegionType(store_type);
   coordinator_controller->GetRegionMapFull(region_map, region_type, index_type);
   if (region_map.regions().empty()) {
     return butil::Status(pb::error::EINTERNAL, "region map is empty");
