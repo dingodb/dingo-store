@@ -22,6 +22,7 @@ import io.dingodb.coordinator.CoordinatorServiceGrpc;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.Location;
 import io.dingodb.sdk.common.cluster.Executor;
+import io.dingodb.sdk.common.cluster.InternalCoordinator;
 import io.dingodb.sdk.common.cluster.InternalRegion;
 import io.dingodb.sdk.common.cluster.Store;
 import io.dingodb.sdk.common.utils.EntityConversion;
@@ -68,11 +69,16 @@ public class ClusterServiceClient {
        	        .setClusterId(clusterId)
        	        .build();
        	Coordinator.GetCoordinatorMapResponse response = connector.exec(stub -> stub.getCoordinatorMap(req));
-       	return response.getCoordinatorLocationsList()
-       	        .stream()
-       	        .map(EntityConversion::mapping)
-       	        .map(location -> EntityConversion.mapping(location, mapping(response.getLeaderLocation())))
-       	        .collect(Collectors.toList());        
+        Location leaderLocation = mapping(response.getLeaderLocation());
+        return response.getCoordinatorMap().getCoordinatorsList()
+                .stream()
+                .map(coordinator -> {
+                    Location location = EntityConversion.mapping(coordinator.getLocation());
+                    boolean isLeader = location.equals(leaderLocation);
+                    int state = coordinator.getState().getNumber();
+                    return new InternalCoordinator(location, isLeader, state);
+                })
+                .collect(Collectors.toList());
     }
     
     public List<Store> getStoreMap(long epoch) {

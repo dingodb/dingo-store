@@ -19,6 +19,7 @@ package io.dingodb.sdk.common.cluster;
 import io.dingodb.sdk.common.Location;
 
 public class InternalCoordinator implements Coordinator {
+    private int state;
     private Location location;
 
     private boolean isLeader;
@@ -26,6 +27,18 @@ public class InternalCoordinator implements Coordinator {
     public InternalCoordinator(Location location, boolean isLeader) {
         this.location = location;
         this.isLeader = isLeader;
+        this.state = 1;
+    }
+
+    public InternalCoordinator(Location location, boolean isLeader, int state) {
+        this.location = location;
+        this.isLeader = isLeader;
+        this.state = state;
+    }
+
+    @Override
+    public int state() {
+        return state;
     }
 
     @Override
