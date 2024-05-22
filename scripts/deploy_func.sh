@@ -168,3 +168,19 @@ function start_program() {
 
   nohup ${root_dir}/bin/dingodb_server -role=${role} 2>&1 >./log/out &
 }
+
+wait_for_process_exit() {
+  local pidKilled=$1
+  local begin=$(date +%s)
+  local end
+  while kill -0 $pidKilled > /dev/null 2>&1
+  do
+    echo -n "."
+    sleep 1;
+    end=$(date +%s)
+    if [ $((end-begin)) -gt 60  ];then
+      echo -e "\nTimeout"
+      break;
+    fi
+  done
+}
