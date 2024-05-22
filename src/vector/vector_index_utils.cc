@@ -455,6 +455,18 @@ std::unique_ptr<faiss::idx_t[]> VectorIndexUtils::ExtractVectorId(
   return std::move(ids);
 }
 
+butil::Status VectorIndexUtils::CheckVectorIdDuplicated(const std::unique_ptr<faiss::idx_t[]>& ids, size_t size) {
+  std::unordered_set<faiss::idx_t> id_set;
+  for (size_t i = 0; i < size; i++) {
+    if (0 != id_set.count(ids[i])) {
+      std::string s = fmt::format("vector id duplicated: {}", ids[i]);
+      return butil::Status(pb::error::Errno::EVECTOR_ID_DUPLICATED, s);
+    }
+    id_set.insert(ids[i]);
+  }
+  return butil::Status::OK();
+}
+
 std::unique_ptr<float[]> VectorIndexUtils::ExtractVectorValue(
     const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize) {
   std::unique_ptr<float[]> vectors = std::make_unique<float[]>(vector_with_ids.size() * dimension);

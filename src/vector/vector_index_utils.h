@@ -166,6 +166,7 @@ class VectorIndexUtils {
   static std::unique_ptr<faiss::idx_t[]> CastVectorId(const std::vector<int64_t>& delete_ids);
 
   static std::unique_ptr<faiss::idx_t[]> ExtractVectorId(const std::vector<pb::common::VectorWithId>& vector_with_ids);
+  static butil::Status CheckVectorIdDuplicated(const std::unique_ptr<faiss::idx_t[]>& ids, size_t size);
 
   static std::unique_ptr<float[]> ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                      faiss::idx_t dimension, bool normalize);

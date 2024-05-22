@@ -223,8 +223,7 @@ TEST_F(VectorIndexFlatTest, SearchNoData) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]"
-                << " [";
+      LOG(INFO) << "[" << i << "]" << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
           LOG(INFO) << ",";
@@ -277,8 +276,7 @@ TEST_F(VectorIndexFlatTest, RangeSearchNoData) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]"
-                << " [";
+      LOG(INFO) << "[" << i << "]" << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
           LOG(INFO) << ",";
@@ -500,8 +498,7 @@ TEST_F(VectorIndexFlatTest, Add) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]"
-                << " [";
+      LOG(INFO) << "[" << i << "]" << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
           LOG(INFO) << ",";
@@ -667,6 +664,70 @@ TEST_F(VectorIndexFlatTest, Delete) {
   }
 }
 
+TEST_F(VectorIndexFlatTest, UpsertWithDuplicated) {
+  butil::Status ok;
+
+  // create random data
+  {
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib;
+
+    data_base.resize(dimension * data_base_size, 0.0f);
+    // float* xb = new float[dimension_ * data_base_size_];
+
+    for (int i = 0; i < data_base_size; i++) {
+      for (int j = 0; j < dimension; j++) data_base[dimension * i + j] = distrib(rng);
+      data_base[dimension * i] += i / 1000.;
+    }
+
+    for (size_t i = 0; i < data_base_size; i++) {
+      LOG(INFO) << "[" << i << "]" << " [";
+      for (faiss::idx_t j = 0; j < dimension; j++) {
+        if (0 != j) {
+          LOG(INFO) << ",";
+        }
+        LOG(INFO) << std::setw(10) << data_base[i * dimension + j];
+      }
+
+      LOG(INFO) << "]";
+    }
+  }
+
+  // update all data
+  {
+    std::vector<pb::common::VectorWithId> vector_with_ids;
+
+    for (size_t id = 0 + data_base_size; id < data_base_size + data_base_size; id++) {
+      pb::common::VectorWithId vector_with_id;
+
+      vector_with_id.set_id(id);
+      for (size_t i = 0; i < dimension; i++) {
+        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    for (size_t id = 0 + data_base_size; id < data_base_size + data_base_size; id++) {
+      pb::common::VectorWithId vector_with_id;
+
+      vector_with_id.set_id(id);
+      for (size_t i = 0; i < dimension; i++) {
+        vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+    }
+
+    ok = vector_index_flat_l2->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_ID_DUPLICATED);
+    ok = vector_index_flat_ip->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_ID_DUPLICATED);
+    ok = vector_index_flat_cosine->Upsert(vector_with_ids);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_ID_DUPLICATED);
+  }
+}
+
 TEST_F(VectorIndexFlatTest, Upsert) {
   butil::Status ok;
 
@@ -684,8 +745,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]"
-                << " [";
+      LOG(INFO) << "[" << i << "]" << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
           LOG(INFO) << ",";
@@ -760,8 +820,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
     }
 
     for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]"
-                << " [";
+      LOG(INFO) << "[" << i << "]" << " [";
       for (faiss::idx_t j = 0; j < dimension; j++) {
         if (0 != j) {
           LOG(INFO) << ",";
