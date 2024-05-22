@@ -27,7 +27,6 @@ SERVER_NUM=${FLAGS_server_num}
 
 source $mydir/deploy_func.sh
 
-
 if [ ${FLAGS_use_pgrep} -ne 0 ]; then
     echo "use_pgrep > 0, use pgrep to get pid"
     process_no=$(pgrep -f "${BASE_DIR}.*dingodb_server.*${FLAGS_role}" -U `id -u` | xargs)
@@ -40,6 +39,8 @@ if [ ${FLAGS_use_pgrep} -ne 0 ]; then
         else
             kill -9 ${process_no}
         fi
+
+        wait_for_process_exit ${process_no}
     else
         echo "not exist ${FLAGS_role} process"
     fi
@@ -66,6 +67,8 @@ else
                     echo "Killing -9 process with PID $pid"
                     kill -9 ${pid}
                 fi
+
+                wait_for_process_exit ${pid}
             else
                 echo "Invalid PID in the PID file: $pid"
             fi
