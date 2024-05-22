@@ -28,7 +28,7 @@ coordinator:
   auto_compaction: true
   compaction_interval_s: 300
   compaction_retention_rev_count: 1000
-  recycle_task_list_interval_s: 60
+  recycle_task_list_interval_s: 600
   reserve_task_list_recent_day: 7
 raft:
   listen_host: $RAFT_LISTEN_HOST$

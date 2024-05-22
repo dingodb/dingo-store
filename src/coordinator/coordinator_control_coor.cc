@@ -4852,8 +4852,6 @@ void CoordinatorControl::RecycleArchiveTaskList() {
 
   uint32_t recent_day = ConfigHelper::GetReserveTaskListRecentDay();
   for (const auto& task_list : task_lists) {
-    DINGO_LOG(INFO) << fmt::format("task llist diff: {} {}", task_list.create_time().substr(0, 10),
-                                   Helper::PastDate(recent_day));
     if (task_list.create_time().empty() || task_list.create_time().substr(0, 10) < Helper::PastDate(recent_day)) {
       recycle_ids.push_back(task_list.id());
       task_list_archive_->Erase(task_list.id());
