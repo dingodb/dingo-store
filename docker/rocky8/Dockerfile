@@ -26,7 +26,7 @@ RUN dnf update -y  \
 # install rust
 # RUN wget https://sh.rustup.rs --content-disposition
 # RUN sh rustup-init.sh -y
-RUN wget https://static.rust-lang.org/dist/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && xz -d rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && tar -xf rust-1.78.0-x86_64-unknown-linux-gnu.tar && cd rust-1.78.0-x86_64-unknown-linux-gnu && sh install.sh --prefix=/opt/rust/
+RUN wget https://static.rust-lang.org/dist/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && xz -d rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && tar -xf rust-1.78.0-x86_64-unknown-linux-gnu.tar && cd rust-1.78.0-x86_64-unknown-linux-gnu && sh install.sh --prefix=/opt/rust/ && cd ../../ && rm -rf rust-1.78.0-x86_64-unknown-linux-gnu*
 
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc
