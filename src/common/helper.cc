@@ -1022,6 +1022,12 @@ int64_t Helper::Timestamp() {
 
 std::string Helper::NowTime() { return FormatMsTime(TimestampMs(), "%Y-%m-%d %H:%M:%S"); }
 
+int Helper::NowHour() {
+  std::time_t tt = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  std::tm* ptm = std::localtime(&tt);
+  return ptm->tm_hour;
+}
+
 std::string Helper::PastDate(int64_t day) { return FormatTime(Timestamp() - day * 86400, "%Y-%m-%d"); }
 
 std::string Helper::FormatMsTime(int64_t timestamp, const std::string& format) {

@@ -182,4 +182,13 @@ uint32_t ConfigHelper::GetReserveTaskListRecentDay() {
   return (num <= 0) ? Constant::kReserveTaskListRecentDayDefaultValue : num;
 }
 
+std::string ConfigHelper::GetBalanceLeaderInspectionTimePeriod() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return "";
+  }
+
+  return config->GetString("coordinator.balance_leader_inspection_time_period");
+}
+
 }  // namespace dingodb

@@ -1606,3 +1606,9 @@ TEST_F(HelperTest, GetThreadNamesWithFilter) {
     EXPECT_TRUE(!thread_names.empty());
   }
 }
+
+TEST_F(HelperTest, NowHour) {
+  int hour = dingodb::Helper::NowHour();
+  ASSERT_LE(hour, 23);
+  ASSERT_GE(hour, 0);
+}

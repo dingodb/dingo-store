@@ -145,6 +145,7 @@ class TaskFilter : public Filter {
   TrackerPtr tracker_;
 };
 
+// abstract store node, support calulate leader score
 class StoreEntry {
  public:
   struct Less {
@@ -167,8 +168,10 @@ class StoreEntry {
 
   int64_t Id();
   pb::common::Store& Store();
+
   std::vector<int64_t> LeaderRegionIds();
   std::vector<int64_t> FollowerRegionIds();
+
   bool IsLeader(int64_t region_id);
   bool IsFollower(int64_t region_id);
 
@@ -179,8 +182,8 @@ class StoreEntry {
   float LeaderScore();
   float LeaderScore(int32_t delta);
 
+  // for unit test
   void TestAddLeader(int64_t region_id) { leader_region_ids_.push_back(region_id); }
-
   void TestAddFollower(int64_t region_id) { follower_region_ids_.push_back(region_id); }
 
  private:
@@ -190,6 +193,9 @@ class StoreEntry {
   int32_t delta_leader_num_{0};
 };
 
+// contain some sort candidate store for balance leader
+// source candidate stores: leader score descending order
+// target candidate stores: leader score ascending order
 class CandidateStores {
  public:
   CandidateStores(const std::vector<StoreEntryPtr>& stores, bool asc) : stores_(stores), asc_(asc) { Sort(); }
@@ -213,9 +219,11 @@ class CandidateStores {
   bool asc_;
   std::vector<StoreEntryPtr> stores_;
 
+  // the current process store offset of stores_
   int index_{0};
 };
 
+// transfer leader task descriptor
 struct TransferLeaderTask {
   int64_t region_id;
   int64_t source_store_id;
@@ -247,14 +255,29 @@ class BalanceLeaderScheduler {
                                                     task_filters, resource_filters, tracker);
   }
 
+  // check run timing
+  // set run time base on config item(coordinator.balance_leader_inspection_time_period)
+  static bool ShouldRun();
+
+  // launch balance leader schedule
+  // only one schedule is allowed run at a time
   static butil::Status LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                            std::shared_ptr<Engine> raft_engine, pb::common::StoreType store_type,
                                            bool dryrun, TrackerPtr tracker);
 
+  // schedule balance leader generate transfer leader tasks
   std::vector<TransferLeaderTaskPtr> Schedule(const pb::common::RegionMap& region_map,
                                               const pb::common::StoreMap& store_map);
 
+  // Just for unit test
+  static std::vector<std::pair<int, int>> TestParseTimePeriod(const std::string& time_period) {
+    return ParseTimePeriod(time_period);
+  }
+
  private:
+  // parse config item(coordinator.balance_leader_inspection_time_period)
+  static std::vector<std::pair<int, int>> ParseTimePeriod(const std::string& time_period);
+  // commit transfer leader tasks to raft
   void CommitTransferLeaderTaskList(const std::vector<TransferLeaderTaskPtr>& tasks);
 
   static pb::common::Store GetStore(const pb::common::StoreMap& store_map, int64_t store_id);
@@ -268,11 +291,14 @@ class BalanceLeaderScheduler {
                                   CandidateStoresPtr target_candidate_stores, TransferLeaderTaskPtr task);
 
   static std::vector<int64_t> FilterUsedRegion(std::vector<int64_t> region_ids, const std::set<int64_t>& used_regions);
+  // pick one region for transfer leader
   pb::coordinator_internal::RegionInternal PickOneRegion(std::vector<int64_t> region_ids);
 
+  // get all followers store of region
   static std::vector<StoreEntryPtr> GetFollowerStores(CandidateStoresPtr candidate_stores,
                                                       pb::coordinator_internal::RegionInternal& region,
                                                       int64_t leader_store_id);
+  // get leader store of region
   static StoreEntryPtr GetLeaderStore(CandidateStoresPtr candidate_stores,
                                       pb::coordinator_internal::RegionInternal& region);
 
@@ -298,17 +324,21 @@ class BalanceLeaderScheduler {
   bool FilterTask(int64_t region_id);
   std::vector<TransferLeaderTaskPtr> FilterTask(std::vector<TransferLeaderTaskPtr>& transfer_leader_tasks);
 
+  // true: eliminate false: reserve
   bool FilterResource(const dingodb::pb::common::Store& store, int64_t region_id);
   std::vector<StoreEntryPtr> FilterResource(const std::vector<StoreEntryPtr>& store_entries, int64_t region_id);
 
   std::shared_ptr<CoordinatorControl> coordinator_controller_;
+  // for commit transfer leader task
   std::shared_ptr<Engine> raft_engine_;
 
+  // some filter
   std::vector<FilterPtr> store_filters_;
   std::vector<FilterPtr> region_filters_;
   std::vector<FilterPtr> task_filters_;
   std::vector<FilterPtr> resource_filters_;
 
+  // for track balance leader schedule process
   TrackerPtr tracker_;
 };
 
