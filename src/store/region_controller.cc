@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/role.h"
@@ -514,29 +515,36 @@ butil::Status SplitRegionTask::SplitRegion() {
 
   ADD_REGION_CHANGE_RECORD(*region_cmd_);
 
-  // Commit raft log
-  ctx_->SetRegionId(region_cmd_->split_request().split_from_region_id());
-  ctx_->SetRegionEpoch(parent_region->Epoch());
-  return Server::GetInstance().GetEngine()->AsyncWrite(
-      ctx_, WriteDataBuilder::BuildWrite(region_cmd_->job_id(), region_cmd_->split_request(), parent_region->Epoch()),
-      [](std::shared_ptr<Context>, butil::Status status) {
-        if (!status.ok()) {
-          LOG(ERROR) << fmt::format("[control.region][region()] write split failed, error: {}", status.error_str());
-        }
-      });
+  // Commit raft command
+  auto ctx = std::make_shared<Context>();
+  ctx->SetRegionId(region_cmd_->split_request().split_from_region_id());
+  ctx->SetRegionEpoch(parent_region->Epoch());
+  status = Server::GetInstance().GetEngine()->Write(
+      ctx, WriteDataBuilder::BuildWrite(region_cmd_->job_id(), region_cmd_->split_request(), parent_region->Epoch()));
+  DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format("[control.region][region()] commit split command failed, error: {}",
+                                                   status.error_str());
+
+  return status;
 }
 
 void SplitRegionTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] Run split region, details: {}",
-                                 region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
-                                 region_cmd_->split_request().split_to_region_id(), region_cmd_->ShortDebugString());
+  DINGO_LOG(INFO) << fmt::format(
+      "[control.region][split.spliting][job_id({}).region({}->{})] Run split region, details: {}",
+      region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
+      region_cmd_->split_request().split_to_region_id(), region_cmd_->ShortDebugString());
   auto status = SplitRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[split.spliting][job_id({}).region({}->{})] Split failed, error: {}",
-                                    region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
-                                    region_cmd_->split_request().split_to_region_id(), Helper::PrintStatus(status));
+    DINGO_LOG(ERROR) << fmt::format(
+        "[control.region][split.spliting][job_id({}).region({}->{})] Split failed, error: {}", region_cmd_->job_id(),
+        region_cmd_->split_request().split_from_region_id(), region_cmd_->split_request().split_to_region_id(),
+        Helper::PrintStatus(status));
 
     NotifyRegionCmdStatus(region_cmd_, status);
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[control.region][split.spliting][job_id({}).region({}->{})] Commit split command finish.",
+        region_cmd_->job_id(), region_cmd_->split_request().split_from_region_id(),
+        region_cmd_->split_request().split_to_region_id());
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -562,9 +570,9 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
   int64_t min_applied_log_id = 0;
   auto status = ValidateMergeRegion(store_region_meta, merge_request, min_applied_log_id);
   if (!status.ok()) {
-    DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}",
-                                   command.job_id(), merge_request.source_region_id(), merge_request.target_region_id(),
-                                   status.error_code(), status.error_str());
+    DINGO_LOG(INFO) << fmt::format(
+        "[control.region][merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}", command.job_id(),
+        merge_request.source_region_id(), merge_request.target_region_id(), status.error_code(), status.error_str());
   }
 
   return status;
@@ -586,14 +594,17 @@ butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id
         if (request.cmd_type() == pb::raft::CmdType::SPLIT || request.cmd_type() == pb::raft::CmdType::PREPARE_MERGE ||
             request.cmd_type() == pb::raft::CmdType::COMMIT_MERGE ||
             request.cmd_type() == pb::raft::CmdType::ROLLBACK_MERGE) {
-          LOG(INFO) << fmt::format("[merge.merging][region({})] Exist split/merge/change_peer log recently", region_id)
+          LOG(INFO) << fmt::format(
+                           "[control.region][merge.merging][region({})] Exist split/merge/change_peer log recently",
+                           region_id)
                     << ", min_applied_log_id: " << min_applied_log_id
                     << ", cmd_type: " << pb::raft::CmdType_Name(request.cmd_type());
           return true;
         }
       }
     } else if (log_entry.type == LogEntryType::kEntryTypeConfiguration) {
-      LOG(INFO) << fmt::format("[merge.merging][region({})] Exist split/merge/change_peer log recently", region_id)
+      LOG(INFO) << fmt::format("[control.region][merge.merging][region({})] Exist split/merge/change_peer log recently",
+                               region_id)
                 << ", min_applied_log_id: " << min_applied_log_id << ", log_entry_type: kEntryTypeConfiguration";
       return true;
     }
@@ -816,17 +827,22 @@ butil::Status MergeRegionTask::MergeRegion() {
 }
 
 void MergeRegionTask::Run() {
-  DINGO_LOG(INFO) << fmt::format("[merge.merging][job_id({}).region({}/{})] Run merge region, details: {}",
-                                 region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
-                                 region_cmd_->merge_request().target_region_id(), region_cmd_->ShortDebugString());
+  DINGO_LOG(INFO) << fmt::format(
+      "[control.region][merge.merging][job_id({}).region({}/{})] Run merge region, details: {}", region_cmd_->job_id(),
+      region_cmd_->merge_request().source_region_id(), region_cmd_->merge_request().target_region_id(),
+      region_cmd_->ShortDebugString());
 
   auto status = MergeRegion();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[merge.merging][job_id({}).region({}/{})] Merge failed, error: {}",
+    DINGO_LOG(ERROR) << fmt::format("[control.region][merge.merging][job_id({}).region({}/{})] Merge failed, error: {}",
                                     region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
                                     region_cmd_->merge_request().target_region_id(), Helper::PrintStatus(status));
 
     NotifyRegionCmdStatus(region_cmd_, status);
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[control.region][merge.merging][job_id({}).region({}/{})] Commit merge command finish", region_cmd_->job_id(),
+        region_cmd_->merge_request().source_region_id(), region_cmd_->merge_request().target_region_id());
   }
 
   Server::GetInstance().GetRegionCommandManager()->UpdateCommandStatus(
@@ -1481,13 +1497,15 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshotAsync(std::shared_ptr<Context
   ADD_REGION_CHANGE_RECORD(*region_cmd);
 
   if (raft_log_index > 0 && vector_index_wrapper->SnapshotLogId() >= raft_log_index) {
-    DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] skip save vector index.", region_id) << ", "
-                    << vector_index_wrapper->SnapshotLogId() << " >= " << raft_log_index;
+    DINGO_LOG(INFO) << fmt::format("[control.region][vector_index.save][index_id({})] skip save vector index.",
+                                   region_id)
+                    << ", " << vector_index_wrapper->SnapshotLogId() << " >= " << raft_log_index;
     return butil::Status();
   }
 
   // Save vector index.
-  DINGO_LOG(INFO) << fmt::format("[vector_index.save][index_id({})] region_save_vector_index.", region_id);
+  DINGO_LOG(INFO) << fmt::format("[control.region][vector_index.save][index_id({})] region_save_vector_index.",
+                                 region_id);
   VectorIndexManager::LaunchSaveVectorIndex(vector_index_wrapper,
                                             fmt::format("{}-region_save_vector_index", region_cmd->job_id()));
 

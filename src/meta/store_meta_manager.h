@@ -40,9 +40,11 @@
 #include "proto/node.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store_internal.pb.h"
-#include "vector/vector_index.h"
 
 namespace dingodb {
+
+class VectorIndexWrapper;
+using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;
 
 namespace store {
 

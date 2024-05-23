@@ -352,7 +352,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(to_region->Id())) {
+    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(to_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id(), false, false,
                                                    true, "child split");
     } else {
@@ -371,7 +371,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                          fmt::format("Clear follower vector index {}", to_region->Id()));
     }
 
-    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(from_region->Id())) {
+    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(from_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id(), false, false,
                                                    true, "parent split");
     } else {
@@ -580,7 +580,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(child_region->Id())) {
+    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(child_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(child_region->VectorIndexWrapper(), request.job_id(), false, false,
                                                    true, "child split");
     } else {
@@ -599,7 +599,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
                                          fmt::format("Clear follower vector index {}", child_region->Id()));
     }
 
-    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(parent_region->Id())) {
+    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(parent_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(parent_region->VectorIndexWrapper(), request.job_id(), false, false,
                                                    true, "parent split");
     } else {
@@ -943,7 +943,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild vector index");
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild vector index");
     // Rebuild vector index
-    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(target_region->Id())) {
+    if (VectorIndexWrapper::IsPermanentHoldVectorIndex(target_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(target_region->VectorIndexWrapper(), request.job_id(), false, false,
                                                    true, "merge");
     } else {

@@ -1198,29 +1198,33 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   return vector_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results);
 }
 
-bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
+bool VectorIndexWrapper::IsPermanentHoldVectorIndex(store::RegionPtr region) {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return true;
   }
 
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Not found region.", region_id);
-    return false;
-  }
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
   }
 
   if (!config->GetBool("vector.enable_follower_hold_index")) {
     // If follower, delete vector index.
-    if (!Server::GetInstance().IsLeader(region_id)) {
+    if (!Server::GetInstance().IsLeader(region->Id())) {
       return false;
     }
   }
 
   return true;
+}
+
+bool VectorIndexWrapper::IsPermanentHoldVectorIndex(int64_t region_id) {
+  auto region = Server::GetInstance().GetRegion(region_id);
+  if (region == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] Not found region.", region_id);
+    return false;
+  }
+  return IsPermanentHoldVectorIndex(region);
 }
 
 butil::Status VectorIndexWrapper::SetVectorIndexRangeFilter(
