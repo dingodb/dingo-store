@@ -433,7 +433,9 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region->State() != pb::common::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Parent region state is NORMAL, not allow split.");
   }
-
+  if (parent_region->GetStoreEngineType() != pb::common::STORE_ENG_RAFT_STORE) {
+    return butil::Status();
+  }
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
   if (raft_store_engine == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
@@ -519,8 +521,10 @@ butil::Status SplitRegionTask::SplitRegion() {
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_cmd_->split_request().split_from_region_id());
   ctx->SetRegionEpoch(parent_region->Epoch());
-  status = Server::GetInstance().GetEngine()->Write(
-      ctx, WriteDataBuilder::BuildWrite(region_cmd_->job_id(), region_cmd_->split_request(), parent_region->Epoch()));
+  status = Server::GetInstance()
+               .GetEngine(parent_region->GetStoreEngineType())
+               ->Write(ctx, WriteDataBuilder::BuildWrite(region_cmd_->job_id(), region_cmd_->split_request(),
+                                                         parent_region->Epoch()));
   DINGO_LOG_IF(ERROR, !status.ok()) << fmt::format("[control.region][region()] commit split command failed, error: {}",
                                                    status.error_str());
 
@@ -661,6 +665,10 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   // Check region peers
   if (Helper::IsDifferencePeers(source_region->Definition(), target_region->Definition())) {
     return butil::Status(pb::error::EMERGE_PEER_NOT_MATCH, "Peers is differencce.");
+  }
+
+  if (source_region->GetStoreEngineType() != pb::common::STORE_ENG_RAFT_STORE) {
+    return butil::Status();
   }
 
   // Check source region follower commit log progress.
@@ -902,8 +910,10 @@ butil::Status ChangeRegionTask::ValidateChangeRegion(std::shared_ptr<StoreMetaMa
   if (region->TemporaryDisableChange()) {
     return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable region change.");
   }
-
-  return CheckLeader(region_definition.id());
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+    return CheckLeader(region_definition.id());
+  }
+  return butil::Status();
 }
 
 butil::Status ChangeRegionTask::ChangeRegion(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
@@ -1360,6 +1370,9 @@ butil::Status HoldVectorIndexTask::ValidateHoldVectorIndex(int64_t region_id) {
   auto region = store_region_meta->GetRegion(region_id);
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", region_id));
+  }
+  if (region->GetStoreEngineType() != pb::common::STORE_ENG_RAFT_STORE) {
+    return butil::Status();
   }
   // Validate is follower
   auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
