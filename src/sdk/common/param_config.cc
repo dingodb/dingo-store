@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/common/param_config.h"
+#include "gflags/gflags.h"
 
 // sdk config
 DEFINE_int64(actuator_thread_num, 8, "actuator thread num");
@@ -33,7 +33,7 @@ DEFINE_int64(rpc_time_out_ms, 500000, "rpc call timeout ms");
 DEFINE_int64(store_rpc_max_retry, 5, "store rpc max retry times, use case: wrong leader or request range invalid");
 DEFINE_int64(store_rpc_retry_delay_ms, 1000, "store rpc retry delay ms");
 
-DEFINE_int64(scan_batch_size, 10, "scan batch size, use for region scanner");
+DEFINE_int64(scan_batch_size, 1000, "scan batch size, use for region scanner");
 
 DEFINE_int64(txn_op_delay_ms, 200, "txn op delay ms");
 DEFINE_int64(txn_op_max_retry, 2, "txn op max retry times");
@@ -43,3 +43,7 @@ DEFINE_int64(raw_kv_max_retry, 5, "raw kv max retry times");
 
 DEFINE_int64(vector_op_delay_ms, 500, "raw kv backoff delay ms");
 DEFINE_int64(vector_op_max_retry, 10, "raw kv max retry times");
+
+DEFINE_int64(txn_max_batch_count, 1000, "txn max batch count");
+
+DEFINE_bool(log_rpc_time, false, "log rpc time");

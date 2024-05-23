@@ -22,6 +22,7 @@
 
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
@@ -654,17 +655,35 @@ Status Transaction::TxnImpl::PreCommit() {
     CHECK(iter != region_id_to_region.end());
     auto region = iter->second;
 
-    auto rpc = PrepareTxnPrewriteRpc(region);
-
+    dingodb::pb::store::TxnPrewriteRequest txn_prewrite_request;
     for (const auto& mutation : mutation_entry.second) {
-      TxnMutation2MutationPB(mutation, rpc->MutableRequest()->add_mutations());
+      TxnMutation2MutationPB(mutation, txn_prewrite_request.add_mutations());
     }
 
-    sub_tasks.emplace_back(rpc.get(), region);
-    rpcs.push_back(std::move(rpc));
+    auto rpc = PrepareTxnPrewriteRpc(region);
+
+    uint32_t tmp_count = 0;
+    for (int i = 0; i < txn_prewrite_request.mutations_size(); i++) {
+      *rpc->MutableRequest()->add_mutations() = txn_prewrite_request.mutations(i);
+      tmp_count++;
+
+      if (tmp_count == FLAGS_txn_max_batch_count) {
+        sub_tasks.emplace_back(rpc.get(), region);
+        rpcs.push_back(std::move(rpc));
+        tmp_count = 0;
+        rpc = PrepareTxnPrewriteRpc(region);
+      }
+    }
+
+    DCHECK_NOTNULL(rpc);
+
+    if (tmp_count > 0) {
+      sub_tasks.emplace_back(rpc.get(), region);
+      rpcs.push_back(std::move(rpc));
+    }
   }
 
-  DCHECK_EQ(rpcs.size(), region_mutations.size());
+  // DCHECK_EQ(rpcs.size(), region_mutations.size());
   DCHECK_EQ(rpcs.size(), sub_tasks.size());
 
   std::vector<std::thread> thread_pool;
@@ -841,15 +860,27 @@ Status Transaction::TxnImpl::Commit() {
         auto region = iter->second;
 
         std::unique_ptr<TxnCommitRpc> rpc = PrepareTxnCommitRpc(region);
+
+        uint32_t tmp_count = 0;
         for (const auto& key : entry.second) {
-          auto* fill = rpc->MutableRequest()->add_keys();
-          *fill = key;
+          rpc->MutableRequest()->add_keys(key);
+          tmp_count++;
+
+          if (tmp_count == FLAGS_txn_max_batch_count) {
+            sub_tasks.emplace_back(rpc.get(), region);
+            rpcs.push_back(std::move(rpc));
+            tmp_count = 0;
+            rpc = PrepareTxnCommitRpc(region);
+          }
         }
-        sub_tasks.emplace_back(rpc.get(), region);
-        rpcs.push_back(std::move(rpc));
+
+        if (tmp_count > 0) {
+          sub_tasks.emplace_back(rpc.get(), region);
+          rpcs.push_back(std::move(rpc));
+        }
       }
 
-      DCHECK_EQ(rpcs.size(), region_commit_keys.size());
+      // DCHECK_EQ(rpcs.size(), region_commit_keys.size());
       DCHECK_EQ(rpcs.size(), sub_tasks.size());
 
       std::vector<std::thread> thread_pool;

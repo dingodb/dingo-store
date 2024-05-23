@@ -59,4 +59,7 @@ DECLARE_int64(txn_op_max_retry);
 DECLARE_int64(vector_op_delay_ms);
 DECLARE_int64(vector_op_max_retry);
 
+DECLARE_int64(txn_max_batch_count);
+DECLARE_bool(log_rpc_time);
+
 #endif  // DINGODB_SDK_PARAM_CONFIG_H_
