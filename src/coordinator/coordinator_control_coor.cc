@@ -2659,7 +2659,9 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
     auto vector_index_version = region_metrics.vector_index_status().last_build_epoch_version();
     auto region_version = split_from_region.definition().epoch().version();
 
-    if (region_version != vector_index_version) {
+    // The mono store engine does not use snapshots, so the vector_index_version constantly remains zero.
+    if (region_version != vector_index_version &&
+        split_from_region.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
       DINGO_LOG(ERROR) << "SplitRegion split_from_region vector index epoch is not equal to region epoch, "
                           "split_from_region_id = "
                        << split_from_region_id << " from_state=" << split_from_region.state()
@@ -2963,8 +2965,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
         merge_from_region.definition().index_parameter().has_vector_index_parameter()) {
       auto vector_index_version = merge_from_region_metrics.vector_index_status().last_build_epoch_version();
       auto region_version = merge_from_region.definition().epoch().version();
-
-      if (region_version != vector_index_version) {
+      // The mono store engine does not use snapshots, so the vector_index_version constantly remains zero.
+      if (region_version != vector_index_version && merge_from_region.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
         DINGO_LOG(ERROR) << "MergeRegion merge_from_region vector index epoch is not equal to region epoch, "
                             "merge_from_region_id = "
                          << merge_from_region_id << " from_state=" << merge_from_region.state()
@@ -3049,7 +3051,11 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
     DINGO_LOG(ERROR) << "ChangePeerRegion region not exists, id = " << region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region not exists");
   }
-
+  if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id" << region_id << "store engine not match";
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STORE_ENGINE_NOT_MATCH,
+                         "ChangePeerRegion region store engine not match");
+  }
   // validate region has NORMAL status
   auto region_status = GetRegionStatus(region_id);
   if (region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
@@ -3313,7 +3319,11 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
                      << region_id;
     return butil::Status(pb::error::Errno::EREGION_STATE, "TransferLeaderRegion region.state() != REGION_NORMAL");
   }
-
+  if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
+    DINGO_LOG(ERROR) << "TransferLeaderRegion, region_id" << region_id << "store engine not match";
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STORE_ENGINE_NOT_MATCH,
+                         "TransferLeaderRegion region store engine not match");
+  }
   auto region_status = GetRegionStatus(region_id);
   if (region_status.heartbeat_status() != pb::common::RegionHeartbeatState::REGION_ONLINE) {
     DINGO_LOG(ERROR) << "TransferLeaderRegion region.heartbeat_state() "
@@ -5352,7 +5362,12 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
         check_passed = false;
       }
     }
-
+    pb::coordinator_internal::RegionInternal region_internal;
+    int ret = region_map_.Get(store_region_check.region_id(), region_internal);
+    if (ret < 0) {
+      DINGO_LOG(INFO) << "check vector_index faild, region_id= " << store_region_check.region_id() << "not exists";
+      return false;
+    }
     if (store_region_check.vector_index_version() > 0) {
       if (!store_region_metrics.has_vector_index_status()) {
         DINGO_LOG(INFO) << "check vector_index faild, region.has_vector_index_status() is false, can't do check, wait "
@@ -5360,7 +5375,9 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
                         << store_region_check.store_id() << ", region_id=" << store_region_check.region_id();
         check_passed = false;
       } else if (store_region_check.vector_index_version() !=
-                 store_region_metrics.vector_index_status().last_build_epoch_version()) {
+                     store_region_metrics.vector_index_status().last_build_epoch_version() &&
+                 region_internal.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
+        // The mono store engine does not use snapshots, so the vector_index_version constantly remains zero.
         DINGO_LOG(INFO) << "check vector_index failed, region_check.vector_index_version()="
                         << store_region_check.vector_index_version()
                         << " region.vector_index_status().vector_index_version()="

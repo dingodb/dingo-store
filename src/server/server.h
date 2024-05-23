@@ -140,6 +140,7 @@ class Server {
 
   std::shared_ptr<Engine> GetEngine();
   std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type);
+  std::shared_ptr<Engine> GetEngine(pb::common::StorageEngine store_engine_type);
 
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
 

@@ -185,8 +185,14 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
 
 static void LaunchAyncSaveSnapshot(store::RegionPtr region) {  // NOLINT
   auto store_region_meta = GET_STORE_REGION_META;
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+    if (region->Type() == pb::common::STORE_REGION) {
+      store_region_meta->UpdateTemporaryDisableChange(region, false);
+    }
+    return;
+  }
   store_region_meta->UpdateNeedBootstrapDoSnapshot(region, true);
-  auto engine = Server::GetInstance().GetEngine();
+  auto engine = Server::GetInstance().GetEngine(region->GetStoreEngineType());
 
   bool is_success = false;
   for (int i = 0; i < Constant::kSplitDoSnapshotRetryTimes; ++i) {
@@ -218,7 +224,6 @@ void SplitHandler::SplitClosure::Run() {
     DINGO_LOG(INFO) << fmt::format("[split.spliting][region({})] not found region.", region_id_);
     return;
   }
-
   if (!status().ok()) {
     DINGO_LOG(WARNING) << fmt::format("[split.spliting][region({})] finish snapshot failed, error: {}", region_id_,
                                       status().error_str());
@@ -700,9 +705,12 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
   assert(storage != nullptr);
 
   uint64_t start_time = Helper::TimestampMs();
-  // Generate LogEntry.
-  auto log_entries =
-      GetRaftLogEntries(source_region_definition.id(), request.min_applied_log_id() + 1, prepare_merge_log_id);
+  std::vector<pb::raft::LogEntry> log_entries;
+  if (target_region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+    // Generate LogEntry.
+    log_entries =
+        GetRaftLogEntries(source_region_definition.id(), request.min_applied_log_id() + 1, prepare_merge_log_id);
+  }
 
   // Timing commit CommitMerge command to target region
   // Just target region leader node will success
@@ -716,7 +724,7 @@ static void LaunchCommitMergeCommand(const pb::raft::PrepareMergeRequest &reques
     auto ctx = std::make_shared<Context>();
     ctx->SetRegionId(request.target_region_id());
     ctx->SetRegionEpoch(request.target_region_epoch());
-
+    ctx->SetStoreEngineType(target_region->GetStoreEngineType());
     // Try to commit local target region raft.
     auto status =
         storage->CommitMerge(ctx, request.job_id(), source_region_definition, prepare_merge_log_id, log_entries);
@@ -865,24 +873,25 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     return 0;
   }
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge");
-
-  // Catch up apply source region raft log.
-  auto node = raft_store_engine->GetNode(source_region->Id());
-  if (node == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source node.",
-                                    request.job_id(), request.source_region_id(), target_region->Id());
-    return 0;
-  }
-  auto state_machine = std::dynamic_pointer_cast<StoreStateMachine>(node->GetStateMachine());
-  if (state_machine == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source state machine.",
-                                    request.job_id(), request.source_region_id(), target_region->Id());
-    return 0;
-  }
-
   int32_t actual_apply_log_count = 0;
-  if (!request.entries().empty()) {
-    actual_apply_log_count = state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
+  if (target_region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+    // Catch up apply source region raft log.
+    auto node = raft_store_engine->GetNode(source_region->Id());
+    if (node == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source node.",
+                                      request.job_id(), request.source_region_id(), target_region->Id());
+      return 0;
+    }
+    auto state_machine = std::dynamic_pointer_cast<StoreStateMachine>(node->GetStateMachine());
+    if (state_machine == nullptr) {
+      DINGO_LOG(FATAL) << fmt::format("[merge.merging][job_id({}).region({}/{})] Not found source state machine.",
+                                      request.job_id(), request.source_region_id(), target_region->Id());
+      return 0;
+    }
+    
+    if (!request.entries().empty()) {
+      actual_apply_log_count = state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
+    }
   }
 
   FAIL_POINT("before_commit_merge_modify_epoch");

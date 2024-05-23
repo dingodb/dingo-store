@@ -924,6 +924,17 @@ std::shared_ptr<RawEngine> Server::GetRawEngine(pb::common::RawEngine type) {
   assert(raft_engine_ != nullptr);
   return raft_engine_->GetRawEngine(type);
 }
+std::shared_ptr<Engine> Server::GetEngine(pb::common::StorageEngine store_engine_type) {
+  if (store_engine_type == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
+    assert(raft_engine_ != nullptr);
+    return raft_engine_;
+  } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
+    assert(rocks_engine_ != nullptr);
+    return rocks_engine_;
+  }
+  DINGO_LOG(FATAL) << fmt::format("GetEngine not support sotre engine:{}", pb::common::StorageEngine_Name(store_engine_type));
+  return nullptr;
+}
 
 std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
   auto engine = GetEngine();
