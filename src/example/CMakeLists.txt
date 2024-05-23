@@ -27,3 +27,9 @@ add_executable(sdk_vector_example
 target_link_libraries(sdk_vector_example
     sdk
 )
+
+add_executable(txn_scan_test
+    txn_scan_test.cc)
+target_link_libraries(txn_scan_test
+    sdk
+)

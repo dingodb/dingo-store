@@ -26,9 +26,25 @@ namespace sdk {
 // TODO: log in rpc when we support async
 template <class StoreClientRpc>
 static Status LogAndSendRpc(const ClientStub& stub, StoreClientRpc& rpc, std::shared_ptr<Region> region) {
-  StoreRpcController controller(stub, rpc, region);
-  Status s = controller.Call();
-  return s;
+  if (fLB::FLAGS_log_rpc_time) {
+    auto start_time_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    StoreRpcController controller(stub, rpc, region);
+    Status s = controller.Call();
+
+    DINGO_LOG(INFO) << "rpc: " << rpc.Method() << " region: " << region->RegionId() << " cost: "
+                    << std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::system_clock::now().time_since_epoch())
+                               .count() -
+                           start_time_ms
+                    << "ms";
+    return s;
+  } else {
+    StoreRpcController controller(stub, rpc, region);
+    Status s = controller.Call();
+    return s;
+  }
 }
 
 }  // namespace sdk
