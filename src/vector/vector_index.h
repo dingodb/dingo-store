@@ -38,6 +38,11 @@
 
 namespace dingodb {
 
+namespace store {
+class Region;
+using RegionPtr = std::shared_ptr<Region>;
+}  // namespace store
+
 // Vector index abstract base class.
 // One region own one vector index(region_id==vector_index_id)
 // But one region can refer other vector index when region split.
@@ -323,6 +328,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   // check temp hold vector index
   bool IsTempHoldVectorIndex() const;
   // check permanent hold vector index
+  static bool IsPermanentHoldVectorIndex(store::RegionPtr region);
   static bool IsPermanentHoldVectorIndex(int64_t region_id);
 
   vector_index::SnapshotMetaSetPtr SnapshotSet() {

@@ -461,24 +461,26 @@ bool StoreRegionMetrics::CollectMetrics() {
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto region_metricses = GetAllMetrics();
 
-  std::vector<store::RegionPtr> need_collect_regions;
   for (const auto& region_metrics : region_metricses) {
     auto raft_meta = store_raft_meta->GetRaftMeta(region_metrics->Id());
     if (raft_meta == nullptr) {
+      DINGO_LOG(DEBUG) << fmt::format("[metrics.region][region({})] not found raft meta.", region_metrics->Id());
       continue;
     }
     int64_t applied_index = raft_meta->AppliedId();
     if (applied_index != 0 && region_metrics->LastLogIndex() >= applied_index) {
+      DINGO_LOG(DEBUG) << fmt::format("[metrics.region][region({})] log index({}/{}) is newest.", region_metrics->Id(),
+                                      region_metrics->LastLogIndex(), applied_index);
+      continue;
+    }
+
+    auto region = store_region_meta->GetRegion(region_metrics->Id());
+    if (region == nullptr) {
+      DINGO_LOG(DEBUG) << fmt::format("[metrics.region][region({})] not found region.", region_metrics->Id());
       continue;
     }
 
     region_metrics->SetLastLogIndex(applied_index);
-
-    auto region = store_region_meta->GetRegion(region_metrics->Id());
-    if (region == nullptr) {
-      continue;
-    }
-    need_collect_regions.push_back(region);
 
     int64_t start_time = Helper::TimestampMs();
 

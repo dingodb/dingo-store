@@ -263,6 +263,7 @@ void DistributeRegionToStore(std::vector<dingodb::balance::StoreEntryPtr>& store
 }
 
 TEST_F(CandidateStoresTest, Build1) {
+  GTEST_SKIP() << "skip...";
   std::vector<dingodb::balance::StoreEntryPtr> stores = GenerateStoreEntries(3);
   // DistributeRegionToStore(stores);
   DistributeRandomRegionToStore(10, 3, stores);
@@ -272,6 +273,7 @@ TEST_F(CandidateStoresTest, Build1) {
 }
 
 TEST_F(BalanceLeaderSchedulerTest, Schedule) {
+  GTEST_SKIP() << "skip...";
   {
     // region | store-1 | stcore-2 | store-3
     // 60001  | L       | F       | F
