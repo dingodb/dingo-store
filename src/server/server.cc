@@ -965,7 +965,11 @@ std::shared_ptr<StoreMetaManager> Server::GetStoreMetaManager() {
 }
 
 store::RegionPtr Server::GetRegion(int64_t region_id) {
-  return GetStoreMetaManager()->GetStoreRegionMeta()->GetRegion(region_id);
+  auto store_meta_manager = GetStoreMetaManager();
+  if (store_meta_manager == nullptr) {
+    return nullptr;
+  }
+  return store_meta_manager->GetStoreRegionMeta()->GetRegion(region_id);
 }
 
 std::vector<store::RegionPtr> Server::GetAllAliveRegion() {

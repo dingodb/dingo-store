@@ -19,6 +19,7 @@
 #include "glog/logging.h"
 #include "report/allure.h"
 #include "report/web.h"
+#include "server/server.h"
 
 DEFINE_string(allure_report, "", "allure report directory");
 DEFINE_string(allure_url, "", "jenkins allure url");
