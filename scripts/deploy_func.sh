@@ -57,14 +57,22 @@ function deploy_store() {
         echo "cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf"
         cp $srcpath/conf/${role}-gflags.conf $dstpath/conf/gflags.conf
         sed  -i 's,\$DEFAULT_REPLICA_NUM\$,'"$DEFAULT_REPLICA_NUM"',g' $dstpath/conf/gflags.conf
-        sed  -i 's,\$DEFAULT_MIN_SYSTEM_DISK_CAPACITY_FREE_RATIO\$,'"$DEFAULT_MIN_SYSTEM_DISK_CAPACITY_FREE_RATIO"',g' $dstpath/conf/gflags.conf
-        sed  -i 's,\$DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO\$,'"$DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO"',g' $dstpath/conf/gflags.conf
         if [ ${DINGODB_ENABLE_LITE} = "1" ];then
           echo "" >> $dstpath/conf/gflags.conf
           echo "-enable_lite=true" >> $dstpath/conf/gflags.conf
           echo "enable_lite is set"
         else
           echo "enable-lite is not set"
+        fi
+        if [ ${DEFAULT_MIN_SYSTEM_DISK_CAPACITY_FREE_RATIO} ];then
+          echo "" >> $dstpath/conf/gflags.conf
+          echo "-min_system_disk_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_DISK_CAPACITY_FREE_RATIO}" >> $dstpath/conf/gflags.conf
+          echo "-min_system_disk_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_DISK_CAPACITY_FREE_RATIO}"
+        fi
+        if [ ${DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO} ];then
+          echo "" >> $dstpath/conf/gflags.conf
+          echo "-min_system_memory_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO}" >> $dstpath/conf/gflags.conf
+          echo "-min_system_memory_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO}"
         fi
     fi
   fi
