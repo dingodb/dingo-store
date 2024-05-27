@@ -77,6 +77,7 @@ class Status {
   DECLARE_ERROR_STATUS(TxnNotFound, kTxnNotFound);
   DECLARE_ERROR_STATUS(TxnPrimaryMismatch, kTxnPrimaryMismatch);
   DECLARE_ERROR_STATUS(TxnRolledBack, kTxnRolledBack);
+  DECLARE_ERROR_STATUS(NoLeader, kNoLeader);
 
   // Return a string representation of this status suitable for printing.
   // Returns the string "OK" for success.
@@ -110,6 +111,7 @@ class Status {
     kTxnNotFound = 21,
     kTxnPrimaryMismatch = 22,
     kTxnRolledBack = 23,
+    kNoLeader = 24,
   };
 
   Status(Code code, int32_t p_errno, const Slice& msg, const Slice& msg2);
