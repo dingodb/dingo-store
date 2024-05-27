@@ -20,7 +20,6 @@
 namespace client {
 
 void DumpDb(std::shared_ptr<Context> ctx);
-void DumpVectorIndexDb(std::shared_ptr<Context> ctx);
 
 }  // namespace client
 

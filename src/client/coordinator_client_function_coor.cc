@@ -107,7 +107,7 @@ DECLARE_bool(use_json_parameter);
 DECLARE_bool(dryrun);
 DECLARE_int32(store_type);
 DECLARE_bool(include_archive);
-DECLARE_bool(pretty_show);
+DECLARE_bool(show_pretty);
 
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -1912,7 +1912,7 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
   DINGO_LOG_IF(INFO, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
 
   for (const auto& task_list : response.task_lists()) {
-    DINGO_LOG(INFO) << "task_list: " << (FLAGS_pretty_show ? task_list.DebugString() : task_list.ShortDebugString());
+    DINGO_LOG(INFO) << "task_list: " << (FLAGS_show_pretty ? task_list.DebugString() : task_list.ShortDebugString());
   }
 }
 
