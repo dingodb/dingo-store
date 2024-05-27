@@ -114,6 +114,9 @@ std::string Status::ToString() const {
       case kTxnRolledBack:
         type = "TxnRolledBack";
         break;
+      case kNoLeader:
+        type = "NoLeader";
+        break;
       default:
         std::string tmp = fmt::format("Unknown code({}):", static_cast<int>(code_));
         CHECK(false) << tmp;

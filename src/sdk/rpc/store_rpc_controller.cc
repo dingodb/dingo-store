@@ -129,14 +129,16 @@ void StoreRpcController::SendStoreRpcCallBack() {
           if (!endpoint.IsValid()) {
             DINGO_LOG(WARNING) << base_msg << " not leader, but leader hint:" << error.leader_location().DebugString()
                                << ", endpoint: " << endpoint.ToString() << " is invalid";
+            status_ = Status::NoLeader(error.errcode(), error.errmsg());
           } else {
             region_->MarkLeader(endpoint);
             DINGO_LOG(WARNING) << base_msg << " not leader, leader hint:" << endpoint.ToString();
+            status_ = Status::NotLeader(error.errcode(), error.errmsg());
           }
         } else {
           DINGO_LOG(WARNING) << base_msg << " not leader, no leader hint";
+          status_ = Status::NoLeader(error.errcode(), error.errmsg());
         }
-        status_ = Status::NotLeader(error.errcode(), error.errmsg());
       } else if (error.errcode() == pb::error::EREGION_VERSION) {
         stub_.GetMetaCache()->ClearRange(region_);
         if (error.has_store_region_info()) {
@@ -175,7 +177,7 @@ void StoreRpcController::RetrySendRpcOrFireCallback() {
     return;
   }
 
-  if (status_.IsNetworkError() || status_.IsRemoteError() || status_.IsNotLeader()) {
+  if (status_.IsNetworkError() || status_.IsRemoteError() || status_.IsNotLeader() || status_.IsNoLeader()) {
     if (NeedRetry()) {
       rpc_retry_times_++;
       DoAsyncCall();
@@ -262,7 +264,7 @@ std::shared_ptr<Region> StoreRpcController::ProcessStoreRegionInfo(
 
 bool StoreRpcController::NeedRetry() const { return this->rpc_retry_times_ < FLAGS_store_rpc_max_retry; }
 
-bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError(); }
+bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError() || status_.IsNoLeader();}
 
 bool StoreRpcController::NeedPickLeader() const { return !status_.IsRemoteError(); }
 
