@@ -396,14 +396,14 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
       } else {
         context->disable_coprocessor_ = disable_coprocessor;
         if (!context->disable_coprocessor_) {
-          context->coprocessor_ = std::make_shared<Coprocessor>();
+          context->coprocessor_ = std::make_shared<Coprocessor>(Helper::GetKeyPrefix(range.start_key()));
         }
       }
     } else {  // pb::common::CoprocessorV2
       const pb::common::CoprocessorV2* coprocessor_v2 = std::get_if<pb::common::CoprocessorV2>(&coprocessor);
       if (nullptr != coprocessor_v2) {
         context->disable_coprocessor_ = disable_coprocessor;
-        context->coprocessor_ = std::make_shared<CoprocessorV2>();
+        context->coprocessor_ = std::make_shared<CoprocessorV2>(Helper::GetKeyPrefix(range.start_key()));
       }
     }
 

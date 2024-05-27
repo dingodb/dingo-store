@@ -41,7 +41,7 @@ namespace dingodb {
 
 class CoprocessorV2 : public RawCoprocessor {
  public:
-  CoprocessorV2();
+  CoprocessorV2(char prefix);
   ~CoprocessorV2() override;
 
   CoprocessorV2(const CoprocessorV2& rhs) = delete;
@@ -86,6 +86,7 @@ class CoprocessorV2 : public RawCoprocessor {
   void ShowSelectionColumnIndexes();
   void ShowResultColumnIndexes();
 
+  char prefix_;                                                                        // NOLINT
   pb::common::CoprocessorV2 coprocessor_;                                              // NOLINT
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_;  // NOLINT
   // array index =  original schema member index field ; value = original schema array index

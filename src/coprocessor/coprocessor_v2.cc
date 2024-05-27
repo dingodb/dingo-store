@@ -55,8 +55,9 @@ bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_running_num("din
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_filter_total_num("dingo_coprocessor_v2_filter_total_num");
 bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_filter_latency("dingo_coprocessor_v2_filter_latency");
 
-CoprocessorV2::CoprocessorV2()
-    : bvar_guard_for_coprocessor_v2_latency_(&coprocessor_v2_latency)
+CoprocessorV2::CoprocessorV2(char prefix)
+    : bvar_guard_for_coprocessor_v2_latency_(&coprocessor_v2_latency),
+      prefix_(prefix)
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
       ,
       coprocessor_v2_start_time_point(std::chrono::steady_clock::now()),
@@ -700,15 +701,14 @@ butil::Status CoprocessorV2::GetKvFromExpr(const std::vector<std::any>& record, 
   pb::common::KeyValue result_key_value;
   int ret = 0;
   try {
-    ret = result_record_encoder_->Encode(record, result_key_value);
+    ret = result_record_encoder_->Encode(prefix_, record, result_key_value);
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
   }
   if (ret < 0) {
-    std::string error_message = fmt::format("serial::Encode failed");
-    DINGO_LOG(ERROR) << error_message;
+    DINGO_LOG(ERROR) << fmt::format("serial::Encode failed");
     return status;
   }
 

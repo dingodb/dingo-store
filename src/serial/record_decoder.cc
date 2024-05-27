@@ -18,32 +18,33 @@
 #include <vector>
 
 #include "common/logging.h"
+#include "glog/logging.h"
 
 namespace dingodb {
 
 // TODO cast and decode function not good, optimize on 0.8.0 or later
 
-using CastAndDecodeOrSkipFuncPointer = void (*)(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+using CastAndDecodeOrSkipFuncPointer = void (*)(const std::shared_ptr<BaseSchema>& schema, Buf& key_buf, Buf& value_buf,
                                                 std::vector<std::any>& record, int record_index, bool skip);
 
 template <typename T>
-void CastAndDecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+void CastAndDecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf& key_buf, Buf& value_buf,
                          std::vector<std::any>& record, int record_index, bool skip) {
   auto dingo_schema = std::dynamic_pointer_cast<DingoSchema<std::optional<T>>>(schema);
   if (skip) {
     if (schema->IsKey()) {
-      dingo_schema->SkipKey(key_buf);
-    } else if (!value_buf->IsEnd()) {
-      dingo_schema->SkipValue(value_buf);
+      dingo_schema->SkipKey(&key_buf);
+    } else if (!value_buf.IsEnd()) {
+      dingo_schema->SkipValue(&value_buf);
     }
   } else {
     if (schema->IsKey()) {
-      record.at(record_index) = dingo_schema->DecodeKey(key_buf);
+      record.at(record_index) = dingo_schema->DecodeKey(&key_buf);
     } else {
-      if (value_buf->IsEnd()) {
+      if (value_buf.IsEnd()) {
         record.at(record_index) = std::optional<T>(std::nullopt);
       } else {
-        record.at(record_index) = dingo_schema->DecodeValue(value_buf);
+        record.at(record_index) = dingo_schema->DecodeValue(&value_buf);
       }
     }
   }
@@ -84,49 +85,43 @@ void RecordDecoder::Init(int schema_version, std::shared_ptr<std::vector<std::sh
   this->common_id_ = common_id;
 }
 
-bool RecordDecoder::CheckPrefix(Buf* buf) const {
+bool RecordDecoder::CheckPrefix(Buf& buf) const {
   // skip name space
-  buf->Skip(1);
-  return buf->ReadLong() == common_id_;
+  buf.Skip(1);
+  return buf.ReadLong() == common_id_;
 }
 
-bool RecordDecoder::CheckReverseTag(Buf* buf) const {
-  if (buf->ReverseRead() <= codec_version_) {
-    buf->ReverseSkip(3);
+bool RecordDecoder::CheckReverseTag(Buf& buf) const {
+  if (buf.ReverseRead() <= codec_version_) {
+    buf.ReverseSkip(3);
     return true;
   }
   return false;
 }
 
-bool RecordDecoder::CheckSchemaVersion(Buf* buf) const { return buf->ReadInt() <= schema_version_; }
+bool RecordDecoder::CheckSchemaVersion(Buf& buf) const { return buf.ReadInt() <= schema_version_; }
 
-void DecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf* key_buf, Buf* value_buf,
+void DecodeOrSkip(const std::shared_ptr<BaseSchema>& schema, Buf& key_buf, Buf& value_buf,
                   std::vector<std::any>& record, int record_index, bool skip) {
   cast_and_decode_or_skip_func_ptrs[static_cast<int>(schema->GetType())](schema, key_buf, value_buf, record,
                                                                          record_index, skip);
 }
 
 int RecordDecoder::Decode(const std::string& key, const std::string& value, std::vector<std::any>& record) {
-  Buf* key_buf = new Buf(key, this->le_);
-  Buf* value_buf = new Buf(value, this->le_);
+  Buf key_buf(key, this->le_);
+  Buf value_buf(value, this->le_);
   if (!CheckPrefix(key_buf)) {
     //"Wrong Common Id"
-    delete key_buf;
-    delete value_buf;
     return -1;
   }
 
   if (!CheckReverseTag(key_buf)) {
     //"Wrong Codec Version"
-    delete key_buf;
-    delete value_buf;
     return -1;
   }
 
   if (!CheckSchemaVersion(value_buf)) {
     //"Wrong Schema Version"
-    delete key_buf;
-    delete value_buf;
     return -1;
   }
 
@@ -136,23 +131,20 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, std:
       DecodeOrSkip(bs, key_buf, value_buf, record, bs->GetIndex(), false);
     }
   }
-  delete key_buf;
-  delete value_buf;
+
   return 0;
 }
 
 int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& record /*output*/) {
-  Buf* key_buf = new Buf(key, this->le_);
+  Buf key_buf(key, this->le_);
 
   if (!CheckPrefix(key_buf)) {
     //"Wrong Common Id"
-    delete key_buf;
     return -1;
   }
 
   if (!CheckReverseTag(key_buf)) {
     //"Wrong Codec Version"
-    delete key_buf;
     return -1;
   }
 
@@ -164,7 +156,7 @@ int RecordDecoder::DecodeKey(const std::string& key, std::vector<std::any>& reco
     }
     index++;
   }
-  delete key_buf;
+
   return 0;
 }
 
@@ -194,7 +186,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
                           std::vector<std::any>& record) {
   Buf key_buf(key, this->le_);
   Buf value_buf(value, this->le_);
-  if (!CheckPrefix(&key_buf) || !CheckReverseTag(&key_buf) || !CheckSchemaVersion(&value_buf)) {
+  if (!CheckPrefix(key_buf) || !CheckReverseTag(key_buf) || !CheckSchemaVersion(value_buf)) {
     return -1;
   }
 
@@ -226,7 +218,7 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
     }
     if (bs) {
       bool is_skip = IsSkipOnly(col_index_mapping, n, m, record_index);
-      DecodeOrSkip(bs, &key_buf, &value_buf, record, record_index, is_skip);
+      DecodeOrSkip(bs, key_buf, value_buf, record, record_index, is_skip);
     }
   }
   return 0;

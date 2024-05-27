@@ -114,7 +114,7 @@ class CoprocessorTest : public testing::Test {
     ASSERT_TRUE(engine != nullptr);
     ASSERT_TRUE(engine->Init(config, kAllCFs));
 
-    coprocessor = std::make_shared<Coprocessor>();
+    coprocessor = std::make_shared<Coprocessor>('r');
     ASSERT_TRUE(coprocessor != nullptr);
   }
 
@@ -690,7 +690,7 @@ TEST_F(CoprocessorTest, Open) {
     }
 
     coprocessor.reset();
-    coprocessor = std::make_shared<Coprocessor>();
+    coprocessor = std::make_shared<Coprocessor>('r');
 
     ok = coprocessor->Open(CoprocessorPbWrapper{pb_coprocessor});
     EXPECT_EQ(ok.error_code(), pb::error::OK);

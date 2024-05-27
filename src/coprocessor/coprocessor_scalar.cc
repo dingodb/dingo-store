@@ -40,7 +40,7 @@ bvar::LatencyRecorder CoprocessorScalar::coprocessor_v2_filter_scalar_latency(
 
 DEFINE_bool(dingo_log_switch_coprocessor_scalar_detail, false, "coprocessor_scalar detail log");
 
-CoprocessorScalar::CoprocessorScalar() = default;
+CoprocessorScalar::CoprocessorScalar(char prefix) : CoprocessorV2(prefix){};
 CoprocessorScalar::~CoprocessorScalar() { Close(); }
 
 butil::Status CoprocessorScalar::Open(const std::any& coprocessor) {

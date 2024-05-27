@@ -118,9 +118,9 @@ class CoprocessorTestV2 : public testing::Test {
     ASSERT_TRUE(engine != nullptr);
     ASSERT_TRUE(engine->Init(config, kAllCFs));
 
-    coprocessor = std::make_shared<CoprocessorV2>();
+    coprocessor = std::make_shared<CoprocessorV2>('r');
     ASSERT_TRUE(coprocessor != nullptr);
-    coprocessor_scalar = std::make_shared<CoprocessorScalar>();
+    coprocessor_scalar = std::make_shared<CoprocessorScalar>('r');
     ASSERT_TRUE(coprocessor_scalar != nullptr);
   }
 

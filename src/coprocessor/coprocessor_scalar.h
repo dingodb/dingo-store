@@ -29,7 +29,7 @@ namespace dingodb {
 
 class CoprocessorScalar : public CoprocessorV2 {
  public:
-  CoprocessorScalar();
+  CoprocessorScalar(char prefix);
   ~CoprocessorScalar() override;
 
   CoprocessorScalar(const CoprocessorScalar& rhs) = delete;

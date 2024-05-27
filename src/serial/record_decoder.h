@@ -22,27 +22,27 @@
 #include "keyvalue.h"
 #include "optional"
 #include "proto/common.pb.h"
-#include "schema/boolean_schema.h"
-#include "schema/double_schema.h"
-#include "schema/float_schema.h"
-#include "schema/integer_schema.h"
-#include "schema/long_schema.h"
-#include "schema/string_schema.h"
 #include "schema/boolean_list_schema.h"
-#include "schema/string_list_schema.h"
+#include "schema/boolean_schema.h"
 #include "schema/double_list_schema.h"
+#include "schema/double_schema.h"
 #include "schema/float_list_schema.h"
+#include "schema/float_schema.h"
 #include "schema/integer_list_schema.h"
+#include "schema/integer_schema.h"
 #include "schema/long_list_schema.h"
+#include "schema/long_schema.h"
+#include "schema/string_list_schema.h"
+#include "schema/string_schema.h"
 #include "utils.h"
 
 namespace dingodb {
 
 class RecordDecoder {
  private:
-  bool CheckPrefix(Buf* buf) const;
-  bool CheckReverseTag(Buf* buf) const;
-  bool CheckSchemaVersion(Buf* buf) const;
+  bool CheckPrefix(Buf& buf) const;
+  bool CheckReverseTag(Buf& buf) const;
+  bool CheckSchemaVersion(Buf& buf) const;
 
   int codec_version_ = 1;
   int schema_version_;

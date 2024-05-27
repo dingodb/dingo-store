@@ -95,6 +95,11 @@ bool Helper::IsClientRaw(const std::string& key) { return key.empty() ? false : 
 
 bool Helper::IsClientTxn(const std::string& key) { return key.empty() ? false : key[0] == Constant::kClientTxn; }
 
+char Helper::GetKeyPrefix(const std::string& key) {
+  CHECK(!key.empty()) << "key is empty";
+  return key[0];
+}
+
 std::string Helper::Ip2HostName(const std::string& ip) {
   std::string hostname;
   butil::ip_t ip_t;
