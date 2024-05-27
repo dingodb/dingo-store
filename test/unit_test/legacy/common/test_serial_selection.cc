@@ -184,7 +184,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
   pb::common::KeyValue kv;
   Counter load_cnter1;
   load_cnter1.reStart();
-  (void)re->Encode('r', record1, kv);
+  (void)re->Encode('r', record1, *kv.mutable_key(), *kv.mutable_value());
   int64_t time_db_fetch1 = load_cnter1.mtimeElapsed();
   LOG(INFO) << "Encode Time : " << time_db_fetch1 << " milliseconds";
   // Decode record and verify values
@@ -192,7 +192,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
   std::vector<std::any> decoded_records;
   Counter load_cnter2;
   load_cnter2.reStart();
-  (void)rd->Decode(kv, decoded_records);
+  (void)rd->Decode(kv.key(), kv.value(), decoded_records);
   LOG(INFO) << "Decode Time : " << load_cnter2.mtimeElapsed() << " milliseconds";
   LOG(INFO) << "Decode output records size:" << decoded_records.size();
 
@@ -209,7 +209,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
     Counter load_cnter3;
     load_cnter3.reStart();
     // std::sort(column_indexes.begin(), column_indexes.end());
-    (void)rd->Decode(kv, column_indexes, decoded_s_records);
+    (void)rd->Decode(kv.key(), kv.value(), column_indexes, decoded_s_records);
     LOG(INFO) << "Decode selection columns size:" << selection_columns_size
               << ", need Time : " << load_cnter3.mtimeElapsed() << " milliseconds";
     LOG(INFO) << "Decode selection output records size:" << decoded_s_records.size();
@@ -226,7 +226,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
     Counter load_cnter3;
     load_cnter3.reStart();
     // std::sort(column_indexes.begin(), column_indexes.end());
-    (void)rd->Decode(kv, column_indexes, decoded_s_records);
+    (void)rd->Decode(kv.key(), kv.value(), column_indexes, decoded_s_records);
     LOG(INFO) << "Decode selection columns size:" << selection_columns_size
               << ", need Time : " << load_cnter3.mtimeElapsed() << " milliseconds";
     LOG(INFO) << "Decode selection output records size:" << decoded_s_records.size();
@@ -255,14 +255,14 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
 //   KeyValueCodec* codec = new KeyValueCodec(td, 0);
 //   pb::common::KeyValue kv;
 //   auto start_time = std::chrono::high_resolution_clock::now();
-//   (void)codec->Encode(record1, kv);
+//   (void)codec->Encode(record1, *kv.mutable_key(), *kv.mutable_value());
 //   auto end_time = std::chrono::high_resolution_clock::now();
 //   auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
 //   LOG(INFO) << "Encode Time taken: " << duration.count() << " milliseconds";
 
 //   // Decode record and verify values
 //   std::vector<std::any> decoded_records;
-//   (void)codec->Decode(kv, decoded_records);
+//   (void)codec->Decode(kv.key(), kv.value(), decoded_records);
 //   auto decode_end_time = std::chrono::high_resolution_clock::now();
 //   auto decode_duration = std::chrono::duration_cast<std::chrono::milliseconds>(decode_end_time - end_time);
 //   LOG(INFO) << "Decode Time taken: " << decode_duration.count() << " milliseconds";
@@ -272,7 +272,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
 //   std::vector<int>& column_indexes = indexes;
 //   std::vector<std::any> decoded_s_records;
 //   auto decode_s_s_end_time = std::chrono::high_resolution_clock::now();
-//   (void)codec->Decode(kv, column_indexes, decoded_s_records);
+//   (void)codec->Decode(kv.key(), kv.value(), column_indexes, decoded_s_records);
 //   auto decode_s_end_time = std::chrono::high_resolution_clock::now();
 //   auto decode_s_duration = std::chrono::duration_cast<std::chrono::milliseconds>(decode_s_end_time -
 //   decode_s_s_end_time); LOG(INFO) << "Decode selection Time taken: " << decode_s_duration.count() << " milliseconds"

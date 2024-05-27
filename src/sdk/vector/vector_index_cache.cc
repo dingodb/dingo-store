@@ -19,12 +19,11 @@
 #include <mutex>
 #include <shared_mutex>
 
-#include "engine/engine.h"
 #include "glog/logging.h"
-#include "proto/meta.pb.h"
-#include "sdk/status.h"
-#include "sdk/vector/vector_common.h"
 #include "sdk/client_stub.h"
+#include "sdk/port/meta.pb.h"
+#include "sdk/rpc/coordinator_rpc.h"
+#include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
@@ -113,33 +112,32 @@ Status VectorIndexCache::SlowGetVectorIndexByKey(const VectorIndexCacheKey& inde
   CHECK(!index_name.empty()) << "illegal index key: " << index_key;
   CHECK_NE(schema_id, 0) << "illegal index key: " << index_key;
 
-  pb::meta::GetIndexByNameRequest request;
-  pb::meta::GetIndexByNameResponse response;
-  auto* schema = request.mutable_schema_id();
+  GetIndexByNameRpc rpc;
+  auto* schema = rpc.MutableRequest()->mutable_schema_id();
   schema->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema->set_entity_id(schema_id);
-  request.set_index_name(index_name);
+  rpc.MutableRequest()->set_index_name(index_name);
 
-  DINGO_RETURN_NOT_OK(stub_.GetCoordinatorProxy()->GetIndexByName(request, response));
+  DINGO_RETURN_NOT_OK(stub_.GetMetaRpcController()->SyncCall(rpc));
 
-  if (CheckIndexResponse(response)) {
-    return ProcessIndexDefinitionWithId(response.index_definition_with_id(), out_vector_index);
+  if (CheckIndexResponse(*rpc.Response())) {
+    return ProcessIndexDefinitionWithId(rpc.Response()->index_definition_with_id(), out_vector_index);
   } else {
     return Status::NotFound("response check invalid");
   }
 }
 
 Status VectorIndexCache::SlowGetVectorIndexById(int64_t index_id, std::shared_ptr<VectorIndex>& out_vector_index) {
-  pb::meta::GetIndexRequest request;
-  pb::meta::GetIndexResponse response;
-  auto* index_id_pb = request.mutable_index_id();
+  GetIndexRpc rpc;
+  auto* index_id_pb = rpc.MutableRequest()->mutable_index_id();
   index_id_pb->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
   index_id_pb->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_id_pb->set_entity_id(index_id);
-  DINGO_RETURN_NOT_OK(stub_.GetCoordinatorProxy()->GetIndexById(request, response));
 
-  if (CheckIndexResponse(response)) {
-    return ProcessIndexDefinitionWithId(response.index_definition_with_id(), out_vector_index);
+  DINGO_RETURN_NOT_OK(stub_.GetMetaRpcController()->SyncCall(rpc));
+
+  if (CheckIndexResponse(*rpc.Response())) {
+    return ProcessIndexDefinitionWithId(rpc.Response()->index_definition_with_id(), out_vector_index);
   } else {
     return Status::NotFound("response check invalid");
   }

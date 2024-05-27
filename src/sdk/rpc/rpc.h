@@ -15,21 +15,23 @@
 #ifndef DINGODB_SDK_RPC_H_
 #define DINGODB_SDK_RPC_H_
 
+#include <cstdint>
 #include <string>
+#include <utility>
 
-#include "brpc/callback.h"
-#include "brpc/channel.h"
-#include "brpc/controller.h"
-#include "butil/endpoint.h"
-#include "butil/fast_rand.h"
-#include "common/logging.h"
 #include "google/protobuf/message.h"
-#include "sdk/common/param_config.h"
 #include "sdk/status.h"
 #include "sdk/utils/callback.h"
+#include "sdk/utils/net_util.h"
 
 namespace dingodb {
 namespace sdk {
+
+struct RpcContext {
+  virtual ~RpcContext() = default;
+
+  RpcCallback cb;
+};
 
 class Rpc {
  public:
@@ -37,17 +39,17 @@ class Rpc {
 
   virtual ~Rpc() = default;
 
-  brpc::Controller* MutableController() { return &controller; }
+  const EndPoint& GetEndPoint() const { return end_point; }
 
-  const butil::EndPoint& GetEndPoint() const { return end_point; }
-
-  void SetEndPoint(const butil::EndPoint& p_end_point) { end_point = p_end_point; }
-
-  const brpc::Controller* Controller() const { return &controller; }
+  void SetEndPoint(const EndPoint& p_end_point) { end_point = p_end_point; }
 
   Status GetStatus() { return status; }
 
   void SetStatus(const Status& s) { status = s; }
+
+  void IncRetryTimes() { retry_times++; }
+
+  int GetRetryTimes() const { return retry_times; }
 
   virtual google::protobuf::Message* RawMutableRequest() = 0;
 
@@ -65,85 +67,19 @@ class Rpc {
 
   virtual void Reset() = 0;
 
-  virtual void Call(brpc::Channel* channel, RpcCallback cb) = 0;
+  virtual void Call(RpcContext* ctx) = 0;
+
+  virtual void OnRpcDone() = 0;
+
+  virtual uint64_t LogId() const = 0;
+
+  StatusCallback call_back;
 
  protected:
   std::string cmd;
-  brpc::Controller controller;
-  butil::EndPoint end_point;
+  EndPoint end_point;
   Status status;
-};
-
-template <class RequestType, class ResponseType, class ServiceType, class StubType>
-class ClientRpc : public Rpc {
- public:
-  ClientRpc(const std::string& cmd) : Rpc(cmd) {
-    request = new RequestType;
-    response = new ResponseType;
-  }
-
-  ~ClientRpc() override {
-    delete request;
-    delete response;
-  }
-
-  RequestType* MutableRequest() { return request; }
-
-  const RequestType* Request() const { return request; }
-
-  ResponseType* MutableResponse() { return response; }
-
-  const ResponseType* Response() const { return response; }
-
-  google::protobuf::Message* RawMutableRequest() override { return request; }
-
-  const google::protobuf::Message* RawRequest() const override { return request; }
-
-  google::protobuf::Message* RawMutableResponse() override { return response; }
-
-  const google::protobuf::Message* RawResponse() const override { return response; }
-
-  std::string ServiceName() override { return ServiceType::descriptor()->name(); }
-
-  std::string ServiceFullName() override { return ServiceType::descriptor()->full_name(); }
-
-  void OnClientRpcDone(RpcCallback cb) {
-    if (controller.Failed()) {
-      DINGO_LOG(WARNING) << "Fail send rpc: " << Method() << ", log_id:" << controller.log_id()
-                         << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str()
-                         << " error_code:" << controller.ErrorCode() << " error_text:" << controller.ErrorText();
-
-      Status err = Status::NetworkError(controller.ErrorCode(), controller.ErrorText());
-      SetStatus(err);
-    } else {
-      DINGO_LOG(DEBUG) << "Success send rpc: " << Method() << ", log_id:" << controller.log_id()
-                       << " endpoint:" << butil::endpoint2str(controller.remote_side()).c_str() << ", request: \n"
-                       << request->DebugString() << ", response:\n"
-                       << response->DebugString();
-    }
-
-    cb();
-  }
-
-  void Reset() override {
-    response->Clear();
-    controller.Reset();
-    controller.set_log_id(butil::fast_rand());
-    controller.set_timeout_ms(FLAGS_rpc_time_out_ms);
-    controller.set_max_retry(FLAGS_rpc_max_retry);
-    status = Status::OK();
-  }
-
-  void Call(brpc::Channel* channel, RpcCallback cb) override {
-    StubType stub(channel);
-    Send(stub, brpc::NewCallback(this, &ClientRpc::OnClientRpcDone, cb));
-  }
-
-  virtual void Send(StubType& stub, google::protobuf::Closure* done) = 0;
-
- protected:
-  RequestType* request;
-  ResponseType* response;
+  int retry_times{0};
 };
 
 }  // namespace sdk

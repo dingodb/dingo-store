@@ -15,15 +15,14 @@
 #ifndef DINGODB_INTEGRATION_TEST_ENVIROMENT_
 #define DINGODB_INTEGRATION_TEST_ENVIROMENT_
 
-#include <iostream>
 #include <mutex>
 
+#include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 #include "proto/common.pb.h"
 #include "sdk/client.h"
-#include "sdk/coordinator_proxy.h"
 
 DECLARE_string(coordinator_url);
 
@@ -33,7 +32,7 @@ namespace integration_test {
 
 class Environment : public testing::Environment {
  public:
-  Environment() : coordinator_proxy_(std::make_shared<sdk::CoordinatorProxy>()) {}
+  Environment() : coordinator_interaction_(std::make_shared<dingodb::CoordinatorInteraction>()) {}
 
   static Environment& GetInstance() {
     static Environment* environment = nullptr;
@@ -48,11 +47,12 @@ class Environment : public testing::Environment {
   }
 
   void SetUp() override {
-    auto status = coordinator_proxy_->Open(FLAGS_coordinator_url);
-    CHECK(status.IsOK()) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
+    bool init = coordinator_interaction_->InitByNameService(
+        FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+    CHECK(init) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
 
     sdk::Client* tmp;
-    status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
+    auto status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
     CHECK(status.IsOK()) << fmt::format("Build sdk client failed, error: {}", status.ToString());
     client_.reset(tmp);
 
@@ -64,7 +64,7 @@ class Environment : public testing::Environment {
   void TearDown() override {}
 
   // TODO: remove this
-  std::shared_ptr<sdk::CoordinatorProxy> GetCoordinatorProxy() { return coordinator_proxy_; }
+  std::shared_ptr<dingodb::CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
   std::shared_ptr<sdk::Client> GetClient() { return client_; }
 
   pb::common::VersionInfo VersionInfo() { return version_info_; }
@@ -78,8 +78,8 @@ class Environment : public testing::Environment {
 
     LOG(INFO) << "Hello request: " << request.ShortDebugString();
 
-    auto status = coordinator_proxy_->Hello(request, response);
-    CHECK(status.IsOK()) << fmt::format("Hello failed, {}", status.ToString());
+    auto status = coordinator_interaction_->SendRequest("Hello", request, response);
+    CHECK(status.ok()) << fmt::format("Hello failed, {}:{}", status.error_code(), status.error_cstr());
 
     return response.version_info();
   }
@@ -101,7 +101,7 @@ class Environment : public testing::Environment {
     LOG(INFO) << fmt::format("{:<24}: {:>64}", "use_sanitizer", (version_info.use_sanitizer() ? "true" : "false"));
   }
 
-  std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
+  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_;
   std::shared_ptr<sdk::Client> client_;
 
   pb::common::VersionInfo version_info_;

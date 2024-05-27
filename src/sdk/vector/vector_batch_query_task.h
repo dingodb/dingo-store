@@ -16,13 +16,13 @@
 #define DINGODB_SDK_VECTOR_BATCH_QUERY_TASK_H_
 
 #include <cstdint>
-#include <vector>
 #include <set>
+#include <vector>
 
+#include "sdk/rpc/index_service_rpc.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/vector.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_task.h"
 
 namespace dingodb {

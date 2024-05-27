@@ -13,10 +13,8 @@
 // limitations under the License.
 #include <cstdint>
 #include <cstdio>
-#include <iostream>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -28,8 +26,9 @@
 #include "proto/error.pb.h"
 #include "sdk/client.h"
 #include "sdk/common/common.h"
+#include "sdk/rpc/coordinator_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
 #include "sdk/utils/callback.h"
 #include "test_base.h"
 #include "test_common.h"
@@ -37,11 +36,11 @@
 namespace dingodb {
 namespace sdk {
 
-class RawKVTest : public TestBase {
+class SDKRawKVTest : public TestBase {
  public:
-  RawKVTest() = default;
+  SDKRawKVTest() = default;
 
-  ~RawKVTest() override = default;
+  ~SDKRawKVTest() override = default;
 
   void SetUp() override {
     TestBase::SetUp();
@@ -56,7 +55,7 @@ class RawKVTest : public TestBase {
   std::shared_ptr<RawKV> raw_kv;
 };
 
-TEST_F(RawKVTest, Get) {
+TEST_F(SDKRawKVTest, Get) {
   std::string key = "b";
   std::string value;
 
@@ -64,7 +63,7 @@ TEST_F(RawKVTest, Get) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
 
@@ -83,7 +82,7 @@ TEST_F(RawKVTest, Get) {
   EXPECT_EQ(value, "pong");
 }
 
-TEST_F(RawKVTest, BatchGetSuccess) {
+TEST_F(SDKRawKVTest, BatchGetSuccess) {
   std::vector<std::string> keys;
   keys.emplace_back("b");
   keys.emplace_back("d");
@@ -91,7 +90,7 @@ TEST_F(RawKVTest, BatchGetSuccess) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -124,7 +123,7 @@ TEST_F(RawKVTest, BatchGetSuccess) {
   }
 }
 
-TEST_F(RawKVTest, BatchGetPartialFail) {
+TEST_F(SDKRawKVTest, BatchGetPartialFail) {
   std::vector<std::string> keys;
   keys.emplace_back("b");
   keys.emplace_back("d");
@@ -132,7 +131,7 @@ TEST_F(RawKVTest, BatchGetPartialFail) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -166,7 +165,7 @@ TEST_F(RawKVTest, BatchGetPartialFail) {
   }
 }
 
-TEST_F(RawKVTest, BatchGetAllFail) {
+TEST_F(SDKRawKVTest, BatchGetAllFail) {
   std::vector<std::string> keys;
   keys.emplace_back("b");
   keys.emplace_back("d");
@@ -174,7 +173,7 @@ TEST_F(RawKVTest, BatchGetAllFail) {
 
   std::vector<KVPair> kvs;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* batch_get_rpc = dynamic_cast<KvBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(batch_get_rpc);
     CHECK(batch_get_rpc->Request()->has_context());
@@ -212,7 +211,7 @@ TEST_F(RawKVTest, BatchGetAllFail) {
   }
 }
 
-TEST_F(RawKVTest, Put) {
+TEST_F(SDKRawKVTest, Put) {
   std::string key = "d";
   std::string value = "pong";
 
@@ -220,7 +219,7 @@ TEST_F(RawKVTest, Put) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
 
@@ -240,13 +239,13 @@ TEST_F(RawKVTest, Put) {
   EXPECT_TRUE(put.IsOK());
 }
 
-TEST_F(RawKVTest, BatchPutSuccess) {
+TEST_F(SDKRawKVTest, BatchPutSuccess) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_batch_put_rpc = dynamic_cast<KvBatchPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_batch_put_rpc);
 
@@ -266,13 +265,13 @@ TEST_F(RawKVTest, BatchPutSuccess) {
   EXPECT_TRUE(put.IsOK());
 }
 
-TEST_F(RawKVTest, BatchPutPartialFail) {
+TEST_F(SDKRawKVTest, BatchPutPartialFail) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_batch_put_rpc = dynamic_cast<KvBatchPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_batch_put_rpc);
 
@@ -297,11 +296,11 @@ TEST_F(RawKVTest, BatchPutPartialFail) {
   EXPECT_FALSE(put.IsOK());
 }
 
-TEST_F(RawKVTest, PutIfAbsent) {
+TEST_F(SDKRawKVTest, PutIfAbsent) {
   std::string key = "d";
   std::string value = "d";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -324,13 +323,13 @@ TEST_F(RawKVTest, PutIfAbsent) {
   EXPECT_TRUE(state);
 }
 
-TEST_F(RawKVTest, BatchPutIfAbsentSuccess) {
+TEST_F(SDKRawKVTest, BatchPutIfAbsentSuccess) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -356,13 +355,13 @@ TEST_F(RawKVTest, BatchPutIfAbsentSuccess) {
   }
 }
 
-TEST_F(RawKVTest, BatchPutIfAbsentPartialFail) {
+TEST_F(SDKRawKVTest, BatchPutIfAbsentPartialFail) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchPutIfAbsentRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -397,10 +396,10 @@ TEST_F(RawKVTest, BatchPutIfAbsentPartialFail) {
   }
 }
 
-TEST_F(RawKVTest, Delete) {
+TEST_F(SDKRawKVTest, Delete) {
   std::string key = "d";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -417,13 +416,13 @@ TEST_F(RawKVTest, Delete) {
   EXPECT_TRUE(raw_kv->Delete(key).IsOK());
 }
 
-TEST_F(RawKVTest, BatchDeleteSuccess) {
+TEST_F(SDKRawKVTest, BatchDeleteSuccess) {
   std::vector<std::string> to_delete;
   to_delete.push_back("b");
   to_delete.push_back("d");
   to_delete.push_back("f");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -441,13 +440,13 @@ TEST_F(RawKVTest, BatchDeleteSuccess) {
   EXPECT_TRUE(raw_kv->BatchDelete(to_delete).IsOK());
 }
 
-TEST_F(RawKVTest, BatchDeletePartialFail) {
+TEST_F(SDKRawKVTest, BatchDeletePartialFail) {
   std::vector<std::string> to_delete;
   to_delete.push_back("b");
   to_delete.push_back("d");
   to_delete.push_back("f");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchDeleteRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -469,24 +468,23 @@ TEST_F(RawKVTest, BatchDeletePartialFail) {
   EXPECT_FALSE(raw_kv->BatchDelete(to_delete).IsOK());
 }
 
-TEST_F(RawKVTest, DeleteRangeInOneRegion) {
+TEST_F(SDKRawKVTest, DeleteRangeInOneRegion) {
   std::string start = "b";
   std::string end = "c";
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), start);
+    EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
+    Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          });
+    return Status::OK();
+  });
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -513,25 +511,24 @@ TEST_F(RawKVTest, DeleteRangeInOneRegion) {
   EXPECT_EQ(count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
+TEST_F(SDKRawKVTest, DeleteRangeInTwoRegion) {
   std::string start = "b";
   std::string end = "d";
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), start);
+    EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
-            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
+    Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionC2E(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          });
+    return Status::OK();
+  });
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -564,26 +561,25 @@ TEST_F(RawKVTest, DeleteRangeInTwoRegion) {
   EXPECT_EQ(2 * count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeInThressRegion) {
+TEST_F(SDKRawKVTest, DeleteRangeInThressRegion) {
   std::string start = "a";
   std::string end = "g";
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), start);
+    EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
-            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
-            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+    Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionC2E(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionE2G(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          });
+    return Status::OK();
+  });
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -618,26 +614,25 @@ TEST_F(RawKVTest, DeleteRangeInThressRegion) {
   EXPECT_EQ(3 * count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
+TEST_F(SDKRawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
   std::string start = "b";
   std::string end = "f";
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), start);
+    EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
-            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
-            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
+    Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionC2E(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionE2G(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          });
+    return Status::OK();
+  });
 
   int64_t count = 100;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -672,59 +667,59 @@ TEST_F(RawKVTest, DeleteRangeInThressRegionWithoutStartKeyWithEndkey) {
   EXPECT_EQ(3 * count, delete_count);
 }
 
-TEST_F(RawKVTest, DeleteRangeDiscontinuous) {
+TEST_F(SDKRawKVTest, DeleteRangeDiscontinuous) {
   std::string start = "b";
   std::string end = "m";
 
   int64_t count = 100;
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), start);
+    EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
-            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
-            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
-            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+    Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionC2E(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionE2G(), t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(RegionL2N(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          });
+    return Status::OK();
+  });
 
   int64_t delete_count;
   EXPECT_TRUE(raw_kv->DeleteRange(start, end, delete_count).IsAborted());
 }
 
-TEST_F(RawKVTest, DeleteRangeNonContinuous) {
+TEST_F(SDKRawKVTest, DeleteRangeNonContinuous) {
   std::string start = "b";
   std::string end = "m";
 
   int64_t count = 100;
 
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), start);
-            EXPECT_EQ(request.range_end(), end);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->key(), start);
+        EXPECT_EQ(t_rpc->Request()->range_end(), end);
 
-            Region2ScanRegionInfo(RegionA2C(), response.add_regions());
-            Region2ScanRegionInfo(RegionC2E(), response.add_regions());
-            Region2ScanRegionInfo(RegionE2G(), response.add_regions());
-            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+        Region2ScanRegionInfo(RegionA2C(), t_rpc->MutableResponse()->add_regions());
+        Region2ScanRegionInfo(RegionC2E(), t_rpc->MutableResponse()->add_regions());
+        Region2ScanRegionInfo(RegionE2G(), t_rpc->MutableResponse()->add_regions());
+        Region2ScanRegionInfo(RegionL2N(), t_rpc->MutableResponse()->add_regions());
 
-            return Status::OK();
-          })
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "g");
-            EXPECT_EQ(request.range_end(), end);
-            Region2ScanRegionInfo(RegionL2N(), response.add_regions());
+        return Status::OK();
+      })
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
 
-            return Status::OK();
-          });
+        EXPECT_EQ(t_rpc->Request()->key(), "g");
+        EXPECT_EQ(t_rpc->Request()->range_end(), end);
+        Region2ScanRegionInfo(RegionL2N(), t_rpc->MutableResponse()->add_regions());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+        return Status::OK();
+      });
+
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvDeleteRangeRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -761,7 +756,7 @@ TEST_F(RawKVTest, DeleteRangeNonContinuous) {
   EXPECT_EQ(4 * count, delete_count);
 }
 
-TEST_F(RawKVTest, CompareAndSet) {
+TEST_F(SDKRawKVTest, CompareAndSet) {
   std::string key = "d";
   std::string value = "d";
   std::string expteced = "b";
@@ -770,7 +765,7 @@ TEST_F(RawKVTest, CompareAndSet) {
   CHECK(meta_cache->LookupRegionByKey(key, region).IsOK());
   CHECK_NOTNULL(region.get());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -799,7 +794,7 @@ TEST_F(RawKVTest, CompareAndSet) {
   EXPECT_TRUE(state);
 }
 
-TEST_F(RawKVTest, BatchCompareAndSetInvalid) {
+TEST_F(SDKRawKVTest, BatchCompareAndSetInvalid) {
   std::vector<KVPair> kvs;
   kvs.push_back({"a", "a"});
   kvs.push_back({"d", "d"});
@@ -812,7 +807,7 @@ TEST_F(RawKVTest, BatchCompareAndSetInvalid) {
   EXPECT_TRUE(result.IsInvalidArgument());
 }
 
-TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
+TEST_F(SDKRawKVTest, BatchCompareAndSetSuccess) {
   std::vector<KVPair> kvs;
   kvs.push_back({"a", "ra"});
   kvs.push_back({"b", "rb"});
@@ -825,7 +820,7 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
   expect_values.push_back("x");
   expect_values.push_back("w");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -869,7 +864,7 @@ TEST_F(RawKVTest, BatchCompareAndSetSuccess) {
   }
 }
 
-TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
+TEST_F(SDKRawKVTest, BatchCompareAndSetPartialFail) {
   std::vector<KVPair> kvs;
   kvs.push_back({"a", "ra"});
   kvs.push_back({"b", "rb"});
@@ -882,7 +877,7 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
   expect_values.push_back("x");
   expect_values.push_back("w");
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvBatchCompareAndSetRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -939,7 +934,7 @@ TEST_F(RawKVTest, BatchCompareAndSetPartialFail) {
   }
 }
 
-TEST_F(RawKVTest, ScanInvalid) {
+TEST_F(SDKRawKVTest, ScanInvalid) {
   std::vector<KVPair> kvs;
   Status ret = raw_kv->Scan("a", "", 0, kvs);
   EXPECT_TRUE(ret.IsInvalidArgument());
@@ -954,7 +949,7 @@ TEST_F(RawKVTest, ScanInvalid) {
   EXPECT_TRUE(ret.IsInvalidArgument());
 }
 
-TEST_F(RawKVTest, ScanNotFoundRegion) {
+TEST_F(SDKRawKVTest, ScanNotFoundRegion) {
   std::vector<KVPair> kvs;
   Status ret = raw_kv->Scan("x", "z", 0, kvs);
   EXPECT_TRUE(ret.IsNotFound());
@@ -962,16 +957,16 @@ TEST_F(RawKVTest, ScanNotFoundRegion) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RawKVTest, ScanLookUpRegionFail) {
-  EXPECT_CALL(*coordinator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "x");
-            EXPECT_EQ(request.range_end(), "z");
-            auto* error = response.mutable_error();
-            error->set_errcode(pb::error::EINTERNAL);
-            return Status::OK();
-          });
+TEST_F(SDKRawKVTest, ScanLookUpRegionFail) {
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+
+    EXPECT_EQ(t_rpc->MutableRequest()->key(), "x");
+    EXPECT_EQ(t_rpc->MutableRequest()->range_end(), "z");
+    auto* error = t_rpc->MutableResponse()->mutable_error();
+    error->set_errcode(pb::error::EINTERNAL);
+    return Status::OK();
+  });
 
   std::vector<KVPair> kvs;
   Status ret = raw_kv->Scan("x", "z", 0, kvs);
@@ -980,7 +975,7 @@ TEST_F(RawKVTest, ScanLookUpRegionFail) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RawKVTest, ScanOpenFail) {
+TEST_F(SDKRawKVTest, ScanOpenFail) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
       .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
         auto mock_scanner =
@@ -999,7 +994,7 @@ TEST_F(RawKVTest, ScanOpenFail) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RawKVTest, ScanNoData) {
+TEST_F(SDKRawKVTest, ScanNoData) {
   EXPECT_CALL(*region_scanner_factory, NewRegionScanner)
       .WillOnce([&](const ScannerOptions& options, std::shared_ptr<RegionScanner>& scanner) {
         auto mock_scanner =
@@ -1028,7 +1023,7 @@ TEST_F(RawKVTest, ScanNoData) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RawKVTest, ScanOneRegion) {
+TEST_F(SDKRawKVTest, ScanOneRegion) {
   std::vector<std::string> fake_datas = {"a001", "a002", "a003"};
 
   int iter = 0;
@@ -1066,7 +1061,7 @@ TEST_F(RawKVTest, ScanOneRegion) {
   }
 }
 
-TEST_F(RawKVTest, ScanOneRegionWithStart) {
+TEST_F(SDKRawKVTest, ScanOneRegionWithStart) {
   std::vector<std::string> fake_datas = {"a001", "a002", "a003"};
 
   int iter = 0;
@@ -1104,7 +1099,7 @@ TEST_F(RawKVTest, ScanOneRegionWithStart) {
   }
 }
 
-TEST_F(RawKVTest, ScanOneRegionWithLimit) {
+TEST_F(SDKRawKVTest, ScanOneRegionWithLimit) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 
@@ -1142,7 +1137,7 @@ TEST_F(RawKVTest, ScanOneRegionWithLimit) {
   }
 }
 
-TEST_F(RawKVTest, ScanTwoRegion) {
+TEST_F(SDKRawKVTest, ScanTwoRegion) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 
@@ -1201,7 +1196,7 @@ TEST_F(RawKVTest, ScanTwoRegion) {
   }
 }
 
-TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
+TEST_F(SDKRawKVTest, ScanTwoRegionWithLimit) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 
@@ -1261,7 +1256,7 @@ TEST_F(RawKVTest, ScanTwoRegionWithLimit) {
   }
 }
 
-TEST_F(RawKVTest, ScanRegionDiscontinuous) {
+TEST_F(SDKRawKVTest, ScanRegionDiscontinuous) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 
@@ -1342,7 +1337,7 @@ TEST_F(RawKVTest, ScanRegionDiscontinuous) {
   }
 }
 
-TEST_F(RawKVTest, ScanRegionDiscontinuousWithLimit) {
+TEST_F(SDKRawKVTest, ScanRegionDiscontinuousWithLimit) {
   std::vector<std::string> a2c_fake_datas = {"a001", "a002", "a003"};
   int a2c_iter = 0;
 

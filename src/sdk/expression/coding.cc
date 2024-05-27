@@ -14,10 +14,7 @@
 
 #include "sdk/expression/coding.h"
 
-#include <cstddef>
 #include <cstring>
-#include <vector>
-
 #include "sdk/expression/encodes.h"
 
 namespace dingodb {
@@ -51,28 +48,6 @@ void EncodeString(const std::string& value, std::string* dst) {
   uint32_t len = value.size();
   EncodeVarint(len, dst);
   dst->append(value.data(), len);
-}
-
-std::string BytesToHexString(const std::string& bytes) {
-  const char* hex_code = "0123456789ABCDEF";
-  std::string r;
-  r.reserve(bytes.length() * 2);
-  for (Byte b : bytes) {
-    r.push_back(hex_code[(b >> 4) & 0xF]);
-    r.push_back(hex_code[b & 0xF]);
-  }
-  return r;
-}
-
-std::string HexStringToBytes(const std::string& hex) {
-  std::string bytes;
-
-  for (unsigned int i = 0; i < hex.length(); i += 2) {
-    std::string byte_string = hex.substr(i, 2);
-    Byte byte = static_cast<Byte>(std::stoi(byte_string, nullptr, 16));
-    bytes.push_back(byte);
-  }
-  return bytes;
 }
 
 }  // namespace expression

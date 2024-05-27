@@ -1472,12 +1472,12 @@ TEST_F(DingoSerialTest, recordTest) {
 
   vector<any>* record1 = GetRecord();
   pb::common::KeyValue kv;
-  (void)re->Encode('r', *record1, kv);
+  (void)re->Encode('r', *record1, *kv.mutable_key(), *kv.mutable_value());
   delete re;
 
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
   vector<any> record2;
-  (void)rd->Decode(kv, record2);
+  (void)rd->Decode(kv.key(), kv.value(), record2);
   int i = 0;
   for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
@@ -1549,7 +1549,7 @@ TEST_F(DingoSerialTest, recordTest) {
   vector<int> index{0, 1, 3, 5};
   vector<int> index_temp{0, 1, 3, 5};
   vector<any> record3;
-  (void)rd->Decode(kv, index, record3);
+  (void)rd->Decode(kv.key(), kv.value(), index, record3);
   i = 0;
   for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();
@@ -1878,7 +1878,7 @@ TEST_F(DingoSerialTest, recordTest) {
 //   pb::common::KeyValue kv;
 //   (void)codec->Encode(record1, kv);
 //   vector<any> record2;
-//   (void)codec->Decode(kv, record2);
+//   (void)codec->Decode(kv.key(), kv.value(), record2);
 
 //   optional<int32_t> r0 = any_cast<optional<int32_t>>(record2.at(0));
 //   if (r0.has_value()) {

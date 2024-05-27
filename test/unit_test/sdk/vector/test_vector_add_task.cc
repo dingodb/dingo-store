@@ -16,6 +16,7 @@
 #include <memory>
 
 #include "gtest/gtest.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_add_task.h"
 #include "sdk/vector/vector_common.h"
@@ -72,14 +73,12 @@ static std::shared_ptr<VectorIndex> CreateFakeVectorIndex(int64_t start_id = 0) 
 TEST_F(SDKVectorAddTaskTest, InitNoAutoIncreFail) {
   auto vector_index = CreateFakeVectorIndex();
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_id(), vector_index->GetId());
-
-        *(response.mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
-
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), vector_index->GetId());
+    *(t_rpc->MutableResponse()->mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
+    return Status::OK();
+  });
 
   std::vector<VectorWithId> ids;
   for (auto i = 0; i < 10; i++) {
@@ -96,14 +95,12 @@ TEST_F(SDKVectorAddTaskTest, InitNoAutoIncreFail) {
 TEST_F(SDKVectorAddTaskTest, InitNoAutoIncreSuccess) {
   auto vector_index = CreateFakeVectorIndex();
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_id(), vector_index->GetId());
-
-        *(response.mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
-
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), vector_index->GetId());
+    *(t_rpc->MutableResponse()->mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
+    return Status::OK();
+  });
 
   std::vector<VectorWithId> ids;
   for (auto i = 0; i < 10; i++) {
@@ -120,14 +117,12 @@ TEST_F(SDKVectorAddTaskTest, InitNoAutoIncreSuccess) {
 TEST_F(SDKVectorAddTaskTest, InitAutoIncreFail) {
   auto vector_index = CreateFakeVectorIndex(1);
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_id(), vector_index->GetId());
-
-        *(response.mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
-
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), vector_index->GetId());
+    *(t_rpc->MutableResponse()->mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
+    return Status::OK();
+  });
 
   std::vector<VectorWithId> ids;
   for (auto i = 0; i < 10; i++) {
@@ -144,14 +139,12 @@ TEST_F(SDKVectorAddTaskTest, InitAutoIncreFail) {
 TEST_F(SDKVectorAddTaskTest, InitAutoIncreSuccess) {
   auto vector_index = CreateFakeVectorIndex(1);
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_id(), vector_index->GetId());
-
-        *(response.mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
-
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), vector_index->GetId());
+    *(t_rpc->MutableResponse()->mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
+    return Status::OK();
+  });
 
   std::vector<VectorWithId> ids;
   for (auto i = 0; i < 10; i++) {
@@ -168,21 +161,17 @@ TEST_F(SDKVectorAddTaskTest, InitAutoIncreSuccess) {
 TEST_F(SDKVectorAddTaskTest, InitAutoIncreUseGenerateid) {
   auto vector_index = CreateFakeVectorIndex(1);
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_id(), vector_index->GetId());
-
-        *(response.mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
-
+  EXPECT_CALL(*meta_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), vector_index->GetId());
+        *(t_rpc->MutableResponse()->mutable_index_definition_with_id()) = vector_index->GetIndexDefWithId();
         return Status::OK();
-      });
-
-  EXPECT_CALL(*coordinator_proxy, GenerateAutoIncrement)
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        (void)request;
-        response.set_start_id(1);
-        response.set_end_id(100);
+      })
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+        t_rpc->MutableResponse()->set_start_id(1);
+        t_rpc->MutableResponse()->set_end_id(100);
         return Status::OK();
       });
 

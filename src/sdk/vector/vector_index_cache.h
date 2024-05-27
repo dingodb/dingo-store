@@ -16,12 +16,10 @@
 #define DINGODB_SDK_VECTOR_INDEX_CACHE_H_
 
 #include <cstdint>
-#include <functional>
 #include <shared_mutex>
-#include <string_view>
 #include <unordered_map>
 
-#include "sdk/coordinator_proxy.h"
+#include "common/logging.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_index.h"
 

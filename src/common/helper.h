@@ -29,6 +29,7 @@
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "proto/store_internal.pb.h"
+#include "common/logging.h"
 
 namespace dingodb {
 
@@ -421,6 +422,8 @@ class Helper {
     std::random_device rd;
     std::shuffle(vec.begin(), vec.end(), rd);
   }
+
+  static LogLevel LogLevelPB2LogLevel(const pb::node::LogLevel& level) ;
 };
 
 }  // namespace dingodb

@@ -20,7 +20,6 @@
 #include <memory>
 #include <vector>
 
-#include "proto/meta.pb.h"
 #include "schema/base_schema.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_schema.h"

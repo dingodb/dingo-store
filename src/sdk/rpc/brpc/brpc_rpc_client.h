@@ -12,39 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_RPC_INTERACTION_H_
-#define DINGODB_SDK_RPC_INTERACTION_H_
+#ifndef DINGODB_SDK_BRPC_RPC_CLIENT_H_
+#define DINGODB_SDK_BRPC_RPC_CLIENT_H_
 
 #include <map>
-#include <memory>
 #include <mutex>
 
 #include "brpc/channel.h"
-#include "butil/endpoint.h"
-#include "rpc.h"
-#include "sdk/utils/callback.h"
+#include "sdk/rpc/rpc_client.h"
 
 namespace dingodb {
 namespace sdk {
 
-class RpcInteraction {
+class BrpcRpcClient : public RpcClient {
  public:
-  RpcInteraction(const RpcInteraction &) = delete;
-  const RpcInteraction &operator=(const RpcInteraction &) = delete;
+  BrpcRpcClient(const RpcClientOptions &options) : RpcClient(options) {}
 
-  RpcInteraction(brpc::ChannelOptions options) : options_(std::move(options)) {}
+  ~BrpcRpcClient() override = default;
 
-  virtual ~RpcInteraction() = default;
-
-  virtual void SendRpc(Rpc &rpc, RpcCallback cb);
+  void SendRpc(Rpc &rpc, RpcCallback cb) override;
 
  private:
-  brpc::ChannelOptions options_;
-
   std::mutex lock_;
-  std::map<butil::EndPoint, std::shared_ptr<brpc::Channel>> channel_map_;
+  std::map<EndPoint, std::shared_ptr<brpc::Channel>> channel_map_;
 };
 
 }  // namespace sdk
 }  // namespace dingodb
-#endif  // DINGODB_SDK_RPC_INTERACTION_H_
+
+#endif  // DINGODB_SDK_BRPC_RPC_CLIENT_H_

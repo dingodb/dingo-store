@@ -16,10 +16,10 @@
 
 #include <memory>
 
-#include "sdk/expression/coding.h"
 #include "sdk/expression/langchain_expr_encoder.h"
 #include "sdk/expression/langchain_expr_factory.h"
 #include "sdk/status.h"
+#include "sdk/utils/codec.h"
 
 namespace dingodb {
 namespace sdk {
@@ -54,7 +54,7 @@ TEST_F(SDKLangChainExprEncoder, DoubleGt) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "713500154049000000000000930500");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "713500154049000000000000930500");
 }
 
 TEST_F(SDKLangChainExprEncoder, Int64Gt) {
@@ -74,7 +74,7 @@ TEST_F(SDKLangChainExprEncoder, Int64Gt) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "7132001232930200");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "7132001232930200");
 }
 
 TEST_F(SDKLangChainExprEncoder, StringEq) {
@@ -94,7 +94,7 @@ TEST_F(SDKLangChainExprEncoder, StringEq) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "71370017026234910700");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "71370017026234910700");
 }
 
 TEST_F(SDKLangChainExprEncoder, BoolEqFalse) {
@@ -114,7 +114,7 @@ TEST_F(SDKLangChainExprEncoder, BoolEqFalse) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "71330023910300");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "71330023910300");
 }
 
 TEST_F(SDKLangChainExprEncoder, BoolEqTrue) {
@@ -134,7 +134,7 @@ TEST_F(SDKLangChainExprEncoder, BoolEqTrue) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "71330013910300");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "71330013910300");
 }
 
 TEST_F(SDKLangChainExprEncoder, AndOperator) {
@@ -181,7 +181,7 @@ TEST_F(SDKLangChainExprEncoder, AndOperator) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes),
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes),
             "71350015401070A3D70A3D719305350115401870A3D70A3D7195055237021702623491075237031702623491075200");
 }
 
@@ -215,7 +215,7 @@ TEST_F(SDKLangChainExprEncoder, OrOperator) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "713300139103350115401870A3D70A3D7195055300");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "713300139103350115401870A3D70A3D7195055300");
 }
 
 TEST_F(SDKLangChainExprEncoder, NotOperator) {
@@ -241,7 +241,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperator) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "7133001391035100");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "7133001391035100");
 }
 
 TEST_F(SDKLangChainExprEncoder, NotOperatorWithOperator) {
@@ -280,7 +280,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperatorWithOperator) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "713300139103350115401870A3D70A3D719505535100");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "713300139103350115401870A3D70A3D719505535100");
 }
 
 // the second comparator is ignored
@@ -314,7 +314,7 @@ TEST_F(SDKLangChainExprEncoder, NotOperatorWithNestedComparator) {
 
   std::string bytes = encoder->EncodeToFilter(expr.get());
 
-  EXPECT_EQ(BytesToHexString(bytes), "71350015401070A3D70A3D7191055100");
+  EXPECT_EQ(sdk::codec::BytesToHexString(bytes), "71350015401070A3D70A3D7191055100");
 }
 
 }  // namespace expression

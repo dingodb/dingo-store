@@ -21,7 +21,6 @@
 #include "functional"
 #include "keyvalue.h"
 #include "optional"
-#include "proto/common.pb.h"
 #include "schema/boolean_list_schema.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_list_schema.h"
@@ -58,13 +57,10 @@ class RecordDecoder {
   void Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
 
   int Decode(const KeyValue& key_value, std::vector<std::any>& record /*output*/);
-  int Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record /*output*/);
   int Decode(const std::string& key, const std::string& value, std::vector<std::any>& record /*output*/);
   int DecodeKey(const std::string& key, std::vector<std::any>& record /*output*/);
 
   int Decode(const KeyValue& key_value, const std::vector<int>& column_indexes,
-             std::vector<std::any>& record /*output*/);
-  int Decode(const pb::common::KeyValue& key_value, const std::vector<int>& column_indexes,
              std::vector<std::any>& record /*output*/);
   int Decode(const std::string& key, const std::string& value, const std::vector<int>& column_indexes,
              std::vector<std::any>& record /*output*/);

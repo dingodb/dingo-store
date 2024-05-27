@@ -21,17 +21,14 @@
 #include "glog/logging.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/status.h"
+#include "sdk/utils/async_util.h"
 
 namespace dingodb {
 namespace sdk {
 
 using pb::coordinator::ScanRegionInfo;
-
-MetaCache::MetaCache(std::shared_ptr<CoordinatorProxy> coordinator_proxy)
-    : coordinator_proxy_(std::move(coordinator_proxy)) {}
-
-MetaCache::~MetaCache() = default;
 
 Status MetaCache::LookupRegionByKey(std::string_view key, std::shared_ptr<Region>& region) {
   CHECK(!key.empty()) << "key should not empty";
@@ -98,18 +95,14 @@ Status MetaCache::ScanRegionsBetweenRange(std::string_view start_key, std::strin
   CHECK(!end_key.empty()) << "end_key should not empty";
   CHECK_GE(limit, 0) << "limit should greater or equal 0";
 
-  pb::coordinator::ScanRegionsRequest request;
-  pb::coordinator::ScanRegionsResponse response;
-  request.set_key(std::string(start_key));
-  request.set_range_end(std::string(end_key));
-  request.set_limit(limit);
+  ScanRegionsRpc rpc;
+  rpc.MutableRequest()->set_key(std::string(start_key));
+  rpc.MutableRequest()->set_range_end(std::string(end_key));
+  rpc.MutableRequest()->set_limit(limit);
 
-  Status send = SendScanRegionsRequest(request, response);
-  if (!send.IsOK()) {
-    return send;
-  }
+  DINGO_RETURN_NOT_OK(coordinator_rpc_controller_->SyncCall(rpc));
 
-  return ProcessScanRegionsBetweenRangeResponse(response, regions);
+  return ProcessScanRegionsBetweenRangeResponse(*rpc.Response(), regions);
 }
 
 Status MetaCache::ScanRegionsBetweenContinuousRange(std::string_view start_key, std::string_view end_key,
@@ -167,18 +160,14 @@ Status MetaCache::ScanRegionsBetweenContinuousRange(std::string_view start_key, 
     }
   }
 
-  pb::coordinator::ScanRegionsRequest request;
-  pb::coordinator::ScanRegionsResponse response;
-  request.set_key(std::string(start_key));
-  request.set_range_end(std::string(end_key));
-  request.set_limit(0);
+  ScanRegionsRpc rpc;
+  rpc.MutableRequest()->set_key(std::string(start_key));
+  rpc.MutableRequest()->set_range_end(std::string(end_key));
+  rpc.MutableRequest()->set_limit(0);
 
-  Status send = SendScanRegionsRequest(request, response);
-  if (!send.IsOK()) {
-    return send;
-  }
+  DINGO_RETURN_NOT_OK(coordinator_rpc_controller_->SyncCall(rpc));
 
-  return ProcessScanRegionsBetweenRangeResponse(response, regions);
+  return ProcessScanRegionsBetweenRangeResponse(*rpc.Response(), regions);
 }
 
 void MetaCache::ClearRange(const std::shared_ptr<Region>& region) {
@@ -264,20 +253,15 @@ Status MetaCache::FastLookUpRegionByKeyUnlocked(std::string_view key, std::share
 }
 
 Status MetaCache::SlowLookUpRegionByKey(std::string_view key, std::shared_ptr<Region>& region) {
-  pb::coordinator::ScanRegionsRequest request;
-  pb::coordinator::ScanRegionsResponse response;
-  request.set_key(std::string(key));
-  Status send = SendScanRegionsRequest(request, response);
+  ScanRegionsRpc rpc;
+  rpc.MutableRequest()->set_key(std::string(key));
+
+  Status send =  coordinator_rpc_controller_->SyncCall(rpc);
   if (!send.IsOK()) {
     return send;
   }
 
-  return ProcessScanRegionsByKeyResponse(response, region);
-}
-
-Status MetaCache::SendScanRegionsRequest(const pb::coordinator::ScanRegionsRequest& request,
-                                         pb::coordinator::ScanRegionsResponse& response) {
-  return coordinator_proxy_->ScanRegions(request, response);
+  return ProcessScanRegionsByKeyResponse(*rpc.Response(), region);
 }
 
 Status MetaCache::ProcessScanRegionsByKeyResponse(const pb::coordinator::ScanRegionsResponse& response,
@@ -343,7 +327,7 @@ void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, st
     if (leader.host().empty() || leader.port() == 0) {
       DINGO_LOG(WARNING) << fmt::format("receive leader is invalid: {} {}", leader.host(), leader.port());
     } else {
-      auto endpoint = Helper::LocationToEndPoint(leader);
+      auto endpoint = LocationToEndPoint(leader);
       replicas.push_back({endpoint, kLeader});
     }
   }
@@ -352,7 +336,7 @@ void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, st
     if (voter.host().empty() || voter.port() == 0) {
       DINGO_LOG(WARNING) << fmt::format("receive voter is invalid: {} {}", voter.host(), voter.port());
     } else {
-      auto endpoint = Helper::LocationToEndPoint(voter);
+      auto endpoint = LocationToEndPoint(voter);
       replicas.push_back({endpoint, kFollower});
     }
   }
@@ -362,7 +346,7 @@ void MetaCache::ProcessScanRegionInfo(const ScanRegionInfo& scan_region_info, st
     if (leaner.host().empty() || leaner.port() == 0) {
       DINGO_LOG(WARNING) << fmt::format("receive voter is invalid: {} {}", leaner.host(), leaner.port());
     } else {
-      auto endpoint = Helper::LocationToEndPoint(leaner);
+      auto endpoint = LocationToEndPoint(leaner);
       replicas.push_back({endpoint, kFollower});
     }
   }

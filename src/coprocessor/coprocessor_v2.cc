@@ -701,7 +701,7 @@ butil::Status CoprocessorV2::GetKvFromExpr(const std::vector<std::any>& record, 
   pb::common::KeyValue result_key_value;
   int ret = 0;
   try {
-    ret = result_record_encoder_->Encode(prefix_, record, result_key_value);
+    ret = result_record_encoder_->Encode(prefix_, record, *result_key_value.mutable_key(), *result_key_value.mutable_value());
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;

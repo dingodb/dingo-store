@@ -25,8 +25,8 @@
 #include <queue>
 #include <thread>
 
-#include "common/threadpool.h"
 #include "sdk/utils/actuator.h"
+#include "sdk/utils/thread_pool.h"
 
 namespace dingodb {
 namespace sdk {
@@ -86,9 +86,7 @@ class ThreadPoolActuator final : public Actuator {
 
   bool Schedule(std::function<void()> func, int delay_ms) override;
 
-  int ThreadNum() const override {
-    return thread_num_;
-  }
+  int ThreadNum() const override { return pool_->GetBackgroundThreads(); }
 
   std::string Name() const override { return InternalName(); }
 
@@ -98,7 +96,6 @@ class ThreadPoolActuator final : public Actuator {
   std::unique_ptr<Timer> timer_;
   std::unique_ptr<ThreadPool> pool_;
   std::atomic<bool> running_;
-  int thread_num_;
 };
 
 }  // namespace sdk

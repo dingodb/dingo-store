@@ -44,9 +44,11 @@ class MockRpc final : public Rpc {
 
   MOCK_METHOD(std::string, Method, (), (const, override));
 
-  MOCK_METHOD(void, Call, (brpc::Channel * channel, RpcCallback cb), (override));
+  MOCK_METHOD(void, Call, (void* channel, RpcCallback cb), (override));
 
   MOCK_METHOD(void, Reset, (), (override));
+
+  MOCK_METHOD(uint64_t, LogId, (), (const, override));
 
  private:
   google::protobuf::Message* request_;

@@ -16,9 +16,9 @@
 #include <memory>
 
 #include "gtest/gtest.h"
-#include "mock_coordinator_proxy.h"
 #include "proto/meta.pb.h"
 #include "sdk/auto_increment_manager.h"
+#include "sdk/rpc/brpc/coordinator_rpc.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index.h"
 #include "test_base.h"
@@ -66,17 +66,16 @@ class SDKAutoInrementerTest : public TestBase {
 };
 
 TEST_F(SDKAutoInrementerTest, CacheEmpty) {
-  EXPECT_CALL(*coordinator_proxy, GenerateAutoIncrement)
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(1);
-        response.set_end_id(3);
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+    EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+    EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+    EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+    t_rpc->MutableResponse()->set_start_id(1);
+    t_rpc->MutableResponse()->set_end_id(3);
+    return Status::OK();
+  });
 
   int64_t id = 0;
   Status s = incrementer->GetNextId(id);
@@ -86,17 +85,16 @@ TEST_F(SDKAutoInrementerTest, CacheEmpty) {
 }
 
 TEST_F(SDKAutoInrementerTest, FromCache) {
-  EXPECT_CALL(*coordinator_proxy, GenerateAutoIncrement)
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(1);
-        response.set_end_id(3);
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+    EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+    EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+    EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+    t_rpc->MutableResponse()->set_start_id(1);
+    t_rpc->MutableResponse()->set_end_id(3);
+    return Status::OK();
+  });
 
   {
     int64_t id = 0;
@@ -114,25 +112,25 @@ TEST_F(SDKAutoInrementerTest, FromCache) {
 }
 
 TEST_F(SDKAutoInrementerTest, FromCacheThenRefill) {
-  EXPECT_CALL(*coordinator_proxy, GenerateAutoIncrement)
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(1);
-        response.set_end_id(3);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+        EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+        t_rpc->MutableResponse()->set_start_id(1);
+        t_rpc->MutableResponse()->set_end_id(3);
         return Status::OK();
       })
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(3);
-        response.set_end_id(4);
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+        EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+        t_rpc->MutableResponse()->set_start_id(3);
+        t_rpc->MutableResponse()->set_end_id(4);
         return Status::OK();
       });
 
@@ -159,25 +157,25 @@ TEST_F(SDKAutoInrementerTest, FromCacheThenRefill) {
 }
 
 TEST_F(SDKAutoInrementerTest, MultiThread) {
-  EXPECT_CALL(*coordinator_proxy, GenerateAutoIncrement)
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(1);
-        response.set_end_id(100);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+        EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+        t_rpc->MutableResponse()->set_start_id(1);
+        t_rpc->MutableResponse()->set_end_id(100);
         return Status::OK();
       })
-      .WillOnce([&](const pb::meta::GenerateAutoIncrementRequest& request,
-                    pb::meta::GenerateAutoIncrementResponse& response) {
-        EXPECT_EQ(request.count(), FLAGS_auto_incre_req_count);
-        EXPECT_EQ(request.auto_increment_increment(), 1);
-        EXPECT_EQ(request.auto_increment_offset(), vector_index->GetIncrementStartId());
-        EXPECT_EQ(request.table_id().entity_id(), vector_index->GetId());
-        response.set_start_id(100);
-        response.set_end_id(200);
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GenerateAutoIncrementRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->count(), FLAGS_auto_incre_req_count);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_increment(), 1);
+        EXPECT_EQ(t_rpc->Request()->auto_increment_offset(), vector_index->GetIncrementStartId());
+        EXPECT_EQ(t_rpc->Request()->table_id().entity_id(), vector_index->GetId());
+        t_rpc->MutableResponse()->set_start_id(100);
+        t_rpc->MutableResponse()->set_end_id(200);
         return Status::OK();
       });
 

@@ -17,13 +17,11 @@
 #include <cstdint>
 #include <sstream>
 
-#include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
-#include "proto/meta.pb.h"
 #include "sdk/common/param_config.h"
+#include "sdk/vector/vector_codec.h"
 #include "sdk/vector/vector_common.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 namespace sdk {
@@ -37,7 +35,7 @@ VectorIndex::VectorIndex(pb::meta::IndexDefinitionWithId index_def_with_id)
       index_def_with_id_(std::move(index_def_with_id)) {
   CHECK_GT(index_def_with_id_.index_definition().index_partition().partitions_size(), 0);
   for (const auto& partition : index_def_with_id_.index_definition().index_partition().partitions()) {
-    int64_t start_id = VectorCodec::DecodeVectorId(partition.range().start_key());
+    int64_t start_id = vector_codec::DecodeVectorId(partition.range().start_key());
     int64_t part_id = partition.id().entity_id();
     CHECK_GE(start_id, 0);
     CHECK(start_key_to_part_id_.insert({start_id, part_id}).second);

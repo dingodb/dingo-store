@@ -113,20 +113,20 @@ int main(int argc, char* argv[]) {
     default_run_case += ":TxnGcTest.*";
 
     // sdk
-    default_run_case += ":MetaCacheTest.*";
-    default_run_case += ":RegionTest.*";
-    default_run_case += ":StoreRpcControllerTest.*";
-    default_run_case += ":ThreadPoolActuatorTest.*";
+    default_run_case += ":SDKMetaCacheTest.*";
+    default_run_case += ":SDKRegionTest.*";
+    default_run_case += ":SDKStoreRpcControllerTest.*";
+    default_run_case += ":SDKThreadPoolActuatorTest.*";
     default_run_case += ":SDKVectorAddTaskTest.*";
     default_run_case += ":SDKVectorCommonTest.*";
     default_run_case += ":SDKVectorIndexCacheKeyTest.*";
     default_run_case += ":SDKVectorIndexCacheTest.*";
     default_run_case += ":SDKVectorIndexTest.*";
-    default_run_case += ":TxnBufferTest.*";
-    default_run_case += ":TxnImplTest.*";
-    default_run_case += ":TxnLockResolverTest.*";
-    default_run_case += ":RawKvRegionScannerImplTest.*";
-    default_run_case += ":RawKVTest.*";
+    default_run_case += ":SDKTxnBufferTest.*";
+    default_run_case += ":SDKTxnImplTest.*";
+    default_run_case += ":SDKTxnLockResolverTest.*";
+    default_run_case += ":SDKRawKvRegionScannerImplTest.*";
+    default_run_case += ":SDKRawKVTest.*";
     default_run_case += ":SDKBytesHexConvert.*";
     default_run_case += ":SDKLangChainExprEncoder.*";
     default_run_case += ":SDKAutoInrementerTest.*";

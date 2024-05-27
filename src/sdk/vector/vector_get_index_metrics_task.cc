@@ -17,8 +17,8 @@
 #include <cstdint>
 #include <memory>
 
-#include "common/synchronization.h"
 #include "sdk/common/common.h"
+#include "sdk/utils/scoped_cleanup.h"
 #include "sdk/vector/vector_common.h"
 
 namespace dingodb {
@@ -64,7 +64,7 @@ void VectorGetIndexMetricsTask::DoAsync() {
 }
 
 void VectorGetIndexMetricsTask::SubTaskCallback(Status status, VectorGetIndexMetricsPartTask* sub_task) {
-  DEFER(delete sub_task);
+  SCOPED_CLEANUP({ delete sub_task; });
 
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();

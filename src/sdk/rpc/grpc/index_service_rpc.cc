@@ -12,24 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/vector/index_service_rpc.h"
-
-#include "fmt/core.h"
+#include "sdk/rpc/grpc/index_service_rpc.h"
 
 namespace dingodb {
 namespace sdk {
-#define DEFINE_INDEX_SERVICE_RPC(METHOD)                                             \
-  METHOD##Rpc::METHOD##Rpc() : METHOD##Rpc("") {}                                    \
-  METHOD##Rpc::METHOD##Rpc(const std::string& cmd) : ClientRpc(cmd) {}               \
-  METHOD##Rpc::~METHOD##Rpc() = default;                                             \
-  void METHOD##Rpc::Send(IndexService_Stub& stub, google::protobuf::Closure* done) { \
-    stub.METHOD(MutableController(), request, response, done);                       \
-  }                                                                                  \
-  std::string METHOD##Rpc::ConstMethod() {                                           \
-    return fmt::format("{}.{}Rpc", IndexService::descriptor()->name(), #METHOD);     \
-  }
 
+#define DEFINE_INDEX_SERVICE_RPC(METHOD) DEFINE_UNAEY_RPC(pb::index, IndexService, METHOD)
+
+namespace index {
 DEFINE_INDEX_SERVICE_RPC(Hello);
+}
+
 DEFINE_INDEX_SERVICE_RPC(VectorAdd);
 DEFINE_INDEX_SERVICE_RPC(VectorSearch);
 DEFINE_INDEX_SERVICE_RPC(VectorDelete);

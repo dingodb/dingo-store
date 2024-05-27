@@ -15,13 +15,12 @@
 #include <cstdint>
 
 #include "glog/logging.h"
-#include "proto/common.pb.h"
-#include "proto/meta.pb.h"
+#include "sdk/port/meta.pb.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/status.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index_creator_internal_data.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 namespace sdk {
@@ -121,19 +120,19 @@ Status VectorIndexCreator::Create(int64_t& out_index_id) {
   DINGO_RETURN_NOT_OK(data_->stub.GetAdminTool()->CreateTableIds(part_count + 1, new_ids));
   int64_t new_index_id = new_ids[0];
 
-  pb::meta::CreateIndexRequest request;
-  auto* schema_id_pb = request.mutable_schema_id();
+  CreateIndexRpc rpc;
+  auto* schema_id_pb = rpc.MutableRequest()->mutable_schema_id();
   schema_id_pb->set_entity_type(pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id_pb->set_entity_id(pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id_pb->set_parent_entity_id(pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id_pb->set_entity_id(data_->schema_id);
 
-  auto* index_id_pb = request.mutable_index_id();
+  auto* index_id_pb = rpc.MutableRequest()->mutable_index_id();
   index_id_pb->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
   index_id_pb->set_parent_entity_id(schema_id_pb->entity_id());
   index_id_pb->set_entity_id(new_index_id);
 
-  auto* index_definition_pb = request.mutable_index_definition();
+  auto* index_definition_pb = rpc.MutableRequest()->mutable_index_definition();
   index_definition_pb->set_name(data_->index_name);
   index_definition_pb->set_replica(data_->replica_num);
 
@@ -152,8 +151,7 @@ Status VectorIndexCreator::Create(int64_t& out_index_id) {
 
   out_index_id = new_index_id;
 
-  pb::meta::CreateIndexResponse response;
-  return data_->stub.GetCoordinatorProxy()->CreateIndex(request, response);
+  return data_->stub.GetMetaRpcController()->SyncCall(rpc);
 }
 
 }  // namespace sdk

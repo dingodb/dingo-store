@@ -19,7 +19,6 @@
 #include <memory>
 #include <string>
 
-#include "proto/common.pb.h"
 #include "serial/keyvalue.h"  // IWYU pragma: keep
 
 namespace dingodb {
@@ -68,18 +67,6 @@ int RecordEncoder::Encode(char prefix, const std::vector<std::any>& record, std:
     return ret;
   }
   ret = EncodeValue(record, value);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
-}
-
-int RecordEncoder::Encode(char prefix, const std::vector<std::any>& record, pb::common::KeyValue& key_value) {
-  int ret = EncodeKey(prefix, record, *key_value.mutable_key());
-  if (ret < 0) {
-    return ret;
-  }
-  ret = EncodeValue(record, *key_value.mutable_value());
   if (ret < 0) {
     return ret;
   }

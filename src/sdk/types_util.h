@@ -16,7 +16,7 @@
 #define DINGODB_SDK_TYPES_UTIL_H_
 
 #include "glog/logging.h"
-#include "proto/common.pb.h"
+#include "sdk/port/common.pb.h"
 #include "sdk/types.h"
 
 namespace dingodb {

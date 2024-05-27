@@ -19,10 +19,9 @@
 #include <memory>
 #include <unordered_map>
 
-#include "glog/logging.h"
 #include "sdk/client_stub.h"
-#include "sdk/store/store_rpc_controller.h"
-#include "sdk/vector/index_service_rpc.h"
+#include "sdk/rpc/index_service_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/vector/vector_index.h"
 #include "sdk/vector/vector_task.h"
 
@@ -41,7 +40,7 @@ class VectorAddTask : public VectorTask {
 
   ~VectorAddTask() override = default;
 
-  Status TEST_Init() { return Init(); } 
+  Status TEST_Init() { return Init(); }
 
  private:
   Status Init() override;

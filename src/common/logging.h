@@ -15,10 +15,29 @@
 #ifndef DINGODB_COMMON_LOGGING_H_
 #define DINGODB_COMMON_LOGGING_H_
 
+#include <string>
 #include "glog/logging.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
+
+enum LogLevel {
+  kDEBUG = 0,
+  kINFO = 1,
+  kWARNING = 2,
+  kERROR = 3,
+  kFATAL = 4
+};
+
+static std::string LogLevelToString(LogLevel level) {
+  switch (level) {
+    case kDEBUG: return "DEBUG";
+    case kINFO: return "INFO";
+    case kWARNING: return "WARNING";
+    case kERROR: return "ERROR";
+    case kFATAL: return "FATAL";
+    default: return "UNKNOWN";
+  }
+}
 
 /**
  * define the debug log level.
@@ -49,7 +68,7 @@ static constexpr int kGlobalValueOfDebug = DINGO_DEBUG;
 
 class DingoLogger {
  public:
-  static void InitLogger(const std::string& log_dir, const std::string& role, const pb::node::LogLevel& level);
+  static void InitLogger(const std::string& log_dir, const std::string& role, const LogLevel& level);
   // LogLevel and Log Verbose
   static void SetMinLogLevel(int level);
   static int GetMinLogLevel();
@@ -63,7 +82,7 @@ class DingoLogger {
 
   static bool GetStoppingWhenDiskFull();
   static void SetStoppingWhenDiskFull(bool is_stop);
-  static void ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& level, uint32_t verbose);
+  static void ChangeGlogLevelUsingDingoLevel(const LogLevel& level, uint32_t verbose);
   static void CustomLogFormatPrefix(std::ostream& s, const google::LogMessageInfo& l, void*);
 };
 

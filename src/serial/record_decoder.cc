@@ -164,10 +164,6 @@ int RecordDecoder::Decode(const KeyValue& key_value, std::vector<std::any>& reco
   return Decode(*key_value.GetKey(), *key_value.GetValue(), record);
 }
 
-int RecordDecoder::Decode(const pb::common::KeyValue& key_value, std::vector<std::any>& record) {
-  return Decode(key_value.key(), key_value.value(), record);
-}
-
 inline bool IsSkipOnly(const std::vector<std::pair<int, int>>& indexed_mapping_index, int& n, int& m,
                        int& record_index) {
   int first = indexed_mapping_index[n].first;
@@ -227,11 +223,6 @@ int RecordDecoder::Decode(const std::string& key, const std::string& value, cons
 int RecordDecoder::Decode(const KeyValue& key_value, const std::vector<int>& column_indexes,
                           std::vector<std::any>& record) {
   return Decode(*key_value.GetKey(), *key_value.GetValue(), column_indexes, record);
-}
-
-int RecordDecoder::Decode(const pb::common::KeyValue& key_value, const std::vector<int>& column_indexes,
-                          std::vector<std::any>& record) {
-  return Decode(key_value.key(), key_value.value(), column_indexes, record);
 }
 
 }  // namespace dingodb

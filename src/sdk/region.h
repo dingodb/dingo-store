@@ -18,11 +18,11 @@
 #include <cstdint>
 #include <shared_mutex>
 
-#include "butil/endpoint.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
-#include "proto/common.pb.h"
+#include "sdk/port/common.pb.h"
 #include "sdk/status.h"
+#include "sdk/utils/net_util.h"
 
 namespace dingodb {
 namespace sdk {
@@ -32,7 +32,7 @@ class MetaCache;
 enum RaftRole : uint8_t { kLeader, kFollower };
 
 struct Replica {
-  butil::EndPoint end_point;
+  EndPoint end_point;
   RaftRole role;
 };
 
@@ -56,13 +56,13 @@ class Region {
 
   std::vector<Replica> Replicas();
 
-  std::vector<butil::EndPoint> ReplicaEndPoint();
+  std::vector<EndPoint> ReplicaEndPoint();
 
-  void MarkLeader(const butil::EndPoint& end_point);
+  void MarkLeader(const EndPoint& end_point);
 
-  void MarkFollower(const butil::EndPoint& end_point);
+  void MarkFollower(const EndPoint& end_point);
 
-  Status GetLeader(butil::EndPoint& leader);
+  Status GetLeader(EndPoint& leader);
 
   bool IsStale() { return stale_.load(std::memory_order_relaxed); }
 
@@ -99,7 +99,7 @@ class Region {
   const pb::common::RegionType region_type_;
 
   mutable std::shared_mutex rw_lock_;
-  butil::EndPoint leader_addr_;
+  EndPoint leader_addr_;
   std::vector<Replica> replicas_;
 
   std::atomic<bool> stale_;

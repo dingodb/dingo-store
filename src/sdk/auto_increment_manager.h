@@ -19,11 +19,10 @@
 #include <deque>
 #include <memory>
 #include <mutex>
-#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
-#include "proto/meta.pb.h"
+#include "sdk/port/meta.pb.h"
 #include "sdk/status.h"
 #include "sdk/vector/vector_index.h"
 

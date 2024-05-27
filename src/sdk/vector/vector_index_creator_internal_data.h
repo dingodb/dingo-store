@@ -18,8 +18,8 @@
 #include <optional>
 #include <utility>
 
-#include "proto/common.pb.h"
 #include "sdk/client_stub.h"
+#include "sdk/port/common.pb.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 
@@ -32,12 +32,7 @@ class VectorIndexCreator::Data {
   const Data& operator=(const Data&) = delete;
 
   explicit Data(const ClientStub& stub)
-      : stub(stub),
-        schema_id(-1),
-        version(1),
-        replica_num(3),
-        index_type(kNoneIndexType),
-        wait(true) {}
+      : stub(stub), schema_id(-1), version(1), replica_num(3), index_type(kNoneIndexType), wait(true) {}
 
   ~Data() = default;
 
@@ -68,7 +63,7 @@ class VectorIndexCreator::Data {
       CHECK(false) << "unsupported index type, " << index_type;
     }
 
-    if(schema.has_value()) {
+    if (schema.has_value()) {
       VectorScalarSchema& s = schema.value();
       FillScalarSchema(parameter->mutable_scalar_schema(), s);
     }

@@ -12,30 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_STORE_RPC_H_
-#define DINGODB_SDK_STORE_RPC_H_
+#ifndef DINGODB_SDK_BRPC_STORE_RPC_H_
+#define DINGODB_SDK_BRPC_STORE_RPC_H_
 
 #include "proto/store.pb.h"
-#include "sdk/rpc/rpc.h"
+#include "sdk/rpc/brpc/unary_rpc.h"
 
 namespace dingodb {
 namespace sdk {
 
-using pb::store::StoreService;
-using pb::store::StoreService_Stub;
-
-#define DECLARE_STORE_RPC(METHOD) \
-class METHOD##Rpc final : public ClientRpc<pb::store::METHOD##Request, pb::store::METHOD##Response, StoreService, StoreService_Stub> { \
-public: \
-  METHOD##Rpc(const METHOD##Rpc &) = delete;\
-  METHOD##Rpc &operator=(const METHOD##Rpc &) = delete;\
-  explicit METHOD##Rpc(); \
-  explicit METHOD##Rpc(const std::string &cmd); \
-  ~METHOD##Rpc() override; \
-  std::string Method() const override { return ConstMethod(); } \
-  void Send(StoreService_Stub &stub, google::protobuf::Closure *done) override;\
-  static std::string ConstMethod(); \
-};
+#define DECLARE_STORE_RPC(METHOD) DECLARE_UNARY_RPC(pb::store, StoreService, METHOD)
 
 DECLARE_STORE_RPC(KvGet);
 DECLARE_STORE_RPC(KvBatchGet);
@@ -65,4 +51,4 @@ DECLARE_STORE_RPC(TxnResolveLock);
 
 }  // namespace sdk
 }  // namespace dingodb
-#endif  // DINGODB_SDK_STORE_RPC_H_
+#endif  // DINGODB_SDK_BRPC_STORE_RPC_H_

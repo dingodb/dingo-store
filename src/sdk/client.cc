@@ -18,6 +18,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,11 +26,12 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
-#include "proto/common.pb.h"
-#include "proto/coordinator.pb.h"
 #include "sdk/client_internal_data.h"
 #include "sdk/client_stub.h"
+#include "sdk/common/helper.h"
 #include "sdk/common/param_config.h"
+#include "sdk/port/common.pb.h"
+#include "sdk/port/coordinator.pb.h"
 #include "sdk/rawkv/raw_kv_batch_compare_and_set_task.h"
 #include "sdk/rawkv/raw_kv_batch_delete_task.h"
 #include "sdk/rawkv/raw_kv_batch_get_task.h"
@@ -44,8 +46,10 @@
 #include "sdk/rawkv/raw_kv_put_task.h"
 #include "sdk/rawkv/raw_kv_scan_task.h"
 #include "sdk/region_creator_internal_data.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_impl.h"
+#include "sdk/utils/net_util.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_index_cache.h"
 #include "sdk/vector/vector_index_creator_internal_data.h"
@@ -53,31 +57,49 @@
 namespace dingodb {
 namespace sdk {
 
-Status Client::BuildAndInitLog(std::string naming_service_url, Client** client) {
-  if (naming_service_url.empty()) {
-    return Status::InvalidArgument("naming_service_url is empty");
+Status Client::BuildAndInitLog(std::string addrs, Client** client) {
+  static std::once_flag init;
+  std::call_once(init, [&]() { google::InitGoogleLogging("dingo_sdk"); });
+
+  return BuildFromAddrs(addrs, client);
+}
+
+Status Client::BuildFromAddrs(std::string addrs, Client** client) {
+  if (addrs.empty()) {
+    return Status::InvalidArgument(fmt::format("addrs:{} is empty", addrs));
   };
 
+  std::vector<EndPoint> endpoints = StringToEndpoints(addrs);
+  if (endpoints.empty()) {
+    return Status::InvalidArgument(fmt::format("invalid addrs:{}", addrs));
+  }
+
   Client* tmp = new Client();
-  Status s = tmp->Init(std::move(naming_service_url));
+  Status s = tmp->Init(endpoints);
   if (!s.ok()) {
     delete tmp;
     return s;
   }
 
-  google::InitGoogleLogging("dingo_sdk");
-
   *client = tmp;
   return s;
 }
+
+static bool IsServiceUrlValid(const std::string& service_url) { return service_url.substr(0, 7) == "file://"; }
 
 Status Client::Build(std::string naming_service_url, Client** client) {
   if (naming_service_url.empty()) {
     return Status::InvalidArgument("naming_service_url is empty");
   };
 
+  if (!IsServiceUrlValid(naming_service_url)) {
+    return Status::InvalidArgument(fmt::format("invalid naming_service_url:{}", naming_service_url));
+  }
+
+  std::vector<EndPoint> endpoints = FileNamingServiceUrlEndpoints(naming_service_url);
+
   Client* tmp = new Client();
-  Status s = tmp->Init(std::move(naming_service_url));
+  Status s = tmp->Init(endpoints);
   if (!s.ok()) {
     delete tmp;
     return s;
@@ -91,14 +113,14 @@ Client::Client() : data_(new Client::Data()) {}
 
 Client::~Client() { delete data_; }
 
-Status Client::Init(std::string naming_service_url) {
-  CHECK(!naming_service_url.empty());
+Status Client::Init(const std::vector<EndPoint>& endpoints) {
+  CHECK(!endpoints.empty());
   if (data_->init) {
     return Status::IllegalState("forbidden multiple init");
   }
 
   auto tmp = std::make_unique<ClientStub>();
-  Status open = tmp->Open(naming_service_url);
+  Status open = tmp->Open(endpoints);
   if (open.IsOK()) {
     data_->init = true;
     data_->stub = std::move(tmp);
@@ -366,19 +388,19 @@ Status RegionCreator::Create(int64_t& out_region_id) {
     return Status::InvalidArgument("replica num must greater 0");
   }
 
-  pb::coordinator::CreateRegionRequest req;
-  req.set_region_name(data_->region_name);
-  req.set_replica_num(data_->replica_num);
-  req.mutable_range()->set_start_key(data_->lower_bound);
-  req.mutable_range()->set_end_key(data_->upper_bound);
+  CreateRegionRpc rpc;
+  rpc.MutableRequest()->set_region_name(data_->region_name);
+  rpc.MutableRequest()->set_replica_num(data_->replica_num);
+  rpc.MutableRequest()->mutable_range()->set_start_key(data_->lower_bound);
+  rpc.MutableRequest()->mutable_range()->set_end_key(data_->upper_bound);
 
-  req.set_raw_engine(EngineType2RawEngine(data_->engine_type));
+  rpc.MutableRequest()->set_raw_engine(EngineType2RawEngine(data_->engine_type));
 
-  pb::coordinator::CreateRegionResponse resp;
-  DINGO_RETURN_NOT_OK(data_->stub.GetCoordinatorProxy()->CreateRegion(req, resp));
-  CHECK(resp.region_id() > 0) << "create region internal error, req:" << req.DebugString()
-                              << ", resp:" << resp.DebugString();
-  out_region_id = resp.region_id();
+  DINGO_RETURN_NOT_OK(data_->stub.GetCoordinatorRpcController()->SyncCall(rpc));
+
+  CHECK(rpc.Response()->region_id() > 0) << "create region internal error, req:" << rpc.Request()->DebugString()
+                                         << ", resp:" << rpc.Response()->DebugString();
+  out_region_id = rpc.Response()->region_id();
 
   if (data_->wait) {
     int retry = 0;

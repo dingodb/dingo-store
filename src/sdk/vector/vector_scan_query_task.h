@@ -17,11 +17,11 @@
 
 #include <cstdint>
 
-#include "proto/index.pb.h"
 #include "sdk/client_stub.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/port/index.pb.h"
+#include "sdk/rpc/index_service_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/vector.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_task.h"
 
 namespace dingodb {
@@ -56,7 +56,7 @@ class VectorScanQueryTask : public VectorTask {
 
   std::shared_mutex rw_lock_;
   std::vector<VectorWithId> result_vectors_;
-  std::set<int64_t> vector_ids_; // for unique check
+  std::set<int64_t> vector_ids_;  // for unique check
   std::set<int64_t> next_part_ids_;
   Status status_;
 

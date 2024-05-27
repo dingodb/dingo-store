@@ -12,21 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/store/store_rpc.h"
-
-#include "fmt/core.h"
+#include "sdk/rpc/grpc/store_rpc.h"
 
 namespace dingodb {
 namespace sdk {
 
-#define DEFINE_STORE_RPC(METHOD)                                                     \
-  METHOD##Rpc::METHOD##Rpc() : METHOD##Rpc("") {}                                    \
-  METHOD##Rpc::METHOD##Rpc(const std::string& cmd) : ClientRpc(cmd) {}               \
-  METHOD##Rpc::~METHOD##Rpc() = default;                                             \
-  void METHOD##Rpc::Send(StoreService_Stub& stub, google::protobuf::Closure* done) { \
-    stub.METHOD(MutableController(), request, response, done);                       \
-  }                                                                                  \
-  std::string METHOD##Rpc::ConstMethod() { return fmt::format("{}.{}Rpc", StoreService::descriptor()->name(), #METHOD); }
+#define DEFINE_STORE_RPC(METHOD) DEFINE_UNAEY_RPC(pb::store, StoreService, METHOD)
 
 DEFINE_STORE_RPC(KvGet);
 DEFINE_STORE_RPC(KvBatchGet);

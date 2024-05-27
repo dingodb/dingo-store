@@ -16,7 +16,7 @@
 #include "sdk/vector/vector_batch_query_task.h"
 
 #include "sdk/common/common.h"
-#include "sdk/vector/index_service_rpc.h"
+#include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_helper.h"
 
 namespace dingodb {

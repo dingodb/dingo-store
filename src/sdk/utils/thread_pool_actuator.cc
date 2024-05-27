@@ -22,6 +22,7 @@
 
 #include "glog/logging.h"
 #include "sdk/utils/actuator.h"
+#include "sdk/utils/thread_pool.h"
 
 namespace dingodb {
 namespace sdk {
@@ -99,7 +100,7 @@ void Timer::Run() {
   }
 }
 
-ThreadPoolActuator::ThreadPoolActuator() : timer_(nullptr), pool_(nullptr), running_(false), thread_num_(0) {}
+ThreadPoolActuator::ThreadPoolActuator() : timer_(nullptr), pool_(nullptr), running_(false) {}
 
 ThreadPoolActuator::~ThreadPoolActuator() {
   Stop();
@@ -108,10 +109,10 @@ ThreadPoolActuator::~ThreadPoolActuator() {
 }
 
 bool ThreadPoolActuator::Start(int thread_num) {
-  pool_ = std::make_unique<ThreadPool>(InternalName(), thread_num);
+  pool_.reset(NewThreadPool(thread_num));
+  pool_->Start();
   timer_ = std::make_unique<Timer>();
   CHECK(timer_->Start(this));
-  thread_num_ = thread_num;
   running_.store(true);
   return true;
 }
@@ -128,7 +129,7 @@ bool ThreadPoolActuator::Stop() {
 
 bool ThreadPoolActuator::Execute(std::function<void()> func) {
   CHECK(running_);
-  pool_->ExecuteTask([=](void*) { func(); }, nullptr);
+  pool_->Execute(std::move(func));
   return true;
 }
 

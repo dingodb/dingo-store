@@ -42,7 +42,6 @@
 namespace dingodb {
 using pb::error::Errno;
 using pb::node::LogDetail;
-using pb::node::LogLevel;
 
 void NodeServiceImpl::GetNodeInfo(google::protobuf::RpcController* /*controller*/,
                                   const pb::node::GetNodeInfoRequest* request, pb::node::GetNodeInfoResponse* response,
@@ -141,9 +140,9 @@ void NodeServiceImpl::GetLogLevel(google::protobuf::RpcController* /*controller*
   }
 
   if (min_log_level == 0 && min_verbose_level > 1) {
-    response->set_log_level(static_cast<LogLevel>(0));
+    response->set_log_level(static_cast<pb::node::LogLevel>(0));
   } else {
-    response->set_log_level(static_cast<LogLevel>(min_log_level + 1));
+    response->set_log_level(static_cast<pb::node::LogLevel>(min_log_level + 1));
   }
 }
 
@@ -153,10 +152,10 @@ void NodeServiceImpl::ChangeLogLevel(google::protobuf::RpcController* /* control
   auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
   brpc::ClosureGuard const done_guard(svr_done);
 
-  const LogLevel log_level = request->log_level();
+  const pb::node::LogLevel log_level = request->log_level();
   const LogDetail& log_detail = request->log_detail();
 
-  DingoLogger::ChangeGlogLevelUsingDingoLevel(log_level, log_detail.verbose());
+  DingoLogger::ChangeGlogLevelUsingDingoLevel(Helper::LogLevelPB2LogLevel(log_level), log_detail.verbose());
   DingoLogger::SetLogBuffSecs(log_detail.log_buf_secs());
   DingoLogger::SetMaxLogSize(log_detail.max_log_size());
   DingoLogger::SetStoppingWhenDiskFull(log_detail.stop_logging_if_full_disk());

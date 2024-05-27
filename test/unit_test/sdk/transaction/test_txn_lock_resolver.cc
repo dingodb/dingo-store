@@ -16,7 +16,8 @@
 
 #include "gtest/gtest.h"
 #include "sdk/common/common.h"
-#include "sdk/store/store_rpc.h"
+#include "sdk/rpc/coordinator_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "test_base.h"
 #include "test_common.h"
@@ -24,10 +25,10 @@
 namespace dingodb {
 namespace sdk {
 
-class TxnLockResolverTest : public TestBase {
+class SDKTxnLockResolverTest : public TestBase {
  public:
-  TxnLockResolverTest() = default;
-  ~TxnLockResolverTest() override = default;
+  SDKTxnLockResolverTest() = default;
+  ~SDKTxnLockResolverTest() override = default;
 
   void SetUp() override {
     TestBase::SetUp();
@@ -40,7 +41,7 @@ class TxnLockResolverTest : public TestBase {
   pb::meta::TsoTimestamp init_tso;
 };
 
-TEST_F(TxnLockResolverTest, TxnNotFound) {
+TEST_F(SDKTxnLockResolverTest, TxnNotFound) {
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
   fake_lock.set_key(key);
@@ -50,17 +51,18 @@ TEST_F(TxnLockResolverTest, TxnNotFound) {
   CHECK_NOTNULL(region.get());
 
   auto fake_tso = CurrentFakeTso();
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
 
-        return Status::OK();
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+    return Status::OK();
+  });
+
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -88,7 +90,7 @@ TEST_F(TxnLockResolverTest, TxnNotFound) {
   EXPECT_TRUE(s.ok());
 }
 
-TEST_F(TxnLockResolverTest, Locked) {
+TEST_F(SDKTxnLockResolverTest, Locked) {
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
   fake_lock.set_key(key);
@@ -99,17 +101,17 @@ TEST_F(TxnLockResolverTest, Locked) {
 
   auto fake_tso = CurrentFakeTso();
 
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-        return Status::OK();
-      });
+    return Status::OK();
+  });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -133,7 +135,7 @@ TEST_F(TxnLockResolverTest, Locked) {
   EXPECT_TRUE(s.IsTxnLockConflict());
 }
 
-TEST_F(TxnLockResolverTest, Committed) {
+TEST_F(SDKTxnLockResolverTest, Committed) {
   // NOTE: careful!!! key and fake_lock primary key in same region
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
@@ -145,17 +147,17 @@ TEST_F(TxnLockResolverTest, Committed) {
 
   auto fake_tso = CurrentFakeTso();
 
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-        return Status::OK();
-      });
+    return Status::OK();
+  });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
@@ -224,7 +226,7 @@ TEST_F(TxnLockResolverTest, Committed) {
   EXPECT_TRUE(s.ok());
 }
 
-TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
+TEST_F(SDKTxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
   // NOTE: careful!!! key and fake_lock primary key in same region
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
@@ -236,17 +238,17 @@ TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
 
   auto fake_tso = CurrentFakeTso();
 
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-        return Status::OK();
-      });
+    return Status::OK();
+  });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
@@ -298,7 +300,7 @@ TEST_F(TxnLockResolverTest, CommittedResolvePrimaryKeyFail) {
   EXPECT_TRUE(!s.ok());
 }
 
-TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
+TEST_F(SDKTxnLockResolverTest, CommittedResolveConflictKeyFail) {
   // NOTE: careful!!! key and fake_lock primary key in same region
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
@@ -310,17 +312,17 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
 
   auto fake_tso = CurrentFakeTso();
 
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-        return Status::OK();
-      });
+    return Status::OK();
+  });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);
@@ -394,7 +396,7 @@ TEST_F(TxnLockResolverTest, CommittedResolveConflictKeyFail) {
   EXPECT_TRUE(!s.ok());
 }
 
-TEST_F(TxnLockResolverTest, Rollbacked) {
+TEST_F(SDKTxnLockResolverTest, Rollbacked) {
   // NOTE: careful!!! key and fake_lock primary key in same region
   std::string key = "b";
   auto fake_lock = PrepareLockInfo();
@@ -406,17 +408,17 @@ TEST_F(TxnLockResolverTest, Rollbacked) {
 
   auto fake_tso = CurrentFakeTso();
 
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        auto* ts = response.mutable_start_timestamp();
-        *ts = fake_tso;
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+    *ts = fake_tso;
 
-        return Status::OK();
-      });
+    return Status::OK();
+  });
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* txn_rpc = dynamic_cast<TxnCheckTxnStatusRpc*>(&rpc);
         CHECK_NOTNULL(txn_rpc);

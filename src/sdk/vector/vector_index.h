@@ -18,7 +18,7 @@
 #include <cstdint>
 #include <memory>
 
-#include "proto/meta.pb.h"
+#include "sdk/port/meta.pb.h"
 #include "sdk/vector.h"
 
 namespace dingodb {

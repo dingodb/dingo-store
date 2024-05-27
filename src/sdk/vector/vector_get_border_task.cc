@@ -16,10 +16,9 @@
 
 #include <cstdint>
 
-#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
-#include "sdk/vector/vector_helper.h"
+#include "sdk/utils/scoped_cleanup.h"
 
 namespace dingodb {
 namespace sdk {
@@ -63,7 +62,7 @@ void VectorGetBorderTask::DoAsync() {
 }
 
 void VectorGetBorderTask::SubTaskCallback(Status status, VectorGetBorderPartTask* sub_task) {
-  DEFER(delete sub_task);
+  SCOPED_CLEANUP({ delete sub_task; });
 
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();

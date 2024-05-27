@@ -21,9 +21,9 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "mock_client_stub.h"
-#include "mock_coordinator_proxy.h"
+#include "mock_coordinator_rpc_controller.h"
 #include "mock_region_scanner.h"
-#include "mock_rpc_interaction.h"
+#include "mock_rpc_client.h"
 #include "sdk/admin_tool.h"
 #include "sdk/auto_increment_manager.h"
 #include "sdk/client.h"
@@ -46,27 +46,32 @@ class TestBase : public ::testing::Test {
     std::unique_ptr<MockClientStub> tmp = std::make_unique<MockClientStub>();
     stub = tmp.get();
 
-    coordinator_proxy = std::make_shared<MockCoordinatorProxy>();
-    ON_CALL(*stub, GetCoordinatorProxy).WillByDefault(testing::Return(coordinator_proxy));
-    EXPECT_CALL(*stub, GetCoordinatorProxy).Times(testing::AnyNumber());
-    ON_CALL(*coordinator_proxy, ScanRegions).WillByDefault(testing::Return(Status::OK()));
+    coordinator_rpc_controller = std::make_shared<MockCoordinatorRpcController>(*stub);
+    ON_CALL(*stub, GetCoordinatorRpcController).WillByDefault(testing::Return(coordinator_rpc_controller));
+    EXPECT_CALL(*stub, GetCoordinatorRpcController).Times(testing::AnyNumber());
+    ON_CALL(*coordinator_rpc_controller, SyncCall).WillByDefault(testing::Return(Status::OK()));
 
-    meta_cache = std::make_shared<MetaCache>(coordinator_proxy);
+    meta_rpc_controller = std::make_shared<MockCoordinatorRpcController>(*stub);
+    ON_CALL(*stub, GetMetaRpcController).WillByDefault(testing::Return(meta_rpc_controller));
+    EXPECT_CALL(*stub, GetMetaRpcController).Times(testing::AnyNumber());
+    ON_CALL(*meta_rpc_controller, SyncCall).WillByDefault(testing::Return(Status::OK()));
+
+    meta_cache = std::make_shared<MetaCache>(coordinator_rpc_controller);
     ON_CALL(*stub, GetMetaCache).WillByDefault(testing::Return(meta_cache));
     EXPECT_CALL(*stub, GetMetaCache).Times(testing::AnyNumber());
 
-    brpc::ChannelOptions options;
+    RpcClientOptions options;
     options.connect_timeout_ms = 3000;
     options.timeout_ms = 5000;
-    store_rpc_interaction = std::make_shared<MockRpcInteraction>(options);
-    ON_CALL(*stub, GetStoreRpcInteraction).WillByDefault(testing::Return(store_rpc_interaction));
-    EXPECT_CALL(*stub, GetStoreRpcInteraction).Times(testing::AnyNumber());
+    store_rpc_client = std::make_shared<MockRpcClient>(options);
+    ON_CALL(*stub, GetStoreRpcClient).WillByDefault(testing::Return(store_rpc_client));
+    EXPECT_CALL(*stub, GetStoreRpcClient).Times(testing::AnyNumber());
 
     region_scanner_factory = std::make_shared<MockRegionScannerFactory>();
     ON_CALL(*stub, GetRawKvRegionScannerFactory).WillByDefault(testing::Return(region_scanner_factory));
     EXPECT_CALL(*stub, GetRawKvRegionScannerFactory).Times(testing::AnyNumber());
 
-    admin_tool = std::make_shared<AdminTool>(coordinator_proxy);
+    admin_tool = std::make_shared<AdminTool>(*stub);
     ON_CALL(*stub, GetAdminTool).WillByDefault(testing::Return(admin_tool));
     EXPECT_CALL(*stub, GetAdminTool).Times(testing::AnyNumber());
 
@@ -74,7 +79,7 @@ class TestBase : public ::testing::Test {
     ON_CALL(*stub, GetTxnLockResolver).WillByDefault(testing::Return(txn_lock_resolver));
     EXPECT_CALL(*stub, GetTxnLockResolver).Times(testing::AnyNumber());
 
-    actuator.reset(new ThreadPoolActuator());
+    actuator = std::make_shared<ThreadPoolActuator>();
     actuator->Start(FLAGS_actuator_thread_num);
     ON_CALL(*stub, GetActuator).WillByDefault(testing::Return(actuator));
     EXPECT_CALL(*stub, GetActuator).Times(testing::AnyNumber());
@@ -92,7 +97,7 @@ class TestBase : public ::testing::Test {
   }
 
   ~TestBase() override {
-    store_rpc_interaction.reset();
+    store_rpc_client.reset();
     meta_cache.reset();
     delete client;
   }
@@ -106,9 +111,10 @@ class TestBase : public ::testing::Test {
     return std::move(txn);
   }
 
-  std::shared_ptr<MockCoordinatorProxy> coordinator_proxy;
+  std::shared_ptr<MockCoordinatorRpcController> coordinator_rpc_controller;
+  std::shared_ptr<MockCoordinatorRpcController> meta_rpc_controller;
   std::shared_ptr<MetaCache> meta_cache;
-  std::shared_ptr<MockRpcInteraction> store_rpc_interaction;
+  std::shared_ptr<MockRpcClient> store_rpc_client;
   std::shared_ptr<MockRegionScannerFactory> region_scanner_factory;
   std::shared_ptr<AdminTool> admin_tool;
   std::shared_ptr<MockTxnLockResolver> txn_lock_resolver;

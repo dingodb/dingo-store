@@ -21,7 +21,6 @@
 #include "sdk/auto_increment_manager.h"
 #include "sdk/common/common.h"
 #include "sdk/status.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_helper.h"
 #include "sdk/vector/vector_index.h"

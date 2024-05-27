@@ -82,3 +82,6 @@
 [submodule "contrib/tantivy-search"]
 	path = contrib/tantivy-search
 	url = https://github.com/dingodb/tantivy-search
+[submodule "contrib/grpc"]
+	path = contrib/grpc
+	url = https://github.com/grpc/grpc.git

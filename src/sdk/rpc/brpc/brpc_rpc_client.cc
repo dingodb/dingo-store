@@ -12,31 +12,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sdk/rpc/rpc_interaction.h"
-
+#include "sdk/rpc/brpc/brpc_rpc_client.h"
 #include <memory>
-#include <mutex>
-#include <utility>
 
-#include "brpc/channel.h"
-#include "butil/endpoint.h"
 #include "glog/logging.h"
+#include "sdk/rpc/brpc/unary_rpc.h"
 
 namespace dingodb {
 namespace sdk {
 
-void RpcInteraction::SendRpc(Rpc& rpc, RpcCallback cb) {
+void BrpcRpcClient::SendRpc(Rpc& rpc, RpcCallback cb) {
   auto endpoint = rpc.GetEndPoint();
-  CHECK(endpoint.ip != butil::IP_ANY) << "rpc endpoint not set";
-  CHECK(endpoint.port != 0) << "rpc endpoint port should not 0";
+  CHECK(endpoint.IsValid()) << "rpc endpoint not valid: " << endpoint.ToString();
 
   std::shared_ptr<brpc::Channel> channel = std::make_shared<brpc::Channel>();
   {
     std::lock_guard<std::mutex> guard(lock_);
     auto ch = channel_map_.find(endpoint);
     if (ch == channel_map_.end()) {
-      int ret = channel->Init(endpoint, &options_);
-      CHECK_EQ(ret, 0) << "Fail init channel endpoint:" << butil::endpoint2str(endpoint).c_str();
+      brpc::ChannelOptions options;
+      options.timeout_ms = m_options.timeout_ms;
+      options.connect_timeout_ms = m_options.connect_timeout_ms;
+      options.max_retry = m_options.max_retry;
+
+      int ret = channel->Init(endpoint.Host().c_str(), endpoint.Port(), &options);
+
+      CHECK_EQ(ret, 0) << "Fail init channel endpoint:" << endpoint.ToString();
       channel_map_.insert(std::make_pair(endpoint, channel));
     } else {
       channel = CHECK_NOTNULL(ch->second);
@@ -44,7 +45,10 @@ void RpcInteraction::SendRpc(Rpc& rpc, RpcCallback cb) {
   }
 
   CHECK_NOTNULL(channel.get());
-  rpc.Call(channel.get(), std::move(cb));
+  auto ctx = std::make_unique<BrpcContext>();
+  ctx->cb = std::move(cb);
+  ctx->channel = channel;
+  rpc.Call(ctx.release());
 }
 
 }  // namespace sdk

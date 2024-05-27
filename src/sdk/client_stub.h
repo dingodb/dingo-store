@@ -20,10 +20,10 @@
 #include "glog/logging.h"
 #include "sdk/admin_tool.h"
 #include "sdk/auto_increment_manager.h"
-#include "sdk/coordinator_proxy.h"
 #include "sdk/meta_cache.h"
 #include "sdk/region_scanner.h"
-#include "sdk/rpc/rpc_interaction.h"
+#include "sdk/rpc/coordinator_rpc_controller.h"
+#include "sdk/rpc/rpc_client.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "sdk/vector/vector_index_cache.h"
 #include "utils/actuator.h"
@@ -37,11 +37,16 @@ class ClientStub {
 
   virtual ~ClientStub();
 
-  Status Open(std::string naming_service_url);
+  Status Open(const std::vector<EndPoint>& endpoints);
 
-  virtual std::shared_ptr<CoordinatorProxy> GetCoordinatorProxy() const {
-    DCHECK_NOTNULL(coordinator_proxy_.get());
-    return coordinator_proxy_;
+  virtual std::shared_ptr<CoordinatorRpcController> GetCoordinatorRpcController() const {
+    DCHECK_NOTNULL(coordinator_rpc_controller_.get());
+    return coordinator_rpc_controller_;
+  }
+
+  virtual std::shared_ptr<CoordinatorRpcController> GetMetaRpcController() const {
+    DCHECK_NOTNULL(meta_rpc_controller_.get());
+    return meta_rpc_controller_;
   }
 
   virtual std::shared_ptr<MetaCache> GetMetaCache() const {
@@ -49,9 +54,9 @@ class ClientStub {
     return meta_cache_;
   }
 
-  virtual std::shared_ptr<RpcInteraction> GetStoreRpcInteraction() const {
-    DCHECK_NOTNULL(store_rpc_interaction_.get());
-    return store_rpc_interaction_;
+  virtual std::shared_ptr<RpcClient> GetStoreRpcClient() const {
+    DCHECK_NOTNULL(store_rpc_client_.get());
+    return store_rpc_client_;
   }
 
   virtual std::shared_ptr<RegionScannerFactory> GetRawKvRegionScannerFactory() const {
@@ -91,9 +96,10 @@ class ClientStub {
 
  private:
   // TODO: use unique ptr
-  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
+  std::shared_ptr<CoordinatorRpcController> coordinator_rpc_controller_;
+  std::shared_ptr<CoordinatorRpcController> meta_rpc_controller_;
   std::shared_ptr<MetaCache> meta_cache_;
-  std::shared_ptr<RpcInteraction> store_rpc_interaction_;
+  std::shared_ptr<RpcClient> store_rpc_client_;
   std::shared_ptr<RegionScannerFactory> raw_kv_region_scanner_factory_;
   std::shared_ptr<RegionScannerFactory> txn_region_scanner_factory_;
   std::shared_ptr<AdminTool> admin_tool_;

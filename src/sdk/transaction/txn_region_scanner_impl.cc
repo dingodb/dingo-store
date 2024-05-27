@@ -21,7 +21,7 @@
 #include "sdk/common/helper.h"
 #include "sdk/common/param_config.h"
 #include "sdk/region_scanner.h"
-#include "sdk/store/store_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/transaction/txn_common.h"
 
 namespace dingodb {

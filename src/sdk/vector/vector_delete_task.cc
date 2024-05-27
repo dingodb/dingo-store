@@ -17,7 +17,6 @@
 #include <cstdint>
 
 #include "sdk/common/common.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_helper.h"
 
 namespace dingodb {

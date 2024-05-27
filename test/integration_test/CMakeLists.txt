@@ -16,6 +16,10 @@ add_executable(${INTEGRATION_TEST_BIN}
                 main.cc
                 ${INTEGRATION_TEST_DEPEND_SRCS}
                 ${INTEGRATION_TEST_SRCS}
+                ${PROJECT_SOURCE_DIR}/src/common/helper.cc
+                ${PROJECT_SOURCE_DIR}/src/common/role.cc
+                ${PROJECT_SOURCE_DIR}/src/coordinator/coordinator_interaction.cc
+                ${PROJECT_SOURCE_DIR}/src/common/service_access.cc
                 )
 
 add_dependencies(${INTEGRATION_TEST_BIN} sdk fmt gtest glog)

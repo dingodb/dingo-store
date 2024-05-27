@@ -16,8 +16,8 @@
 #define DINGODB_SDK_TEST_MOCK_CLIENT_STUB_H_
 
 #include "gmock/gmock.h"
-#include "mock_rpc_interaction.h"
 #include "sdk/client_stub.h"
+#include "sdk/rpc/coordinator_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {
@@ -27,9 +27,10 @@ class MockClientStub final : public ClientStub {
 
   ~MockClientStub() override = default;
 
-  MOCK_METHOD(std::shared_ptr<CoordinatorProxy>, GetCoordinatorProxy, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<CoordinatorRpcController>, GetCoordinatorRpcController, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<CoordinatorRpcController>, GetMetaRpcController, (), (const, override));
   MOCK_METHOD(std::shared_ptr<MetaCache>, GetMetaCache, (), (const, override));
-  MOCK_METHOD(std::shared_ptr<RpcInteraction>, GetStoreRpcInteraction, (), (const, override));
+  MOCK_METHOD(std::shared_ptr<RpcClient>, GetStoreRpcClient, (), (const, override));
   MOCK_METHOD(std::shared_ptr<RegionScannerFactory>, GetRawKvRegionScannerFactory, (), (const, override));
   MOCK_METHOD(std::shared_ptr<AdminTool>, GetAdminTool, (), (const, override));
   MOCK_METHOD(std::shared_ptr<TxnLockResolver>, GetTxnLockResolver, (), (const, override));

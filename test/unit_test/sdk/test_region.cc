@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <memory>
+
 #include "gtest/gtest.h"
 #include "sdk/region.h"
 #include "test_common.h"
@@ -19,7 +21,7 @@
 namespace dingodb {
 namespace sdk {
 
-class RegionTest : public testing::Test {
+class SDKRegionTest : public testing::Test {
  protected:
   void SetUp() override { InitRegion(); }
 
@@ -42,16 +44,14 @@ class RegionTest : public testing::Test {
     std::vector<Replica> replicas;
     replicas.reserve(kInitReplica.size());
     for (const auto& entry : kInitReplica) {
-      butil::EndPoint end_point;
-      butil::str2endpoint(entry.first.c_str(), &end_point);
-      replicas.push_back({end_point, entry.second});
+      replicas.push_back({entry.first, entry.second});
     }
 
-    region.reset(new Region(1, range, epoch, type, replicas));
+    region = std::make_shared<Region>(1, range, epoch, type, replicas);
   }
 };
 
-TEST_F(RegionTest, TestInit) {
+TEST_F(SDKRegionTest, TestInit) {
   EXPECT_EQ(region->RegionId(), 1);
   EXPECT_EQ(region->Range().start_key(), "a");
   EXPECT_EQ(region->Range().end_key(), "b");
@@ -62,29 +62,28 @@ TEST_F(RegionTest, TestInit) {
   auto end_points = region->ReplicaEndPoint();
 
   for (const auto& end : end_points) {
-    EXPECT_TRUE(kInitReplica.find(Helper::EndPointToString(end)) != kInitReplica.end());
+    EXPECT_TRUE(kInitReplica.find(end) != kInitReplica.end());
   }
 
-  butil::EndPoint leader;
+  EndPoint leader;
   Status got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToString(leader), kAddrOne);
+  EXPECT_EQ(leader, kAddrOne);
   EXPECT_TRUE(region->IsStale());
 }
 
-TEST_F(RegionTest, TestMark) {
-  butil::EndPoint end;
-  butil::str2endpoint(kAddrOne.c_str(), &end);
+TEST_F(SDKRegionTest, TestMark) {
+  EndPoint end = kAddrOne;
   region->MarkFollower(end);
-  butil::EndPoint leader;
+  EndPoint leader;
   Status got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsNotFound());
 
-  butil::str2endpoint(kAddrTwo.c_str(), &end);
+  end = kAddrTwo;
   region->MarkLeader(end);
   got = region->GetLeader(leader);
   EXPECT_TRUE(got.IsOK());
-  EXPECT_EQ(Helper::EndPointToString(leader), kAddrTwo);
+  EXPECT_EQ(leader, kAddrTwo);
 
   {
     // test mark and unmark stale

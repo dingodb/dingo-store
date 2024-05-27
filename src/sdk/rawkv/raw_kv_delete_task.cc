@@ -15,7 +15,7 @@
 #include "sdk/rawkv/raw_kv_delete_task.h"
 
 #include "sdk/common/common.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

@@ -2246,4 +2246,21 @@ std::vector<std::string> Helper::GetThreadNames(int64_t pid, const std::string& 
   return filter_thread_names;
 }
 
+LogLevel Helper::LogLevelPB2LogLevel(const pb::node::LogLevel& level) {
+  switch(level) {
+    case pb::node::LogLevel::DEBUG:
+      return LogLevel::kDEBUG;
+    case pb::node::LogLevel::INFO:
+      return LogLevel::kINFO;
+    case pb::node::LogLevel::WARNING:
+      return LogLevel::kWARNING;
+    case pb::node::LogLevel::ERROR:
+      return LogLevel::kERROR;
+    case pb::node::LogLevel::FATAL:
+      return LogLevel::kFATAL;
+    default:
+      CHECK(false) << "Invalid log level: " << level;
+  }
+}
+
 }  // namespace dingodb

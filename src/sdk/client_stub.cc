@@ -14,12 +14,23 @@
 
 #include "sdk/client_stub.h"
 
+#include <memory>
+
 #include "sdk/common/param_config.h"
 #include "sdk/meta_cache.h"
 #include "sdk/rawkv/raw_kv_region_scanner_impl.h"
+
+#ifdef USE_GRPC
+#include "sdk/rpc/grpc/grpc_rpc_client.h"
+#else
+#include "sdk/rpc/brpc/brpc_rpc_client.h"
+#endif
+#include "sdk/rpc/coordinator_rpc_controller.h"
+#include "sdk/rpc/rpc_client.h"
 #include "sdk/status.h"
 #include "sdk/transaction/txn_lock_resolver.h"
 #include "sdk/transaction/txn_region_scanner_impl.h"
+#include "sdk/utils/net_util.h"
 #include "sdk/utils/thread_pool_actuator.h"
 
 namespace dingodb {
@@ -27,39 +38,48 @@ namespace dingodb {
 namespace sdk {
 
 ClientStub::ClientStub()
-    : coordinator_proxy_(nullptr),
+    : coordinator_rpc_controller_(nullptr),
       raw_kv_region_scanner_factory_(nullptr),
       meta_cache_(nullptr),
       admin_tool_(nullptr) {}
 
 ClientStub::~ClientStub() = default;
 
-Status ClientStub::Open(std::string naming_service_url) {
-  coordinator_proxy_ = std::make_shared<CoordinatorProxy>();
-  DINGO_RETURN_NOT_OK(coordinator_proxy_->Open(naming_service_url));
+Status ClientStub::Open(const std::vector<EndPoint>& endpoints) {
+  CHECK(!endpoints.empty());
+  coordinator_rpc_controller_ = std::make_shared<CoordinatorRpcController>(*this);
+  coordinator_rpc_controller_->Open(endpoints);
 
-  // TODO: pass use gflag or add options
-  brpc::ChannelOptions options;
+  meta_rpc_controller_ = std::make_shared<CoordinatorRpcController>(*this);
+  meta_rpc_controller_->Open(endpoints);
+
+  RpcClientOptions options;
   options.timeout_ms = FLAGS_rpc_channel_timeout_ms;
   options.connect_timeout_ms = FLAGS_rpc_channel_connect_timeout_ms;
-  store_rpc_interaction_.reset(new RpcInteraction(options));
 
-  meta_cache_.reset(new MetaCache(coordinator_proxy_));
+#ifdef USE_GRPC
+  store_rpc_client_ = std::make_shared<GrpcRpcClient>(options);
+  store_rpc_client_->Open();
+#else
+  store_rpc_client_ = std::make_shared<BrpcRpcClient>(options);
+#endif
 
-  raw_kv_region_scanner_factory_.reset(new RawKvRegionScannerFactoryImpl());
+  meta_cache_ = std::make_shared<MetaCache>(coordinator_rpc_controller_);
 
-  txn_region_scanner_factory_.reset(new TxnRegionScannerFactoryImpl());
+  raw_kv_region_scanner_factory_ = std::make_shared<RawKvRegionScannerFactoryImpl>();
 
-  admin_tool_.reset(new AdminTool(coordinator_proxy_));
+  txn_region_scanner_factory_ = std::make_shared<TxnRegionScannerFactoryImpl>();
 
-  txn_lock_resolver_.reset(new TxnLockResolver(*(this)));
+  admin_tool_ = std::make_shared<AdminTool>(*this);
 
-  actuator_.reset(new ThreadPoolActuator());
+  txn_lock_resolver_ = std::make_shared<TxnLockResolver>(*(this));
+
+  actuator_ = std::make_shared<ThreadPoolActuator>();
   actuator_->Start(FLAGS_actuator_thread_num);
 
-  vector_index_cache_.reset(new VectorIndexCache(*this));
+  vector_index_cache_ = std::make_shared<VectorIndexCache>(*this);
 
-  auto_increment_manager_.reset(new AutoIncrementerManager(*this));
+  auto_increment_manager_ = std::make_shared<AutoIncrementerManager>(*this);
 
   return Status::OK();
 }

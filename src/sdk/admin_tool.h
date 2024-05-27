@@ -15,18 +15,23 @@
 #ifndef DINGODB_SDK_ADMIN_TOOL_H_
 #define DINGODB_SDK_ADMIN_TOOL_H_
 
-#include "sdk/coordinator_proxy.h"
+#include <vector>
+
+#include "sdk/port/meta.pb.h"
+#include "sdk/rpc/coordinator_rpc_controller.h"
 #include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
+
+class ClientStub;
 
 class AdminTool {
  public:
   AdminTool(const AdminTool&) = delete;
   const AdminTool& operator=(const AdminTool&) = delete;
 
-  explicit AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy);
+  explicit AdminTool(const ClientStub& stub) : stub_(stub) {}
 
   ~AdminTool() = default;
 
@@ -43,7 +48,7 @@ class AdminTool {
   Status DropIndex(int64_t index_id);
 
  private:
-  std::shared_ptr<CoordinatorProxy> coordinator_proxy_;
+  const ClientStub& stub_;
 };
 
 }  // namespace sdk

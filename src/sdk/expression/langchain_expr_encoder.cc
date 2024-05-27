@@ -18,13 +18,13 @@
 #include <cstdint>
 #include <iostream>
 
-#include "common/logging.h"
 #include "glog/logging.h"
 #include "sdk/common/param_config.h"
 #include "sdk/expression/coding.h"
 #include "sdk/expression/encodes.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/types_util.h"
+#include "sdk/utils/codec.h"
 
 namespace dingodb {
 namespace sdk {
@@ -52,7 +52,7 @@ pb::common::CoprocessorV2 LangChainExprEncoder::EncodeToCoprocessor(LangchainExp
   }
 
   VLOG(kSdkVlogLevel) << "langchain expr: " << expr->ToString()
-                      << " encode hex string: " << BytesToHexString(coprocessor.rel_expr())
+                      << " encode hex string: " << sdk::codec::BytesToHexString(coprocessor.rel_expr())
                       << " coprocessor: " << coprocessor.DebugString();
   return coprocessor;
 }

@@ -19,18 +19,17 @@
 #include <memory>
 
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "glog/logging.h"
-#include "proto/common.pb.h"
-#include "proto/index.pb.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
 #include "sdk/expression/langchain_expr.h"
 #include "sdk/expression/langchain_expr_encoder.h"
 #include "sdk/expression/langchain_expr_factory.h"
+#include "sdk/port/common.pb.h"
+#include "sdk/port/index.pb.h"
 #include "sdk/status.h"
+#include "sdk/utils/scoped_cleanup.h"
 #include "sdk/vector.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_common.h"
 
 namespace dingodb {
@@ -99,7 +98,7 @@ void VectorSearchTask::DoAsync() {
 }
 
 void VectorSearchTask::SubTaskCallback(Status status, VectorSearchPartTask* sub_task) {
-  DEFER(delete sub_task);
+  SCOPED_CLEANUP({ delete sub_task; });
 
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();

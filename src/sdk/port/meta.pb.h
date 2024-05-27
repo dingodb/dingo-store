@@ -12,23 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <gtest/gtest.h>
+#ifndef DINGODB_SDK_PORT_META_PB_H_
+#define DINGODB_SDK_PORT_META_PB_H_
 
-#include <string>
+#ifdef USE_GRPC
+#include "proto_grpc/meta.grpc.pb.h"
+#include "proto_grpc/meta.pb.h"
+#else
+#include "proto/meta.pb.h"
+#endif
 
-#include "sdk/expression/coding.h"
-
-namespace dingodb {
-namespace sdk {
-namespace expression {
-
-TEST(SDKBytesHexConvert, Convert) {
-  std::string hex_string1 = "2F4A33";
-  std::string bytes = HexStringToBytes(hex_string1);
-
-  EXPECT_EQ(BytesToHexString(bytes), hex_string1);
-}
-
-}  // namespace expression
-}  // namespace sdk
-}  // namespace dingodb
+#endif  // DINGODB_SDK_PORT_META_PB_H_

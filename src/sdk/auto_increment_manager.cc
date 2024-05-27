@@ -20,11 +20,10 @@
 #include <mutex>
 #include <utility>
 
-#include "common/logging.h"
 #include "glog/logging.h"
-#include "proto/common.pb.h"
-#include "proto/meta.pb.h"
 #include "sdk/client_stub.h"
+#include "sdk/common/param_config.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/status.h"
 
 namespace dingodb {
@@ -79,18 +78,19 @@ Status AutoInrementer::GetNextIds(std::vector<int64_t>& to_fill, int64_t count) 
 }
 
 Status AutoInrementer::RefillCache() {
-  pb::meta::GenerateAutoIncrementRequest request;
-  PrepareRequest(request);
-  pb::meta::GenerateAutoIncrementResponse response;
-  Status s = stub_.GetCoordinatorProxy()->GenerateAutoIncrement(request, response);
-  VLOG(kSdkVlogLevel) << "GenerateAutoIncrement request:" << request.DebugString()
-                      << " response:" << response.DebugString();
+  GenerateAutoIncrementRpc rpc;
+  PrepareRequest(*rpc.MutableRequest());
 
-  DINGO_RETURN_NOT_OK(s);
+  VLOG(kSdkVlogLevel) << "GenerateAutoIncrement request:" << rpc.Request()->DebugString()
+                      << " response:" << rpc.Response()->DebugString();
+
+  DINGO_RETURN_NOT_OK(stub_.GetMetaRpcController()->SyncCall(rpc));
   // TODO: maybe not crash just return error msg
-  CHECK_GT(response.end_id(), response.start_id())
-      << " request:" << request.DebugString() << " response: " << response.DebugString();
-  for (int64_t i = response.start_id(); i < response.end_id(); i++) {
+  const auto* response = rpc.Response();
+  const auto* request = rpc.Request();
+  CHECK_GT(response->end_id(), response->start_id())
+      << " request:" << request->DebugString() << " response: " << response->DebugString();
+  for (int64_t i = response->start_id(); i < response->end_id(); i++) {
     id_cache_.push_back(i);
   }
   return Status::OK();

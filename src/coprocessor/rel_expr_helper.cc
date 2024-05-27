@@ -19,6 +19,7 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "serial/schema/base_schema.h"
+#include "proto/error.pb.h"
 
 namespace dingodb {
 
