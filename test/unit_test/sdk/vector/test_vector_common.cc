@@ -156,21 +156,21 @@ TEST(SDKVectorCommonTest, TestFillRangePartitionRule) {
   for (int i = 0; i < partition_rule.partitions_size(); i++) {
     const auto& part = partition_rule.partitions(i);
 
-    int64_t start_id = VectorCodec::DecodeVectorId(part.range().start_key());
+    int64_t start_id = vector_codec::DecodeVectorId(part.range().start_key());
     if (i == 0) {
       EXPECT_EQ(start_id, 0);
     } else {
       EXPECT_EQ(start_id, seperator_ids[i - 1]);
     }
 
-    int64_t end_id = VectorCodec::DecodeVectorId(part.range().end_key());
+    int64_t end_id = vector_codec::DecodeVectorId(part.range().end_key());
     EXPECT_EQ(end_id, 0);
   }
 
   for (int i = 0; i < partition_rule.partitions_size(); i++) {
     const auto& part = partition_rule.partitions(i);
-    int64_t start_key_part_id = VectorCodec::DecodePartitionId(part.range().start_key());
-    int64_t end_key_part_id = VectorCodec::DecodePartitionId(part.range().end_key());
+    int64_t start_key_part_id = vector_codec::DecodePartitionId(part.range().start_key());
+    int64_t end_key_part_id = vector_codec::DecodePartitionId(part.range().end_key());
     EXPECT_EQ(start_key_part_id, index_and_part_ids[i + 1]);
     EXPECT_EQ(end_key_part_id, index_and_part_ids[i + 1] + 1);
   }

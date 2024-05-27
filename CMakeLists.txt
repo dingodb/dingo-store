@@ -51,6 +51,9 @@ option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
+option(SDK_ENABLE_GRPC "Build sdk with grpc instead brpc" OFF)
+
+set(CONFIG_BUILD_PARALLEL 8 CACHE INT "build parallel jobs on cmake config phase")
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -233,6 +236,7 @@ include(brpc)
 include(braft)
 include(nlohmann)
 include(tantivy-search)
+include(grpc)
 
 if(BUILD_BENCHMARK STREQUAL "ON")
     include(hdf5)
@@ -682,7 +686,7 @@ add_executable(dingodb_client
                 ${SERIAL2_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
-add_dependencies(DINGODB_OBJS ${DEPEND_LIBS})
+add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client ${DEPEND_LIBS})
 
@@ -714,29 +718,44 @@ target_link_libraries(dingodb_server
 target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB})
 
-add_subdirectory(src/sdk)
+if(SDK_ENABLE_GRPC)
+    add_subdirectory(src/sdk/externalproject)
 
 if(BUILD_SDK_EXAMPLE)
     message(STATUS "Build sdk example")
-    add_subdirectory(src/example)
+    add_subdirectory(src/example/externalproject)
+endif()
+else()
+    add_subdirectory(src/sdk)
+    if(BUILD_SDK_EXAMPLE)
+        message(STATUS "Build sdk example")
+        add_subdirectory(src/example)
+    endif()
 endif()
 
-if(BUILD_UNIT_TESTS)
-    message(STATUS "Build unit test")
-    add_subdirectory(test/unit_test)
+
+
+if(NOT SDK_ENABLE_GRPC)
+    if(BUILD_UNIT_TESTS)
+        message(STATUS "Build unit test")
+        add_subdirectory(test/unit_test)
+    endif()
+
+    if(BUILD_INTEGRATION_TESTS)
+        message(STATUS "Build integration test")
+        add_subdirectory(test/integration_test)
+    endif()
+
+    if(BUILD_BENCHMARK)
+        message(STATUS "Build benchmark")
+        add_subdirectory(src/benchmark)
+    endif()
+
 endif()
 
-if(BUILD_INTEGRATION_TESTS)
-    message(STATUS "Build integration test")
-    add_subdirectory(test/integration_test)
-endif()
-
-if(BUILD_BENCHMARK)
-    message(STATUS "Build benchmark")
-    add_subdirectory(src/benchmark)
-endif()
-
-if(BUILD_PYTHON_SDK)
-    message(STATUS "Build python sdk")
-    add_subdirectory(src/pysdk)
+if(NOT BRPC_ENABLE_CPU_PROFILER)
+    if(BUILD_PYTHON_SDK)
+        message(STATUS "Build python sdk")
+        add_subdirectory(src/pysdk)
+    endif()
 endif()

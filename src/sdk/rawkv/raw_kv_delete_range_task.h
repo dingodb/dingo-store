@@ -20,8 +20,8 @@
 
 #include "sdk/client_stub.h"
 #include "sdk/rawkv/raw_kv_task.h"
-#include "sdk/store/store_rpc.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/store_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

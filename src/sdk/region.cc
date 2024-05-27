@@ -40,10 +40,10 @@ std::vector<Replica> Region::Replicas() {
   return replicas_;
 }
 
-std::vector<butil::EndPoint> Region::ReplicaEndPoint() {
+std::vector<EndPoint> Region::ReplicaEndPoint() {
   std::shared_lock<std::shared_mutex> r(rw_lock_);
 
-  std::vector<butil::EndPoint> end_points;
+  std::vector<EndPoint> end_points;
   end_points.reserve(replicas_.size());
   for (const auto& r : replicas_) {
     end_points.push_back(r.end_point);
@@ -52,7 +52,7 @@ std::vector<butil::EndPoint> Region::ReplicaEndPoint() {
   return end_points;
 }
 
-void Region::MarkLeader(const butil::EndPoint& end_point) {
+void Region::MarkLeader(const EndPoint& end_point) {
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   for (auto& r : replicas_) {
     if (r.end_point == end_point) {
@@ -67,7 +67,7 @@ void Region::MarkLeader(const butil::EndPoint& end_point) {
   DINGO_LOG(INFO) << "region:" << region_id_ << " replicas:" << ReplicasAsStringUnlocked();
 }
 
-void Region::MarkFollower(const butil::EndPoint& end_point) {
+void Region::MarkFollower(const EndPoint& end_point) {
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   for (auto& r : replicas_) {
     if (r.end_point == end_point) {
@@ -76,16 +76,17 @@ void Region::MarkFollower(const butil::EndPoint& end_point) {
   }
 
   if (leader_addr_ == end_point) {
-    leader_addr_.reset();
+    leader_addr_.ReSet();
   }
 
-  DINGO_LOG(INFO) << "region:" << region_id_ << " mark replica:" << butil::endpoint2str(end_point).c_str()
+  DINGO_LOG(INFO) << "region:" << region_id_ << " mark replica:" << end_point.ToString()
                   << " follower, current replicas:" << ReplicasAsStringUnlocked();
 }
 
-Status Region::GetLeader(butil::EndPoint& leader) {
+Status Region::GetLeader(EndPoint& leader) {
   std::shared_lock<std::shared_mutex> r(rw_lock_);
-  if (leader_addr_.ip != butil::IP_ANY && leader_addr_.port != 0) {
+
+  if (leader_addr_.IsValid()) {
     leader = leader_addr_;
     return Status::OK();
   }
@@ -107,7 +108,7 @@ std::string Region::ReplicasAsStringUnlocked() const {
       replicas_str.append(", ");
     }
 
-    std::string msg = fmt::format("({},{})", butil::endpoint2str(r.end_point).c_str(), RaftRoleName(r.role));
+    std::string msg = fmt::format("({},{})", r.end_point.ToString(), RaftRoleName(r.role));
     replicas_str.append(msg);
   }
   return replicas_str;

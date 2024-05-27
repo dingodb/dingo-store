@@ -1614,12 +1614,12 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   LOG(INFO) << "record1 size:" << record1->size();
   LOG(INFO) << "schemas size:" << schemas->size();
   pb::common::KeyValue kv;
-  (void)re->Encode('r', *record1, kv);
+  (void)re->Encode('r', *record1, *kv.mutable_key(), *kv.mutable_value());
   delete re;
 
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
   vector<any> record2;
-  (void)rd->Decode(kv, record2);
+  (void)rd->Decode(kv.key(), kv.value(), record2);
   LOG(INFO) << "record2 size:" << record2.size();
   int i = 0;
   for (const auto& bs : *schemas) {
@@ -1809,7 +1809,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   vector<int> index{0, 1, 3, 5, 12, 13, 15, 17, 19, 22, 24};
   vector<int> index_temp{0, 1, 3, 5, 12, 13, 15, 17, 19, 22, 24};
   vector<any> record3;
-  (void)rd->Decode(kv, index, record3);
+  (void)rd->Decode(kv.key(), kv.value(), index, record3);
   i = 0;
   for (const auto& bs : *schemas) {
     BaseSchema::Type type = bs->GetType();

@@ -17,15 +17,15 @@
 
 #include <memory>
 
-#include "butil/endpoint.h"
-#include "proto/error.pb.h"
 #include "sdk/client_stub.h"
+#include "sdk/port/error.pb.h"
 #include "sdk/status.h"
 #include "sdk/utils/callback.h"
+#include "sdk/utils/net_util.h"
 
 namespace dingodb {
 namespace sdk {
-class DingoStub;
+
 // TODO: support backoff strategy
 class StoreRpcController {
  public:
@@ -57,7 +57,7 @@ class StoreRpcController {
   void MaybeDelay();
   bool NeedDelay() const;
 
-  bool PickNextLeader(butil::EndPoint& leader);
+  bool PickNextLeader(EndPoint& leader);
 
   std::shared_ptr<Region> ProcessStoreRegionInfo(const dingodb::pb::error::StoreRegionInfo& store_region_info);
 

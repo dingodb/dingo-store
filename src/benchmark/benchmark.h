@@ -26,8 +26,8 @@
 #include "benchmark/dataset.h"
 #include "benchmark/operation.h"
 #include "bvar/latency_recorder.h"
+#include "coordinator/coordinator_interaction.h"
 #include "sdk/client.h"
-#include "sdk/coordinator_proxy.h"
 
 namespace dingodb {
 namespace benchmark {
@@ -102,10 +102,10 @@ using ThreadEntryPtr = std::shared_ptr<ThreadEntry>;
 
 class Benchmark {
  public:
-  Benchmark(std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy, std::shared_ptr<sdk::Client> client);
+  Benchmark(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, std::shared_ptr<sdk::Client> client);
   ~Benchmark() = default;
 
-  static std::shared_ptr<Benchmark> New(std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy,
+  static std::shared_ptr<Benchmark> New(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
                                         std::shared_ptr<sdk::Client> client);
 
   void Stop();
@@ -148,7 +148,7 @@ class Benchmark {
   void IntervalReport();
   void Report(bool is_cumulative, size_t milliseconds);
 
-  std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
+  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_;
   std::shared_ptr<sdk::Client> client_;
   OperationPtr operation_;
 
@@ -170,7 +170,7 @@ class Environment {
 
   bool Init();
 
-  std::shared_ptr<sdk::CoordinatorProxy> GetCoordinatorProxy() { return coordinator_proxy_; }
+  std::shared_ptr<dingodb::CoordinatorInteraction> GetCoordinatorInteraction() { return coordinator_interaction_; }
   std::shared_ptr<sdk::Client> GetClient() { return client_; }
 
   void AddBenchmark(BenchmarkPtr benchmark);
@@ -185,7 +185,7 @@ class Environment {
 
   std::vector<BenchmarkPtr> benchmarks_;
 
-  std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy_;
+  std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction_;
   std::shared_ptr<sdk::Client> client_;
 };
 

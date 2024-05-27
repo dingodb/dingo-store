@@ -100,7 +100,7 @@ class Server {
   // Init document index manager
   bool InitDocumentIndexManager();
 
-  static pb::node::LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
+  static LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
 
   // Init Heartbeat
   bool InitHeartbeat();

@@ -28,6 +28,7 @@
 
 #include "benchmark/color.h"
 #include "common/helper.h"
+#include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
@@ -231,15 +232,15 @@ std::string Stats::Header() {
   }
 }
 
-Benchmark::Benchmark(std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy, std::shared_ptr<sdk::Client> client)
-    : coordinator_proxy_(coordinator_proxy), client_(client) {
+Benchmark::Benchmark(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, std::shared_ptr<sdk::Client> client)
+    : coordinator_interaction_(coordinator_interaction), client_(client) {
   stats_interval_ = std::make_shared<Stats>();
   stats_cumulative_ = std::make_shared<Stats>();
 }
 
-std::shared_ptr<Benchmark> Benchmark::New(std::shared_ptr<sdk::CoordinatorProxy> coordinator_proxy,
+std::shared_ptr<Benchmark> Benchmark::New(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction,
                                           std::shared_ptr<sdk::Client> client) {
-  return std::make_shared<Benchmark>(coordinator_proxy, client);
+  return std::make_shared<Benchmark>(coordinator_interaction, client);
 }
 
 void Benchmark::Stop() {
@@ -840,12 +841,13 @@ bool Environment::Init() {
     return false;
   }
 
-  coordinator_proxy_ = std::make_shared<sdk::CoordinatorProxy>();
-  auto status = coordinator_proxy_->Open(FLAGS_coordinator_url);
-  CHECK(status.IsOK()) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
+  coordinator_interaction_ = std::make_shared<dingodb::CoordinatorInteraction>();
+  bool init = coordinator_interaction_->InitByNameService(
+        FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+  CHECK(init) << "Open coordinator proxy failed, please check parameter --url=" << FLAGS_coordinator_url;
 
   sdk::Client* tmp;
-  status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
+  auto status = sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   CHECK(status.IsOK()) << fmt::format("Build sdk client failed, error: {}", status.ToString());
   client_.reset(tmp);
 
@@ -872,10 +874,10 @@ void Environment::PrintVersionInfo() {
 
   request.set_is_just_version_info(true);
 
-  auto status = coordinator_proxy_->Hello(request, response);
-  CHECK(status.IsOK()) << fmt::format("Hello failed, {}", status.ToString());
+  auto status = coordinator_interaction_->SendRequest("Hello", request, response);
+  CHECK(status.ok()) << fmt::format("Hello failed, {}:{}", status.error_code(), status.error_cstr());
 
-  auto version_info = response.version_info();
+  const auto& version_info = response.version_info();
 
   std::cout << COLOR_GREEN << "Version(dingo-store):" << COLOR_RESET << '\n';
 

@@ -16,29 +16,28 @@
 
 #include "common/logging.h"
 #include "glog/logging.h"
-#include "proto/coordinator.pb.h"
+#include "rpc/coordinator_rpc.h"
+#include "sdk/client_stub.h"
 #include "sdk/common/common.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/status.h"
 
 namespace dingodb {
 namespace sdk {
 
-AdminTool::AdminTool(std::shared_ptr<CoordinatorProxy> coordinator_proxy) : coordinator_proxy_(coordinator_proxy) {}
-
 Status AdminTool::GetCurrentTsoTimeStamp(pb::meta::TsoTimestamp& timestamp) {
-  pb::meta::TsoRequest request;
-  pb::meta::TsoResponse response;
+  TsoServiceRpc rpc;
+  rpc.MutableRequest()->set_op_type(pb::meta::TsoOpType::OP_GEN_TSO);
+  rpc.MutableRequest()->set_count(1);
 
-  request.set_op_type(pb::meta::TsoOpType::OP_GEN_TSO);
-  request.set_count(1);
+  Status status = stub_.GetMetaRpcController()->SyncCall(rpc);
 
-  auto status = coordinator_proxy_->TsoService(request, response);
   if (!status.IsOK()) {
     DINGO_LOG(WARNING) << "Fail tsoService request fail, status:" << status.ToString()
-                       << ", response:" << response.DebugString();
+                       << ", response:" << rpc.Response()->DebugString();
   } else {
-    CHECK(response.has_start_timestamp());
-    timestamp = response.start_timestamp();
+    CHECK(rpc.Response()->has_start_timestamp());
+    timestamp = rpc.Response()->start_timestamp();
     DINGO_LOG(DEBUG) << "tso timestamp: " << timestamp.DebugString();
   }
 
@@ -53,26 +52,27 @@ Status AdminTool::GetCurrentTimeStamp(int64_t& timestamp) {
 }
 
 Status AdminTool::IsCreateRegionInProgress(int64_t region_id, bool& out_create_in_progress) {
-  pb::coordinator::QueryRegionRequest req;
-  req.set_region_id(region_id);
+  QueryRegionRpc rpc;
+  rpc.MutableRequest()->set_region_id(region_id);
 
-  pb::coordinator::QueryRegionResponse resp;
-  DINGO_RETURN_NOT_OK(coordinator_proxy_->QueryRegion(req, resp));
+  Status status = stub_.GetCoordinatorRpcController()->SyncCall(rpc);
+  if (!status.ok()) {
+    return status;
+  }
 
-  CHECK(resp.has_region()) << "query region internal error, req:" << req.DebugString()
-                           << ", resp:" << resp.DebugString();
-  CHECK_EQ(resp.region().id(), region_id);
-  out_create_in_progress = (resp.region().state() == pb::common::REGION_NEW);
+  CHECK(rpc.Response()->has_region()) << "query region internal error, req:" << rpc.Request()->DebugString()
+                                      << ", resp:" << rpc.Response()->DebugString();
+  CHECK_EQ(rpc.Response()->region().id(), region_id);
+  out_create_in_progress = (rpc.Response()->region().state() == pb::common::REGION_NEW);
 
   return Status::OK();
 }
 
 Status AdminTool::DropRegion(int64_t region_id) {
-  pb::coordinator::DropRegionRequest req;
-  req.set_region_id(region_id);
-  pb::coordinator::DropRegionResponse resp;
-  Status ret = coordinator_proxy_->DropRegion(req, resp);
+  DropRegionRpc rpc;
+  rpc.MutableRequest()->set_region_id(region_id);
 
+  Status ret = stub_.GetCoordinatorRpcController()->SyncCall(rpc);
   if (ret.IsNotFound()) {
     ret = Status::OK();
   }
@@ -82,19 +82,22 @@ Status AdminTool::DropRegion(int64_t region_id) {
 
 Status AdminTool::CreateTableIds(int64_t count, std::vector<int64_t>& out_table_ids) {
   CHECK(count > 0) << "count must greater 0";
-  pb::meta::CreateTableIdsRequest request;
-  pb::meta::CreateTableIdsResponse response;
-
-  auto* schema_id = request.mutable_schema_id();
+  CreateTableIdsRpc rpc;
+  auto* schema_id = rpc.MutableRequest()->mutable_schema_id();
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  request.set_count(count);
-  DINGO_RETURN_NOT_OK(coordinator_proxy_->CreateTableIds(request, response));
-  CHECK_EQ(response.table_ids_size(), count);
+  rpc.MutableRequest()->set_count(count);
 
-  for (const auto& id : response.table_ids()) {
+  Status ret = stub_.GetMetaRpcController()->SyncCall(rpc);
+  if (!ret.ok()) {
+    return ret;
+  }
+
+  CHECK_EQ(rpc.MutableResponse()->table_ids_size(), count);
+
+  for (const auto& id : rpc.MutableResponse()->table_ids()) {
     out_table_ids.push_back(id.entity_id());
   }
 
@@ -106,15 +109,13 @@ Status AdminTool::DropIndex(int64_t index_id) {
     return Status::InvalidArgument("index_id must greater than 0");
   }
 
-  pb::meta::DropIndexRequest request;
-  pb::meta::DropIndexResponse response;
-
-  auto* index_pb = request.mutable_index_id();
+  DropIndexRpc rpc;
+  auto* index_pb = rpc.MutableRequest()->mutable_index_id();
   index_pb->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
   index_pb->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_pb->set_entity_id(index_id);
 
-  return coordinator_proxy_->DropIndex(request, response);
+  return stub_.GetMetaRpcController()->SyncCall(rpc);
 }
 
 }  // namespace sdk

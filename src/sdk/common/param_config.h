@@ -40,6 +40,8 @@ DECLARE_int64(rpc_channel_connect_timeout_ms);
 DECLARE_int64(rpc_max_retry);
 DECLARE_int64(rpc_time_out_ms);
 
+DECLARE_int64(grpc_poll_thread_num);
+
 // each store rpc params, used for store rpc controller
 DECLARE_int64(store_rpc_max_retry);
 DECLARE_int64(store_rpc_retry_delay_ms);

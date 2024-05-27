@@ -19,8 +19,8 @@
 #include <cstdint>
 
 #include "sdk/client_stub.h"
-#include "sdk/store/store_rpc_controller.h"
-#include "sdk/vector/index_service_rpc.h"
+#include "sdk/rpc/index_service_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/vector/vector_task.h"
 
 namespace dingodb {

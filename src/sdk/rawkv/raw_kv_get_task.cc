@@ -17,7 +17,6 @@
 #include "sdk/common/common.h"
 #include "sdk/rawkv/raw_kv_task.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
 
 namespace dingodb {
 namespace sdk {

@@ -15,10 +15,10 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
-#include <iostream>
 #include <memory>
 #include <mutex>
 
+#include "common/logging.h"
 #include "gtest/gtest.h"
 #include "sdk/utils/thread_pool_actuator.h"
 
@@ -27,7 +27,7 @@ namespace sdk {
 
 static const int kThreadNum = 8;
 
-class ThreadPoolActuatorTest : public testing::Test {
+class SDKThreadPoolActuatorTest : public testing::Test {
  public:
   void SetUp() override { actuator = std::make_unique<ThreadPoolActuator>(); }
 
@@ -36,12 +36,12 @@ class ThreadPoolActuatorTest : public testing::Test {
   std::unique_ptr<ThreadPoolActuator> actuator;
 };
 
-TEST_F(ThreadPoolActuatorTest, Start) {
+TEST_F(SDKThreadPoolActuatorTest, Start) {
   bool res = actuator->Start(kThreadNum);
   EXPECT_TRUE(res);
 }
 
-TEST_F(ThreadPoolActuatorTest, Stop) {
+TEST_F(SDKThreadPoolActuatorTest, Stop) {
   bool res = actuator->Start(kThreadNum);
   EXPECT_TRUE(res);
   res = actuator->Stop();
@@ -50,13 +50,13 @@ TEST_F(ThreadPoolActuatorTest, Stop) {
   EXPECT_FALSE(res);
 }
 
-TEST_F(ThreadPoolActuatorTest, ThreadNum) {
+TEST_F(SDKThreadPoolActuatorTest, ThreadNum) {
   bool res = actuator->Start(kThreadNum);
   int num = actuator->ThreadNum();
   EXPECT_EQ(num, kThreadNum);
 }
 
-TEST_F(ThreadPoolActuatorTest, Execute) {
+TEST_F(SDKThreadPoolActuatorTest, Execute) {
   bool res = actuator->Start(kThreadNum);
   int num = actuator->ThreadNum();
   EXPECT_EQ(num, kThreadNum);
@@ -85,7 +85,7 @@ TEST_F(ThreadPoolActuatorTest, Execute) {
   EXPECT_EQ(count.load(), 0);
 }
 
-TEST_F(ThreadPoolActuatorTest, Schedule) {
+TEST_F(SDKThreadPoolActuatorTest, Schedule) {
   bool res = actuator->Start(kThreadNum);
 
   std::mutex mutex;
@@ -110,7 +110,7 @@ TEST_F(ThreadPoolActuatorTest, Schedule) {
   {
     std::unique_lock<std::mutex> lg(mutex);
     while (count.load() != 0) {
-      LOG(INFO) << "wait 1 ms" << std::endl;
+      DINGO_LOG(INFO) << "wait 1 ms";
       cond.wait_for(lg, std::chrono::milliseconds(1));
     }
   }

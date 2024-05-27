@@ -16,20 +16,20 @@
 #define DINGODB_SDK_VECTOR_HELPER_H_
 
 #include "glog/logging.h"
-#include "sdk/vector/vector_common.h"
+#include "sdk/vector/vector_codec.h"
 #include "sdk/vector/vector_index.h"
-#include "vector/codec.h"
 
 namespace dingodb {
 namespace sdk {
 namespace vector_helper {
+
 static std::string VectorIdToRangeKey(const VectorIndex& vector_index, int64_t vector_id) {
   int64_t part_id = vector_index.GetPartitionId(vector_id);
   CHECK_GT(part_id, 0);
   CHECK_GT(vector_id, 0);
 
   std::string tmp_key;
-  VectorCodec::EncodeVectorKey(kVectorPrefix, part_id, vector_id, tmp_key);
+  vector_codec::EncodeVectorKey(kVectorPrefix, part_id, vector_id, tmp_key);
   return std::move(tmp_key);
 }
 }  // namespace vector_helper

@@ -21,14 +21,14 @@
 namespace dingodb {
 namespace sdk {
 
-class TxnBufferTest : public testing::Test {
+class SDKTxnBufferTest : public testing::Test {
  protected:
-  void SetUp() override { txn_buffer.reset(new TxnBuffer()); }
+  void SetUp() override { txn_buffer = std::make_shared<TxnBuffer>(); }
 
   std::shared_ptr<TxnBuffer> txn_buffer;
 };
 
-TEST_F(TxnBufferTest, TestSingleOp) {
+TEST_F(SDKTxnBufferTest, TestSingleOp) {
   TxnMutation mutation;
   Status tmp;
   {
@@ -89,7 +89,7 @@ TEST_F(TxnBufferTest, TestSingleOp) {
   }
 }
 
-TEST_F(TxnBufferTest, Range) {
+TEST_F(SDKTxnBufferTest, Range) {
   Status tmp;
   // put
   tmp = txn_buffer->Put("a", "ra");
@@ -110,7 +110,7 @@ TEST_F(TxnBufferTest, Range) {
   EXPECT_EQ(mutations.size(), 2);
 
   std::set<std::string> to_check = {"a", "b", "c"};
-  for(const auto& mutation : mutations) {
+  for (const auto& mutation : mutations) {
     to_check.erase(mutation.key);
   }
   EXPECT_EQ(to_check.size(), 1);

@@ -15,7 +15,6 @@
 #include <cstdint>
 #include <memory>
 
-#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -23,8 +22,9 @@
 #include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/common/common.h"
+#include "sdk/rpc/coordinator_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
 #include "sdk/transaction/txn_impl.h"
 #include "test_base.h"
 #include "test_common.h"
@@ -34,10 +34,10 @@ static const int64_t kStep = 10;
 namespace dingodb {
 namespace sdk {
 
-class TxnImplTest : public TestBase {
+class SDKTxnImplTest : public TestBase {
  public:
-  TxnImplTest() = default;
-  ~TxnImplTest() override = default;
+  SDKTxnImplTest() = default;
+  ~SDKTxnImplTest() override = default;
 
   // TODO: test readcommited isolation
   void SetUp() override {
@@ -45,17 +45,17 @@ class TxnImplTest : public TestBase {
     options.kind = kOptimistic;
     options.isolation = kSnapshotIsolation;
 
-    ON_CALL(*coordinator_proxy, TsoService)
-        .WillByDefault([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-          EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-          EXPECT_EQ(request.count(), 1);
-          auto* ts = response.mutable_start_timestamp();
-          *ts = CurrentFakeTso();
+    ON_CALL(*meta_rpc_controller, SyncCall).WillByDefault([&](Rpc& rpc) {
+      auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+      EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+      EXPECT_EQ(t_rpc->Request()->count(), 1);
+      auto* ts = t_rpc->MutableResponse()->mutable_start_timestamp();
+      *ts = CurrentFakeTso();
 
-          return Status::OK();
-        });
+      return Status::OK();
+    });
 
-    EXPECT_CALL(*coordinator_proxy, TsoService).Times(testing::AnyNumber());
+    EXPECT_CALL(*meta_rpc_controller, SyncCall).Times(testing::AnyNumber());
 
     ON_CALL(*txn_lock_resolver, ResolveLock).WillByDefault(testing::Return(Status::OK()));
   }
@@ -63,28 +63,26 @@ class TxnImplTest : public TestBase {
   TransactionOptions options;
 };
 
-TEST_F(TxnImplTest, BeginFail) {
-  EXPECT_CALL(*coordinator_proxy, TsoService)
-      .WillOnce([&](const pb::meta::TsoRequest& request, pb::meta::TsoResponse& response) {
-        EXPECT_EQ(request.op_type(), pb::meta::OP_GEN_TSO);
-        EXPECT_EQ(request.count(), 1);
-        (void)response;
-
-        return Status::NetworkError("mock error");
-      });
+TEST_F(SDKTxnImplTest, BeginFail) {
+  ON_CALL(*meta_rpc_controller, SyncCall).WillByDefault([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<TsoServiceRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->op_type(), pb::meta::OP_GEN_TSO);
+    EXPECT_EQ(t_rpc->Request()->count(), 1);
+    return Status::NetworkError("mock error");
+  });
 
   Transaction* txn = nullptr;
   EXPECT_FALSE(client->NewTransaction(options, &txn).ok());
   delete txn;
 }
 
-TEST_F(TxnImplTest, BeginSuccess) {
+TEST_F(SDKTxnImplTest, BeginSuccess) {
   Transaction* txn;
   EXPECT_TRUE(client->NewTransaction(options, &txn).ok());
   delete txn;
 }
 
-TEST_F(TxnImplTest, Get) {
+TEST_F(SDKTxnImplTest, Get) {
   std::string key = "b";
   std::string value;
 
@@ -94,7 +92,7 @@ TEST_F(TxnImplTest, Get) {
 
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -119,10 +117,10 @@ TEST_F(TxnImplTest, Get) {
   EXPECT_EQ(value, "pong");
 }
 
-TEST_F(TxnImplTest, SingleOP) {
+TEST_F(SDKTxnImplTest, SingleOP) {
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -182,7 +180,7 @@ TEST_F(TxnImplTest, SingleOP) {
   }
 }
 
-TEST_F(TxnImplTest, BatchGet) {
+TEST_F(SDKTxnImplTest, BatchGet) {
   std::vector<std::string> keys;
   keys.emplace_back("b");
   keys.emplace_back("d");
@@ -190,7 +188,7 @@ TEST_F(TxnImplTest, BatchGet) {
 
   auto txn = NewTransactionImpl(options);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* txn_rpc = dynamic_cast<TxnBatchGetRpc*>(&rpc);
     CHECK_NOTNULL(txn_rpc);
 
@@ -228,13 +226,13 @@ TEST_F(TxnImplTest, BatchGet) {
   }
 }
 
-TEST_F(TxnImplTest, BatchGetFromBuffer) {
+TEST_F(SDKTxnImplTest, BatchGetFromBuffer) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
   kvs.push_back({"f", "f"});
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).Times(0);
+  EXPECT_CALL(*store_rpc_client, SendRpc).Times(0);
 
   auto txn = NewTransactionImpl(options);
 
@@ -257,7 +255,7 @@ TEST_F(TxnImplTest, BatchGetFromBuffer) {
   }
 }
 
-TEST_F(TxnImplTest, BatchOp) {
+TEST_F(SDKTxnImplTest, BatchOp) {
   std::vector<KVPair> kvs;
   kvs.push_back({"b", "b"});
   kvs.push_back({"d", "d"});
@@ -269,7 +267,7 @@ TEST_F(TxnImplTest, BatchOp) {
     keys.push_back(kv.key);
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).Times(0);
+  EXPECT_CALL(*store_rpc_client, SendRpc).Times(0);
 
   auto txn = NewTransactionImpl(options);
 
@@ -305,8 +303,8 @@ TEST_F(TxnImplTest, BatchOp) {
   }
 }
 
-TEST_F(TxnImplTest, CommitEmpty) {
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).Times(0);
+TEST_F(SDKTxnImplTest, CommitEmpty) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).Times(0);
 
   auto txn = NewTransactionImpl(options);
 
@@ -320,7 +318,7 @@ TEST_F(TxnImplTest, CommitEmpty) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kCommitted);
 }
 
-TEST_F(TxnImplTest, CommitWithData) {
+TEST_F(SDKTxnImplTest, CommitWithData) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -335,7 +333,7 @@ TEST_F(TxnImplTest, CommitWithData) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr == txn_rpc) {
       // commit
@@ -386,7 +384,7 @@ TEST_F(TxnImplTest, CommitWithData) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kCommitted);
 }
 
-TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
+TEST_F(SDKTxnImplTest, PrimaryKeyLockConflict) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -404,7 +402,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
   auto mock_lock = PrepareLockInfo();
   mock_lock.set_key(txn->TEST_GetPrimaryKey());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
@@ -464,7 +462,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflict) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kCommitted);
 }
 
-TEST_F(TxnImplTest, PrimaryKeyLockConflictExceed) {
+TEST_F(SDKTxnImplTest, PrimaryKeyLockConflictExceed) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -482,7 +480,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflictExceed) {
   auto mock_lock = PrepareLockInfo();
   mock_lock.set_key(txn->TEST_GetPrimaryKey());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     // precommit
     CHECK_NOTNULL(txn_rpc);
@@ -516,7 +514,7 @@ TEST_F(TxnImplTest, PrimaryKeyLockConflictExceed) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kPreCommitting);
 }
 
-TEST_F(TxnImplTest, PrimaryKeyWriteLockConfict) {
+TEST_F(SDKTxnImplTest, PrimaryKeyWriteLockConfict) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -536,7 +534,7 @@ TEST_F(TxnImplTest, PrimaryKeyWriteLockConfict) {
   conflict.set_start_ts(txn->TEST_GetStartTs() + kStep);
   conflict.set_key(txn->TEST_GetPrimaryKey());
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     // precommit
     CHECK_NOTNULL(txn_rpc);
@@ -565,7 +563,7 @@ TEST_F(TxnImplTest, PrimaryKeyWriteLockConfict) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kPreCommitting);
 }
 
-TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
+TEST_F(SDKTxnImplTest, PreWriteSecondLockConflict) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -580,7 +578,7 @@ TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
@@ -627,7 +625,7 @@ TEST_F(TxnImplTest, PreWriteSecondLockConflict) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kPreCommitting);
 }
 
-TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
+TEST_F(SDKTxnImplTest, PreWriteSecondWriteConflict) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -642,7 +640,7 @@ TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
         // precommit
@@ -694,7 +692,7 @@ TEST_F(TxnImplTest, PreWriteSecondWriteConflict) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kPreCommitting);
 }
 
-TEST_F(TxnImplTest, CommitPrimaryKeyMeetRollback) {
+TEST_F(SDKTxnImplTest, CommitPrimaryKeyMeetRollback) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -709,7 +707,7 @@ TEST_F(TxnImplTest, CommitPrimaryKeyMeetRollback) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -753,7 +751,7 @@ TEST_F(TxnImplTest, CommitPrimaryKeyMeetRollback) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kRollbackted);
 }
 
-TEST_F(TxnImplTest, CommitSencondError) {
+TEST_F(SDKTxnImplTest, CommitSencondError) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -768,7 +766,7 @@ TEST_F(TxnImplTest, CommitSencondError) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -805,7 +803,7 @@ TEST_F(TxnImplTest, CommitSencondError) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kCommitted);
 }
 
-TEST_F(TxnImplTest, PreCommitFailThenRollback) {
+TEST_F(SDKTxnImplTest, PreCommitFailThenRollback) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -820,7 +818,7 @@ TEST_F(TxnImplTest, PreCommitFailThenRollback) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -870,7 +868,7 @@ TEST_F(TxnImplTest, PreCommitFailThenRollback) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kRollbackted);
 }
 
-TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
+TEST_F(SDKTxnImplTest, RollbackPrimaryKeyFail) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -885,7 +883,7 @@ TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit
@@ -942,7 +940,7 @@ TEST_F(TxnImplTest, RollbackPrimaryKeyFail) {
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kRollbacking);
 }
 
-TEST_F(TxnImplTest, RollbackSecondKeysFail) {
+TEST_F(SDKTxnImplTest, RollbackSecondKeysFail) {
   auto txn = NewTransactionImpl(options);
 
   EXPECT_EQ(txn->TEST_GetTransactionState(), TransactionState::kActive);
@@ -957,7 +955,7 @@ TEST_F(TxnImplTest, RollbackSecondKeysFail) {
     txn->PutIfAbsent("d", "d");
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     TxnPrewriteRpc* txn_rpc = dynamic_cast<TxnPrewriteRpc*>(&rpc);
     if (nullptr != txn_rpc) {
       // precommit

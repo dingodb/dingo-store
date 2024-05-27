@@ -15,9 +15,9 @@
 #include <cstdint>
 #include <vector>
 
-#include "common/logging.h"
 #include "gtest/gtest.h"
-#include "mock_coordinator_proxy.h"
+#include "sdk/rpc/brpc/coordinator_rpc.h"
+#include "sdk/rpc/coordinator_rpc.h"
 #include "sdk/vector.h"
 #include "sdk/vector/vector_common.h"
 #include "sdk/vector/vector_index_cache.h"
@@ -26,7 +26,6 @@
 
 namespace dingodb {
 namespace sdk {
-
 
 TEST(SDKVectorIndexCacheKeyTest, TestEncodeDecodeVectorIndexCacheKey) {
   int64_t schema_id = 123;
@@ -54,12 +53,12 @@ class SDKVectorIndexCacheTest : public TestBase {
 
 TEST_F(SDKVectorIndexCacheTest, GetIndexIdByNameNotOK) {
   std::string index_name = "test";
-  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
-      .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_name(), index_name);
-        return Status::RemoteError("mock error");
-      });
+
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexByNameRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_name(), index_name);
+    return Status::RemoteError("mock error");
+  });
 
   int64_t id = -1;
   Status status = cache->GetIndexIdByKey(EncodeVectorIndexCacheKey(schema_id, index_name), id);
@@ -70,12 +69,12 @@ TEST_F(SDKVectorIndexCacheTest, GetIndexIdByNameNotOK) {
 
 TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
   std::string index_name = "test";
-  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
-      .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_name(), index_name);
-        return Status::RemoteError("mock error");
-      });
+
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexByNameRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_name(), index_name);
+    return Status::RemoteError("mock error");
+  });
 
   std::shared_ptr<VectorIndex> index;
   Status status = cache->GetVectorIndexByKey(EncodeVectorIndexCacheKey(schema_id, index_name), index);
@@ -85,15 +84,15 @@ TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyNotOK) {
 
 TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByIdNotOK) {
   int64_t index_id = 2;
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
-        EXPECT_EQ(request.index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-        EXPECT_EQ(request.index_id().entity_id(), index_id);
 
-        return Status::RemoteError("mock error");
-      });
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
+    EXPECT_EQ(t_rpc->Request()->index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), index_id);
+
+    return Status::RemoteError("mock error");
+  });
 
   std::shared_ptr<VectorIndex> index;
   Status status = cache->GetVectorIndexById(index_id, index);
@@ -108,25 +107,21 @@ TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyOK) {
   std::vector<int64_t> range_seperator_ids = {5, 10, 20};
   FlatParam flat_param(1000, dingodb::sdk::MetricType::kL2);
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
-      .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
-        EXPECT_EQ(request.index_name(), index_name);
-        FillVectorIndexId(response.mutable_index_definition_with_id()->mutable_index_id(), index_id, schema_id);
-        auto* defination = response.mutable_index_definition_with_id()->mutable_index_definition();
-        defination->set_name(index_name);
-        FillRangePartitionRule(defination->mutable_index_partition(), range_seperator_ids, index_and_part_ids);
-        defination->set_replica(3);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexByNameRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_name(), index_name);
+    FillVectorIndexId(t_rpc->MutableResponse()->mutable_index_definition_with_id()->mutable_index_id(), index_id,
+                      schema_id);
+    auto* defination = t_rpc->MutableResponse()->mutable_index_definition_with_id()->mutable_index_definition();
+    defination->set_name(index_name);
+    FillRangePartitionRule(defination->mutable_index_partition(), range_seperator_ids, index_and_part_ids);
+    defination->set_replica(3);
 
-        auto* index_parameter = defination->mutable_index_parameter();
-        index_parameter->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
-        FillFlatParmeter(index_parameter->mutable_vector_index_parameter(), flat_param);
-        return Status::OK();
-      })
-      .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_name(), index_name);
-        return Status::RemoteError("mock error");
-      });
+    auto* index_parameter = defination->mutable_index_parameter();
+    index_parameter->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+    FillFlatParmeter(index_parameter->mutable_vector_index_parameter(), flat_param);
+    return Status::OK();
+  });
 
   {
     std::shared_ptr<VectorIndex> index;
@@ -150,12 +145,19 @@ TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByKeyOK) {
     EXPECT_EQ(index->GetVectorIndexType(), flat_param.Type());
   }
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
-        EXPECT_EQ(request.index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-        EXPECT_EQ(request.index_id().entity_id(), index_id);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GetIndexByNameRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->index_name(), index_name);
+        return Status::RemoteError("mock error");
+      })
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+
+        EXPECT_EQ(t_rpc->Request()->index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
+        EXPECT_EQ(t_rpc->Request()->index_id().parent_entity_id(),
+                  ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+        EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), index_id);
 
         return Status::RemoteError("mock error");
       });
@@ -184,31 +186,24 @@ TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByIdOK) {
   std::vector<int64_t> range_seperator_ids = {5, 10, 20};
   FlatParam flat_param(1000, dingodb::sdk::MetricType::kL2);
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexById)
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
-        EXPECT_EQ(request.index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-        EXPECT_EQ(request.index_id().entity_id(), index_id);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
+    EXPECT_EQ(t_rpc->Request()->index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+    EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), index_id);
 
-        FillVectorIndexId(response.mutable_index_definition_with_id()->mutable_index_id(), index_id, schema_id);
-        auto* defination = response.mutable_index_definition_with_id()->mutable_index_definition();
-        defination->set_name(index_name);
-        FillRangePartitionRule(defination->mutable_index_partition(), range_seperator_ids, index_and_part_ids);
-        defination->set_replica(3);
+    FillVectorIndexId(t_rpc->MutableResponse()->mutable_index_definition_with_id()->mutable_index_id(), index_id,
+                      schema_id);
+    auto* defination = t_rpc->MutableResponse()->mutable_index_definition_with_id()->mutable_index_definition();
+    defination->set_name(index_name);
+    FillRangePartitionRule(defination->mutable_index_partition(), range_seperator_ids, index_and_part_ids);
+    defination->set_replica(3);
 
-        auto* index_parameter = defination->mutable_index_parameter();
-        index_parameter->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
-        FillFlatParmeter(index_parameter->mutable_vector_index_parameter(), flat_param);
-        return Status::OK();
-      })
-      .WillOnce([&](const pb::meta::GetIndexRequest& request, pb::meta::GetIndexResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
-        EXPECT_EQ(request.index_id().parent_entity_id(), ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-        EXPECT_EQ(request.index_id().entity_id(), index_id);
-
-        return Status::RemoteError("mock error");
-      });
+    auto* index_parameter = defination->mutable_index_parameter();
+    index_parameter->set_index_type(pb::common::IndexType::INDEX_TYPE_VECTOR);
+    FillFlatParmeter(index_parameter->mutable_vector_index_parameter(), flat_param);
+    return Status::OK();
+  });
 
   {
     std::shared_ptr<VectorIndex> index;
@@ -232,10 +227,19 @@ TEST_F(SDKVectorIndexCacheTest, GetVectorIndexByIdOK) {
     EXPECT_EQ(index->GetVectorIndexType(), flat_param.Type());
   }
 
-  EXPECT_CALL(*coordinator_proxy, GetIndexByName)
-      .WillOnce([&](const pb::meta::GetIndexByNameRequest& request, pb::meta::GetIndexByNameResponse& response) {
-        (void)response;
-        EXPECT_EQ(request.index_name(), index_name);
+  EXPECT_CALL(*meta_rpc_controller, SyncCall)
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GetIndexRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->index_id().entity_type(), pb::meta::EntityType::ENTITY_TYPE_INDEX);
+        EXPECT_EQ(t_rpc->Request()->index_id().parent_entity_id(),
+                  ::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+        EXPECT_EQ(t_rpc->Request()->index_id().entity_id(), index_id);
+
+        return Status::RemoteError("mock error");
+      })
+      .WillOnce([&](Rpc& rpc) {
+        auto* t_rpc = dynamic_cast<GetIndexByNameRpc*>(&rpc);
+        EXPECT_EQ(t_rpc->Request()->index_name(), index_name);
         return Status::RemoteError("mock error");
       });
 

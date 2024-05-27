@@ -18,20 +18,19 @@
 #include <string>
 
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
-#include "sdk/store/store_rpc.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/utils/async_util.h"
+#include "sdk/utils/scoped_cleanup.h"
 
 namespace dingodb {
 namespace sdk {
 
-RawKvRegionScannerImpl::RawKvRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region, std::string start_key,
-                                     std::string end_key)
+RawKvRegionScannerImpl::RawKvRegionScannerImpl(const ClientStub& stub, std::shared_ptr<Region> region,
+                                               std::string start_key, std::string end_key)
     : RegionScanner(stub, std::move(region)),
       start_key_(std::move(start_key)),
       end_key_(std::move(end_key)),
@@ -75,8 +74,8 @@ void RawKvRegionScannerImpl::AsyncOpen(StatusCallback cb) {
 }
 
 void RawKvRegionScannerImpl::AsyncOpenCallback(Status status, StoreRpcController* controller, KvScanBeginRpc* rpc,
-                                          StatusCallback cb) {
-  ScopeGuard sg([controller, rpc] {
+                                               StatusCallback cb) {
+  SCOPED_CLEANUP({
     delete controller;
     delete rpc;
   });
@@ -120,8 +119,8 @@ void RawKvRegionScannerImpl::AsyncClose(StatusCallback cb) {
 }
 
 void RawKvRegionScannerImpl::AsyncCloseCallback(Status status, std::string scan_id, StoreRpcController* controller,
-                                           KvScanReleaseRpc* rpc, StatusCallback cb) {
-  ScopeGuard sg([controller, rpc] {
+                                                KvScanReleaseRpc* rpc, StatusCallback cb) {
+  SCOPED_CLEANUP({
     delete controller;
     delete rpc;
   });
@@ -162,9 +161,10 @@ void RawKvRegionScannerImpl::AsyncNextBatch(std::vector<KVPair>& kvs, StatusCall
   });
 }
 
-void RawKvRegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcController* controller, KvScanContinueRpc* rpc,
-                                                  std::vector<KVPair>& kvs, StatusCallback cb) {
-  ScopeGuard sg([controller, rpc] {
+void RawKvRegionScannerImpl::KvScanContinueRpcCallback(Status status, StoreRpcController* controller,
+                                                       KvScanContinueRpc* rpc, std::vector<KVPair>& kvs,
+                                                       StatusCallback cb) {
+  SCOPED_CLEANUP({
     delete controller;
     delete rpc;
   });
@@ -221,7 +221,7 @@ RawKvRegionScannerFactoryImpl::RawKvRegionScannerFactoryImpl() = default;
 RawKvRegionScannerFactoryImpl::~RawKvRegionScannerFactoryImpl() = default;
 
 Status RawKvRegionScannerFactoryImpl::NewRegionScanner(const ScannerOptions& options,
-                                                  std::shared_ptr<RegionScanner>& scanner) {
+                                                       std::shared_ptr<RegionScanner>& scanner) {
   CHECK(options.start_key < options.end_key);
   CHECK(options.start_key >= options.region->Range().start_key())
       << fmt::format("start_key:{} should greater than region range start_key:{}", options.start_key,

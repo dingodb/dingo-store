@@ -16,8 +16,9 @@
 #define DINGODB_SDK_TRANSACTION_LOCK_RESOLVER_H_
 
 #include <cstdint>
+
 #include "fmt/core.h"
-#include "proto/store.pb.h"
+#include "sdk/port/store.pb.h"
 #include "sdk/status.h"
 
 namespace dingodb {
@@ -51,7 +52,8 @@ class TxnLockResolver {
   virtual Status ResolveLock(const pb::store::LockInfo& lock_info, int64_t caller_start_ts);
 
  private:
-  Status CheckTxnStatus(int64_t txn_start_ts, const std::string& txn_primary_key, int64_t caller_start_ts, TxnStatus& txn_status);
+  Status CheckTxnStatus(int64_t txn_start_ts, const std::string& txn_primary_key, int64_t caller_start_ts,
+                        TxnStatus& txn_status);
 
   static Status ProcessTxnCheckStatusResponse(const pb::store::TxnCheckTxnStatusResponse& response,
                                               TxnStatus& txn_status);

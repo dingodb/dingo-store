@@ -16,8 +16,6 @@
 #define DINGODB_SDK_CLIENT_H_
 
 #include <cstdint>
-#include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -34,6 +32,7 @@ class TransactionOptions;
 class Transaction;
 class VectorIndexCreator;
 class VectorClient;
+class EndPoint;
 
 /// @brief Callers must keep client valid in it's lifetime in order to interact with the cluster,
 class Client {
@@ -45,7 +44,11 @@ class Client {
 
   // NOTE:: Caller must delete *client when it is no longer needed.
   // TODO: add client builder if we have more options
-  static Status BuildAndInitLog(std::string naming_service_url, Client** client);
+  // addrs like 127.0.0.1:8201,127.0.0.1:8202,127.0.0.1:8203
+  static Status BuildAndInitLog(std::string addrs, Client** client);
+
+  // NOTE:: Caller must delete *client when it is no longer needed.
+  static Status BuildFromAddrs(std::string addrs, Client** client);
 
   // NOTE:: Caller must delete *client when it is no longer needed.
   static Status Build(std::string naming_service_url, Client** client);
@@ -85,7 +88,7 @@ class Client {
 
   Client();
 
-  Status Init(std::string naming_service_url);
+  Status Init(const std::vector<EndPoint>& endpoints);
 
   // own
   class Data;

@@ -17,11 +17,10 @@
 #include <cstdint>
 
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
-#include "sdk/vector/index_service_rpc.h"
-#include "vector/codec.h"
+#include "sdk/utils/scoped_cleanup.h"
+#include "sdk/vector/vector_codec.h"
 
 namespace dingodb {
 namespace sdk {
@@ -68,7 +67,7 @@ void VectorCountTask::DoAsync() {
 }
 
 void VectorCountTask::SubTaskCallback(Status status, VectorCountPartTask* sub_task) {
-  DEFER(delete sub_task);
+  SCOPED_CLEANUP({ delete sub_task; });
 
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();
@@ -99,6 +98,18 @@ void VectorCountTask::SubTaskCallback(Status status, VectorCountPartTask* sub_ta
   }
 }
 
+static void DecodeRangeToVectorId(const pb::common::Range& range, int64_t& begin_vector_id, int64_t& end_vector_id) {
+  begin_vector_id = vector_codec::DecodeVectorId(range.start_key());
+  int64_t temp_end_vector_id = vector_codec::DecodeVectorId(range.end_key());
+  if (temp_end_vector_id > 0) {
+    end_vector_id = temp_end_vector_id;
+  } else {
+    if (vector_codec::DecodePartitionId(range.end_key()) > vector_codec::DecodePartitionId(range.start_key())) {
+      end_vector_id = INT64_MAX;
+    }
+  }
+}
+
 void VectorCountPartTask::DoAsync() {
   const auto& range = vector_index_->GetPartitionRange(part_id_);
   std::vector<std::shared_ptr<Region>> partition_regions;
@@ -119,7 +130,7 @@ void VectorCountPartTask::DoAsync() {
   for (const auto& region : partition_regions) {
     int64_t region_start_vector_id;
     int64_t region_end_vector_id;
-    VectorCodec::DecodeRangeToVectorId(region->Range(), region_start_vector_id, region_end_vector_id);
+    DecodeRangeToVectorId(region->Range(), region_start_vector_id, region_end_vector_id);
 
     auto start = std::max(region_start_vector_id, start_vector_id_);
     auto end = std::min(region_end_vector_id, end_vector_id_);

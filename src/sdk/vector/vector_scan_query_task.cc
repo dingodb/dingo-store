@@ -14,10 +14,9 @@
 
 #include "sdk/vector/vector_scan_query_task.h"
 
-#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "sdk/common/common.h"
-#include "sdk/vector/index_service_rpc.h"
+#include "sdk/utils/scoped_cleanup.h"
 #include "sdk/vector/vector_common.h"
 
 namespace dingodb {
@@ -77,7 +76,7 @@ void VectorScanQueryTask::DoAsync() {
 }
 
 void VectorScanQueryTask::SubTaskCallback(Status status, VectorScanQueryPartTask* sub_task) {
-  DEFER(delete sub_task);
+  SCOPED_CLEANUP({delete sub_task;});
 
   if (!status.ok()) {
     DINGO_LOG(WARNING) << "sub_task: " << sub_task->Name() << " fail: " << status.ToString();

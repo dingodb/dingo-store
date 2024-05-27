@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto benchmark = dingodb::benchmark::Benchmark::New(environment.GetCoordinatorProxy(), environment.GetClient());
+  auto benchmark = dingodb::benchmark::Benchmark::New(environment.GetCoordinatorInteraction(), environment.GetClient());
 
   environment.AddBenchmark(benchmark);
 

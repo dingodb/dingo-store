@@ -12,20 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "common/logging.h"
-#include "common/synchronization.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
 #include "sdk/status.h"
 #include "sdk/types.h"
+#include "sdk/utils/scoped_cleanup.h"
 #include "sdk/vector.h"
 
-using dingodb::sdk::Status;
+using namespace dingodb::sdk;
 
 DEFINE_string(coordinator_url, "", "coordinator url");
 static std::shared_ptr<dingodb::sdk::Client> g_client;
@@ -47,7 +48,7 @@ static void PrepareVectorIndex() {
   Status built = g_client->NewVectorIndexCreator(&creator);
   CHECK(built.IsOK()) << "dingo creator build fail:" << built.ToString();
   CHECK_NOTNULL(creator);
-  dingodb::ScopeGuard guard([&]() { delete creator; });
+  SCOPED_CLEANUP({ delete creator; });
 
   dingodb::sdk::VectorScalarSchema schema;
   // NOTE: may be add more
@@ -697,7 +698,7 @@ int main(int argc, char* argv[]) {
       Status built = g_client->NewVectorIndexCreator(&creator);
       CHECK(built.IsOK()) << "dingo creator build fail:" << built.ToString();
       CHECK_NOTNULL(creator);
-      dingodb::ScopeGuard guard([&]() { delete creator; });
+      SCOPED_CLEANUP({ delete creator; });
 
       Status create = creator->SetSchemaId(g_schema_id)
                           .SetName(g_index_name)

@@ -58,7 +58,6 @@ class RecordEncoder {
 
   void Init(int schema_version, std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas, long common_id);
 
-  int Encode(char prefix, const std::vector<std::any>& record, pb::common::KeyValue& key_value /*output*/);
   int Encode(char prefix, const std::vector<std::any>& record, std::string& key, std::string& value);
 
   int EncodeKey(char prefix, const std::vector<std::any>& record, std::string& output);

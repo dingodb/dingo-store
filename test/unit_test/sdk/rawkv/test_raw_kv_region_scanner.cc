@@ -18,14 +18,13 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "mock_region_scanner.h"
 #include "proto/error.pb.h"
 #include "sdk/client.h"
 #include "sdk/common/common.h"
 #include "sdk/common/param_config.h"
 #include "sdk/rawkv/raw_kv_region_scanner_impl.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/utils/async_util.h"
 #include "test_base.h"
 #include "test_common.h"
@@ -33,11 +32,11 @@
 namespace dingodb {
 namespace sdk {
 
-class RawKvRegionScannerImplTest : public TestBase {
+class SDKRawKvRegionScannerImplTest : public TestBase {
  public:
-  RawKvRegionScannerImplTest() = default;
+  SDKRawKvRegionScannerImplTest() = default;
 
-  ~RawKvRegionScannerImplTest() override = default;
+  ~SDKRawKvRegionScannerImplTest() override = default;
 
   void SetUp() override {
     meta_cache->MaybeAddRegion(RegionA2C());
@@ -61,7 +60,7 @@ static Status CloseScanner(RawKvRegionScannerImpl& scanner) {
   return close;
 }
 
-TEST_F(RawKvRegionScannerImplTest, OpenCloseSuccess) {
+TEST_F(SDKRawKvRegionScannerImplTest, OpenCloseSuccess) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
@@ -70,7 +69,7 @@ TEST_F(RawKvRegionScannerImplTest, OpenCloseSuccess) {
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
@@ -127,14 +126,14 @@ TEST_F(RawKvRegionScannerImplTest, OpenCloseSuccess) {
   CloseScanner(scanner);
 }
 
-TEST_F(RawKvRegionScannerImplTest, OpenFail) {
+TEST_F(SDKRawKvRegionScannerImplTest, OpenFail) {
   std::shared_ptr<Region> region;
   CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
     CHECK_NOTNULL(kv_rpc);
 
@@ -152,7 +151,7 @@ TEST_F(RawKvRegionScannerImplTest, OpenFail) {
   EXPECT_FALSE(scanner.TEST_IsOpen());
 }
 
-TEST_F(RawKvRegionScannerImplTest, OpenSuccessCloseFail) {
+TEST_F(SDKRawKvRegionScannerImplTest, OpenSuccessCloseFail) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
@@ -161,7 +160,7 @@ TEST_F(RawKvRegionScannerImplTest, OpenSuccessCloseFail) {
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
@@ -191,7 +190,7 @@ TEST_F(RawKvRegionScannerImplTest, OpenSuccessCloseFail) {
   EXPECT_FALSE(scanner.TEST_IsOpen());
 }
 
-TEST_F(RawKvRegionScannerImplTest, SetBatchSize) {
+TEST_F(SDKRawKvRegionScannerImplTest, SetBatchSize) {
   std::shared_ptr<Region> region;
   CHECK(meta_cache->LookupRegionBetweenRange("a", "c", region).ok());
   CHECK_NOTNULL(region.get());
@@ -210,7 +209,7 @@ TEST_F(RawKvRegionScannerImplTest, SetBatchSize) {
   EXPECT_EQ(scanner.GetBatchSize(), 20);
 }
 
-TEST_F(RawKvRegionScannerImplTest, NextBatchFail) {
+TEST_F(SDKRawKvRegionScannerImplTest, NextBatchFail) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
@@ -219,7 +218,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchFail) {
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
@@ -260,7 +259,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchFail) {
   EXPECT_EQ(kvs.size(), 0);
 }
 
-TEST_F(RawKvRegionScannerImplTest, NextBatchNoData) {
+TEST_F(SDKRawKvRegionScannerImplTest, NextBatchNoData) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
@@ -269,7 +268,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchNoData) {
 
   std::string scan_id = "101";
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
@@ -309,7 +308,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchNoData) {
   EXPECT_FALSE(scanner.HasMore());
 }
 
-TEST_F(RawKvRegionScannerImplTest, NextBatchWithData) {
+TEST_F(SDKRawKvRegionScannerImplTest, NextBatchWithData) {
   testing::InSequence s;
 
   std::shared_ptr<Region> region;
@@ -324,7 +323,7 @@ TEST_F(RawKvRegionScannerImplTest, NextBatchWithData) {
   int iter = 0;
   int iter_before = 0;
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvScanBeginRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);

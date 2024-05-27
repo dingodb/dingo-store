@@ -14,30 +14,26 @@
 
 #include <memory>
 
-#include "brpc/channel.h"
-#include "common/logging.h"
 #include "glog/logging.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "mock_rpc_interaction.h"
 #include "mock_store_rpc_controller.h"
 #include "proto/error.pb.h"
 #include "sdk/common/common.h"
-#include "sdk/meta_cache.h"
 #include "sdk/region.h"
 #include "sdk/rpc/rpc.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/store_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "test_base.h"
 #include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
 
-class StoreRpcControllerTest : public TestBase {};
+class SDKStoreRpcControllerTest : public TestBase {};
 
-TEST_F(StoreRpcControllerTest, CallSuccess) {
+TEST_F(SDKStoreRpcControllerTest, CallSuccess) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -48,7 +44,7 @@ TEST_F(StoreRpcControllerTest, CallSuccess) {
 
   StoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(get_rpc);
     get_rpc->MutableResponse()->set_value("pong");
@@ -62,7 +58,7 @@ TEST_F(StoreRpcControllerTest, CallSuccess) {
   EXPECT_EQ(rpc.Response()->value(), "pong");
 }
 
-TEST_F(StoreRpcControllerTest, RegionIsStale) {
+TEST_F(SDKStoreRpcControllerTest, RegionIsStale) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -80,8 +76,8 @@ TEST_F(StoreRpcControllerTest, RegionIsStale) {
   EXPECT_TRUE(call.IsIncomplete());
 }
 
-TEST_F(StoreRpcControllerTest, AllReplicaFail) {
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+TEST_F(SDKStoreRpcControllerTest, AllReplicaFail) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     rpc.SetStatus(Status::NetworkError("connect fail"));
     cb();
   });
@@ -102,7 +98,7 @@ TEST_F(StoreRpcControllerTest, AllReplicaFail) {
   EXPECT_TRUE(call.IsAborted());
 }
 
-TEST_F(StoreRpcControllerTest, RaftNotLeaderWithOutHint) {
+TEST_F(SDKStoreRpcControllerTest, RaftNotLeaderWithOutHint) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -121,7 +117,7 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithOutHint) {
     }
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -143,7 +139,7 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithOutHint) {
   EXPECT_FALSE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, RaftNotLeaderWithHint) {
+TEST_F(SDKStoreRpcControllerTest, RaftNotLeaderWithHint) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -166,14 +162,14 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithHint) {
     }
   }
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_get_rpc);
         auto* response = kv_get_rpc->MutableResponse();
         response->mutable_error()->set_errcode(pb::error::Errno::ERAFT_NOTLEADER);
         auto* location = response->mutable_error()->mutable_leader_location();
-        *location = Helper::EndPointToLocation(follower.end_point);
+        *location = EndPointToLocation(follower.end_point);
 
         cb();
       })
@@ -203,7 +199,7 @@ TEST_F(StoreRpcControllerTest, RaftNotLeaderWithHint) {
   EXPECT_FALSE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, RegionVersionWithOutStoreRegionInfo) {
+TEST_F(SDKStoreRpcControllerTest, RegionVersionWithOutStoreRegionInfo) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -214,7 +210,7 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithOutStoreRegionInfo) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -229,7 +225,7 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithOutStoreRegionInfo) {
   EXPECT_TRUE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
+TEST_F(SDKStoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -242,7 +238,7 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
 
   std::shared_ptr<Region> new_region = RegionC2E(2);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -266,7 +262,7 @@ TEST_F(StoreRpcControllerTest, RegionVersionWithStoreRegionInfo) {
   EXPECT_EQ(EpochCompare(region->Epoch(), new_region->Epoch()), 0);
 }
 
-TEST_F(StoreRpcControllerTest, RegionNotFound) {
+TEST_F(SDKStoreRpcControllerTest, RegionNotFound) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -277,7 +273,7 @@ TEST_F(StoreRpcControllerTest, RegionNotFound) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -291,7 +287,7 @@ TEST_F(StoreRpcControllerTest, RegionNotFound) {
   EXPECT_TRUE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, KeyOutOfRange) {
+TEST_F(SDKStoreRpcControllerTest, KeyOutOfRange) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -302,7 +298,7 @@ TEST_F(StoreRpcControllerTest, KeyOutOfRange) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_get_rpc = dynamic_cast<KvGetRpc*>(&rpc);
     CHECK_NOTNULL(kv_get_rpc);
     auto* response = kv_get_rpc->MutableResponse();
@@ -316,7 +312,7 @@ TEST_F(StoreRpcControllerTest, KeyOutOfRange) {
   EXPECT_TRUE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, RequestFull) {
+TEST_F(SDKStoreRpcControllerTest, RequestFull) {
   std::string key = "d";
 
   KvPutRpc rpc;
@@ -331,7 +327,7 @@ TEST_F(StoreRpcControllerTest, RequestFull) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillRepeatedly([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
     auto* response = kv_put_rpc->MutableResponse();
@@ -345,7 +341,7 @@ TEST_F(StoreRpcControllerTest, RequestFull) {
   EXPECT_FALSE(region->IsStale());
 }
 
-TEST_F(StoreRpcControllerTest, RequestFullThenSuccess) {
+TEST_F(SDKStoreRpcControllerTest, RequestFullThenSuccess) {
   KvGetRpc rpc;
   std::string key = "d";
   rpc.MutableRequest()->set_key(key);
@@ -356,7 +352,7 @@ TEST_F(StoreRpcControllerTest, RequestFullThenSuccess) {
 
   StoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc)
+  EXPECT_CALL(*store_rpc_client, SendRpc)
       .WillOnce([&](Rpc& rpc, std::function<void()> cb) {
         auto* kv_rpc = dynamic_cast<KvGetRpc*>(&rpc);
         CHECK_NOTNULL(kv_rpc);
@@ -379,7 +375,7 @@ TEST_F(StoreRpcControllerTest, RequestFullThenSuccess) {
   EXPECT_EQ(rpc.Response()->value(), "pong");
 }
 
-TEST_F(StoreRpcControllerTest, OtherErrorCode) {
+TEST_F(SDKStoreRpcControllerTest, OtherErrorCode) {
   std::string key = "d";
 
   KvPutRpc rpc;
@@ -394,7 +390,7 @@ TEST_F(StoreRpcControllerTest, OtherErrorCode) {
 
   MockStoreRpcController controller(*stub, rpc, region);
 
-  EXPECT_CALL(*store_rpc_interaction, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
+  EXPECT_CALL(*store_rpc_client, SendRpc).WillOnce([&](Rpc& rpc, std::function<void()> cb) {
     auto* kv_put_rpc = dynamic_cast<KvPutRpc*>(&rpc);
     CHECK_NOTNULL(kv_put_rpc);
     auto* response = kv_put_rpc->MutableResponse();

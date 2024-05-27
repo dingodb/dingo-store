@@ -10,7 +10,7 @@ set(SDK_UNIT_TEST_SRCS
   test_store_rpc_controller.cc
   test_thread_pool_actuator.cc
   test_auto_increment_manager.cc
-  expression/test_coding.cc
+  utils/test_coding.cc
   expression/test_langchain_expr_encoder.cc
   ${SDK_UNIT_TEST_RAWKV_SRCS}
   ${SDK_UNIT_TEST_TRANSACTION_SRCS}

@@ -18,13 +18,12 @@
 
 #include "common/logging.h"
 #include "glog/logging.h"
-#include "proto/store.pb.h"
 #include "sdk/client_stub.h"
 #include "sdk/common/common.h"
 #include "sdk/region.h"
+#include "sdk/rpc/store_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/status.h"
-#include "sdk/store/store_rpc.h"
-#include "sdk/store/store_rpc_controller.h"
 
 namespace dingodb {
 namespace sdk {

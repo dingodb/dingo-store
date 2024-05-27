@@ -19,14 +19,12 @@
 #include <cstdint>
 #include <unordered_map>
 
-#include "common/logging.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
-#include "proto/coordinator.pb.h"
 #include "sdk/client_stub.h"
-#include "sdk/store/store_rpc_controller.h"
+#include "sdk/rpc/index_service_rpc.h"
+#include "sdk/rpc/store_rpc_controller.h"
 #include "sdk/vector.h"
-#include "sdk/vector/index_service_rpc.h"
 #include "sdk/vector/vector_task.h"
 namespace dingodb {
 namespace sdk {

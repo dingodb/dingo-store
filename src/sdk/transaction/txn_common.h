@@ -16,7 +16,7 @@
 #define DINGODB_SDK_TRANSACTION_COMMON_H_
 
 #include "glog/logging.h"
-#include "proto/store.pb.h"
+#include "sdk/port/store.pb.h"
 #include "sdk/client.h"
 
 namespace dingodb {

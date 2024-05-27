@@ -15,37 +15,37 @@
 #include <vector>
 
 #include "gtest/gtest.h"
-#include "mock_coordinator_proxy.h"
-#include "sdk/coordinator_proxy.h"
+#include "mock_coordinator_rpc_controller.h"
 #include "sdk/meta_cache.h"
+#include "sdk/rpc/brpc/coordinator_rpc.h"
+#include "test_base.h"
 #include "test_common.h"
 
 namespace dingodb {
 namespace sdk {
 
-class MetaCacheTest : public testing::Test {
+class SDKMetaCacheTest : public TestBase {
  protected:
   void SetUp() override {
-    cooridnator_proxy = std::make_shared<MockCoordinatorProxy>();
-    meta_cache = std::make_shared<MetaCache>(cooridnator_proxy);
+    coordinator_rpc_controller = std::make_shared<MockCoordinatorRpcController>(*stub);
+    meta_cache = std::make_shared<MetaCache>(coordinator_rpc_controller);
   }
 
   void TearDown() override { meta_cache.reset(); }
 
-  std::shared_ptr<MockCoordinatorProxy> cooridnator_proxy;
+  std::shared_ptr<MockCoordinatorRpcController> coordinator_rpc_controller;
   std::shared_ptr<MetaCache> meta_cache;
 };
 
-TEST_F(MetaCacheTest, LookupRegionByKey) {
+TEST_F(SDKMetaCacheTest, LookupRegionByKey) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "b");
-            Region2ScanRegionInfo(region, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "b");
+    Region2ScanRegionInfo(region, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionByKey("b", tmp);
@@ -56,16 +56,15 @@ TEST_F(MetaCacheTest, LookupRegionByKey) {
   EXPECT_EQ(tmp->Range().end_key(), region->Range().end_key());
 }
 
-TEST_F(MetaCacheTest, ClearRange) {
+TEST_F(SDKMetaCacheTest, ClearRange) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "b");
-            Region2ScanRegionInfo(region, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "b");
+    Region2ScanRegionInfo(region, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   {
     // clear exist
@@ -89,16 +88,15 @@ TEST_F(MetaCacheTest, ClearRange) {
   }
 }
 
-TEST_F(MetaCacheTest, AddRegion) {
+TEST_F(SDKMetaCacheTest, AddRegion) {
   auto region = RegionA2C();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "b");
-            Region2ScanRegionInfo(region, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "b");
+    Region2ScanRegionInfo(region, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionByKey("b", tmp);
@@ -131,7 +129,7 @@ TEST_F(MetaCacheTest, AddRegion) {
   }
 }
 
-TEST_F(MetaCacheTest, AddInterleaveRegionFromSmall2Large) {
+TEST_F(SDKMetaCacheTest, AddInterleaveRegionFromSmall2Large) {
   std::shared_ptr<Region> a2c;
   {
     Status got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
@@ -192,7 +190,7 @@ TEST_F(MetaCacheTest, AddInterleaveRegionFromSmall2Large) {
   meta_cache->Dump();
 }
 
-TEST_F(MetaCacheTest, AddInterleaveRegionFromLarge2Small) {
+TEST_F(SDKMetaCacheTest, AddInterleaveRegionFromLarge2Small) {
   std::shared_ptr<Region> a2z = RegionA2Z();
   {
     std::shared_ptr<Region> tmp;
@@ -312,7 +310,7 @@ TEST_F(MetaCacheTest, AddInterleaveRegionFromLarge2Small) {
   meta_cache->Dump();
 }
 
-TEST_F(MetaCacheTest, StaleRegion) {
+TEST_F(SDKMetaCacheTest, StaleRegion) {
   std::shared_ptr<Region> a2c;
   {
     Status got = meta_cache->TEST_FastLookUpRegionByKey("b", a2c);
@@ -357,30 +355,29 @@ TEST_F(MetaCacheTest, StaleRegion) {
   }
 }
 
-TEST_F(MetaCacheTest, LookupRegionBetweenRangeNotFound) {
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "a");
-            EXPECT_EQ(request.range_end(), "d");
-            return Status::OK();
-          });
+TEST_F(SDKMetaCacheTest, LookupRegionBetweenRangeNotFound) {
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "a");
+    EXPECT_EQ(t_rpc->Request()->range_end(), "d");
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
   EXPECT_TRUE(got.IsNotFound());
 }
 
-TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromRemote) {
+TEST_F(SDKMetaCacheTest, LookupRegionBetweenRangeFromRemote) {
   auto region = RegionA2C();
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "a");
-            EXPECT_EQ(request.range_end(), "d");
-            Region2ScanRegionInfo(region, response.add_regions());
-            return Status::OK();
-          });
+
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "a");
+    EXPECT_EQ(t_rpc->Request()->range_end(), "d");
+    Region2ScanRegionInfo(region, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
@@ -391,11 +388,11 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromRemote) {
   EXPECT_EQ(tmp->Range().end_key(), region->Range().end_key());
 }
 
-TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromCache) {
+TEST_F(SDKMetaCacheTest, LookupRegionBetweenRangeFromCache) {
   auto region = RegionA2C();
   meta_cache->MaybeAddRegion(region);
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions).Times(0);
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).Times(0);
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRange("a", "d", tmp);
@@ -406,20 +403,19 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeFromCache) {
   EXPECT_EQ(tmp->Range().end_key(), region->Range().end_key());
 }
 
-TEST_F(MetaCacheTest, LookupRegionBetweenRangePrefetch) {
+TEST_F(SDKMetaCacheTest, LookupRegionBetweenRangePrefetch) {
   auto a2c = RegionA2C();
   auto e2g = RegionE2G();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "a");
-            EXPECT_EQ(request.range_end(), "f");
-            EXPECT_GT(request.limit(), 1);
-            Region2ScanRegionInfo(a2c, response.add_regions());
-            Region2ScanRegionInfo(e2g, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "a");
+    EXPECT_EQ(t_rpc->Request()->range_end(), "f");
+    EXPECT_GT(t_rpc->Request()->limit(), 1);
+    Region2ScanRegionInfo(a2c, t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(e2g, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRange("a", "f", tmp);
@@ -436,18 +432,17 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangePrefetch) {
   EXPECT_EQ(tmp->Range().end_key(), e2g->Range().end_key());
 }
 
-TEST_F(MetaCacheTest, LookupRegionBetweenRangeNoPreetch) {
+TEST_F(SDKMetaCacheTest, LookupRegionBetweenRangeNoPrefetch) {
   auto a2c = RegionA2C();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "a");
-            EXPECT_EQ(request.range_end(), "f");
-            EXPECT_EQ(request.limit(), 1);
-            Region2ScanRegionInfo(a2c, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "a");
+    EXPECT_EQ(t_rpc->Request()->range_end(), "f");
+    EXPECT_EQ(t_rpc->Request()->limit(), 1);
+    Region2ScanRegionInfo(a2c, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
 
   std::shared_ptr<Region> tmp;
   Status got = meta_cache->LookupRegionBetweenRangeNoPrefetch("a", "f", tmp);
@@ -458,15 +453,12 @@ TEST_F(MetaCacheTest, LookupRegionBetweenRangeNoPreetch) {
   EXPECT_EQ(tmp->Range().end_key(), a2c->Range().end_key());
 }
 
-TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
+TEST_F(SDKMetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
   {
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
@@ -478,13 +470,10 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
     auto region = RegionA2C();
     meta_cache->MaybeAddRegion(region);
 
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
@@ -498,13 +487,10 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
     auto region = RegionB2F();
     meta_cache->MaybeAddRegion(region);
 
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
@@ -520,13 +506,10 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
     region = RegionL2N();
     meta_cache->MaybeAddRegion(region);
 
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "e", regions);
@@ -540,13 +523,10 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
     auto region = RegionL2N();
     meta_cache->MaybeAddRegion(region);
 
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("c", "g", regions);
@@ -562,13 +542,10 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
     region = RegionE2G();
     meta_cache->MaybeAddRegion(region);
 
-    EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-        .WillOnce(
-            [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-              (void)request;
-              (void)response;
-              return Status::OK();
-            });
+    EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+      (void)rpc;
+      return Status::OK();
+    });
 
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "g", regions);
@@ -579,7 +556,7 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeNoRegion) {
   }
 }
 
-TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeRegionFromCache) {
+TEST_F(SDKMetaCacheTest, ScanRegionsBetweenContinuousRangeRegionFromCache) {
   {
     auto region = RegionA2C();
     meta_cache->MaybeAddRegion(region);
@@ -634,7 +611,7 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeRegionFromCache) {
   }
 }
 
-TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromCache) {
+TEST_F(SDKMetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromCache) {
   {
     auto a2c = RegionA2C();
     meta_cache->MaybeAddRegion(a2c);
@@ -678,22 +655,22 @@ TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromCache) 
   }
 }
 
-TEST_F(MetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromRemote) {
+TEST_F(SDKMetaCacheTest, ScanRegionsBetweenContinuousRangeMultipleRegionFromRemote) {
   auto a2c = RegionA2C();
   auto c2e = RegionC2E();
   auto e2g = RegionE2G();
 
-  EXPECT_CALL(*cooridnator_proxy, ScanRegions)
-      .WillOnce(
-          [&](const pb::coordinator::ScanRegionsRequest& request, pb::coordinator::ScanRegionsResponse& response) {
-            EXPECT_EQ(request.key(), "a");
-            EXPECT_EQ(request.range_end(), "g");
-            EXPECT_EQ(request.limit(), 0);
-            Region2ScanRegionInfo(a2c, response.add_regions());
-            Region2ScanRegionInfo(c2e, response.add_regions());
-            Region2ScanRegionInfo(e2g, response.add_regions());
-            return Status::OK();
-          });
+  EXPECT_CALL(*coordinator_rpc_controller, SyncCall).WillOnce([&](Rpc& rpc) {
+    auto* t_rpc = dynamic_cast<ScanRegionsRpc*>(&rpc);
+    EXPECT_EQ(t_rpc->Request()->key(), "a");
+    EXPECT_EQ(t_rpc->Request()->range_end(), "g");
+    EXPECT_EQ(t_rpc->Request()->limit(), 0);
+    Region2ScanRegionInfo(a2c, t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(c2e, t_rpc->MutableResponse()->add_regions());
+    Region2ScanRegionInfo(e2g, t_rpc->MutableResponse()->add_regions());
+    return Status::OK();
+  });
+
   {
     std::vector<std::shared_ptr<Region>> regions;
     Status got = meta_cache->ScanRegionsBetweenContinuousRange("a", "g", regions);

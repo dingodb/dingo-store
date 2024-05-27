@@ -21,20 +21,11 @@
 #include "common/logging.h"
 #include "glog/logging.h"
 #include "sdk/client.h"
-#include "sdk/coordinator_proxy.h"
-#include "sdk/meta_cache.h"
 #include "sdk/status.h"
 
-using dingodb::sdk::MetaCache;
-using dingodb::sdk::Region;
 using dingodb::sdk::Status;
 
 DEFINE_string(coordinator_url, "", "coordinator url");
-
-// TODO: remove
-static std::shared_ptr<dingodb::CoordinatorInteraction> g_coordinator_interaction;
-
-static std::shared_ptr<dingodb::sdk::CoordinatorProxy> g_coordinator_proxy;
 
 static std::shared_ptr<dingodb::sdk::Client> g_client;
 
@@ -81,25 +72,6 @@ void PostClean() {
     DINGO_LOG(INFO) << "query region status: " << tmp.ToString() << ", region_id:" << region_id;
   }
   g_region_ids.clear();
-}
-
-void MetaCacheExample() {
-  auto meta_cache = std::make_shared<MetaCache>(g_coordinator_proxy);
-
-  std::shared_ptr<Region> region;
-  Status got = meta_cache->LookupRegionByKey("wb", region);
-  DINGO_LOG(INFO) << got.ToString() << ", " << (got.IsOK() ? region->ToString() : "null");
-  CHECK(got.IsOK());
-
-  got = meta_cache->LookupRegionByKey("wc00000000", region);
-  DINGO_LOG(INFO) << got.ToString();
-  CHECK(got.IsOK());
-
-  got = meta_cache->LookupRegionByKey("wz00000000", region);
-  DINGO_LOG(INFO) << got.ToString();
-  CHECK(got.IsNotFound());
-
-  meta_cache->Dump();
 }
 
 void RawKVExample() {
@@ -311,8 +283,7 @@ void RawKVExample() {
     bool state;
     Status result = raw_kv->CompareAndSet(key, value, "", state);
     DINGO_LOG(INFO) << "raw_kv compare_and_set:" << result.ToString() << " key:" << key << " value:" << value
-                    << " expect:empty"
-                    << " state:" << (state ? "true" : "false");
+                    << " expect:empty" << " state:" << (state ? "true" : "false");
 
     std::string to_get;
     result = raw_kv->Get(key, to_get);
@@ -497,24 +468,12 @@ int main(int argc, char* argv[]) {
   }
 
   CHECK(!FLAGS_coordinator_url.empty());
-  g_coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
-  if (!g_coordinator_interaction->InitByNameService(
-          FLAGS_coordinator_url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
-    DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --url=" << FLAGS_coordinator_url;
-    return -1;
-  }
-
-  g_coordinator_proxy = std::make_shared<dingodb::sdk::CoordinatorProxy>();
-  Status open = g_coordinator_proxy->Open(FLAGS_coordinator_url);
-  if (!open.IsOK()) {
-    DINGO_LOG(ERROR) << "Fail to open coordinator_proxy, please check parameter --url=" << FLAGS_coordinator_url;
-    return -1;
-  }
 
   dingodb::sdk::Client* tmp;
   Status built = dingodb::sdk::Client::Build(FLAGS_coordinator_url, &tmp);
   if (!built.ok()) {
-    DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url;
+    DINGO_LOG(ERROR) << "Fail to build client, please check parameter --url=" << FLAGS_coordinator_url << " error: "
+                     << built.ToString();
     return -1;
   }
   CHECK_NOTNULL(tmp);
@@ -527,8 +486,6 @@ int main(int argc, char* argv[]) {
 
     CreateRegion("skd_example04", "wl00000000", "wn00000000", 3);
 
-    MetaCacheExample();
-
     RawKVExample();
     PostClean();
   }
@@ -539,8 +496,6 @@ int main(int argc, char* argv[]) {
     CreateRegion("skd_example03", "we00000000", "wg00000000", 3, dingodb::sdk::kBTree);
 
     CreateRegion("skd_example04", "wl00000000", "wn00000000", 3, dingodb::sdk::kBTree);
-
-    MetaCacheExample();
 
     RawKVExample();
     PostClean();

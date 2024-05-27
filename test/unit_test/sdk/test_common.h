@@ -18,17 +18,15 @@
 
 #include <cstdint>
 #include <string>
-#include <type_traits>
 
-#include "butil/endpoint.h"
 #include "coordinator/tso_control.h"
-#include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
-#include "sdk/meta_cache.h"
-#include "sdk/rpc/rpc.h"
+#include "sdk/common/common.h"
+#include "sdk/region.h"
+#include "sdk/utils/net_util.h"
 
 namespace dingodb {
 
@@ -39,23 +37,18 @@ const std::string kIpThree = "192.0.0.3";
 
 const int kPort = 20001;
 
-static std::string HostPortToAddrStr(std::string ip, int port) { return fmt::format("{}:{}", ip, port); }
+const EndPoint kAddrOne = EndPoint(kIpOne, kPort);
+const EndPoint kAddrTwo = EndPoint(kIpTwo, kPort);
+const EndPoint kAddrThree = EndPoint(kIpThree, kPort);
 
-const std::string kAddrOne = HostPortToAddrStr(kIpOne, kPort);
-const std::string kAddrTwo = HostPortToAddrStr(kIpTwo, kPort);
-const std::string kAddrThree = HostPortToAddrStr(kIpThree, kPort);
-
-const std::map<std::string, RaftRole> kInitReplica = {
-    {kAddrOne, kLeader}, {kAddrTwo, kFollower}, {kAddrThree, kFollower}};
+const std::map<EndPoint, RaftRole> kInitReplica = {{kAddrOne, kLeader}, {kAddrTwo, kFollower}, {kAddrThree, kFollower}};
 
 static std::shared_ptr<Region> GenRegion(int64_t id, pb::common::Range range, pb::common::RegionEpoch epoch,
                                          pb::common::RegionType type) {
   std::vector<Replica> replicas;
   replicas.reserve(kInitReplica.size());
   for (const auto& entry : kInitReplica) {
-    butil::EndPoint end_point;
-    butil::str2endpoint(entry.first.c_str(), &end_point);
-    replicas.push_back({end_point, entry.second});
+    replicas.push_back({entry.first, entry.second});
   }
   return std::make_shared<Region>(id, range, epoch, type, replicas);
 }
@@ -153,10 +146,10 @@ static void Region2ScanRegionInfo(const std::shared_ptr<Region>& region,
   for (const auto& r : replicas) {
     if (r.role == kLeader) {
       auto* leader = scan_region_info->mutable_leader();
-      *leader = Helper::EndPointToLocation(r.end_point);
+      *leader = EndPointToLocation(r.end_point);
     } else {
       auto* voter = scan_region_info->add_voters();
-      *voter = Helper::EndPointToLocation(r.end_point);
+      *voter = EndPointToLocation(r.end_point);
     }
   }
 }
@@ -180,7 +173,7 @@ static void Region2StoreRegionInfo(const std::shared_ptr<Region>& region,
     peer->set_role(pb::common::PeerRole::VOTER);
 
     auto* location = peer->mutable_server_location();
-    *location = Helper::EndPointToLocation(r.end_point);
+    *location = EndPointToLocation(r.end_point);
   }
 }
 

@@ -18,11 +18,10 @@
 #include <iomanip>
 
 #include "fmt/core.h"
-#include "proto/node.pb.h"
 
 namespace dingodb {
 
-void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role, const pb::node::LogLevel& level) {
+void DingoLogger::InitLogger(const std::string& log_dir, const std::string& role, const LogLevel& level) {
   FLAGS_logbufsecs = 0;
   FLAGS_max_log_size = 80;
   FLAGS_stop_logging_if_full_disk = true;
@@ -64,8 +63,8 @@ void DingoLogger::CustomLogFormatPrefix(std::ostream& s, const google::LogMessag
     << l.thread_id << "][" << l.filename << ':' << l.line_number << "]";
 }
 
-void DingoLogger::ChangeGlogLevelUsingDingoLevel(const pb::node::LogLevel& log_level, uint32_t verbose) {
-  if (log_level == pb::node::DEBUG) {
+void DingoLogger::ChangeGlogLevelUsingDingoLevel(const LogLevel& log_level, uint32_t verbose) {
+  if (log_level == kDEBUG) {
     DingoLogger::SetMinLogLevel(0);
     DingoLogger::SetMinVerboseLevel(verbose == 0 ? kGlobalValueOfDebug : verbose);
   } else {

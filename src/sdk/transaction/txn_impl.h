@@ -18,12 +18,12 @@
 #include <cstdint>
 #include <memory>
 
-#include "proto/meta.pb.h"
-#include "proto/store.pb.h"
 #include "sdk/client.h"
 #include "sdk/client_stub.h"
+#include "sdk/port/meta.pb.h"
+#include "sdk/port/store.pb.h"
 #include "sdk/region.h"
-#include "sdk/store/store_rpc.h"
+#include "sdk/rpc/store_rpc.h"
 #include "sdk/transaction/txn_buffer.h"
 
 namespace dingodb {

@@ -125,21 +125,20 @@ bool Server::InitConfig(const std::string& filename) {
   return true;
 }
 
-pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> config) {
-  using dingodb::pb::node::LogLevel;
-  LogLevel log_level = LogLevel::INFO;
+LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> config) {
+  LogLevel log_level = LogLevel::kINFO;
 
   std::string const input_log_level = config->GetString("log.level");
-  if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::DEBUG), input_log_level)) {
-    log_level = LogLevel::DEBUG;
-  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::WARNING), input_log_level)) {
-    log_level = LogLevel::WARNING;
-  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::ERROR), input_log_level)) {
-    log_level = LogLevel::ERROR;
-  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(LogLevel::FATAL), input_log_level)) {
-    log_level = LogLevel::FATAL;
+  if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(pb::node::LogLevel::DEBUG), input_log_level)) {
+    log_level = LogLevel::kDEBUG;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(pb::node::LogLevel::WARNING), input_log_level)) {
+    log_level = LogLevel::kWARNING;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(pb::node::LogLevel::ERROR), input_log_level)) {
+    log_level = LogLevel::kERROR;
+  } else if (dingodb::Helper::IsEqualIgnoreCase(LogLevel_Name(pb::node::LogLevel::FATAL), input_log_level)) {
+    log_level = LogLevel::kFATAL;
   } else {
-    log_level = LogLevel::INFO;
+    log_level = LogLevel::kINFO;
   }
   return log_level;
 }
@@ -147,7 +146,7 @@ pb::node::LogLevel Server::GetDingoLogLevel(std::shared_ptr<dingodb::Config> con
 bool Server::InitLog() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
-  dingodb::pb::node::LogLevel const log_level = GetDingoLogLevel(config);
+  LogLevel const log_level = GetDingoLogLevel(config);
 
   if (!Helper::IsExistPath(log_dir_)) {
     DINGO_LOG(ERROR) << "log_dir: " << log_dir_ << " not exist";
@@ -159,7 +158,7 @@ bool Server::InitLog() {
   DingoLogger::InitLogger(FLAGS_log_dir, GetRoleName(), log_level);
 
   DINGO_LOG(INFO) << "log_dir: " << FLAGS_log_dir << " role:" << role_name
-                  << " LogLevel:" << dingodb::pb::node::LogLevel_Name(log_level);
+                  << " LogLevel:" << LogLevelToString(log_level);
 
   DingoLogVerion();
 

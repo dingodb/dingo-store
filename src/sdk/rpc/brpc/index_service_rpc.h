@@ -12,31 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_SDK_TEST_MOCK_RPC_INTERACTION_H_
-#define DINGODB_SDK_TEST_MOCK_RPC_INTERACTION_H_
+#ifndef DINGODB_SDK_BRPC_INDEX_SERVICE_RPC_H_
+#define DINGODB_SDK_BRPC_INDEX_SERVICE_RPC_H_
 
-#include <memory>
-
-#include "brpc/channel.h"
-#include "gmock/gmock.h"
-#include "sdk/rpc/rpc_interaction.h"
-#include "sdk/status.h"
-#include "sdk/utils/callback.h"
+#include "proto/index.pb.h"
+#include "sdk/rpc/brpc/unary_rpc.h"
 
 namespace dingodb {
 namespace sdk {
 
-class MockRpcInteraction final : public RpcInteraction {
- public:
-  MockRpcInteraction(brpc::ChannelOptions options) : RpcInteraction(std::move(options)) {}
+#define DECLARE_INDEX_SERVICE_RPC(METHOD) DECLARE_UNARY_RPC(pb::index, IndexService, METHOD)
 
-  ~MockRpcInteraction() override = default;
-
-  MOCK_METHOD(void, SendRpc, (Rpc & rpc, RpcCallback cb), (override));
-};
+namespace index  {
+DECLARE_INDEX_SERVICE_RPC(Hello);
+}
+DECLARE_INDEX_SERVICE_RPC(VectorAdd);
+DECLARE_INDEX_SERVICE_RPC(VectorSearch);
+DECLARE_INDEX_SERVICE_RPC(VectorDelete);
+DECLARE_INDEX_SERVICE_RPC(VectorBatchQuery);
+DECLARE_INDEX_SERVICE_RPC(VectorGetBorderId);
+DECLARE_INDEX_SERVICE_RPC(VectorScanQuery);
+DECLARE_INDEX_SERVICE_RPC(VectorGetRegionMetrics);
+DECLARE_INDEX_SERVICE_RPC(VectorCount);
 
 }  // namespace sdk
-
 }  // namespace dingodb
-
-#endif  // DINGODB_SDK_TEST_MOCK_RPC_INTERACTION_H_
+#endif  // DINGODB_SDK_BRPC_INDEX_SERVICE_RPC_H_

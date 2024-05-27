@@ -28,6 +28,7 @@
 #include "engine/snapshot.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
+#include "proto/store_internal.pb.h"
 
 namespace dingodb {
 
