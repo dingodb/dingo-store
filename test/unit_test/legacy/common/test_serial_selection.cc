@@ -184,7 +184,7 @@ TEST_F(DingoSerialTest, keyvaluecodeStringLoopTest) {
   pb::common::KeyValue kv;
   Counter load_cnter1;
   load_cnter1.reStart();
-  (void)re->Encode(record1, kv);
+  (void)re->Encode('r', record1, kv);
   int64_t time_db_fetch1 = load_cnter1.mtimeElapsed();
   LOG(INFO) << "Encode Time : " << time_db_fetch1 << " milliseconds";
   // Decode record and verify values

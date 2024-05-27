@@ -1614,7 +1614,7 @@ TEST_F(DingoSerialListTypeTest, recordTest) {
   LOG(INFO) << "record1 size:" << record1->size();
   LOG(INFO) << "schemas size:" << schemas->size();
   pb::common::KeyValue kv;
-  (void)re->Encode(*record1, kv);
+  (void)re->Encode('r', *record1, kv);
   delete re;
 
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);
