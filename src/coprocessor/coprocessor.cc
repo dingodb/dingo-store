@@ -43,10 +43,11 @@ bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_execute_running_num("ding
 bvar::Adder<uint64_t> Coprocessor::bvar_coprocessor_v1_execute_total_num("dingo_coprocessor_v1_execute_total_num");
 bvar::LatencyRecorder Coprocessor::coprocessor_v1_execute_latency("dingo_coprocessor_v1_execute_latency");
 
-Coprocessor::Coprocessor()
+Coprocessor::Coprocessor(char prefix)
     : enable_expression_(true),
       end_of_group_by_(true),
-      bvar_guard_for_coprocessor_v1_latency_(&coprocessor_v1_latency) {
+      bvar_guard_for_coprocessor_v1_latency_(&coprocessor_v1_latency),
+      prefix_(prefix) {
   bvar_coprocessor_v1_object_running_num << 1;
   bvar_coprocessor_v1_object_total_num << 1;
 }
@@ -443,7 +444,7 @@ butil::Status Coprocessor::DoExecuteForAggregation(const std::vector<std::any>& 
     int ret = 0;
     try {
       // group_by_key_record [0,1,2,3,4,5,6] sort, for group_by_key_serial_schemas_ in vector index no schema index
-      ret = group_by_key_encoder.EncodeKey(group_by_key_record, group_by_key);
+      ret = group_by_key_encoder.EncodeKey(prefix_, group_by_key_record, group_by_key);
     } catch (const std::exception& my_exception) {
       std::string error_message = fmt::format("serial::EncodeKey failed exception : {}", my_exception.what());
       DINGO_LOG(ERROR) << error_message;
@@ -485,7 +486,7 @@ butil::Status Coprocessor::DoExecuteForSelection(const std::vector<std::any>& se
   pb::common::KeyValue result_key_value;
   int ret = 0;
   try {
-    ret = result_record_encoder.Encode(selection_record, result_key_value);
+    ret = result_record_encoder.Encode(prefix_, selection_record, result_key_value);
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
@@ -579,7 +580,7 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
       pb::common::KeyValue result_key_value;
       ret = 0;
       try {
-        ret = result_record_encoder.Encode(result_record, result_key_value);
+        ret = result_record_encoder.Encode(prefix_, result_record, result_key_value);
       } catch (const std::exception& my_exception) {
         std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
         DINGO_LOG(ERROR) << error_message;

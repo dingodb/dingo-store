@@ -46,6 +46,8 @@ class Helper {
   static bool IsClientRaw(const std::string& key);
   static bool IsClientTxn(const std::string& key);
 
+  static char GetKeyPrefix(const std::string& key);
+
   // static butil::EndPoint GetEndPoint(const std::string& host, int port);
   // static butil::EndPoint GetEndPoint(const std::string& addr);
 

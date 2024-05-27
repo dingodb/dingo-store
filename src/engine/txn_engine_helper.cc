@@ -1025,7 +1025,8 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   txn_iter->Seek(range.start_key());
 
   if (!disable_coprocessor) {
-    std::shared_ptr<RawCoprocessor> txn_coprocessor = std::make_shared<CoprocessorV2>();
+    std::shared_ptr<RawCoprocessor> txn_coprocessor =
+        std::make_shared<CoprocessorV2>(Helper::GetKeyPrefix(range.start_key()));
     butil::Status status;
     status = txn_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
     if (!status.ok()) {

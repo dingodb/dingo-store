@@ -32,7 +32,7 @@ namespace dingodb {
 
 class Coprocessor : public RawCoprocessor {
  public:
-  Coprocessor();
+  Coprocessor(char prefix);
   ~Coprocessor() override;
 
   Coprocessor(const Coprocessor& rhs) = delete;
@@ -73,6 +73,7 @@ class Coprocessor : public RawCoprocessor {
   void GetOriginalColumnIndexes();
   void GetSelectionColumnIndexes();
 
+  char prefix_;
   pb::store::Coprocessor coprocessor_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> original_serial_schemas_;
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> selection_serial_schemas_;

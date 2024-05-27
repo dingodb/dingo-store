@@ -1056,7 +1056,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     {
       pb::common::KeyValue kv;
       std::string key;
-      // VectorCodec::EncodeVectorData(region->PartitionId(), vector.id(), key);
       VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
 
       kv.mutable_key()->swap(key);
@@ -1067,7 +1066,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     {
       pb::common::KeyValue kv;
       std::string key;
-      // VectorCodec::EncodeVectorScalar(region->PartitionId(), vector.id(), key);
       VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.scalar_data().SerializeAsString());
@@ -1094,7 +1092,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     {
       pb::common::KeyValue kv;
       std::string key;
-      // VectorCodec::EncodeVectorTable(region->PartitionId(), vector.id(), key);
       VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
       kv.mutable_key()->swap(key);
       kv.set_value(vector.table_data().SerializeAsString());

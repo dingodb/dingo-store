@@ -124,7 +124,8 @@ butil::Status VectorReader::SearchVector(
         return status;
       }
 
-      std::shared_ptr<RawCoprocessor> scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+      std::shared_ptr<RawCoprocessor> scalar_coprocessor =
+          std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
 
       status = scalar_coprocessor->Open(CoprocessorPbWrapper{parameter.vector_coprocessor()});
       if (!status.ok()) {
@@ -291,7 +292,6 @@ butil::Status VectorReader::QueryVectorScalarData(const pb::common::Range& regio
                                                   std::vector<std::string> selected_scalar_keys,
                                                   pb::common::VectorWithId& vector_with_id) {
   std::string key, value;
-  // VectorCodec::EncodeVectorScalar(partition_id, vector_with_id.id(), key);
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_with_id.id(), key);
 
   auto status = reader_->KvGet(Constant::kVectorScalarCF, key, value);
@@ -871,7 +871,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
 
     const auto& coprocessor = parameter.vector_coprocessor();
 
-    scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+    scalar_coprocessor = std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
 
     status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
     if (!status.ok()) {
@@ -1099,7 +1099,8 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
 
   const auto& coprocessor = parameter.vector_coprocessor();
 
-  std::shared_ptr<RawCoprocessor> table_coprocessor = std::make_shared<CoprocessorV2>();
+  std::shared_ptr<RawCoprocessor> table_coprocessor =
+      std::make_shared<CoprocessorV2>(Helper::GetKeyPrefix(region_range.start_key()));
   butil::Status status;
   status = table_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
   if (!status.ok()) {
@@ -1255,7 +1256,8 @@ butil::Status VectorReader::SearchVectorDebug(
       search_time_us = lambda_time_diff_microseconds_function(start, end);
 
       auto start_kv_get = lambda_time_now_function();
-      std::shared_ptr<RawCoprocessor> scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+      std::shared_ptr<RawCoprocessor> scalar_coprocessor =
+          std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
 
       status = scalar_coprocessor->Open(CoprocessorPbWrapper{parameter.vector_coprocessor()});
       if (!status.ok()) {
@@ -1448,7 +1450,8 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
 
   const auto& coprocessor = parameter.vector_coprocessor();
 
-  std::shared_ptr<RawCoprocessor> scalar_coprocessor = std::make_shared<CoprocessorScalar>();
+  std::shared_ptr<RawCoprocessor> scalar_coprocessor =
+      std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
   status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
