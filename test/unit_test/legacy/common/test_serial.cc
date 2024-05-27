@@ -1472,7 +1472,7 @@ TEST_F(DingoSerialTest, recordTest) {
 
   vector<any>* record1 = GetRecord();
   pb::common::KeyValue kv;
-  (void)re->Encode(*record1, kv);
+  (void)re->Encode('r', *record1, kv);
   delete re;
 
   RecordDecoder* rd = new RecordDecoder(0, schemas, 0L, this->le);

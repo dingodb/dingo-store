@@ -325,7 +325,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -362,7 +362,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_22222"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
     lambda_txn_set_kv_function(key_value);
@@ -398,7 +398,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_33333"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -435,7 +435,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_44444"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -472,7 +472,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_55555"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -509,7 +509,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -546,7 +546,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_77777"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -583,7 +583,7 @@ TEST_F(TxnScanTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 

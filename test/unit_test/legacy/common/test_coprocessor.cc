@@ -776,7 +776,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -835,7 +835,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("fdf45nrthn"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -894,7 +894,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("sssfdf45nrthn"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -953,7 +953,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("cccfdf45nrthn"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -1012,7 +1012,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("errerfdf45nrthn"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -1071,7 +1071,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -1118,7 +1118,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("dfaerj56j"));
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -1177,7 +1177,7 @@ TEST_F(CoprocessorTest, Prepare) {
     std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
     record.emplace_back(std::move(any_string));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -2713,7 +2713,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(false);
     record.emplace_back(any_bool);
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -2773,7 +2773,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -2833,7 +2833,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -2893,7 +2893,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(3);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -2953,7 +2953,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -3013,7 +3013,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(5);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -3061,7 +3061,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
@@ -3121,7 +3121,7 @@ TEST_F(CoprocessorTest, PrepareForDisorder) {
     std::any any_bool = std::optional<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    int ret = record_encoder.Encode(record, key_value);
+    int ret = record_encoder.Encode('r', record, key_value);
 
     EXPECT_EQ(ret, 0);
 
