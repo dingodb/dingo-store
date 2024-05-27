@@ -209,7 +209,7 @@ DEFINE_int32(store_type, 0, "store type");
 
 DEFINE_bool(include_archive, false, "include history archive");
 
-DEFINE_bool(pretty_show, false, "pretty show");
+DEFINE_bool(show_pretty, false, "show pretty");
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
@@ -562,29 +562,6 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->db_path = FLAGS_db_path;
       ctx->offset = FLAGS_offset;
       ctx->limit = FLAGS_limit;
-      if (ctx->table_id == 0 && ctx->index_id == 0) {
-        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
-        return;
-      }
-      if (ctx->db_path.empty()) {
-        DINGO_LOG(ERROR) << "Param db_path is error.";
-        return;
-      }
-      if (ctx->offset < 0) {
-        DINGO_LOG(ERROR) << "Param offset is error.";
-        return;
-      }
-      if (ctx->limit < 0) {
-        DINGO_LOG(ERROR) << "Param limit is error.";
-        return;
-      }
-      client::DumpDb(ctx);
-    } else if (method == "DumpVectorIndexDb") {
-      ctx->table_id = FLAGS_table_id;
-      ctx->index_id = FLAGS_index_id;
-      ctx->db_path = FLAGS_db_path;
-      ctx->offset = FLAGS_offset;
-      ctx->limit = FLAGS_limit;
       ctx->show_vector = FLAGS_show_vector;
       if (ctx->table_id == 0 && ctx->index_id == 0) {
         DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
@@ -602,7 +579,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         DINGO_LOG(ERROR) << "Param limit is error.";
         return;
       }
-      client::DumpVectorIndexDb(ctx);
+      client::DumpDb(ctx);
       // illegal method
     } else {
       DINGO_LOG(ERROR) << "Unknown method: " << method;

@@ -177,6 +177,9 @@ dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
 
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
 
+  if (response.table_definition_with_ids().empty()) {
+    return dingodb::pb::meta::TableDefinition();
+  }
   return response.table_definition_with_ids()[0].table_definition();
 }
 
