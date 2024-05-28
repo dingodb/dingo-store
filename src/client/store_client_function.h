@@ -93,6 +93,7 @@ struct Context {
 dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
 dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
+dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id);
 
 // coordinator
 dingodb::pb::common::Region SendQueryRegion(int64_t region_id);

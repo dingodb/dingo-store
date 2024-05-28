@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 
+#include "client/client_helper.h"
 #include "client/store_client_function.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -41,6 +42,7 @@
 #include "rocksdb/options.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
+#include "serial/utils.h"
 #include "vector/codec.h"
 
 DEFINE_bool(show_lock, false, "show lock info");
@@ -154,180 +156,6 @@ class RocksDBOperator {
 
 using RocksDBOperatorPtr = std::shared_ptr<RocksDBOperator>;
 
-dingodb::pb::common::Schema::Type TransformSchemaType(const std::string& name) {
-  static std::map<std::string, dingodb::pb::common::Schema::Type> schema_type_map = {
-      std::make_pair("CHAR", dingodb::pb::common::Schema::STRING),
-      std::make_pair("VARCHAR", dingodb::pb::common::Schema::STRING),
-      std::make_pair("ANY", dingodb::pb::common::Schema::STRING),
-      std::make_pair("BINARY", dingodb::pb::common::Schema::STRING),
-      std::make_pair("INTEGER", dingodb::pb::common::Schema::INTEGER),
-      std::make_pair("BIGINT", dingodb::pb::common::Schema::LONG),
-      std::make_pair("DATE", dingodb::pb::common::Schema::LONG),
-      std::make_pair("TIME", dingodb::pb::common::Schema::LONG),
-      std::make_pair("TIMESTAMP", dingodb::pb::common::Schema::LONG),
-      std::make_pair("DOUBLE", dingodb::pb::common::Schema::DOUBLE),
-      std::make_pair("BOOL", dingodb::pb::common::Schema::BOOL),
-      std::make_pair("BOOLEAN", dingodb::pb::common::Schema::BOOL),
-      std::make_pair("FLOAT", dingodb::pb::common::Schema::FLOAT),
-      std::make_pair("LONG", dingodb::pb::common::Schema::LONG),
-
-      std::make_pair("ARRAY_BOOL", dingodb::pb::common::Schema::BOOLLIST),
-      std::make_pair("ARRAY_BOOLEAN", dingodb::pb::common::Schema::BOOLLIST),
-      std::make_pair("ARRAY_INTEGER", dingodb::pb::common::Schema::INTEGERLIST),
-      std::make_pair("ARRAY_FLOAT", dingodb::pb::common::Schema::FLOATLIST),
-      std::make_pair("ARRAY_DOUBLE", dingodb::pb::common::Schema::DOUBLELIST),
-      std::make_pair("ARRAY_LONG", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("ARRAY_BIGINT", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("ARRAY_DATE", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("ARRAY_TIME", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("ARRAY_TIMESTAMP", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("ARRAY_CHAR", dingodb::pb::common::Schema::STRINGLIST),
-      std::make_pair("ARRAY_VARCHAR", dingodb::pb::common::Schema::STRINGLIST),
-
-      std::make_pair("MULTISET_BOOL", dingodb::pb::common::Schema::BOOLLIST),
-      std::make_pair("MULTISET_BOOLEAN", dingodb::pb::common::Schema::BOOLLIST),
-      std::make_pair("MULTISET_INTEGER", dingodb::pb::common::Schema::INTEGERLIST),
-      std::make_pair("MULTISET_FLOAT", dingodb::pb::common::Schema::FLOATLIST),
-      std::make_pair("MULTISET_DOUBLE", dingodb::pb::common::Schema::DOUBLELIST),
-      std::make_pair("MULTISET_LONG", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("MULTISET_BIGINT", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("MULTISET_DATE", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("MULTISET_TIME", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("MULTISET_TIMESTAMP", dingodb::pb::common::Schema::LONGLIST),
-      std::make_pair("MULTISET_CHAR", dingodb::pb::common::Schema::STRINGLIST),
-      std::make_pair("MULTISET_VARCHAR", dingodb::pb::common::Schema::STRINGLIST),
-  };
-
-  auto it = schema_type_map.find(name);
-  if (it == schema_type_map.end()) {
-    DINGO_LOG(FATAL) << "Not found schema type: " << name;
-  }
-
-  return it->second;
-}
-
-std::vector<dingodb::pb::common::Schema> TransformColumnSchema(const dingodb::pb::meta::TableDefinition& definition) {
-  std::vector<dingodb::pb::common::Schema> column_schemas;
-  int i = 0;
-  for (const auto& column : definition.columns()) {
-    dingodb::pb::common::Schema schema;
-    std::string sql_type = column.sql_type();
-    if (sql_type == "ARRAY" || sql_type == "MULTISET") {
-      sql_type += "_" + column.element_type();
-    }
-    schema.set_type(TransformSchemaType(sql_type));
-    schema.set_index(i++);
-    if (column.indexofkey() >= 0) {
-      schema.set_is_key(true);
-    }
-    schema.set_is_nullable(column.nullable());
-    column_schemas.push_back(schema);
-  }
-
-  return column_schemas;
-}
-
-template <typename T>
-std::string FormatVecotr(std::vector<T>& vec) {
-  std::stringstream str;
-  for (int i = 0; i < vec.size(); ++i) {
-    str << vec[i];
-    if (i + 1 < vec.size()) {
-      str << ",";
-    }
-  }
-
-  return str.str();
-}
-
-std::string ConvertTOString(const dingodb::pb::meta::ColumnDefinition& column_definition,
-                            const std::any& value) {  // NOLINT
-  std::ostringstream ostr;
-
-  if (value.type() == typeid(std::optional<std::string>)) {
-    auto v = std::any_cast<std::optional<std::string>>(value);
-    ostr << v.value_or("");
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::string>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::string>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      if (column_definition.sql_type() == "BINARY" || column_definition.sql_type() == "ANY") {
-        ostr << dingodb::Helper::StringToHex(*ptr);
-      } else {
-        ostr << *ptr;
-      }
-    }
-  } else if (value.type() == typeid(std::optional<int32_t>)) {
-    auto v = std::any_cast<std::optional<int32_t>>(value);
-    ostr << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<uint32_t>)) {
-    auto v = std::any_cast<std::optional<uint32_t>>(value);
-    ostr << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<int64_t>)) {
-    auto v = std::any_cast<std::optional<int64_t>>(value);
-    ostr << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<int64_t>)) {
-    auto v = std::any_cast<std::optional<int64_t>>(value);
-    ostr << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<double>)) {
-    auto v = std::any_cast<std::optional<double>>(value);
-    ostr << v.value_or(0.0);
-  } else if (value.type() == typeid(std::optional<float>)) {
-    auto v = std::any_cast<std::optional<float>>(value);
-    ostr << v.value_or(0.0);
-  } else if (value.type() == typeid(std::optional<bool>)) {
-    auto v = std::any_cast<std::optional<bool>>(value);
-    ostr << v.value_or(false);
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<bool>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<bool>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<std::string>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<std::string>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<double>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<double>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<float>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<float>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<int32_t>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<int32_t>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<int64_t>>>)) {
-    auto v = std::any_cast<std::optional<std::shared_ptr<std::vector<int64_t>>>>(value);
-    auto ptr = v.value_or(nullptr);
-    if (ptr != nullptr) {
-      ostr << FormatVecotr(*ptr);
-    }
-
-  } else {
-    ostr << fmt::format("unknown type({})", value.type().name());
-  }
-
-  return ostr.str();
-}
-
 void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition, const std::vector<std::any>& values,
                  int64_t ts = 0) {  // NOLINT
   std::vector<std::string> str_values;
@@ -337,7 +165,7 @@ void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition, con
   for (int i = 0; i < values.size(); ++i) {
     const auto& column_definition = table_definition.columns().at(i);
 
-    std::string str = ConvertTOString(column_definition, values[i]);
+    std::string str = dingodb::ConvertColumnValueToString(column_definition, values[i]);
     if (str.size() >= FLAGS_print_column_width) {
       str = str.substr(0, FLAGS_print_column_width - 3) + "...";
     }
@@ -357,7 +185,7 @@ void PrintValuesPretty(const dingodb::pb::meta::TableDefinition& table_definitio
   for (int i = 0; i < values.size(); ++i) {
     const auto& column_definition = table_definition.columns().at(i);
 
-    std::string str = ConvertTOString(column_definition, values[i]);
+    std::string str = dingodb::ConvertColumnValueToString(column_definition, values[i]);
     if (str.size() >= FLAGS_print_column_width) {
       str = str.substr(0, FLAGS_print_column_width - 3) + "...";
     }
@@ -366,8 +194,8 @@ void PrintValuesPretty(const dingodb::pb::meta::TableDefinition& table_definitio
   }
 }
 
-std::string GetPrimaryString(const dingodb::pb::meta::TableDefinition& table_definition,
-                             const std::vector<std::any>& values) {
+std::string RecordToString(const dingodb::pb::meta::TableDefinition& table_definition,
+                           const std::vector<std::any>& values) {
   std::vector<std::string> result;
   for (int i = 0; i < values.size(); ++i) {
     if (strcmp(values[i].type().name(), "v") == 0) {
@@ -375,25 +203,10 @@ std::string GetPrimaryString(const dingodb::pb::meta::TableDefinition& table_def
     }
     const auto& column_definition = table_definition.columns().at(i);
 
-    result.push_back(ConvertTOString(column_definition, values[i]));
+    result.push_back(dingodb::ConvertColumnValueToString(column_definition, values[i]));
   }
 
   return dingodb::Helper::VectorToString(result);
-}
-
-std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> GenSerialSchema(
-    const dingodb::pb::meta::TableDefinition& definition) {
-  auto column_schemas = TransformColumnSchema(definition);  // NOLINT
-  google::protobuf::RepeatedPtrField<dingodb::pb::common::Schema> pb_schemas;
-  dingodb::Helper::VectorToPbRepeated(column_schemas, &pb_schemas);
-
-  auto serial_schemas = std::make_shared<std::vector<std::shared_ptr<dingodb::BaseSchema>>>();
-  auto status = dingodb::Utils::TransToSerialSchema(pb_schemas, &serial_schemas);
-  if (!status.ok()) {
-    return nullptr;
-  }
-
-  return serial_schemas;
 }
 
 std::vector<int> GemSelectionColumnIndex(
@@ -424,7 +237,7 @@ void DumpExcutorRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
     return;
   }
 
-  auto serial_schema = GenSerialSchema(table_definition);
+  auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
   auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition.id().entity_id());
   auto record_decoder = std::make_shared<dingodb::RecordDecoder>(1, serial_schema, partition.id().entity_id());
 
@@ -458,7 +271,7 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
     return;
   }
 
-  auto serial_schema = GenSerialSchema(table_definition);
+  auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
   auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition.id().entity_id());
   auto record_decoder = std::make_shared<dingodb::RecordDecoder>(1, serial_schema, partition.id().entity_id());
 
@@ -489,7 +302,7 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
       return;
     }
 
-    std::cout << fmt::format("lock key({}) ts({}) value({})", GetPrimaryString(table_definition, record), ts,
+    std::cout << fmt::format("lock key({}) ts({}) value({})", RecordToString(table_definition, record), ts,
                              lock_info.ShortDebugString());
   };
 
@@ -517,8 +330,19 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
 
     last_datas.insert(std::make_pair(origin_key, write_info.start_ts()));
 
-    std::cout << fmt::format("write key({}) ts({}) value({})", GetPrimaryString(table_definition, record), ts,
-                             write_info.ShortDebugString())
+    // parse short_value
+    std::string decode_short_value;
+    if (!write_info.short_value().empty()) {
+      std::vector<std::any> record;
+      int ret = record_decoder->Decode(origin_key, write_info.short_value(), record);
+      if (ret != 0) {
+        LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
+      }
+      decode_short_value = RecordToString(table_definition, record);
+    }
+
+    std::cout << fmt::format("write key({}) ts({}) value({} {} {})", RecordToString(table_definition, record), ts,
+                             write_info.start_ts(), dingodb::pb::store::Op_Name(write_info.op()), decode_short_value)
               << std::endl;
   };
 
@@ -582,7 +406,7 @@ void DumpClientRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefinit
     return;
   }
 
-  // auto serial_schema = GenSerialSchema(table_definition);
+  // auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
   // auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition.id().entity_id());
   // auto record_decoder = std::make_shared<dingodb::RecordDecoder>(1, serial_schema, partition.id().entity_id());
 
@@ -792,7 +616,7 @@ void DumpDb(std::shared_ptr<Context> ctx) {
       }
 
     } else if (dingodb::Helper::IsClientTxn(partition.range().start_key())) {
-      // DumpClientTxn(ctx, table_definition, partition);
+      DumpClientTxn(ctx, table_definition, partition);
 
     } else if (dingodb::Helper::IsClientRaw(partition.range().start_key())) {
       if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
@@ -810,5 +634,84 @@ void DumpDb(std::shared_ptr<Context> ctx) {
 }
 
 void DumpMeta(std::shared_ptr<Context> ctx) {}
+
+void WhichRegion(std::shared_ptr<Context> ctx) {
+  dingodb::pb::meta::TableDefinition table_definition;
+  int64_t table_or_index_id = ctx->table_id > 0 ? ctx->table_id : ctx->index_id;
+  if (table_or_index_id == 0) {
+    DINGO_LOG(ERROR) << "table_id/index_id is invalid.";
+    return;
+  }
+  table_definition = SendGetTable(table_or_index_id);
+  if (table_definition.name().empty()) {
+    table_definition = SendGetIndex(table_or_index_id);
+  }
+  if (table_definition.name().empty()) {
+    DINGO_LOG(ERROR) << "not found table/index definition.";
+    return;
+  }
+
+  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
+    DINGO_LOG(ERROR) << "not support find hash partition type table/idnex.";
+    return;
+  }
+
+  // get region range
+  dingodb::pb::meta::IndexRange index_range;
+  dingodb::pb::meta::TableRange table_range = SendGetTableRange(table_or_index_id);
+  if (table_range.range_distribution().empty()) {
+    index_range = SendGetIndexRange(table_or_index_id);
+    if (index_range.range_distribution().empty()) {
+      DINGO_LOG(ERROR) << "get table/index range failed.";
+      return;
+    }
+  }
+
+  auto range_distribution =
+      !table_range.range_distribution().empty() ? table_range.range_distribution() : index_range.range_distribution();
+
+  for (int i = range_distribution.size() - 1; i >= 0; --i) {
+    const auto& distribution = range_distribution.at(i);
+    int64_t partition_id = distribution.id().parent_entity_id();
+    const auto& range = distribution.range();
+
+    std::string encoded_key;
+    if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_NONE ||
+        table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
+      auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
+
+      std::vector<std::string> origin_keys;
+      dingodb::Helper::SplitString(ctx->key, ',', origin_keys);
+      if (origin_keys.empty()) {
+        DINGO_LOG(ERROR) << fmt::format("split key is empty");
+        return;
+      }
+      record_encoder->EncodeKeyPrefix(dingodb::Helper::GetKeyPrefix(range.start_key()), origin_keys, encoded_key);
+
+      if (encoded_key >= range.start_key()) {
+        std::cout << fmt::format("Key locate region({}) range.", distribution.id().entity_id()) << std::endl;
+        break;
+      }
+
+    } else if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      int64_t vector_id = dingodb::Helper::StringToInt64(ctx->key);
+
+      dingodb::VectorCodec::EncodeVectorKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id, vector_id,
+                                            encoded_key);
+
+    } else if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      int64_t vector_id = dingodb::Helper::StringToInt64(ctx->key);
+
+      dingodb::DocumentCodec::EncodeDocumentKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id,
+                                                vector_id, encoded_key);
+    }
+
+    if (encoded_key >= range.start_key()) {
+      std::cout << fmt::format("Key locate region({}) range.", distribution.id().entity_id()) << std::endl;
+      break;
+    }
+  }
+}
 
 }  // namespace client
