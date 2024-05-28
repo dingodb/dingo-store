@@ -43,20 +43,255 @@
 
 namespace dingodb {
 
-DEFINE_int64(max_short_value_in_write_cf, 1024, "max short value in write cf");
-DEFINE_int64(max_batch_get_count, 1024, "max batch get count");
-DEFINE_int64(max_batch_get_memory_size, 32 * 1024 * 1024, "max batch get memory size");
-DEFINE_int64(max_scan_memory_size, 32 * 1024 * 1024, "max scan memory size");
-DEFINE_int64(max_scan_line_limit, 2048, "max scan line limit");
-DEFINE_int64(max_scan_lock_limit, 2048, "Max scan lock limit");
-DEFINE_int64(max_prewrite_count, 1024, "max prewrite count");
-DEFINE_int64(max_commit_count, 1024, "max commit count");
-DEFINE_int64(max_rollback_count, 1024, "max rollback count");
-DEFINE_int64(max_resolve_count, 1024, "max rollback count");
-DEFINE_int64(max_pessimistic_count, 1024, "max pessimistic count");
+DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
+DEFINE_int64(max_batch_get_count, 4096, "max batch get count");
+DEFINE_int64(max_batch_get_memory_size, 60 * 1024 * 1024, "max batch get memory size");
+DEFINE_int64(max_scan_memory_size, 60 * 1024 * 1024, "max scan memory size");
+DEFINE_int64(max_scan_line_limit, 40960, "max scan line limit");
+DEFINE_int64(max_scan_lock_limit, 40960, "Max scan lock limit");
+DEFINE_int64(max_prewrite_count, 4096, "max prewrite count");
+DEFINE_int64(max_commit_count, 4096, "max commit count");
+DEFINE_int64(max_rollback_count, 4096, "max rollback count");
+DEFINE_int64(max_resolve_count, 4096, "max rollback count");
+DEFINE_int64(max_pessimistic_count, 4096, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
 DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
+
+butil::Status TxnReader::Init() {
+  if (is_initialized_) {
+    return butil::Status::OK();
+  }
+
+  if (snapshot_ == nullptr) {
+    snapshot_ = raw_engine_->GetSnapshot();
+    if (snapshot_ == nullptr) {
+      DINGO_LOG(ERROR) << "[txn]Scan GetSnapshot failed";
+      return butil::Status(pb::error::Errno::EINTERNAL, "get snapshot failed");
+    }
+  }
+
+  if (reader_ == nullptr) {
+    reader_ = raw_engine_->Reader();
+    if (reader_ == nullptr) {
+      DINGO_LOG(ERROR) << "[txn]Scan Reader failed";
+      return butil::Status(pb::error::Errno::EINTERNAL, "get reader failed");
+    }
+  }
+
+  // construct write iter
+  IteratorOptions write_iter_options;
+  write_iter_ = reader_->NewIterator(Constant::kTxnWriteCF, snapshot_, write_iter_options);
+  if (write_iter_ == nullptr) {
+    DINGO_LOG(ERROR) << "[txn]Scan NewIterator write failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "new iterator failed");
+  }
+
+  is_initialized_ = true;
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnReader::GetLockInfo(const std::string &key, pb::store::LockInfo &lock_info) {
+  if (!is_initialized_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
+  }
+
+  std::string lock_value;
+  auto status =
+      reader_->KvGet(Constant::kTxnLockCF, snapshot_, Helper::EncodeTxnKey(key, Constant::kLockVer), lock_value);
+  // if lock_value is not found or it is empty, then the key is not locked
+  // else the key is locked, return WriteConflict
+  if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+    // key is not exists, the key is not locked
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_key is not exist";
+    return butil::Status::OK();
+  }
+
+  if (!status.ok()) {
+    // other error, return error
+    DINGO_LOG(ERROR) << "[txn]GetLockInfo read lock_key failed, lock_key: " << Helper::StringToHex(key)
+                     << ", status: " << status.error_str();
+    return butil::Status(status.error_code(), status.error_str());
+  }
+
+  if (lock_value.empty()) {
+    // lock_value is empty, the key is not locked
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_value is null";
+    return butil::Status::OK();
+  }
+
+  auto ret = lock_info.ParseFromString(lock_value);
+  if (!ret) {
+    DINGO_LOG(FATAL) << "[txn]GetLockInfo parse lock info failed, lock_key: " << Helper::StringToHex(key)
+                     << ", lock_value: " << Helper::StringToHex(lock_value);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnReader::GetDataValue(const std::string &key, std::string &value) {
+  if (!is_initialized_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
+  }
+
+  // data_iter_->Seek(key);
+  // if (!data_iter_->Valid() || data_iter_->Key() != key) {
+  //   // key is not exists, the key is not locked
+  //   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+  //       << "[txn]GetDataValue key: " << Helper::StringToHex(key) << " key is not exist";
+  //   return butil::Status(pb::error::Errno::EKEY_NOT_FOUND, "key is not exist");
+  // }
+
+  // value = data_iter_->Value();
+
+  auto ret = reader_->KvGet(Constant::kTxnDataCF, snapshot_, key, value);
+  if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+    // key is not exists, the key is not locked
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetDataValue key: " << Helper::StringToHex(key) << " key is not exist";
+    return butil::Status(pb::error::Errno::EKEY_NOT_FOUND, "key is not exist");
+  }
+
+  if (value.empty()) {
+    // value is empty, the key is not locked
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]GetDataValue key: " << Helper::StringToHex(key) << " value is null";
+    return butil::Status::OK();
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnReader::GetWriteInfo(int64_t min_commit_ts, int64_t max_commit_ts, int64_t start_ts,
+                                      const std::string &key, bool include_rollback, bool include_delete,
+                                      bool include_put, pb::store::WriteInfo &write_info, int64_t &commit_ts) {
+  if (!is_initialized_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
+  }
+
+  IteratorOptions iter_options;
+  iter_options.lower_bound = Helper::EncodeTxnKey(key, max_commit_ts);
+  iter_options.upper_bound = Helper::EncodeTxnKey(key, min_commit_ts);
+
+  // if the key is committed after start_ts, return WriteConflict
+  pb::store::WriteInfo tmp_write_info;
+  write_iter_->Seek(iter_options.lower_bound);
+  while (write_iter_->Valid() && write_iter_->Key() < iter_options.upper_bound) {
+    if (write_iter_->Key().length() <= 8) {
+      DINGO_LOG(ERROR) << "invalid write_key, key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_key is less than 8 bytes: " << Helper::StringToHex(write_iter_->Key());
+      return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_key");
+    }
+
+    std::string write_key;
+    int64_t write_ts;
+    Helper::DecodeTxnKey(write_iter_->Key(), write_key, write_ts);
+
+    if (write_ts < min_commit_ts) {
+      break;
+    }
+
+    auto ret = tmp_write_info.ParseFromArray(write_iter_->Value().data(), write_iter_->Value().size());
+    if (!ret) {
+      DINGO_LOG(ERROR) << "cannot parse tmp_write_info, key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_ts: " << write_ts << ", write_key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_value(hex): " << Helper::StringToHex(write_iter_->Value());
+      return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
+    }
+
+    if (start_ts > 0) {
+      if (tmp_write_info.start_ts() != start_ts) {
+        write_iter_->Next();
+        continue;
+      }
+    }
+
+    if (tmp_write_info.op() == pb::store::Op::Rollback) {
+      if (!include_rollback) {
+        write_iter_->Next();
+        continue;
+      }
+    } else if (tmp_write_info.op() == pb::store::Op::Delete) {
+      if (!include_delete) {
+        write_iter_->Next();
+        continue;
+      }
+    } else if (tmp_write_info.op() == pb::store::Op::Put) {
+      if (!include_put) {
+        write_iter_->Next();
+        continue;
+      }
+    } else {
+      DINGO_LOG(ERROR) << "invalid write op, key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_ts: " << write_ts << ", write_key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_value(hex): " << Helper::StringToHex(write_iter_->Value());
+      write_iter_->Next();
+      continue;
+    }
+
+    write_info = tmp_write_info;
+    commit_ts = write_ts;
+    break;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status TxnReader::GetRollbackInfo(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info) {
+  if (!is_initialized_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
+  }
+
+  std::string write_value;
+  auto ret = reader_->KvGet(Constant::kTxnWriteCF, snapshot_, Helper::EncodeTxnKey(key, start_ts), write_value);
+  if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+    // no rollback
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "not find a rollback write line, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts;
+
+    return butil::Status::OK();
+  }
+
+  if (write_value.empty()) {
+    DINGO_LOG(ERROR) << "find a rollback write line, but write_value is empty, key: " << Helper::StringToHex(key)
+                     << ", start_ts: " << start_ts;
+    return butil::Status(pb::error::Errno::EINTERNAL, "write_value is empty");
+  }
+
+  pb::store::WriteInfo tmp_write_info;
+  auto ret1 = tmp_write_info.ParseFromArray(write_value.data(), write_value.size());
+  if (!ret1) {
+    DINGO_LOG(ERROR) << "parse write info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                     << ", tmp_write_info: " << tmp_write_info.ShortDebugString()
+                     << ", write_value: " << Helper::StringToHex(write_value);
+    return butil::Status(pb::error::Errno::EINTERNAL, "parse write info failed");
+  }
+
+  if (tmp_write_info.start_ts() != start_ts) {
+    return butil::Status::OK();
+  }
+
+  if (tmp_write_info.op() == pb::store::Op::Rollback) {
+    if (tmp_write_info.start_ts() == start_ts) {
+      write_info = tmp_write_info;
+      return butil::Status::OK();
+    } else {
+      DINGO_LOG(ERROR)
+          << "find a rollback write line, but not the same start_ts, there my be FATAL error, write_info : "
+          << tmp_write_info.ShortDebugString() << ", key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts;
+    }
+  } else {
+    DINGO_LOG(ERROR) << "find a rollback write line, but not rollback op, there may be FATAL error, write_info: "
+                     << tmp_write_info.ShortDebugString() << ", key: " << Helper::StringToHex(key)
+                     << ", start_ts: " << start_ts;
+    return butil::Status(pb::error::Errno::EINTERNAL, "find a rollback write line, but not rollback op");
+  }
+
+  return butil::Status::OK();
+}
 
 butil::Status TxnIterator::Init() {
   snapshot_ = raw_engine_->GetSnapshot();
@@ -647,42 +882,6 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
   return false;
 }
 
-butil::Status TxnEngineHelper::GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key,
-                                           pb::store::LockInfo &lock_info) {
-  std::string lock_value;
-  auto status = reader->KvGet(Constant::kTxnLockCF, Helper::EncodeTxnKey(key, Constant::kLockVer), lock_value);
-  // if lock_value is not found or it is empty, then the key is not locked
-  // else the key is locked, return WriteConflict
-  if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-    // key is not exists, the key is not locked
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_key is not exist";
-    return butil::Status::OK();
-  }
-
-  if (!status.ok()) {
-    // other error, return error
-    DINGO_LOG(ERROR) << "[txn]GetLockInfo read lock_key failed, lock_key: " << Helper::StringToHex(key)
-                     << ", status: " << status.error_str();
-    return butil::Status(status.error_code(), status.error_str());
-  }
-
-  if (lock_value.empty()) {
-    // lock_value is empty, the key is not locked
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn]GetLockInfo key: " << Helper::StringToHex(key) << " is not locked, lock_value is null";
-    return butil::Status::OK();
-  }
-
-  auto ret = lock_info.ParseFromString(lock_value);
-  if (!ret) {
-    DINGO_LOG(FATAL) << "[txn]GetLockInfo parse lock info failed, lock_key: " << Helper::StringToHex(key)
-                     << ", lock_value: " << Helper::StringToHex(lock_value);
-  }
-
-  return butil::Status::OK();
-}
-
 bvar::LatencyRecorder g_txn_scan_lock_latency("dingo_txn_scan_lock");
 
 butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_lock_ts, int64_t max_lock_ts,
@@ -716,7 +915,9 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
                      << ", end_key: " << Helper::StringToHex(range.end_key());
   }
 
+  int64_t response_memory_size = 0;
   iter->Seek(iter_options.lower_bound);
+
   while (iter->Valid()) {
     auto lock_value = iter->Value();
     if (lock_value.length() <= 8) {
@@ -759,11 +960,19 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
     }
 
     lock_infos.push_back(lock_info);
+    response_memory_size += lock_info.ByteSizeLong();
+
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << "[txn] ScanLock push_back lock_info: " << lock_info.ShortDebugString();
 
-    if (limit > 0 && lock_infos.size() >= limit) {
+    if ((limit > 0 && lock_infos.size() >= limit) || lock_infos.size() > FLAGS_max_scan_lock_limit ||
+        response_memory_size > FLAGS_max_scan_memory_size) {
       has_more = true;
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << "[txn]ScanLockInfo has_more: " << has_more << ", lock_infos size: " << lock_infos.size()
+          << ", limit: " << limit << ", max_scan_lock_limit: " << FLAGS_max_scan_lock_limit
+          << ", response_memory_size: " << response_memory_size
+          << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
       break;
     }
 
@@ -814,9 +1023,20 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "txn_result_info is not empty");
   }
 
-  auto reader = engine->Reader();
+  TxnReader txn_reader(engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << "[txn]BatchGet txn_reader.Init failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn_reader.Init failed");
+  }
 
   int64_t response_memory_size = 0;
+
+  auto write_iter = txn_reader.GetWriteIter();
+  if (write_iter == nullptr) {
+    DINGO_LOG(ERROR) << "[txn]BatchGet GetWriteIter failed, start_ts: " << start_ts;
+    return butil::Status(pb::error::Errno::EINTERNAL, "GetWriteIter failed");
+  }
 
   // for every key in keys, get lock info, if lock_ts < start_ts, return LockInfo
   // else find the latest write below our start_ts
@@ -826,7 +1046,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     kv.set_key(key);
 
     pb::store::LockInfo lock_info;
-    auto ret = GetLockInfo(reader, key, lock_info);
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << "[txn]BatchGet GetLockInfo failed, key: " << Helper::StringToHex(key)
                        << ", status: " << ret.error_str();
@@ -857,27 +1077,23 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     IteratorOptions iter_options;
     iter_options.lower_bound = Helper::EncodeTxnKey(key, iter_start_ts);
     iter_options.upper_bound = Helper::EncodeTxnKey(key, 0);
-    auto iter = reader->NewIterator(Constant::kTxnWriteCF, iter_options);
-    if (iter == nullptr) {
-      DINGO_LOG(FATAL) << "[txn]BatchGet NewIterator failed, start_ts: " << start_ts;
-    }
 
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << "iter_options.lower_bound: " << Helper::StringToHex(iter_options.lower_bound)
         << ", iter_options.upper_bound: " << Helper::StringToHex(iter_options.upper_bound);
 
     // check isolation level and return value
-    iter->Seek(iter_options.lower_bound);
-    while (iter->Valid()) {
-      if (iter->Key().length() <= 8) {
-        DINGO_LOG(ERROR) << ", invalid write_key, key: " << Helper::StringToHex(iter->Key())
+    write_iter->Seek(iter_options.lower_bound);
+    while (write_iter->Valid() && write_iter->Key() < iter_options.lower_bound) {
+      if (write_iter->Key().length() <= 8) {
+        DINGO_LOG(ERROR) << ", invalid write_key, key: " << Helper::StringToHex(write_iter->Key())
                          << ", start_ts: " << start_ts
-                         << ", write_key is less than 8 bytes: " << Helper::StringToHex(iter->Key());
+                         << ", write_key is less than 8 bytes: " << Helper::StringToHex(write_iter->Key());
         return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_key");
       }
       std::string write_key;
       int64_t write_ts;
-      Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
+      Helper::DecodeTxnKey(write_iter->Key(), write_key, write_ts);
 
       bool is_valid = false;
       if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
@@ -894,27 +1110,27 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       if (is_valid) {
         // write_ts <= start_ts, return write_info
         pb::store::WriteInfo write_info;
-        auto ret = write_info.ParseFromArray(iter->Value().data(), iter->Value().size());
+        auto ret = write_info.ParseFromArray(write_iter->Value().data(), write_iter->Value().size());
         if (!ret) {
           DINGO_LOG(FATAL) << "[txn]BatchGet parse write info failed, key: " << Helper::StringToHex(key)
-                           << ", write_key: " << Helper::StringToHex(iter->Key())
-                           << ", write_value(hex): " << Helper::StringToHex(iter->Value());
+                           << ", write_key: " << Helper::StringToHex(write_iter->Key())
+                           << ", write_value(hex): " << Helper::StringToHex(write_iter->Value());
         }
 
         // check the op type of write_info
         if (write_info.op() == pb::store::Op::Rollback) {
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << "[txn]BatchGet write_info.op() == pb::store::Op::Rollback, go to next line, key: "
-              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(write_iter->Key())
               << ", write_info: " << write_info.ShortDebugString();
           // goto next write line
-          iter->Next();
+          write_iter->Next();
           continue;
         } else if (write_info.op() == pb::store::Op::Delete) {
           // if op is delete, value is null
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << "[txn]BatchGet write_info.op() == pb::store::Op::Delete, so value is null, key: "
-              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key())
+              << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(write_iter->Key())
               << ", write_info: " << write_info.ShortDebugString();
           kv.set_value(std::string());
           break;
@@ -930,8 +1146,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
           break;
         }
 
-        auto ret1 =
-            reader->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(key, write_info.start_ts()), *kv.mutable_value());
+        auto ret1 = txn_reader.GetDataValue(Helper::EncodeTxnKey(key, write_info.start_ts()), *kv.mutable_value());
         if (!ret1.ok() && ret1.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
           DINGO_LOG(FATAL) << "[txn]BatchGet read data failed, key: " << Helper::StringToHex(key)
                            << ", status: " << ret1.error_str();
@@ -944,10 +1159,10 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       } else {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << "[txn]BatchGet is_valid = false, go to next line, write_ts: " << write_ts << " >= start_ts: " << start_ts
-            << ", key: " << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(iter->Key());
+            << ", key: " << Helper::StringToHex(key) << ", write_key: " << Helper::StringToHex(write_iter->Key());
       }
 
-      iter->Next();
+      write_iter->Next();
     }
 
     kvs.emplace_back(kv);
@@ -1082,132 +1297,6 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   return butil::Status::OK();
 }
 
-butil::Status TxnEngineHelper::GetWriteInfo(RawEnginePtr engine, int64_t min_commit_ts, int64_t max_commit_ts,
-                                            int64_t start_ts, const std::string &key, bool include_rollback,
-                                            bool include_delete, bool include_put, pb::store::WriteInfo &write_info,
-                                            int64_t &commit_ts) {
-  IteratorOptions iter_options;
-  iter_options.lower_bound = Helper::EncodeTxnKey(key, max_commit_ts);
-  iter_options.upper_bound = Helper::EncodeTxnKey(key, min_commit_ts);
-  auto iter = engine->Reader()->NewIterator(Constant::kTxnWriteCF, iter_options);
-  if (iter == nullptr) {
-    DINGO_LOG(FATAL) << ", new iterator failed, key: " << Helper::StringToHex(key);
-  }
-
-  // if the key is committed after start_ts, return WriteConflict
-  pb::store::WriteInfo tmp_write_info;
-  iter->Seek(iter_options.lower_bound);
-  while (iter->Valid()) {
-    if (iter->Key().length() <= 8) {
-      DINGO_LOG(ERROR) << "invalid write_key, key: " << Helper::StringToHex(iter->Key())
-                       << ", write_key is less than 8 bytes: " << Helper::StringToHex(iter->Key());
-      return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_key");
-    }
-
-    std::string write_key;
-    int64_t write_ts;
-    Helper::DecodeTxnKey(iter->Key(), write_key, write_ts);
-
-    if (write_ts < min_commit_ts) {
-      break;
-    }
-
-    auto ret = tmp_write_info.ParseFromArray(iter->Value().data(), iter->Value().size());
-    if (!ret) {
-      DINGO_LOG(ERROR) << "cannot parse tmp_write_info, key: " << Helper::StringToHex(iter->Key())
-                       << ", write_ts: " << write_ts << ", write_key: " << Helper::StringToHex(iter->Key())
-                       << ", write_value(hex): " << Helper::StringToHex(iter->Value());
-      return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
-    }
-
-    if (start_ts > 0) {
-      if (tmp_write_info.start_ts() != start_ts) {
-        iter->Next();
-        continue;
-      }
-    }
-
-    if (tmp_write_info.op() == pb::store::Op::Rollback) {
-      if (!include_rollback) {
-        iter->Next();
-        continue;
-      }
-    } else if (tmp_write_info.op() == pb::store::Op::Delete) {
-      if (!include_delete) {
-        iter->Next();
-        continue;
-      }
-    } else if (tmp_write_info.op() == pb::store::Op::Put) {
-      if (!include_put) {
-        iter->Next();
-        continue;
-      }
-    } else {
-      DINGO_LOG(ERROR) << "invalid write op, key: " << Helper::StringToHex(iter->Key()) << ", write_ts: " << write_ts
-                       << ", write_key: " << Helper::StringToHex(iter->Key())
-                       << ", write_value(hex): " << Helper::StringToHex(iter->Value());
-      iter->Next();
-      continue;
-    }
-
-    write_info = tmp_write_info;
-    commit_ts = write_ts;
-    break;
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status TxnEngineHelper::GetRollbackInfo(RawEngine::ReaderPtr reader, int64_t start_ts, const std::string &key,
-                                               pb::store::WriteInfo &write_info) {
-  std::string write_value;
-  auto ret = reader->KvGet(Constant::kTxnWriteCF, Helper::EncodeTxnKey(key, start_ts), write_value);
-  if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-    // no rollback
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "not find a rollback write line, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts;
-
-    return butil::Status::OK();
-  }
-
-  if (write_value.empty()) {
-    DINGO_LOG(ERROR) << "find a rollback write line, but write_value is empty, key: " << Helper::StringToHex(key)
-                     << ", start_ts: " << start_ts;
-    return butil::Status(pb::error::Errno::EINTERNAL, "write_value is empty");
-  }
-
-  pb::store::WriteInfo tmp_write_info;
-  auto ret1 = tmp_write_info.ParseFromArray(write_value.data(), write_value.size());
-  if (!ret1) {
-    DINGO_LOG(ERROR) << "parse write info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
-                     << ", tmp_write_info: " << tmp_write_info.ShortDebugString()
-                     << ", write_value: " << Helper::StringToHex(write_value);
-    return butil::Status(pb::error::Errno::EINTERNAL, "parse write info failed");
-  }
-
-  if (tmp_write_info.start_ts() != start_ts) {
-    return butil::Status::OK();
-  }
-
-  if (tmp_write_info.op() == pb::store::Op::Rollback) {
-    if (tmp_write_info.start_ts() == start_ts) {
-      write_info = tmp_write_info;
-      return butil::Status::OK();
-    } else {
-      DINGO_LOG(ERROR) << "find a rollback write line, but not the same start_ts, there my be FATAL error, write_info: "
-                       << tmp_write_info.ShortDebugString() << ", key: " << Helper::StringToHex(key)
-                       << ", start_ts: " << start_ts;
-    }
-  } else {
-    DINGO_LOG(ERROR) << "find a rollback write line, but not rollback op, there may be FATAL error, write_info: "
-                     << tmp_write_info.ShortDebugString() << ", key: " << Helper::StringToHex(key)
-                     << ", start_ts: " << start_ts;
-    return butil::Status(pb::error::Errno::EINTERNAL, "find a rollback write line, but not rollback op");
-  }
-
-  return butil::Status::OK();
-}
-
 bvar::LatencyRecorder g_txn_pessimistic_lock_latency("dingo_txn_pessimistic_lock");
 
 butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
@@ -1251,7 +1340,14 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
 
   auto *error = response->mutable_error();
 
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
   // for every mutation, check and do lock, if any one of the mutation is failed, the whole lock is failed
   // 1. check if a lock is exists:
   for (const auto &mutation : mutations) {
@@ -1266,7 +1362,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     // 1.check if the key is locked
     //   if the key is locked, return LockInfo
     pb::store::LockInfo lock_info;
-    auto ret = GetLockInfo(reader, mutation.key(), lock_info);
+    auto ret = txn_reader.GetLockInfo(mutation.key(), lock_info);
     if (!ret.ok()) {
       // Now we need to fatal exit to prevent data inconsistency between raft peers
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
@@ -1346,8 +1442,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       // there is not lock exists, we need to check if for_update_ts will confict with commit_ts
       pb::store::WriteInfo write_info;
       int64_t commit_ts = 0;
-      auto ret2 = GetWriteInfo(raw_engine, start_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
-                               write_info, commit_ts);
+      auto ret2 = txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info,
+                                          commit_ts);
       if (!ret2.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
                          << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
@@ -1543,7 +1639,14 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
   auto *error = response->mutable_error();
 
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
   // for every key, check and do rollback lock, if any one of the rollback is failed, the whole lock is failed
   // 1. check if a lock is exists:
   //    if a lock exists: a)  if start_ts
@@ -1551,7 +1654,7 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
     // 1.check if the key is locked
     //   if the key is locked, return LockInfo
     pb::store::LockInfo lock_info;
-    auto ret = GetLockInfo(reader, key, lock_info);
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
     if (!ret.ok()) {
       // Now we need to fatal exit to prevent data inconsistency between raft peers
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback, start_ts: {}", region->Id(), start_ts)
@@ -1716,7 +1819,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   }
   auto *error = response->mutable_error();
 
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
   // for every mutation, check and do prewrite, if any one of the mutation is failed, the whole prewrite is failed
   for (int64_t i = 0; i < mutations.size(); i++) {
     const auto &mutation = mutations[i];
@@ -1724,7 +1834,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // 1.check if the key is locked
     //   if the key is locked, return LockInfo
     pb::store::LockInfo prev_lock_info;
-    auto ret = GetLockInfo(reader, mutation.key(), prev_lock_info);
+    auto ret = txn_reader.GetLockInfo(mutation.key(), prev_lock_info);
     if (!ret.ok()) {
       // TODO: do read before write to raft state machine
       // Now we need to fatal exit to prevent data inconsistency between raft peers
@@ -1854,7 +1964,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // 2.1 check rollback
     // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
     pb::store::WriteInfo write_info;
-    auto ret1 = GetRollbackInfo(reader, start_ts, mutation.key(), write_info);
+    auto ret1 = txn_reader.GetRollbackInfo(start_ts, mutation.key(), write_info);
     if (!ret1.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
                        << ", get rollback info failed, key: " << Helper::StringToHex(mutation.key())
@@ -1891,7 +2001,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // phase, so we do not need to check here
     int64_t commit_ts = 0;
     auto ret2 =
-        GetWriteInfo(raw_engine, 0, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info, commit_ts);
+        txn_reader.GetWriteInfo(0, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info, commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite", region->Id())
                        << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
@@ -2242,7 +2352,13 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   }
 
   // create reader and writer
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
 
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
@@ -2261,7 +2377,7 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
   std::vector<pb::store::LockInfo> lock_infos;
   for (const auto &key : keys) {
     pb::store::LockInfo lock_info;
-    auto ret = TxnEngineHelper::GetLockInfo(reader, key, lock_info);
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
                                       commit_ts)
@@ -2335,8 +2451,8 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
       // check if the key is already committed, if it is committed can skip it
       pb::store::WriteInfo write_info;
       int64_t prev_commit_ts = 0;
-      auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, start_ts, commit_ts, start_ts, key, false, true, true,
-                                                write_info, prev_commit_ts);
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, commit_ts, start_ts, key, false, true, true, write_info, prev_commit_ts);
       if (!ret2.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
                                         commit_ts)
@@ -2357,7 +2473,7 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
       // check if the key is already rollbacked, if it is rollbacked, return WriteConflict
       // if there is a rollback, there will be a key | start_ts : WriteInfo| in write_cf
-      auto ret1 = TxnEngineHelper::GetRollbackInfo(reader, start_ts, key, write_info);
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
       if (!ret1.ok()) {
         DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
                                         commit_ts)
@@ -2626,7 +2742,12 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
   }
 
   // create reader and writer
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id()) << ", init txn_reader failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
 
   auto *response = dynamic_cast<pb::store::TxnCheckTxnStatusResponse *>(ctx->Response());
   if (response == nullptr) {
@@ -2639,7 +2760,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
 
   // get lock info
   pb::store::LockInfo lock_info;
-  auto ret = TxnEngineHelper::GetLockInfo(reader, primary_key, lock_info);
+  auto ret = txn_reader.GetLockInfo(primary_key, lock_info);
   if (!ret.ok()) {
     DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
                      << ", get lock info failed, primary_key: " << Helper::StringToHex(primary_key)
@@ -2762,7 +2883,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     // the lock is not exists, check if it is rollbacked or committed
     // try to get if there is a rollback to lock_ts
     pb::store::WriteInfo write_info;
-    auto ret1 = TxnEngineHelper::GetRollbackInfo(reader, lock_ts, primary_key, write_info);
+    auto ret1 = txn_reader.GetRollbackInfo(lock_ts, primary_key, write_info);
     if (!ret1.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus, ", region->Id())
                        << ", get rollback info failed, primary_key: " << Helper::StringToHex(primary_key)
@@ -2779,8 +2900,8 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
 
     // if there is not a rollback to lock_ts, try to get the commit_ts
     int64_t commit_ts = 0;
-    auto ret2 = TxnEngineHelper::GetWriteInfo(raw_engine, lock_ts, Constant::kMaxVer, lock_ts, primary_key, false, true,
-                                              true, write_info, commit_ts);
+    auto ret2 = txn_reader.GetWriteInfo(lock_ts, Constant::kMaxVer, lock_ts, primary_key, false, true, true, write_info,
+                                        commit_ts);
     if (!ret2.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                        << ", get write info failed, primary_key: " << Helper::StringToHex(primary_key)
@@ -2835,7 +2956,14 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   }
 
   // create reader and writer
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
 
@@ -2860,7 +2988,7 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   std::vector<std::string> keys_to_rollback_without_data;
   for (const auto &key : keys) {
     pb::store::LockInfo lock_info;
-    auto ret = TxnEngineHelper::GetLockInfo(reader, key, lock_info);
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
                        << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
@@ -3072,7 +3200,13 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   // scan lock_cf to search if transaction with start_ts is exists, if exists, do rollback or commit
   // if not exists, do nothing
   // create reader and writer
-  auto reader = raw_engine->Reader();
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
 
   std::vector<pb::common::KeyValue> kv_puts_write;
   std::vector<std::string> kv_deletes_lock;
@@ -3096,7 +3230,7 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   if (!keys.empty()) {
     for (const auto &key : keys) {
       pb::store::LockInfo lock_info;
-      auto ret = GetLockInfo(reader, key, lock_info);
+      auto ret = txn_reader.GetLockInfo(key, lock_info);
       if (!ret.ok()) {
         DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                          << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
@@ -3246,8 +3380,16 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   auto *error = response->mutable_error();
   auto *txn_result = response->mutable_txn_result();
 
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
   pb::store::LockInfo lock_info;
-  auto ret = GetLockInfo(raw_engine->Reader(), primary_lock, lock_info);
+  auto ret = txn_reader.GetLockInfo(primary_lock, lock_info);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(),
                                     Helper::StringToHex(primary_lock))

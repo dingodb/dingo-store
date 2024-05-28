@@ -25,10 +25,39 @@
 #include "common/constant.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
+#include "engine/snapshot.h"
 #include "meta/store_meta_manager.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
+class TxnReader {
+ public:
+  TxnReader(RawEnginePtr raw_engine) : raw_engine_(raw_engine) {}
+
+  TxnReader(RawEnginePtr raw_engine, SnapshotPtr snapshot) : raw_engine_(raw_engine), snapshot_(snapshot) {}
+
+  ~TxnReader() = default;
+
+  butil::Status Init();
+  butil::Status GetLockInfo(const std::string &key, pb::store::LockInfo &lock_info);
+  butil::Status GetDataValue(const std::string &key, std::string &value);
+  butil::Status GetWriteInfo(int64_t min_commit_ts, int64_t max_commit_ts, int64_t start_ts, const std::string &key,
+                             bool include_rollback, bool include_delete, bool include_put,
+                             pb::store::WriteInfo &write_info, int64_t &commit_ts);
+  butil::Status GetRollbackInfo(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info);
+
+  std::shared_ptr<Iterator> GetWriteIter() { return write_iter_; }
+  SnapshotPtr GetSnapshot() { return snapshot_; }
+
+ private:
+  bool is_initialized_{false};
+  RawEnginePtr raw_engine_;
+  SnapshotPtr snapshot_;
+  RawEngine::ReaderPtr reader_;
+
+  std::shared_ptr<Iterator> write_iter_;
+};
 
 class TxnIterator {
  public:
@@ -99,8 +128,6 @@ class TxnEngineHelper {
                                 int64_t start_ts, const std::set<int64_t> &resolved_locks,
                                 pb::store::TxnResultInfo &txn_result_info);
 
-  static butil::Status GetLockInfo(RawEngine::ReaderPtr reader, const std::string &key, pb::store::LockInfo &lock_info);
-
   static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
                                     const pb::common::Range &range, int64_t limit,
                                     std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
@@ -116,14 +143,6 @@ class TxnEngineHelper {
                             const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                             const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
                             std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_scan_key);
-
-  static butil::Status GetWriteInfo(RawEnginePtr raw_engine, int64_t min_commit_ts, int64_t max_commit_ts,
-                                    int64_t start_ts, const std::string &key, bool include_rollback,
-                                    bool include_delete, bool include_put, pb::store::WriteInfo &write_info,
-                                    int64_t &commit_ts);
-
-  static butil::Status GetRollbackInfo(RawEngine::ReaderPtr write_reader, int64_t start_ts, const std::string &key,
-                                       pb::store::WriteInfo &write_info);
 
   // txn write functions
   static butil::Status DoTxnCommit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
