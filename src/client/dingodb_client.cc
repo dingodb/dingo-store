@@ -580,6 +580,20 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
         return;
       }
       client::DumpDb(ctx);
+    } else if (method == "WhichRegion") {
+      ctx->table_id = FLAGS_table_id;
+      ctx->index_id = FLAGS_index_id;
+      ctx->key = FLAGS_key;
+      if (ctx->table_id == 0 && ctx->index_id == 0) {
+        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
+        return;
+      }
+      if (ctx->key.empty()) {
+        DINGO_LOG(ERROR) << "Param key is error.";
+        return;
+      }
+      WhichRegion(ctx);
+
       // illegal method
     } else {
       DINGO_LOG(ERROR) << "Unknown method: " << method;

@@ -20,6 +20,7 @@
 namespace client {
 
 void DumpDb(std::shared_ptr<Context> ctx);
+void WhichRegion(std::shared_ptr<Context> ctx);
 
 }  // namespace client
 
