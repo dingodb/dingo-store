@@ -3,7 +3,6 @@ INCLUDE(ExternalProject)
 SET(SDK_LIBRARIES "${CMAKE_CURRENT_BINARY_DIR}/../libsdk.a" CACHE FILEPATH "sdk library." FORCE)
 message(STATUS "SDK_LIBRARIES: ${SDK_LIBRARIES}")
 
-
 # Builds absl project from the git submodule.
 ExternalProject_Add(absl
   PREFIX absl
@@ -33,6 +32,7 @@ ExternalProject_Add(c-ares
   SOURCE_DIR "${GRPC_SOURCES_DIR}/third_party/cares/cares"
   BINARY_DIR "${GRPC_BUILD_DIR}/c-ares"
   CMAKE_CACHE_ARGS
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=TRUE
         -DCARES_SHARED:BOOL=OFF
         -DCARES_STATIC:BOOL=ON
         -DCARES_STATIC_PIC:BOOL=ON
@@ -45,6 +45,7 @@ ExternalProject_Add(grpc_protobuf
   SOURCE_DIR "${GRPC_SOURCES_DIR}/third_party/protobuf"
   BINARY_DIR "${GRPC_BUILD_DIR}/protobuf"
   CMAKE_CACHE_ARGS
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=TRUE
         -Dprotobuf_BUILD_TESTS:BOOL=OFF
         -Dprotobuf_WITH_ZLIB:BOOL=OFF
         -Dprotobuf_ABSL_PROVIDER:STRING=package
@@ -96,6 +97,7 @@ ExternalProject_Add(extern_grpc
         ${EXTERNAL_OPTIONAL_ARGS}
 
   CMAKE_CACHE_ARGS
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=TRUE
         -DgRPC_INSTALL:BOOL=ON
         -DgRPC_BUILD_TESTS:BOOL=OFF
         -DgRPC_BUILD_MSVC_MP_COUNT:STRING=-1
@@ -133,6 +135,7 @@ ExternalProject_Add(extern_sdk
         -DGTEST_LIBRARIES=${GTEST_LIBRARIES}
         -DLIBUNWIND_LIBRARIES=${LIBUNWIND_LIBRARIES}
   CMAKE_CACHE_ARGS
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=TRUE
         -Dutf8_range_DIR:STRING=${GRPC_INSTALL_DIR}/lib/cmake/utf8_range
         -DProtobuf_DIR:PATH=${_FINDPACKAGE_PROTOBUF_CONFIG_DIR}
         -Dc-ares_DIR:PATH=${GRPC_INSTALL_DIR}/lib/cmake/c-ares
