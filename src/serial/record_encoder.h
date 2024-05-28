@@ -16,6 +16,7 @@
 #define DINGO_SERIAL_RECORD_ENCODER_H_
 
 #include <memory>
+#include <string>
 
 #include "any"
 #include "functional"  // IWYU pragma: keep
@@ -65,6 +66,7 @@ class RecordEncoder {
   int EncodeValue(const std::vector<std::any>& record, std::string& output);
 
   int EncodeKeyPrefix(char prefix, const std::vector<std::any>& record, int column_count, std::string& output);
+  int EncodeKeyPrefix(char prefix, const std::vector<std::string>& keys, std::string& output);
 
   int EncodeMaxKeyPrefix(char prefix, std::string& output) const;
 

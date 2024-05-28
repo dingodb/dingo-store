@@ -16,9 +16,13 @@
 
 #include <sys/types.h>
 
+#include <cstdint>
+#include <cstdlib>
 #include <memory>
 #include <string>
 
+#include "common/helper.h"
+#include "proto/common.pb.h"
 #include "serial/keyvalue.h"  // IWYU pragma: keep
 
 namespace dingodb {
@@ -308,6 +312,73 @@ int RecordEncoder::EncodeKeyPrefix(char prefix, const std::vector<std::any>& rec
 
     if (--column_count <= 0) {
       break;
+    }
+  }
+
+  return buf.GetBytes(output);
+}
+
+int RecordEncoder::EncodeKeyPrefix(char prefix, const std::vector<std::string>& keys, std::string& output) {
+  Buf buf(key_buf_size_, this->le_);
+  buf.EnsureRemainder(9);
+  EncodePrefix(buf, prefix);
+  int i = 0;
+  for (const auto& bs : *schemas_) {
+    if (i == keys.size()) {
+      break;
+    }
+    if (bs) {
+      BaseSchema::Type type = bs->GetType();
+      switch (type) {
+        case BaseSchema::kBool: {
+          auto bos = std::dynamic_pointer_cast<DingoSchema<std::optional<bool>>>(bs);
+          if (bos->IsKey()) {
+            bos->EncodeKeyPrefix(&buf, std::optional<bool>(Helper::StringToBool(keys[i])));
+          }
+          break;
+        }
+        case BaseSchema::kInteger: {
+          auto is = std::dynamic_pointer_cast<DingoSchema<std::optional<int32_t>>>(bs);
+          if (is->IsKey()) {
+            is->EncodeKeyPrefix(&buf, std::optional<int32_t>(Helper::StringToBool(keys[i])));
+          }
+          break;
+        }
+        case BaseSchema::kFloat: {
+          auto fs = std::dynamic_pointer_cast<DingoSchema<std::optional<float>>>(bs);
+          if (fs->IsKey()) {
+            fs->EncodeKeyPrefix(&buf, std::optional<float>(Helper::StringToBool(keys[i])));
+          }
+          break;
+        }
+        case BaseSchema::kLong: {
+          auto ls = std::dynamic_pointer_cast<DingoSchema<std::optional<int64_t>>>(bs);
+          if (ls->IsKey()) {
+            ls->EncodeKeyPrefix(&buf, std::optional<int64_t>(Helper::StringToBool(keys[i])));
+          }
+          break;
+        }
+        case BaseSchema::kDouble: {
+          auto ds = std::dynamic_pointer_cast<DingoSchema<std::optional<double>>>(bs);
+          if (ds->IsKey()) {
+            ds->EncodeKeyPrefix(&buf, std::optional<double>(Helper::StringToBool(keys[i])));
+          }
+          break;
+        }
+        case BaseSchema::kString: {
+          auto ss = std::dynamic_pointer_cast<DingoSchema<std::optional<std::shared_ptr<std::string>>>>(bs);
+          if (ss->IsKey()) {
+            ss->EncodeKeyPrefix(&buf,
+                                std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>(keys[i])));
+          }
+          break;
+        }
+        default: {
+          break;
+        }
+      }
+
+      ++i;
     }
   }
 

@@ -1994,6 +1994,42 @@ butil::Status Utils::CheckPbSchemaNameFieldExistEmptyName(
   return butil::Status::OK();
 }
 
+std::vector<pb::common::Schema> Utils::TransformColumnSchema(const pb::meta::TableDefinition& definition) {
+  std::vector<pb::common::Schema> column_schemas;
+  int i = 0;
+  for (const auto& column : definition.columns()) {
+    pb::common::Schema schema;
+    std::string sql_type = column.sql_type();
+    if (sql_type == "ARRAY" || sql_type == "MULTISET") {
+      sql_type += "_" + column.element_type();
+    }
+    schema.set_type(TransformSchemaType(sql_type));
+    schema.set_index(i++);
+    if (column.indexofkey() >= 0) {
+      schema.set_is_key(true);
+    }
+    schema.set_is_nullable(column.nullable());
+    column_schemas.push_back(schema);
+  }
+
+  return column_schemas;
+}
+
+std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> Utils::GenSerialSchema(
+    const pb::meta::TableDefinition& definition) {
+  auto column_schemas = TransformColumnSchema(definition);  // NOLINT
+  google::protobuf::RepeatedPtrField<pb::common::Schema> pb_schemas;
+  Helper::VectorToPbRepeated(column_schemas, &pb_schemas);
+
+  auto serial_schemas = std::make_shared<std::vector<std::shared_ptr<dingodb::BaseSchema>>>();
+  auto status = TransToSerialSchema(pb_schemas, &serial_schemas);
+  if (!status.ok()) {
+    return nullptr;
+  }
+
+  return serial_schemas;
+}
+
 #undef COPROCESSOR_LOG
 #undef COPROCESSOR_LOG_FOR_LAMBDA
 
