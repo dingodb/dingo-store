@@ -180,6 +180,32 @@ void DebugServiceImpl::TransferLeader(google::protobuf::RpcController* controlle
   }
 }
 
+void DebugServiceImpl::ModifyRegionMeta(google::protobuf::RpcController* controller,
+                                        const pb::debug::ModifyRegionMetaRequest* request,
+                                        pb::debug::ModifyRegionMetaResponse* response,
+                                        google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  if (request->fields().empty()) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "Missing param fields");
+    return;
+  }
+
+  auto region = Server::GetInstance().GetRegion(request->region_id());
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND, "Not found region");
+    return;
+  }
+
+  for (const auto& field : request->fields()) {
+    if (field == "state") {
+      region->SetState(request->state());
+    }
+  }
+}
+
 void DebugServiceImpl::SnapshotVectorIndex(google::protobuf::RpcController* controller,
                                            const pb::debug::SnapshotVectorIndexRequest* request,
                                            pb::debug::SnapshotVectorIndexResponse* response,

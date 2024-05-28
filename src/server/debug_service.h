@@ -41,6 +41,9 @@ class DebugServiceImpl : public pb::debug::DebugService {
   void TransferLeader(google::protobuf::RpcController* controller, const pb::debug::TransferLeaderRequest* request,
                       pb::debug::TransferLeaderResponse* response, google::protobuf::Closure* done) override;
 
+  void ModifyRegionMeta(google::protobuf::RpcController* controller, const pb::debug::ModifyRegionMetaRequest* request,
+                        pb::debug::ModifyRegionMetaResponse* response, google::protobuf::Closure* done) override;
+
   void SnapshotVectorIndex(google::protobuf::RpcController* controller,
                            const pb::debug::SnapshotVectorIndexRequest* request,
                            pb::debug::SnapshotVectorIndexResponse* response, google::protobuf::Closure* done) override;
