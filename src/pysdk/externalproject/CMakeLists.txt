@@ -10,7 +10,7 @@ else()
   set(_FINDPACKAGE_PROTOBUF_CONFIG_DIR "${GRPC_INSTALL_DIR}/lib/cmake/protobuf")
 endif()
 
-ExternalProject_Add(extern_sdk_example
+ExternalProject_Add(extern_pysdk
   SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.."
   BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/.."
   INSTALL_COMMAND ""
@@ -38,4 +38,4 @@ ExternalProject_Add(extern_sdk_example
   DEPENDS sdk 
   STEP_TARGETS configure
 )
-add_dependencies(extern_sdk_example extern_sdk_example-configure)
+add_dependencies(extern_pysdk extern_pysdk-configure)

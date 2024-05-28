@@ -20,20 +20,6 @@ if(SDK_ENABLE_GRPC)
     message(STATUS "sdk_example: GRPC_INSTALL_DIR ${GRPC_INSTALL_DIR}, THIRD_PARTY_PATH:${THIRD_PARTY_PATH}" )
 
     add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT)
-    # the location where protobuf-config.cmake will be installed varies by platform
-    if (WIN32)
-      set(_FINDPACKAGE_PROTOBUF_CONFIG_DIR "${GRPC_INSTALL_DIR}/cmake")
-    else()
-      set(_FINDPACKAGE_PROTOBUF_CONFIG_DIR "${GRPC_INSTALL_DIR}/lib/cmake/protobuf")
-    endif()
-
-    set(utf8_range_DIR ${GRPC_INSTALL_DIR}/lib/cmake/utf8_range)
-    set(Protobuf_DIR ${_FINDPACKAGE_PROTOBUF_CONFIG_DIR})
-    set(c-ares_DIR ${GRPC_INSTALL_DIR}/lib/cmake/c-ares)
-    set(re2_DIR ${GRPC_INSTALL_DIR}/lib/cmake/re2)
-    set(ZLIB_ROOT ${THIRD_PARTY_PATH}/install/zlib)
-    set(absl_DIR ${GRPC_INSTALL_DIR}/lib/cmake/absl)
-    set(gRPC_DIR ${GRPC_INSTALL_DIR}/lib/cmake/grpc)
 
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/..)
     include_directories(${GLOG_INCLUDE_DIR})
