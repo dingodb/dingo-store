@@ -348,6 +348,15 @@ class Helper {
   static std::string Rtrim(const std::string& s, const std::string& delete_str);
   static std::string Trim(const std::string& s, const std::string& delete_str);
 
+  // string type cast
+  static bool StringToBool(const std::string& str);
+  static int32_t StringToInt32(const std::string& str);
+  static int64_t StringToInt64(const std::string& str);
+  static float StringToFloat(const std::string& str);
+  static double StringToDouble(const std::string& str);
+
+  static std::vector<float> StringToVector(const std::string& str);
+
   // Clean string first slash, e.g. /name.txt -> name.txt
   static std::string CleanFirstSlash(const std::string& str);
 
@@ -385,8 +394,6 @@ class Helper {
   static float DingoHnswInnerProductDistance(const float* p_vect1, const float* p_vect2, size_t d);
 
   static float DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_t d);
-
-  static std::vector<float> StringToVector(const std::string& str);
 
   template <typename T>
   static std::string SetToString(const std::set<T>& set) {

@@ -24,6 +24,7 @@
 
 #include "butil/status.h"
 #include "proto/common.pb.h"
+#include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
 namespace dingodb {
@@ -147,6 +148,10 @@ class Utils {
 
   static butil::Status CheckPbSchemaNameFieldExistEmptyName(
       const google::protobuf::RepeatedPtrField<pb::common::Schema>& pb_schemas, bool& is_exist_empty_name);  // NOLINT
+
+  static std::vector<pb::common::Schema> TransformColumnSchema(const pb::meta::TableDefinition& definition);
+  static std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> GenSerialSchema(
+      const pb::meta::TableDefinition& definition);
 };
 
 }  // namespace dingodb

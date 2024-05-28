@@ -22,15 +22,15 @@
 
 #include "schema/base_schema.h"
 #include "schema/boolean_schema.h"
-#include "schema/double_schema.h"
-#include "schema/integer_schema.h"
-#include "schema/long_schema.h"
-#include "schema/string_schema.h"
-#include "schema/string_list_schema.h"
 #include "schema/double_list_schema.h"
+#include "schema/double_schema.h"
 #include "schema/float_list_schema.h"
 #include "schema/integer_list_schema.h"
+#include "schema/integer_schema.h"
 #include "schema/long_list_schema.h"
+#include "schema/long_schema.h"
+#include "schema/string_list_schema.h"
+#include "schema/string_schema.h"
 
 namespace dingodb {
 
@@ -41,11 +41,12 @@ int* GetApproPerRecordSize(std::shared_ptr<std::vector<std::shared_ptr<BaseSchem
 bool VectorFindAndRemove(std::vector<int>* v, int t);
 // bool VectorFind(const std::vector<int>& v, int t);
 // bool VectorFind(const std::vector<int>& v, int t, int n);
-inline bool VectorFind(const std::vector<int>& v, int t, int n) {
-  return v[n] == t;
-}
+inline bool VectorFind(const std::vector<int>& v, int t, int n) { return v[n] == t; }
 
 bool IsLE();
+
+std::string ConvertColumnValueToString(const pb::meta::ColumnDefinition& column_definition, const std::any& value);
+pb::common::Schema::Type TransformSchemaType(const std::string& name);
 
 }  // namespace dingodb
 

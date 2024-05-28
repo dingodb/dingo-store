@@ -1803,6 +1803,24 @@ std::string Helper::Trim(const std::string& s, const std::string& delete_str) {
   return Rtrim(Ltrim(s, delete_str), delete_str);
 }
 
+bool Helper::StringToBool(const std::string& str) { return !(str == "0" || str == "false"); }
+int32_t Helper::StringToInt32(const std::string& str) { return std::strtol(str.c_str(), nullptr, 10); }
+int64_t Helper::StringToInt64(const std::string& str) { return std::strtoll(str.c_str(), nullptr, 10); }
+float Helper::StringToFloat(const std::string& str) { return std::strtof(str.c_str(), nullptr); }
+double Helper::StringToDouble(const std::string& str) { return std::strtod(str.c_str(), nullptr); }
+
+std::vector<float> Helper::StringToVector(const std::string& str) {
+  std::vector<float> vec;
+  std::stringstream ss(str);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    vec.push_back(std::stof(token));
+  }
+
+  return vec;
+}
+
 std::string Helper::CleanFirstSlash(const std::string& str) { return (str.front() == '/') ? str.substr(1) : str; }
 
 bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
@@ -2001,18 +2019,6 @@ float Helper::DingoHnswL2Sqr(const float* p_vect1v, const float* p_vect2v, size_
     res += t * t;
   }
   return (res);
-}
-
-std::vector<float> Helper::StringToVector(const std::string& str) {
-  std::vector<float> vec;
-  std::stringstream ss(str);
-  std::string token;
-
-  while (std::getline(ss, token, ',')) {
-    vec.push_back(std::stof(token));
-  }
-
-  return vec;
 }
 
 bool Helper::SaveFile(const std::string& filepath, const std::string& data) {

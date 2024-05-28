@@ -100,7 +100,6 @@ int64_t VectorCodec::DecodeVectorId(const std::string& value) {
 int64_t VectorCodec::DecodePartitionId(const std::string& value) {
   Buf buf(value);
 
-  // if (value.size() >= 17 || value.size() == 9) {
   if (value.size() >= Constant::kVectorKeyMaxLenWithPrefix || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
     buf.Skip(1);
   }
