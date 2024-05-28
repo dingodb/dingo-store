@@ -20,6 +20,8 @@
 #include <memory>
 #include <vector>
 
+#include "proto/common.pb.h"
+#include "proto/meta.pb.h"
 #include "schema/base_schema.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_list_schema.h"

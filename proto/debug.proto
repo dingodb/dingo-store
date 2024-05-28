@@ -88,6 +88,19 @@ message TransferLeaderResponse {
   dingodb.pb.error.Error error = 2;
 }
 
+message ModifyRegionMetaRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+
+  repeated string fields = 10;
+  dingodb.pb.common.StoreRegionState state = 11;
+}
+
+message ModifyRegionMetaResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
 message SnapshotVectorIndexRequest {
   dingodb.pb.common.RequestInfo request_info = 1;
   int64 vector_index_id = 2;
@@ -372,12 +385,17 @@ service DebugService {
   rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
   rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
   rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
-  rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
 
+  // regoin meta
+  rpc ModifyRegionMeta(ModifyRegionMetaRequest) returns (ModifyRegionMetaResponse);
+
+  // vector index
+  rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
   rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
   rpc TriggerRebuildVectorIndex(TriggerRebuildVectorIndexRequest) returns (TriggerRebuildVectorIndexResponse);
   rpc TriggerSaveVectorIndex(TriggerSaveVectorIndexRequest) returns (TriggerSaveVectorIndexResponse);
 
+  // rocksdb
   rpc Compact(CompactRequest) returns (CompactResponse);
 
   // debug
