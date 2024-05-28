@@ -53,8 +53,6 @@ option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
 option(SDK_ENABLE_GRPC "Build sdk with grpc instead brpc" OFF)
 
-set(CONFIG_BUILD_PARALLEL 8 CACHE INT "build parallel jobs on cmake config phase")
-
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
 
