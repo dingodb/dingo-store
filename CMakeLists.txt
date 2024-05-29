@@ -234,7 +234,10 @@ include(brpc)
 include(braft)
 include(nlohmann)
 include(tantivy-search)
-include(grpc)
+
+if(SDK_ENABLE_GRPC)
+    include(grpc)
+endif()
 
 if(BUILD_BENCHMARK STREQUAL "ON")
     include(hdf5)
@@ -246,16 +249,18 @@ message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
 message(STATUS "protobuf lib: ${PROTOBUF_LIBRARIES}")
 message(STATUS "protobuf lite lib: ${PROTOBUF_LITE_LIBRARY}")
 
+SET(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/contrib/dingo-store-proto/proto)
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
-if(EXISTS "${CMAKE_CURRENT_BINARY_DIR}/proto" AND IS_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/proto")
-        SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
+
+if(EXISTS ${MESSAGE_DIR} AND IS_DIRECTORY ${MESSAGE_DIR})
+    SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
 else()
-        file(MAKE_DIRECTORY ${MESSAGE_DIR})
-        SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
+    file(MAKE_DIRECTORY ${MESSAGE_DIR})
+    SET(PROTO_META_BASE_DIR ${MESSAGE_DIR})
 endif()
 
-LIST(APPEND PROTO_FLAGS -I${CMAKE_SOURCE_DIR}/proto)
-file(GLOB_RECURSE MSG_PROTOS ${CMAKE_SOURCE_DIR}/proto/*.proto)
+list(APPEND PROTO_FLAGS -I${MESSAGE_SOURCE_DIR})
+file(GLOB_RECURSE MSG_PROTOS ${MESSAGE_SOURCE_DIR}/*.proto)
 set(PROTO_SRCS "")
 set(PROTO_HDRS "")
 
@@ -272,7 +277,7 @@ foreach(msg ${MSG_PROTOS})
                  "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h"
           COMMAND  ${PROTOBUF_PROTOC_EXECUTABLE}
           ARGS --cpp_out  ${PROTO_META_BASE_DIR}
-            -I ${CMAKE_SOURCE_DIR}/proto
+            -I ${MESSAGE_SOURCE_DIR}
             ${msg}
           DEPENDS protobuf ${msg}
           COMMENT "Running C++ protocol buffer compiler on ${msg}"
