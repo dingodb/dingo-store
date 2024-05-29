@@ -18,6 +18,5 @@ logger = logging.getLogger(__name__)
 
 # we import * so that the symbol X can be accessed as dingosdk.X
 logger.info("Loading dingosdk.")
-import dingosdk
-
+from .dingosdk import *
 logger.info("Successfully loaded dingosdk.")

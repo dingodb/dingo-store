@@ -1,24 +1,33 @@
-#/usr/bin/env python3
+# /usr/bin/env python3
 
 from os.path import dirname, abspath
 import argparse
 
 import dingosdk
 
-dir = dirname(dirname(dirname(abspath(__file__))))
-
-parser = argparse.ArgumentParser(description='argparse')
-parser.add_argument('--coordinator_url', '-url', type=str, default ="file://"+ dir+"/bin/coor_list", help="coordinator url, try to use like file://./coor_list")
+parser = argparse.ArgumentParser(description="argparse")
+parser.add_argument(
+    "--coordinator_addrs",
+    "-addrs",
+    type=str,
+    default="127.0.0.1:22001,127.0.0.1:22002,127.0.0.1:22003",
+    help="coordinator addrs, try to use like 127.0.0.1:22001,127.0.0.1:22002,127.0.0.1:22003",
+)
 args = parser.parse_args()
 
-g_region_ids=[]
+g_region_ids = []
 
-s, g_client = dingosdk.Client.Build(args.coordinator_url)
+s, g_client = dingosdk.Client.BuildFromAddrs(args.coordinator_addrs)
 assert s.ok(), "client build fail"
 
 
-def create_region(name: str, start_key: str, end_key: str, replicas: int = 3,
-                  engine_type = dingosdk.kLSM):
+def create_region(
+    name: str,
+    start_key: str,
+    end_key: str,
+    replicas: int = 3,
+    engine_type=dingosdk.kLSM,
+):
     assert name, "name should not be empty"
     assert start_key, "start_key should not be empty"
     assert end_key, "end_key should not be empty"
@@ -37,7 +46,7 @@ def create_region(name: str, start_key: str, end_key: str, replicas: int = 3,
 
     print(f"Create region status: {s.ToString()}, region_id: {region_id}")
 
-    if s.ok() :
+    if s.ok():
         assert region_id > 0
         s, inprogress = g_client.IsCreateRegionInProgress(region_id)
         assert not inprogress
@@ -49,7 +58,9 @@ def post_clean():
         s = g_client.DropRegion(region_id)
         print(f"Drop region status: {s.ToString()}, region_id: {region_id}")
         s, inprogress = g_client.IsCreateRegionInProgress(region_id)
-        print(f"Query region status: {s.ToString()}, region_id: {region_id}, {inprogress}")
+        print(
+            f"Query region status: {s.ToString()}, region_id: {region_id}, {inprogress}"
+        )
     g_region_ids.clear()
 
 
@@ -63,13 +74,13 @@ def raw_kv_example():
     put = raw_kv.Put(key, value)
     print(f"raw_kv put status:{put.ToString()}, key: {key}, value: {value}")
 
-    got, to_get= raw_kv.Get(key)
+    got, to_get = raw_kv.Get(key)
     print(f"raw_kv get status:{got.ToString()}, key: {key}, value: {to_get}")
 
     dele = raw_kv.Delete(key)
     print(f"raw_kv delete status:{dele.ToString()}, key: {key}")
     if dele.ok():
-        got, tmp= raw_kv.Get(key)
+        got, tmp = raw_kv.Get(key)
         print(f"raw_kv get status:{got.ToString()}, key: {key}, value: {tmp}")
 
     keys = ["wb01", "wc01", "wd01", "wf01", "wl01", "wm01"]
@@ -111,18 +122,18 @@ def raw_kv_example():
     result, state = raw_kv.PutIfAbsent(key, value)
     print(f"raw_kv put_if_absent: {result.ToString()}, state: {state}")
 
-    result, to_get= raw_kv.Get(key)
+    result, to_get = raw_kv.Get(key)
     print(f"raw_kv get after put_if_absent: {result.ToString()}, value: {to_get}")
     if result.ok():
         assert value == to_get
 
-    result, again_state= raw_kv.PutIfAbsent(key, value)
+    result, again_state = raw_kv.PutIfAbsent(key, value)
     print(f"raw_kv put_if_absent again: {result.ToString()}, state: {again_state}")
 
     result = raw_kv.Delete(key)
     print(f"raw_kv delete: {result.ToString()}")
     if result.ok():
-        result, tmp= raw_kv.Get(key)
+        result, tmp = raw_kv.Get(key)
         print(f"raw_kv get after delete: {result.ToString()}, value: {tmp}")
 
     # batch put if absent
@@ -131,21 +142,27 @@ def raw_kv_example():
     print(f"raw_kv batch_put_if_absent: {result.ToString()}")
     if result.ok():
         for key_state in keys_state:
-            print(f"raw_kv batch_put_if_absent, key: {key_state.key}, state: {key_state.state}")
+            print(
+                f"raw_kv batch_put_if_absent, key: {key_state.key}, state: {key_state.state}"
+            )
 
     batch_get_values = dingosdk.KVPairVector()
     result = raw_kv.BatchGet(keys, batch_get_values)
     print(f"raw_kv batch_get after batch_put_if_absent: {result.ToString()}")
     if result.ok():
         for kv in batch_get_values:
-            print(f"raw_kv batch_get after batch_put_if_absent, key: {kv.key}, value: {kv.value}")
+            print(
+                f"raw_kv batch_get after batch_put_if_absent, key: {kv.key}, value: {kv.value}"
+            )
 
     again_keys_state = dingosdk.KeyOpStateVector()
     result = raw_kv.BatchPutIfAbsent(kvs, again_keys_state)
     print(f"raw_kv batch_put_if_absent again: {result.ToString()}")
     if result.ok():
         for key_state in again_keys_state:
-            print(f"raw_kv batch_put_if_absent again, key: {key_state.key}, state: {key_state.state}")
+            print(
+                f"raw_kv batch_put_if_absent again, key: {key_state.key}, state: {key_state.state}"
+            )
 
     result = raw_kv.BatchDelete(keys)
     print(f"raw_kv batch_delete: {result.ToString()}")
@@ -173,39 +190,49 @@ def raw_kv_example():
     print(f"raw_kv delete range: {result.ToString()}, delete_count: {delete_count}")
 
     result, delete_count = raw_kv.DeleteRangeNonContinuous("wb01", "wz01")
-    print(f"raw_kv delete range non continuous: {result.ToString()}, delete_count: {delete_count}")
+    print(
+        f"raw_kv delete range non continuous: {result.ToString()}, delete_count: {delete_count}"
+    )
 
     tmp_batch_get_values = dingosdk.KVPairVector()
     result = raw_kv.BatchGet(keys, tmp_batch_get_values)
     print(f"raw_kv batch_get after delete_range: {result.ToString()}")
     if result.ok():
         for kv in tmp_batch_get_values:
-            print(f"raw_kv batch_get after delete_range, key: {kv.key}, value: {kv.value}")
+            print(
+                f"raw_kv batch_get after delete_range, key: {kv.key}, value: {kv.value}"
+            )
 
     # compare and set
     key = "wb01"
     value = "pong"
 
-    result, state= raw_kv.CompareAndSet(key, value, "")
-    print(f"raw_kv compare_and_set: {result.ToString()}, key: {key}, value: {value}, expect: empty, state: {state}")
+    result, state = raw_kv.CompareAndSet(key, value, "")
+    print(
+        f"raw_kv compare_and_set: {result.ToString()}, key: {key}, value: {value}, expect: empty, state: {state}"
+    )
 
     result, to_get = raw_kv.Get(key)
     print(f"raw_kv get after compare_and_set: {result.ToString()}, value: {to_get}")
     if result.ok():
         assert value == to_get
 
-    result, again_state= raw_kv.CompareAndSet(key, "ping", value)
-    print(f"raw_kv compare_and_set again: {result.ToString()}, key: {key}, value: ping, expect: {value}, state: {again_state}")
+    result, again_state = raw_kv.CompareAndSet(key, "ping", value)
+    print(
+        f"raw_kv compare_and_set again: {result.ToString()}, key: {key}, value: ping, expect: {value}, state: {again_state}"
+    )
 
-    result, again_get= raw_kv.Get(key)
-    print(f"raw_kv get after compare_and_set again: {result.ToString()}, value: {again_get}")
+    result, again_get = raw_kv.Get(key)
+    print(
+        f"raw_kv get after compare_and_set again: {result.ToString()}, value: {again_get}"
+    )
     if result.ok():
         assert "ping" == again_get
 
     result = raw_kv.Delete(key)
     print(f"raw_kv delete: {result.ToString()}")
     if result.ok():
-        result, tmp= raw_kv.Get(key)
+        result, tmp = raw_kv.Get(key)
         print(f"raw_kv get after delete: {result.ToString()}, value: {tmp}")
         assert tmp == ""
 
@@ -224,7 +251,9 @@ def raw_kv_example():
     print(f"raw_kv batch_compare_and_set: {result.ToString()}")
     if result.ok():
         for key_state in keys_state:
-            print(f"raw_kv batch_compare_and_set, key: {key_state.key}, state: {key_state.state}")
+            print(
+                f"raw_kv batch_compare_and_set, key: {key_state.key}, state: {key_state.state}"
+            )
             assert key_state.state
 
     batch_get_values = dingosdk.KVPairVector()
@@ -232,7 +261,9 @@ def raw_kv_example():
     print(f"raw_kv batch_get after batch_compare_and_set: {result.ToString()}")
     if result.ok():
         for kv in batch_get_values:
-            print(f"raw_kv batch_get after batch_compare_and_set, key: {kv.key}, value: {kv.value}")
+            print(
+                f"raw_kv batch_get after batch_compare_and_set, key: {kv.key}, value: {kv.value}"
+            )
             find = False
             for ele in kvs:
                 if ele.key == kv.key:
@@ -258,7 +289,9 @@ def raw_kv_example():
     print(f"raw_kv batch_compare_and_set again: {result.ToString()}")
     if result.ok():
         for key_state in again_keys_state:
-            print(f"raw_kv batch_compare_and_set again, key: {key_state.key}, state: {key_state.state}")
+            print(
+                f"raw_kv batch_compare_and_set again, key: {key_state.key}, state: {key_state.state}"
+            )
             assert key_state.state
 
     batch_get_values = dingosdk.KVPairVector()
@@ -266,7 +299,9 @@ def raw_kv_example():
     print(f"raw_kv batch_get after batch_compare_and_set again: {result.ToString()}")
     if result.ok():
         for kv in batch_get_values:
-            print(f"raw_kv batch_get after batch_compare_and_set again, key: {kv.key}, value: {kv.value}")
+            print(
+                f"raw_kv batch_get after batch_compare_and_set again, key: {kv.key}, value: {kv.value}"
+            )
             find = False
             for ele in kvs:
                 if ele.key == kv.key:

@@ -115,7 +115,11 @@ Status AdminTool::DropIndex(int64_t index_id) {
   index_pb->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_pb->set_entity_id(index_id);
 
-  return stub_.GetMetaRpcController()->SyncCall(rpc);
+  Status s = stub_.GetMetaRpcController()->SyncCall(rpc);
+  if (s.IsNotFound()) {
+    s = Status::OK();
+  }
+  return s;
 }
 
 }  // namespace sdk

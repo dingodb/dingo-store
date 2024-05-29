@@ -59,7 +59,10 @@ namespace sdk {
 
 Status Client::BuildAndInitLog(std::string addrs, Client** client) {
   static std::once_flag init;
-  std::call_once(init, [&]() { google::InitGoogleLogging("dingo_sdk"); });
+  std::call_once(init, [&]() { 
+    FLAGS_v = dingodb::kGlobalValueOfDebug;
+    google::InitGoogleLogging("dingo_sdk"); 
+  });
 
   return BuildFromAddrs(addrs, client);
 }

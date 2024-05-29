@@ -1058,7 +1058,7 @@ bool Transaction::TxnImpl::NeedRetryAndInc(int& times) {
   return retry;
 }
 
-void Transaction::TxnImpl::DelayRetry(int64_t delay_ms) { (void)usleep(delay_ms); }
+void Transaction::TxnImpl::DelayRetry(int64_t delay_ms) { (void)usleep(delay_ms * 1000); }
 
 }  // namespace sdk
 }  // namespace dingodb

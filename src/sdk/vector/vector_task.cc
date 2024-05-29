@@ -14,6 +14,7 @@
 
 #include "sdk/vector/vector_task.h"
 
+#include "common/logging.h"
 #include "sdk/common/param_config.h"
 #include "sdk/utils/async_util.h"
 
@@ -49,10 +50,10 @@ Status VectorTask::Init() { return Status::OK(); }
 std::string VectorTask::ErrorMsg() const { return ""; }
 
 void VectorTask::DoAsyncDone(const Status& status) {
+  status_ = status;
   if (status.ok()) {
     FireCallback();
   } else {
-    status_ = status;
     FailOrRetry();
   }
 }
@@ -72,11 +73,15 @@ bool VectorTask::NeedRetry() {
         error_code == pb::error::EKEY_OUT_OF_RANGE) {
       retry_count_++;
       if (retry_count_ < FLAGS_vector_op_max_retry) {
+        std::string msg = fmt::format("Task:{} will retry, retry_count_:{}, max_retry:{}", Name(), retry_count_,
+                                      FLAGS_vector_op_max_retry);
+        DINGO_LOG(INFO) << msg;
         return true;
       } else {
         std::string msg =
             fmt::format("Fail task:{} retry too times:{}, last err:{}", Name(), retry_count_, status_.ToString());
         status_ = Status::Aborted(status_.Errno(), msg);
+        DINGO_LOG(INFO) << msg;
       }
     }
   }
@@ -85,7 +90,9 @@ bool VectorTask::NeedRetry() {
 }
 
 void VectorTask::BackoffAndRetry() {
-  stub.GetActuator()->Schedule([this] { DoAsync(); }, FLAGS_vector_op_delay_ms);
+  auto delay = retry_count_ * FLAGS_vector_op_delay_ms;
+  DINGO_LOG(INFO) << "Task:" << Name() << " will retry after " << delay << "ms";
+  stub.GetActuator()->Schedule([this] { DoAsync(); }, delay);
 }
 
 void VectorTask::FireCallback() {

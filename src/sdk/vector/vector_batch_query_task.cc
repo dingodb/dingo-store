@@ -38,16 +38,14 @@ Status VectorBatchQueryTask::Init() {
 
 void VectorBatchQueryTask::DoAsync() {
   std::set<int64_t> next_batch;
-  Status tmp;
   {
-    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    std::unique_lock<std::shared_mutex> w(rw_lock_);
+    if (vector_ids_.empty()) {
+      DoAsyncDone(Status::OK());
+      return;
+    }
     next_batch = vector_ids_;
-    tmp = status_;
-  }
-
-  if (next_batch.empty()) {
-    DoAsyncDone(tmp);
-    return;
+    status_ = Status::OK();
   }
 
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;

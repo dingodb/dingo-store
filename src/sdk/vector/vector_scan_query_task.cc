@@ -16,6 +16,7 @@
 
 #include "glog/logging.h"
 #include "sdk/common/common.h"
+#include "sdk/status.h"
 #include "sdk/utils/scoped_cleanup.h"
 #include "sdk/vector/vector_common.h"
 
@@ -55,16 +56,15 @@ Status VectorScanQueryTask::Init() {
 
 void VectorScanQueryTask::DoAsync() {
   std::set<int64_t> next_part_ids;
-  Status tmp;
   {
-    std::shared_lock<std::shared_mutex> r(rw_lock_);
-    next_part_ids = next_part_ids_;
-    tmp = status_;
-  }
+    std::unique_lock<std::shared_mutex> w(rw_lock_);
+    if(next_part_ids_.empty()) {
+      DoAsyncDone(Status::OK());
+      return;
+    }
 
-  if (next_part_ids.empty()) {
-    DoAsyncDone(tmp);
-    return;
+    next_part_ids = next_part_ids_;
+    status_ = Status::OK();
   }
 
   sub_tasks_count_.store(next_part_ids.size());
@@ -136,6 +136,7 @@ void VectorScanQueryPartTask::DoAsync() {
   {
     std::unique_lock<std::shared_mutex> w(rw_lock_);
     result_vectors_.clear();
+    status_ = Status::OK();
   }
 
   controllers_.clear();
