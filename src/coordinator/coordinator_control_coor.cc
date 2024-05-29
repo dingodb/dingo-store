@@ -2196,8 +2196,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(
   // create region definition begin
   auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
-  region_definition->set_name(region_name + std::string("[") + region_range.start_key().at(0) + std::string("|") +
-                              std::to_string(create_region_id) + std::string("]"));
+  region_definition->set_name(region_name + std::string("[") + std::to_string(create_region_id) + std::string("]"));
   region_definition->mutable_epoch()->set_conf_version(1);
   region_definition->mutable_epoch()->set_version(1);
   region_definition->set_schema_id(schema_id);
