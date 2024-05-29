@@ -1,4 +1,3 @@
-
 # Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,5 +18,6 @@ logger = logging.getLogger(__name__)
 
 # we import * so that the symbol X can be accessed as dingosdk.X
 logger.info("Loading dingosdk.")
-from .dingosdk import *
+import dingosdk
+
 logger.info("Successfully loaded dingosdk.")

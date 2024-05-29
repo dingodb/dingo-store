@@ -29,7 +29,9 @@ include(UseSWIG)
 set(CMAKE_SWIG_FLAGS)
 set(SWIG_SOURCE_FILE_EXTENSIONS swg)
 
-list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++")
+# list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++")
+
+list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++" "-DSWIG_TYPE_TABLE=aabbccdd")
 
 set_property(SOURCE dingosdk.swg PROPERTY CPLUSPLUS ON)
 
@@ -46,6 +48,7 @@ swig_add_library(dingosdk
   LANGUAGE python 
   SOURCES dingosdk.swg
 )
+# -DSWIG_TYPE_TABLE=myprojectname
 
 target_include_directories(dingosdk 
   PRIVATE 
@@ -90,7 +93,7 @@ if(SDK_ENABLE_GRPC)
         Threads::Threads
     )
 
-elseif()
+else()
     target_link_libraries(dingosdk
       PRIVATE
       sdk
