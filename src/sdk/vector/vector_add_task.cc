@@ -85,16 +85,14 @@ Status VectorAddTask::Init() {
 
 void VectorAddTask::DoAsync() {
   std::unordered_map<int64_t, int64_t> next_batch;
-  Status tmp;
   {
-    std::shared_lock<std::shared_mutex> r(rw_lock_);
+    std::unique_lock<std::shared_mutex> w(rw_lock_);
+    if (vector_id_to_idx_.empty()) {
+      DoAsyncDone(Status::OK());
+      return;
+    }
     next_batch = vector_id_to_idx_;
-    tmp = status_;
-  }
-
-  if (next_batch.empty()) {
-    DoAsyncDone(tmp);
-    return;
+    status_ = Status::OK();
   }
 
   std::unordered_map<int64_t, std::shared_ptr<Region>> region_id_to_region;

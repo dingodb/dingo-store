@@ -93,8 +93,7 @@ if(SDK_ENABLE_GRPC)
     target_link_libraries(txn_scan_test
         ${DEP_LIBS}
     )
-
-elseif()
+else()
     add_executable(sdk_rawkv_example
         sdk_rawkv_example.cc)
     target_link_libraries(sdk_rawkv_example

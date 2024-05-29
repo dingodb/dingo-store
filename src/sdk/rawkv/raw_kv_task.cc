@@ -48,10 +48,10 @@ Status RawKvTask::Init() { return Status::OK(); }
 std::string RawKvTask::ErrorMsg() const { return ""; }
 
 void RawKvTask::DoAsyncDone(const Status& status) {
+  status_ = status;
   if (status.ok()) {
     FireCallback();
   } else {
-    status_ = status;
     FailOrRetry();
   }
 }

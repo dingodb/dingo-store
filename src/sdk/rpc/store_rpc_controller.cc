@@ -101,8 +101,9 @@ void StoreRpcController::SendStoreRpc() {
 
 void StoreRpcController::MaybeDelay() {
   if (NeedDelay()) {
-    DINGO_LOG(INFO) << "try to delay:" << FLAGS_store_rpc_retry_delay_ms << "ms";
-    (void)usleep(FLAGS_store_rpc_retry_delay_ms);
+    auto delay = FLAGS_store_rpc_retry_delay_ms * rpc_retry_times_;
+    DINGO_LOG(INFO) << "try to delay:" << delay << "ms, rpr_retry_times:" << rpc_retry_times_;
+    (void)usleep(delay*1000);
   }
 }
 
@@ -264,7 +265,7 @@ std::shared_ptr<Region> StoreRpcController::ProcessStoreRegionInfo(
 
 bool StoreRpcController::NeedRetry() const { return this->rpc_retry_times_ < FLAGS_store_rpc_max_retry; }
 
-bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError() || status_.IsNoLeader();}
+bool StoreRpcController::NeedDelay() const { return status_.IsRemoteError() || status_.IsNoLeader(); }
 
 bool StoreRpcController::NeedPickLeader() const { return !status_.IsRemoteError(); }
 

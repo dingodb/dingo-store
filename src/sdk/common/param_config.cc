@@ -13,14 +13,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "gflags/gflags.h"
+#include "sdk/common/param_config.h"
 
 // sdk config
 DEFINE_int64(actuator_thread_num, 8, "actuator thread num");
 
 // coordinator config
 DEFINE_int64(coordinator_interaction_delay_ms, 500, "coordinator interaction delay ms");
-DEFINE_int64(coordinator_interaction_max_retry, 20, "coordinator interaction max retry");
+DEFINE_int64(coordinator_interaction_max_retry, 30, "coordinator interaction max retry");
 DEFINE_int64(auto_incre_req_count, 1000, "raw kv max retry times");
 
 // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
@@ -33,19 +33,19 @@ DEFINE_int64(grpc_poll_thread_num, 8, "grpc poll cq thread num");
 DEFINE_int64(rpc_max_retry, 3, "rpc call max retry times");
 DEFINE_int64(rpc_time_out_ms, 500000, "rpc call timeout ms");
 
-DEFINE_int64(store_rpc_max_retry, 10, "store rpc max retry times, use case: wrong leader or request range invalid");
-DEFINE_int64(store_rpc_retry_delay_ms, 1000, "store rpc retry delay ms");
+DEFINE_int64(store_rpc_retry_delay_ms, 500, "store rpc retry delay ms");
+DEFINE_int64(store_rpc_max_retry, 30, "store rpc max retry times, use case: wrong leader or request range invalid");
 
 DEFINE_int64(scan_batch_size, 1000, "scan batch size, use for region scanner");
 
 DEFINE_int64(txn_op_delay_ms, 200, "txn op delay ms");
 DEFINE_int64(txn_op_max_retry, 2, "txn op max retry times");
 
-DEFINE_int64(raw_kv_delay_ms, 200, "raw kv backoff delay ms");
-DEFINE_int64(raw_kv_max_retry, 5, "raw kv max retry times");
+DEFINE_int64(raw_kv_delay_ms, 500, "raw kv backoff delay ms");
+DEFINE_int64(raw_kv_max_retry, 10, "raw kv max retry times");
 
-DEFINE_int64(vector_op_delay_ms, 1000, "raw kv backoff delay ms");
-DEFINE_int64(vector_op_max_retry, 10, "raw kv max retry times");
+DEFINE_int64(vector_op_delay_ms, 500, "vector task base backoff delay ms");
+DEFINE_int64(vector_op_max_retry, 30, "vector task max retry times");
 
 DEFINE_int64(txn_max_batch_count, 1000, "txn max batch count");
 

@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(pysdk)
 
-find_package(SWIG 4.2 REQUIRED)
+find_package(SWIG REQUIRED)
 
 if(SWIG_FOUND)
   message("SWIG found: ${SWIG_EXECUTABLE}, dir: ${SWIG_DIR}, version: ${SWIG_VERSION}")
@@ -29,9 +29,7 @@ include(UseSWIG)
 set(CMAKE_SWIG_FLAGS)
 set(SWIG_SOURCE_FILE_EXTENSIONS swg)
 
-# list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++")
-
-list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++" "-DSWIG_TYPE_TABLE=aabbccdd")
+list(APPEND CMAKE_SWIG_FLAGS "-DSWIGWORDSIZE64" "-c++")
 
 set_property(SOURCE dingosdk.swg PROPERTY CPLUSPLUS ON)
 

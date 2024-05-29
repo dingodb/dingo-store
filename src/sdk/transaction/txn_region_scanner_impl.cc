@@ -162,7 +162,7 @@ bool TxnRegionScannerImpl::NeedRetryAndInc(int& times) {
   return retry;
 }
 
-void TxnRegionScannerImpl::DelayRetry(int64_t delay_ms) { (void)usleep(delay_ms); }
+void TxnRegionScannerImpl::DelayRetry(int64_t delay_ms) { (void)usleep(delay_ms * 1000); }
 
 TxnRegionScannerFactoryImpl::TxnRegionScannerFactoryImpl() = default;
 

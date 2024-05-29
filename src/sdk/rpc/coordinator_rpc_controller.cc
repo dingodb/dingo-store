@@ -75,7 +75,7 @@ void CoordinatorRpcController::SendCoordinatorRpc(Rpc& rpc) {
   // TODO: what error should be delay
   if (NeedDelay(rpc)) {
     DINGO_LOG(INFO) << "try to delay:" << FLAGS_coordinator_interaction_delay_ms << "ms";
-    (void)usleep(FLAGS_coordinator_interaction_delay_ms);
+    (void)usleep(FLAGS_coordinator_interaction_delay_ms * 1000);
   }
 
   stub_.GetStoreRpcClient()->SendRpc(rpc, [this, &rpc] { SendCoordinatorRpcCallBack(rpc); });
@@ -94,9 +94,9 @@ void CoordinatorRpcController::SendCoordinatorRpcCallBack(Rpc& rpc) {
       Status s = Status::OK();
       rpc.SetStatus(s);
     } else {
-      DINGO_LOG(WARNING) << fmt::format("log_id:{} method:{} endpoint:{}, error_code:{}, error_msg:{}", rpc.LogId(),
-                                        rpc.Method(), rpc.GetEndPoint().ToString(),
-                                        dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
+      DINGO_LOG(INFO) << fmt::format("log_id:{} method:{} endpoint:{}, error_code:{}, error_msg:{}", rpc.LogId(),
+                                     rpc.Method(), rpc.GetEndPoint().ToString(),
+                                     dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg());
 
       if (error.errcode() == pb::error::Errno::ERAFT_NOTLEADER) {
         meta_member_info_.MarkFollower(rpc.GetEndPoint());
@@ -110,6 +110,12 @@ void CoordinatorRpcController::SendCoordinatorRpcCallBack(Rpc& rpc) {
         }
 
         Status s = Status::NotLeader(error.errcode(), error.errmsg());
+        rpc.SetStatus(s);
+      } else if (error.errcode() == pb::error::Errno::EREGION_NOT_FOUND) {
+        Status s = Status::NotFound(error.errcode(), error.errmsg());
+        rpc.SetStatus(s);
+      } else if (error.errcode() == pb::error::Errno::EINDEX_NOT_FOUND) {
+        Status s = Status::NotFound(error.errcode(), error.errmsg());
         rpc.SetStatus(s);
       } else {
         Status s = Status::Incomplete(error.errcode(), error.errmsg());
