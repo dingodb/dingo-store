@@ -316,18 +316,6 @@ static pb::common::RegionType GetRegionTypeByStoreType(pb::common::StoreType sto
   return pb::common::RegionType::STORE_REGION;
 }
 
-static pb::common::IndexType GetIndexTypeByRegionType(pb::common::StoreType store_type) {
-  if (store_type == pb::common::NODE_TYPE_STORE) {
-    return pb::common::INDEX_TYPE_NONE;
-  } else if (store_type == pb::common::NODE_TYPE_INDEX) {
-    return pb::common::INDEX_TYPE_VECTOR;
-  } else if (store_type == pb::common::NODE_TYPE_DOCUMENT) {
-    return pb::common::INDEX_TYPE_DOCUMENT;
-  }
-
-  return pb::common::INDEX_TYPE_NONE;
-}
-
 // parse time period, format start_hour1,end_hour1;start_hour2,end_hour2
 // e.g. str=1,3;4,5 parsed [1,3] [4,5]
 std::vector<std::pair<int, int>> BalanceLeaderScheduler::ParseTimePeriod(const std::string& time_period) {
@@ -430,8 +418,7 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
   // get all region and store
   pb::common::RegionMap region_map;
   auto region_type = GetRegionTypeByStoreType(store_type);
-  auto index_type = GetIndexTypeByRegionType(store_type);
-  coordinator_controller->GetRegionMapFull(region_map, region_type, index_type);
+  coordinator_controller->GetRegionMapFull(region_map, region_type);
   if (region_map.regions().empty()) {
     return butil::Status(pb::error::EINTERNAL, "region map is empty");
   }

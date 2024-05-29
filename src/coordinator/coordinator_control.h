@@ -599,8 +599,7 @@ class CoordinatorControl : public MetaControl {
 
   void GetRegionMap(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
-  void GetRegionMapFull(pb::common::RegionMap &region_map, pb::common::RegionType region_type,
-                        pb::common::IndexType index_type);
+  void GetRegionMapFull(pb::common::RegionMap &region_map, pb::common::RegionType region_type);
   void GetDeletedRegionMap(pb::common::RegionMap &region_map);
   butil::Status AddDeletedRegionMap(int64_t region_id, bool force);
   butil::Status CleanDeletedRegionMap(int64_t region_id);

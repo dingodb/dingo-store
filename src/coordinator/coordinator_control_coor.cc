@@ -936,8 +936,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
   }
 }
 
-void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb::common::RegionType region_type,
-                                          pb::common::IndexType index_type) {
+void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb::common::RegionType region_type) {
   region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
@@ -947,7 +946,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb:
 
     for (auto& element : region_internal_map_copy) {
       const auto& region = element.second;
-      if (region.region_type() == region_type && region.definition().index_parameter().index_type() == index_type) {
+      if (region.region_type() == region_type) {
         auto* tmp_region = region_map.add_regions();
         GenRegionFull(region, *tmp_region);
       }
@@ -2966,7 +2965,8 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
       auto vector_index_version = merge_from_region_metrics.vector_index_status().last_build_epoch_version();
       auto region_version = merge_from_region.definition().epoch().version();
       // The mono store engine does not use snapshots, so the vector_index_version constantly remains zero.
-      if (region_version != vector_index_version && merge_from_region.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
+      if (region_version != vector_index_version &&
+          merge_from_region.definition().store_engine() == pb::common::STORE_ENG_RAFT_STORE) {
         DINGO_LOG(ERROR) << "MergeRegion merge_from_region vector index epoch is not equal to region epoch, "
                             "merge_from_region_id = "
                          << merge_from_region_id << " from_state=" << merge_from_region.state()
