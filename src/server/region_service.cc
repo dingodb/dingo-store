@@ -216,7 +216,7 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
       return plaintext_range;
     }
 
-    if (origin_range.start_key().size() >= Constant::kVectorKeyMinLenWithPrefix) {
+    if (origin_range.start_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
       auto record_decoder = std::make_shared<RecordDecoder>(
           1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
       std::vector<std::any> record;
@@ -228,9 +228,12 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
       plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
                                                 region_definition.part_id(),
                                                 GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    } else {
+      plaintext_range.set_start_key(
+          fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.start_key()), region_definition.part_id()));
     }
 
-    if (origin_range.end_key().size() >= Constant::kVectorKeyMinLenWithPrefix) {
+    if (origin_range.end_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
       auto record_decoder = std::make_shared<RecordDecoder>(
           1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
       std::vector<std::any> record;
@@ -239,8 +242,11 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
         DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
       }
       plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-                                              region_definition.part_id(),
+                                              VectorCodec::DecodePartitionId(origin_range.end_key()),
                                               GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    } else {
+      plaintext_range.set_end_key(fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+                                              VectorCodec::DecodePartitionId(origin_range.end_key())));
     }
 
   } else {
