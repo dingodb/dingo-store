@@ -24,7 +24,6 @@ fi
 
 if [ -n "$2" ]
 then
-    DEPLOY_SERVER_NUM=$2
     DEPLOY_COORDINATOR_SERVER_NUM=$2
     DEPLOY_STORE_SERVER_NUM=$2
     DEPLOY_INDEX_SERVER_NUM=$2
@@ -32,14 +31,16 @@ then
 fi
 
 echo "DEPLOY_PARAMETER="${DEPLOY_PARAMETER}
-echo "DEPLOY_SERVER_NUM="${DEPLOY_SERVER_NUM}
+echo "DEPLOY_COORDINATOR_SERVER_NUM="${DEPLOY_COORDINATOR_SERVER_NUM}
+echo "DEPLOY_STORE_SERVER_NUM="${DEPLOY_STORE_SERVER_NUM}
+echo "DEPLOY_INDEX_SERVER_NUM="${DEPLOY_INDEX_SERVER_NUM}
+echo "DEPLOY_DOC_SERVER_NUM="${DEPLOY_DOC_SERVER_NUM}
 
 echo "====== force stop all ======"
 ./stop.sh --role coordinator --force=1 --server_num=${DEPLOY_COORDINATOR_SERVER_NUM}
 ./stop.sh --role store --force=1 --server_num=${DEPLOY_STORE_SERVER_NUM}
 ./stop.sh --role index --force=1 --server_num=${DEPLOY_INDEX_SERVER_NUM}
 ./stop.sh --role document --force=1 --server_num=${DEPLOY_DOC_SERVER_NUM}
-sleep 2
 
 echo "====== deploy all ======"
 ./deploy_server.sh --role coordinator --clean_all --server_num=${DEPLOY_COORDINATOR_SERVER_NUM} --parameters=${DEPLOY_PARAMETER}
