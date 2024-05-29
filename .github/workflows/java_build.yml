@@ -6,7 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-
 jobs:
   build:
 
@@ -20,6 +19,12 @@ jobs:
         java-version: '8'
         distribution: 'temurin'
         cache: maven
+
+    - name: Clone Submodule
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: git submodule update --init --recursive
+
     - name: Build with Maven
       run:  cd java && mvn clean package -Dmaven.test.skip=true  #-DiskipTests
       # run: cd java && mvn -B package --file pom.xml
