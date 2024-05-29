@@ -1084,7 +1084,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 
     // check isolation level and return value
     write_iter->Seek(iter_options.lower_bound);
-    while (write_iter->Valid() && write_iter->Key() < iter_options.lower_bound) {
+    while (write_iter->Valid() && write_iter->Key() < iter_options.upper_bound) {
       if (write_iter->Key().length() <= 8) {
         DINGO_LOG(ERROR) << ", invalid write_key, key: " << Helper::StringToHex(write_iter->Key())
                          << ", start_ts: " << start_ts
