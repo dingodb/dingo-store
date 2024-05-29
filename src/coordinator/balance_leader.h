@@ -263,7 +263,7 @@ class BalanceLeaderScheduler {
   // only one schedule is allowed run at a time
   static butil::Status LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                            std::shared_ptr<Engine> raft_engine, pb::common::StoreType store_type,
-                                           bool dryrun, TrackerPtr tracker);
+                                           bool dryrun, bool force, TrackerPtr tracker);
 
   // schedule balance leader generate transfer leader tasks
   std::vector<TransferLeaderTaskPtr> Schedule(const pb::common::RegionMap& region_map,

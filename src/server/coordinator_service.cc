@@ -3673,8 +3673,8 @@ void CoordinatorServiceImpl::BalanceLeader(google::protobuf::RpcController *,
   }
 
   auto tracker = balance::Tracker::New();
-  auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
-                                                                     request->store_type(), request->dryrun(), tracker);
+  auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(
+      coordinator_controller, raft_engine, request->store_type(), request->dryrun(), true, tracker);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
