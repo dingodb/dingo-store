@@ -561,8 +561,8 @@ void BalanceLeaderTask::DoBalanceLeader() {
   {
     // store
     auto tracker = balance::Tracker::New();
-    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
-                                                                       pb::common::NODE_TYPE_STORE, false, tracker);
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(
+        coordinator_controller, raft_engine, pb::common::NODE_TYPE_STORE, false, false, tracker);
     DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] store process error: {}", status.error_str());
     tracker->Print();
   }
@@ -570,8 +570,8 @@ void BalanceLeaderTask::DoBalanceLeader() {
   {
     // index
     auto tracker = balance::Tracker::New();
-    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
-                                                                       pb::common::NODE_TYPE_INDEX, false, tracker);
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(
+        coordinator_controller, raft_engine, pb::common::NODE_TYPE_INDEX, false, false, tracker);
     DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] index process error: {}", status.error_str());
     tracker->Print();
   }
@@ -579,8 +579,8 @@ void BalanceLeaderTask::DoBalanceLeader() {
   {
     // document
     auto tracker = balance::Tracker::New();
-    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(coordinator_controller, raft_engine,
-                                                                       pb::common::NODE_TYPE_DOCUMENT, false, tracker);
+    auto status = balance::BalanceLeaderScheduler::LaunchBalanceLeader(
+        coordinator_controller, raft_engine, pb::common::NODE_TYPE_DOCUMENT, false, false, tracker);
     DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.leader] document process error: {}", status.error_str());
     tracker->Print();
   }

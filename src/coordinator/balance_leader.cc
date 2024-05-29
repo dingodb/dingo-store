@@ -392,10 +392,10 @@ bool BalanceLeaderScheduler::ShouldRun() {
 
 butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                                           std::shared_ptr<Engine> raft_engine,
-                                                          pb::common::StoreType store_type, bool dryrun,
+                                                          pb::common::StoreType store_type, bool dryrun, bool force,
                                                           TrackerPtr tracker) {
   // check run timing
-  if (!ShouldRun()) {
+  if (!force && !ShouldRun()) {
     return butil::Status(pb::error::EINTERNAL, "current time not should run.");
   }
 
