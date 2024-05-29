@@ -164,35 +164,42 @@ static std::string GetPrimaryString(const dingodb::pb::meta::TableDefinition& ta
 pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coordinator_controller,
                                          const pb::common::Region& region) {
   const pb::common::RegionDefinition& region_definition = region.definition();
+  const auto& origin_range = region_definition.range();
 
-  pb::common::Range range;
+  DINGO_LOG(INFO) << fmt::format(
+      "decode range info, region_id({}) partition_id({}) table_id({}) region_type({}) index_type({}) prefix({})",
+      region.id(), region_definition.part_id(),
+      region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id(),
+      pb::common::RegionType_Name(region.region_type()),
+      pb::common::IndexType_Name(region.definition().index_parameter().index_type()),
+      Helper::GetKeyPrefix(origin_range.start_key()));
+
+  pb::common::Range plaintext_range;
   if (region.region_type() == pb::common::INDEX_REGION &&
       region.definition().index_parameter().has_vector_index_parameter()) {
-    DINGO_LOG(INFO) << fmt::format(
-        "here01: {}", region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id());
-
     int64_t min_vector_id = 0, max_vector_id = 0;
-    VectorCodec::DecodeRangeToVectorId(region_definition.range(), min_vector_id, max_vector_id);
-    range.set_start_key(std::to_string(min_vector_id));
-    range.set_end_key(std::to_string(max_vector_id));
+    VectorCodec::DecodeRangeToVectorId(origin_range, min_vector_id, max_vector_id);
+
+    plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
+                                              VectorCodec::DecodePartitionId(origin_range.start_key()), min_vector_id));
+
+    plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+                                            VectorCodec::DecodePartitionId(origin_range.end_key()), max_vector_id));
 
   } else if (region.region_type() == pb::common::DOCUMENT_REGION &&
              region.definition().index_parameter().has_document_index_parameter()) {
-    DINGO_LOG(INFO) << fmt::format(
-        "here02: {}", region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id());
-
     int64_t min_document_id = 0, max_document_id = 0;
-    DocumentCodec::DecodeRangeToDocumentId(region_definition.range(), min_document_id, max_document_id);
-    range.set_start_key(std::to_string(min_document_id));
-    range.set_end_key(std::to_string(max_document_id));
+    DocumentCodec::DecodeRangeToDocumentId(origin_range, min_document_id, max_document_id);
 
-  } else if (dingodb::Helper::IsExecutorRaw(region_definition.range().start_key()) ||
-             dingodb::Helper::IsExecutorTxn(region_definition.range().start_key())) {
-    DINGO_LOG(INFO) << fmt::format(
-        "here03: {} {} {} {}", region.id(),
-        region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id(),
-        pb::common::RegionType_Name(region.region_type()), region_definition.part_id());
+    plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
+                                              DocumentCodec::DecodePartitionId(origin_range.start_key()),
+                                              min_document_id));
 
+    plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+                                            DocumentCodec::DecodePartitionId(origin_range.end_key()), max_document_id));
+
+  } else if (dingodb::Helper::IsExecutorRaw(origin_range.start_key()) ||
+             dingodb::Helper::IsExecutorTxn(origin_range.start_key())) {
     pb::meta::TableDefinitionWithId table_definition_with_id;
 
     coordinator_controller->GetTable(region_definition.schema_id(), region_definition.table_id(),
@@ -206,36 +213,47 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
       DINGO_LOG(ERROR) << fmt::format(
           "Get table/index definition failed, table_id/index_id({}).",
           region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id());
-      return range;
+      return plaintext_range;
     }
 
-    if (region_definition.range().start_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
+    if (origin_range.start_key().size() >= Constant::kVectorKeyMinLenWithPrefix) {
       auto record_decoder = std::make_shared<RecordDecoder>(
           1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
       std::vector<std::any> record;
-      int ret = record_decoder->DecodeKey(region_definition.range().start_key(), record);
+      int ret = record_decoder->DecodeKey(origin_range.start_key(), record);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
       }
-      range.set_start_key(GetPrimaryString(table_definition_with_id.table_definition(), record));
+
+      plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
+                                                region_definition.part_id(),
+                                                GetPrimaryString(table_definition_with_id.table_definition(), record)));
     }
 
-    if (region_definition.range().end_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
+    if (origin_range.end_key().size() >= Constant::kVectorKeyMinLenWithPrefix) {
       auto record_decoder = std::make_shared<RecordDecoder>(
           1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
       std::vector<std::any> record;
-      int ret = record_decoder->DecodeKey(region_definition.range().end_key(), record);
+      int ret = record_decoder->DecodeKey(origin_range.end_key(), record);
       if (ret != 0) {
         DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
       }
-      range.set_end_key(GetPrimaryString(table_definition_with_id.table_definition(), record));
+      plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+                                              region_definition.part_id(),
+                                              GetPrimaryString(table_definition_with_id.table_definition(), record)));
     }
 
   } else {
-    range = region_definition.range();
+    std::string start_key = origin_range.start_key().substr(1, origin_range.start_key().size());
+    plaintext_range.set_start_key(
+        fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.start_key()), Helper::StringToHex(start_key)));
+
+    std::string end_key = origin_range.end_key().substr(1, origin_range.end_key().size());
+    plaintext_range.set_end_key(
+        fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.end_key()), Helper::StringToHex(end_key)));
   }
 
-  return range;
+  return plaintext_range;
 }
 
 void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
