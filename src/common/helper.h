@@ -15,6 +15,7 @@
 #ifndef DINGODB_COMMON_HELPER_H_
 #define DINGODB_COMMON_HELPER_H_
 
+#include <any>
 #include <cstdint>
 #include <random>
 #include <string>
@@ -24,12 +25,12 @@
 #include "braft/configuration.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 #include "proto/store_internal.pb.h"
-#include "common/logging.h"
 
 namespace dingodb {
 
@@ -430,7 +431,11 @@ class Helper {
     std::shuffle(vec.begin(), vec.end(), rd);
   }
 
-  static LogLevel LogLevelPB2LogLevel(const pb::node::LogLevel& level) ;
+  static LogLevel LogLevelPB2LogLevel(const pb::node::LogLevel& level);
+
+  static std::string ConvertColumnValueToString(const pb::meta::ColumnDefinition& column_definition,
+                                                const std::any& value);
+  static pb::common::Schema::Type TransformSchemaType(const std::string& name);
 };
 
 }  // namespace dingodb

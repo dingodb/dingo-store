@@ -2003,7 +2003,7 @@ std::vector<pb::common::Schema> Utils::TransformColumnSchema(const pb::meta::Tab
     if (sql_type == "ARRAY" || sql_type == "MULTISET") {
       sql_type += "_" + column.element_type();
     }
-    schema.set_type(TransformSchemaType(sql_type));
+    schema.set_type(Helper::TransformSchemaType(sql_type));
     schema.set_index(i++);
     if (column.indexofkey() >= 0) {
       schema.set_is_key(true);
