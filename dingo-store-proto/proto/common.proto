@@ -1,0 +1,1004 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package dingodb.pb.common;
+
+option java_package = "io.dingodb.common";
+
+enum ClusterRole {
+  ILLEGAL = 0;
+  COORDINATOR = 1;
+  STORE = 2;
+  EXECUTOR = 3;
+  INDEX = 4;
+  DOCUMENT = 5;
+};
+
+enum Engine {
+  ENG_ROCKSDB = 0;
+  ENG_BDB = 1;
+  LSM = 2;
+  TXN_LSM = 3;
+  BTREE = 4;
+  TXN_BTREE = 5;
+};
+
+enum StorageEngine {
+  STORE_ENG_RAFT_STORE = 0;
+  STORE_ENG_MONO_STORE = 1;
+  STORE_ENG_MEMORY = 2;
+};
+
+enum RawEngine {
+  RAW_ENG_ROCKSDB = 0;
+  RAW_ENG_BDB = 1;
+  RAW_ENG_XDPROCKS = 2;
+};
+
+message Location {
+  string host = 1;
+  int32 port = 2;
+  int32 index = 3;  // corresponding braft peerId idx
+}
+
+// prefix range [start_key, end_key)
+message Range {
+  bytes start_key = 1;
+  bytes end_key = 2;
+}
+
+// prefix range
+message RangeWithOptions {
+  Range range = 1;
+  bool with_start = 2;
+  bool with_end = 3;
+}
+
+message KeyValue {
+  bytes key = 1;
+  bytes value = 2;
+}
+
+enum ValueType {
+  FLOAT = 0;
+  UINT8 = 1;  // binary
+}
+
+message Vector {
+  int32 dimension = 1;
+  ValueType value_type = 2;
+  repeated float float_values = 3;
+  repeated bytes binary_values = 4;
+}
+
+message VectorScalardata {
+  map<string, ScalarValue> scalar_data = 1;  // scalar data of this vector, key: scalar key, value: scalar value data.
+}
+
+message VectorTableData {
+  bytes table_key = 1;    // table primary key of this vector
+  bytes table_value = 2;  // table value of this vector
+}
+
+message VectorWithId {
+  int64 id = 1;
+  Vector vector = 2;  // vector data
+  // scalar data of this vector, key: scalar key, value: scalar value data. meta data.
+  VectorScalardata scalar_data = 3;
+  VectorTableData table_data = 4;  // table data of this vector, only SQL can use this field
+}
+
+message VectorWithDistance {
+  VectorWithId vector_with_id = 1;
+  float distance = 2;
+  MetricType metric_type = 3;
+}
+
+enum CoordinatorState {
+  COORDINATOR_NEW = 0;
+  COORDINATOR_NORMAL = 1;
+  COORDINATOR_OFFLINE = 2;
+  COORDINATOR_ERROR = 3;
+}
+
+enum StoreState {
+  STORE_NEW = 0;      // a new store, wait to startup and join raft
+  STORE_NORMAL = 1;   // normal state
+  STORE_OFFLINE = 2;  // miss hearteat
+}
+
+enum StoreInState {
+  STORE_IN = 0;   // can replicate data to this store
+  STORE_OUT = 1;  // cant not replicate data to this store
+}
+
+enum ExecutorState {
+  EXECUTOR_NEW = 0;      // a new store, wait to startup and join raft
+  EXECUTOR_NORMAL = 1;   // normal state
+  EXECUTOR_OFFLINE = 2;  // miss hearteat
+}
+
+enum RegionState {
+  REGION_NONE = 0;  // this is a illegal state
+  REGION_NEW = 1;   // create new region
+  REGION_NORMAL = 2;
+
+  REGION_EXPAND = 3;     // start to expand
+  REGION_EXPANDING = 4;  // leader start to expand region
+  REGION_EXPANDED = 5;   // new peer joined raft
+
+  REGION_SHRINK = 6;      // start to shrink
+  REGION_SHIRINKING = 7;  // leader start to shrink region
+  REGION_SHRANK = 8;      // shrink finish, maybe we don't need this state
+
+  REGION_DELETE = 9;     // region need to delete
+  REGION_DELETING = 10;  // region is deleting
+  REGION_DELETED = 11;   // region is deleted
+
+  REGION_SPLIT = 12;      // region need to split
+  REGION_SPLITTING = 13;  // region is splitting
+  REGION_SPLITED = 14;    // region is splited (split's past tense is split, not splited, use as a symbol here)
+
+  REGION_MERGE = 15;    // region need to merge
+  REGION_MERGING = 16;  // region is mergting
+  REGION_MERGED = 17;   // region is merged
+
+  // other state add here
+  REGION_ILLEGAL = 20;    // region is not create by coordinator
+  REGION_STANDBY = 21;    // region is standby, used in split
+  REGION_TOMBSTONE = 22;  // region is tombstone, need to delete
+}
+
+enum RegionHeartbeatState {
+  REGION_ONLINE = 0;  // region is online
+  REGION_DOWN = 1;    // region is offline
+}
+
+// StoreRegionState
+// region's state on store, include region's state and raft's state
+enum StoreRegionState {
+  NEW = 0;        // new region, not join raft
+  NORMAL = 1;     // normal
+  STANDBY = 2;    // standby, can not serve read/write
+  SPLITTING = 3;  // region is spliting to another region
+  MERGING = 4;    // region is merging to another region
+  DELETING = 5;   // region is deleting
+  DELETED = 6;    // region is deleted
+  ORPHAN = 7;     // region is orphan, need to delete
+  TOMBSTONE = 8;  // region is tombstone, need to delete
+}
+
+// RegionRaftStatus
+// region's raft status
+enum RegionRaftStatus {
+  REGION_RAFT_NONE = 0;
+  REGION_RAFT_HEALTHY = 1;
+  REGION_RAFT_LAGGY = 3;
+  REGION_RAFT_RECOVERING = 4;
+  REGION_RAFT_CONSECUTIVE_ERROR = 5;
+}
+
+// This enum defines the possible states of a region vector index.
+enum RegionVectorIndexStatus {
+  VECTOR_INDEX_STATUS_NONE = 0;          // The index has no status.
+  VECTOR_INDEX_STATUS_NORMAL = 1;        // The index is in a normal state.
+  VECTOR_INDEX_STATUS_BUILDING = 2;      // The index is being built.
+  VECTOR_INDEX_STATUS_REBUILDING = 3;    // The index is being rebuilt.
+  VECTOR_INDEX_STATUS_LOADING = 4;       // The index is being loaded.
+  VECTOR_INDEX_STATUS_SNAPSHOTTING = 5;  // The index is being snapshotted.
+  VECTOR_INDEX_STATUS_REPLAYING = 6;     // The index is replaying wal.
+  VECTOR_INDEX_STATUS_ERROR = 10;        // The index is in an error state.
+  VECTOR_INDEX_STATUS_DELETE = 11;       // The index is delete state.
+}
+
+enum ReplicaStatus {
+  REPLICA_NONE = 0;
+  REPLICA_NORMAL = 1;
+  REPLICA_DEGRAED = 2;
+  REPLICA_UNAVAILABLE = 3;
+}
+
+message Coordinator {
+  int64 id = 1;
+  CoordinatorState state = 2;
+  Location location = 3;
+  string resource_tag = 4;
+}
+
+message CoordinatorMap {
+  int64 epoch = 1;
+  repeated Coordinator coordinators = 2;
+}
+
+message ExecutorUser {
+  string user = 1;
+  string keyring = 2;
+}
+
+message ExecutorUserMap {
+  int64 epoch = 1;
+  repeated ExecutorUser executor_users = 2;
+}
+
+// Executor
+message Executor {
+  string id = 1;                   // only updated by coordinator, sdk can ignore this field now
+  int64 epoch = 2;                 // unused
+  ExecutorState state = 3;         // only updated by coordinator, sdk can ignore this field now
+  Location server_location = 4;    // sdk set this field in heartbeat, only updated by sdk
+  ExecutorUser executor_user = 5;  // sdk set this field in heartbeat, only updated by coordinator
+  string resource_tag = 6;         // only updated by coordinator
+  int64 create_timestamp = 7;      // only updated by coordinator
+  int64 last_seen_timestamp = 8;   // only updated by coordinator
+}
+
+message ExecutorMap {
+  int64 epoch = 1;  // now unused
+  repeated Executor executors = 2;
+}
+
+enum StoreType {
+  NODE_TYPE_STORE = 0;
+  NODE_TYPE_INDEX = 1;
+  NODE_TYPE_DOCUMENT = 2;
+}
+
+// Store
+message Store {
+  int64 id = 1;                    // only updated by coordinator
+  int64 epoch = 2;                 // only updated by coordinator
+  StoreState state = 3;            // only updated by coordinator
+  StoreInState in_state = 4;       // only updated by coordinator
+  Location server_location = 5;    // store can only update this field in the first heartbeat
+  Location raft_location = 6;      // store can only update this field in the first heartbeat
+  string resource_tag = 7;         // only updated by coordinator
+  string keyring = 8;              // only updated by coordinator
+  int64 create_timestamp = 9;      // only updated by coordinator
+  int64 last_seen_timestamp = 10;  // only updated by coordinator
+
+  // store type
+  StoreType store_type = 11;  // only updated by coordinator
+
+  int32 leader_num_weight = 20;
+}
+
+message StoreMap {
+  int64 epoch = 1;
+  repeated Store stores = 2;
+}
+
+enum PeerRole {
+  VOTER = 0;
+  LEARNER = 1;
+}
+
+message Peer {
+  int64 store_id = 1;
+  PeerRole role = 2;
+  Location server_location = 3;
+  Location raft_location = 4;
+}
+
+message RegionEpoch {
+  int64 conf_version = 1;  // Member Conf version, auto increment when add or remove peer
+  int64 version = 2;       // Region version, auto increment when split or merge
+}
+
+// RegionDefinition
+message RegionDefinition {
+  // store info
+  int64 id = 1;
+  RegionEpoch epoch = 2;
+  string name = 3;
+  repeated Peer peers = 4;
+  Range range = 5;                 // this range is provide by user, such as sdk
+  RawEngine raw_engine = 6;        // this is the raw engine of the region
+  StorageEngine store_engine = 7;  // this is the store engine of the region
+  // meta info
+  int64 schema_id = 11;
+  int64 table_id = 12;
+  int64 index_id = 13;
+  int64 part_id = 14;    // the partition_id of this region, each partion contains one or more regions
+  int64 tenant_id = 15;  // the tenant_id of this region, this is useful gc in multi-tenant scenario
+
+  IndexParameter index_parameter = 20;
+
+  int64 revision = 50;
+}
+
+enum RegionType {
+  STORE_REGION = 0;
+  INDEX_REGION = 1;
+  DOCUMENT_REGION = 2;
+}
+
+enum IndexType {
+  INDEX_TYPE_NONE = 0;  // this is not index, for store region only
+  INDEX_TYPE_VECTOR = 1;
+  INDEX_TYPE_SCALAR = 2;
+  INDEX_TYPE_DOCUMENT = 3;
+}
+
+enum VectorIndexType {
+  VECTOR_INDEX_TYPE_NONE = 0;
+  VECTOR_INDEX_TYPE_FLAT = 1;
+  VECTOR_INDEX_TYPE_IVF_FLAT = 2;
+  VECTOR_INDEX_TYPE_IVF_PQ = 3;
+  VECTOR_INDEX_TYPE_HNSW = 4;
+  VECTOR_INDEX_TYPE_DISKANN = 5;
+  VECTOR_INDEX_TYPE_BRUTEFORCE = 6;
+}
+
+enum MetricType {
+  METRIC_TYPE_NONE = 0;  // this is a placeholder
+  METRIC_TYPE_L2 = 1;
+  METRIC_TYPE_INNER_PRODUCT = 2;
+  METRIC_TYPE_COSINE = 3;
+}
+
+enum VectorFilter {
+  // filter vector scalar include post filter and pre filter
+  SCALAR_FILTER = 0;
+
+  // use coprocessor only include pre filter
+  TABLE_FILTER = 1;
+
+  // vector id search direct by ids. only include pre filter
+  VECTOR_ID_FILTER = 10;
+}
+
+enum VectorFilterType {
+  // first vector search, then filter
+  QUERY_POST = 0;
+
+  // first search from rocksdb, then search vector
+  QUERY_PRE = 1;
+}
+
+enum ScalarFieldType {
+  NONE = 0;     // just a placeholder
+  BOOL = 1;     // not used now
+  INT8 = 2;     // not used now
+  INT16 = 3;    // not used now
+  INT32 = 4;    // not used now
+  INT64 = 5;    // for vector and document
+  FLOAT32 = 6;  // not used now
+  DOUBLE = 7;   // for vector and document
+  STRING = 8;   // for vector is string, for document is text with tokenizer
+  BYTES = 9;  // for document only, is binary data, no tokenizer is used, not implemented now, will be used in the near
+              // future
+}
+
+message ScalarField {
+  oneof data {
+    bool bool_data = 1;
+    int32 int_data = 2;
+    int64 long_data = 3;
+    float float_data = 4;
+    double double_data = 5;
+    string string_data = 6;
+    bytes bytes_data = 7;
+  }
+}
+
+message ScalarValue {
+  // data type of scalar field
+  ScalarFieldType field_type = 1;
+  // scalar field, only one element in most cases
+  repeated ScalarField fields = 2;
+}
+
+message CreateBruteForceParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+}
+
+message CreateFlatParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+}
+
+message CreateIvfFlatParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
+  // Number of cluster centers (default 2048) required
+  int32 ncentroids = 3;
+}
+
+message CreateIvfPqParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
+  // Number of cluster centers Default 2048 required
+  int32 ncentroids = 3;
+
+  // PQ split sub-vector size default 64 required
+  int32 nsubvector = 4;
+
+  // Inverted list (IVF) bucket initialization size default 1000 optional
+  int32 bucket_init_size = 5;
+
+  // Inverted list (IVF) bucket maximum capacity default 1280000 optional
+  int32 bucket_max_size = 6;
+
+  // bit number of sub cluster center. default 8 required.  means 256.
+  int32 nbits_per_idx = 7;
+}
+
+message CreateHnswParam {
+  // dimensions required
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  MetricType metric_type = 2;
+
+  // the range traversed in the graph during the process of finding node neighbors when
+  // composing the graph. The larger the value, the better the composition effect and the
+  // longer the composition time. Default 40 required
+  uint32 efConstruction = 3;
+
+  // Set the maximum number of elements. required
+  uint32 max_elements = 4;
+
+  // The number of node neighbors, the larger the value, the better the composition effect, and the
+  // more memory it takes. Default 32. required .
+  int32 nlinks = 5;
+}
+
+message CreateDiskAnnParam {
+  // dimensions required
+  // The number of dimensions in the vector data.
+  uint32 dimension = 1;
+
+  // distance calculation method (L2 or InnerProduct) required
+  // The distance calculation method to be used for the index.
+  MetricType metric_type = 2;
+
+  // The number of trees to be built in the index.
+  // The number of trees affects the accuracy and search speed of the index.
+  // A larger number of trees will result in higher accuracy but slower search speed.
+  int32 num_trees = 3;
+
+  // The number of nearest neighbors to be returned in a search.
+  // The number of neighbors affects the accuracy and search speed of the index.
+  // A larger number of neighbors will result in higher accuracy but slower search speed.
+  int32 num_neighbors = 4;
+
+  // The number of threads to be used for building the index.
+  // The number of threads affects the speed of building the index.
+  // A larger number of threads will result in faster index building but may use more system resources.
+  int32 num_threads = 5;
+}
+
+message VectorIndexParameter {
+  VectorIndexType vector_index_type = 1;
+  oneof vector_index_parameter {
+    CreateFlatParam flat_parameter = 2;
+    CreateIvfFlatParam ivf_flat_parameter = 3;
+    CreateIvfPqParam ivf_pq_parameter = 4;
+    CreateHnswParam hnsw_parameter = 5;
+    CreateDiskAnnParam diskann_parameter = 6;
+    CreateBruteForceParam bruteforce_parameter = 7;
+  }
+  ScalarSchema scalar_schema = 50;
+}
+
+message SearchFlatParam {
+  // query parallel mode
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a single query that contains multiple vectors, and is parallelized between each
+  // vector query. optional
+  int32 parallel_on_queries = 1;
+}
+
+message SearchIvfFlatParam {
+  // How many buckets to query, the default is 80, and cannot exceed the size of ncentroids. Optional parameters
+  int32 nprobe = 1;
+
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a query in which a single query contains multiple vectors, and is parallelized
+  // between each vector query. If there is only a single vector, it can be queried in parallel across nprobe buckets.
+  // optional parameters
+  int32 parallel_on_queries = 2;
+}
+
+message SearchIvfPqParam {
+  // How many buckets to query, the default is 80, and cannot exceed the size of ncentroids Optional parameters
+  int32 nprobe = 1;
+
+  // Default 1, parallel between queries; 0, parallel in a single query.
+  // Inter-query parallelism refers to a query in which a single query contains multiple vectors, and is parallelized
+  // between each vector query. If there is only a single vector, it can be queried in parallel across nprobe buckets
+  // optional parameters
+  int32 parallel_on_queries = 2;
+
+  // number of results recalled from the index
+  // The default is 100. This parameter is for whether to use the original vector for fine sorting. When searching, it
+  // will look for recall_num results in the IVF index. Then use the original vectors to reorder to get the topK final
+  // results. Among them, whether to use the original vector to reorder is specified by the quick parameter. optional
+  // parameters
+  int32 recall_num = 3;
+}
+
+message SearchHNSWParam {
+  // Range traversed in the graph when searching for node neighbors Optional parameters Default 64 Optional parameters
+  int32 efSearch = 1;
+}
+
+message SearchDiskAnnParam {
+  // TODO : Not implement
+}
+
+message Schema {
+  enum Type {
+    BOOL = 0;
+    INTEGER = 1;
+    FLOAT = 2;
+    LONG = 3;
+    DOUBLE = 4;
+    STRING = 5;
+    BOOLLIST = 6;
+    INTEGERLIST = 7;
+    FLOATLIST = 8;
+    LONGLIST = 9;
+    DOUBLELIST = 10;
+    STRINGLIST = 11;
+  };
+
+  // type of data
+  Type type = 1;
+
+  // Is primary key
+  bool is_key = 2;
+
+  // is allowed to be empty
+  bool is_nullable = 3;
+
+  // index position starts from 0
+  int32 index = 4;
+
+  // field name only for scala , others invalid
+  string name = 5;
+}
+
+message CoprocessorV2 {
+  // The version of the serialized data.
+  int32 schema_version = 1;
+
+  message SchemaWrapper {
+    repeated Schema schema = 1;
+    int64 common_id = 2;
+  }
+
+  // Original schema.
+  SchemaWrapper original_schema = 2;
+
+  // Result schema
+  SchemaWrapper result_schema = 3;
+
+  // Column selection in the table list selection.
+  // For example, [0, 2, 4, 7] selects the index subscript of the column.
+  // If the length of the array is 0, it means not need to decode.
+  repeated int32 selection_columns = 4;
+
+  // Encoded binary of the relational expression pushed down.
+  bytes rel_expr = 5;
+}
+
+message VectorSearchParameter {
+  // The number of top results to return.
+  uint32 top_n = 1;
+
+  bool without_vector_data = 2;       // Default false, if true, response without vector data.
+  bool without_scalar_data = 3;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 4;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                      // if this parameter is null, all scalar data will be returned.
+  bool without_table_data = 5;        // Default false, if true, response without table data
+
+  bool enable_range_search = 6;  // Whether to enable range search. true : enable , false disable.
+                                 // if enable_range_search = true. top_n disabled.
+  float radius = 7;              // Query the target value of the vector. if enable_range_search = true. use this.
+
+  // The search method to use.
+  oneof search {
+    SearchFlatParam flat = 11;
+    SearchIvfFlatParam ivf_flat = 12;
+    SearchIvfPqParam ivf_pq = 13;
+    SearchHNSWParam hnsw = 14;
+    SearchDiskAnnParam diskann = 15;
+  }
+
+  // filter source
+  VectorFilter vector_filter = 21;
+
+  // only include pre filter and post filter
+  VectorFilterType vector_filter_type = 22;
+
+  //  if vector_filter == TABLE_FILTER and  vector_query_type = QUERY_PRE enable vector_coprocessor
+  //  coprocessor request
+  CoprocessorV2 vector_coprocessor = 23;
+
+  // vector id array vector_filter == VECTOR_ID_FILTER enable vector_ids
+  bool is_negation = 26;
+  bool is_sorted = 27;  // vector_ids is sorted
+  repeated int64 vector_ids = 24;
+
+  // use brute-force search
+  bool use_brute_force = 25;
+}
+
+enum ScalarIndexType {
+  SCALAR_INDEX_TYPE_NONE = 0;  // no scalar index, just a placeholder
+  SCALAR_INDEX_TYPE_LSM = 1;
+  SCALAR_INDEX_TYPE_BTREE = 2;
+}
+
+message ScalarSchemaItem {
+  // field key
+  string key = 1;
+
+  // filed type
+  ScalarFieldType field_type = 2;
+
+  // need to speed up key
+  bool enable_speed_up = 3;
+}
+
+message ScalarSchema {
+  // array field
+  repeated ScalarSchemaItem fields = 1;
+}
+
+message ScalarIndexParameter {
+  ScalarIndexType scalar_index_type = 1;
+  bool is_unique = 2;  // for scalar index
+}
+
+message IndexParameter {
+  IndexType index_type = 1;
+  VectorIndexParameter vector_index_parameter = 2;
+  ScalarIndexParameter scalar_index_parameter = 3;
+  DocumentIndexParameter document_index_parameter = 4;
+}
+
+message DocumentIndexParameter {
+  // for default, String field will use "chinese" tokenizer.
+  // if user want to specialize tokenizer, user can use json_parameter to specify tokenizer.
+  // Only string[text], bytes[bytes], double[f64], int64[i64] is supported.
+  ScalarSchema scalar_schema = 1;
+
+  // if use json_parameter, user can use this field to specify tokenizer.
+  // the field in json_parameter must match the field in scalar_schema.
+  string json_parameter = 2;
+}
+
+message RegionStatus {
+  RegionRaftStatus raft_status = 1;
+  ReplicaStatus replica_status = 2;
+  RegionHeartbeatState heartbeat_status = 3;
+  int64 last_update_timestamp = 25;
+}
+
+message Region {
+  // store info
+  int64 id = 1;
+  int64 epoch = 2;
+  // region type
+  RegionType region_type = 3;
+  // region definition
+  RegionDefinition definition = 4;
+
+  RegionState state = 10;
+  RegionStatus status = 11;
+  int64 leader_store_id = 12;
+
+  // region metrics
+  RegionMetrics metrics = 20;
+
+  // other
+  int64 create_timestamp = 21;
+  int64 deleted_timestamp = 22;
+}
+
+// RegionMetrics
+message RegionMetrics {
+  int64 id = 1;
+  int64 leader_store_id = 2;                      // leader store id
+  StoreRegionState store_region_state = 3;        // region state defined by store
+  BRaftStatus braft_status = 4;                   // region braft status defined by store
+  RegionDefinition region_definition = 5;         // region definition
+  VectorIndexStatus vector_index_status = 6;      // vector index status
+  DocumentIndexStatus document_index_status = 7;  // document index status
+
+  int64 row_count = 11;                      // row count of this region
+  bytes min_key = 12;                        // the min key of this region now exist
+  bytes max_key = 13;                        // the max key of this region now exist
+  int64 region_size = 14;                    // the bytes size of this region
+  int64 last_update_metrics_log_index = 15;  // last update metrics log index
+  int64 last_update_metrics_version = 16;    // last update metrics version
+  int64 last_update_metrics_timestamp = 17;  // last update metrics timestamp
+
+  // bool is_hold_vector_index = 29;                // is hold vector index
+  VectorIndexMetrics vector_index_metrics = 20;      // vector index  metrics
+  int64 snapshot_epoch_version = 21;                 // latest region raft snapshot epoch version
+  DocumentIndexMetrics document_index_metrics = 22;  // document index metrics
+
+  // region's info
+  RegionStatus region_status = 30;
+}
+
+message RegionMap {
+  int64 epoch = 1;
+  repeated Region regions = 2;
+}
+
+// RaftNodeStatus
+// raft node's status
+// equal to braft state in raft.h
+enum RaftNodeState {
+  STATE_NONE = 0;  // this is just a placeholder
+  STATE_LEADER = 1;
+  STATE_TRANSFERRING = 2;
+  STATE_CANDIDATE = 3;
+  STATE_FOLLOWER = 4;
+  STATE_ERROR = 5;
+  STATE_UNINITIALIZED = 6;
+  STATE_SHUTTING = 7;
+  STATE_SHUTDOWN = 8;
+  STATE_END = 9;
+}
+
+// RaftPeerStatus
+message RaftPeerStatus {
+  bool valid = 1;
+  bool installing_snapshot = 2;
+  int64 next_index = 3;
+  int64 last_rpc_send_timestamp = 4;
+  int64 flying_append_entries_size = 5;
+  int64 readonly_index = 6;
+  int32 consecutive_error_times = 7;
+}
+
+// BRaftStatus
+message BRaftStatus {
+  RaftNodeState raft_state = 1;    // the current state of the raft node
+  string peer_id = 11;             // the ID of the peer associated with this status
+  string leader_peer_id = 12;      // the ID of the current leader peer
+  bool readonly = 13;              // whether the node is in read-only mode
+  int64 term = 14;                 // the current term of the raft node
+  int64 committed_index = 15;      // the index of the highest log entry known to be committed
+  int64 known_applied_index = 16;  // the index of the highest log entry applied to the state machine
+  int64 pending_index = 17;        // the index of the highest log entry not yet known to be committed
+  int64 pending_queue_size = 18;   // the size of the pending queue
+  int64 applying_index = 19;       // the index of the highest log entry currently being applied to the state machine
+  int64 first_index = 20;          // the index of the first log entry
+  int64 last_index = 21;           // the index of the last log entry
+  int64 disk_index = 22;           // the index of the last log entry persisted to disk
+
+  // a map of stable followers, where the key is the peer ID and the value is the status of the follower
+  map<string, RaftPeerStatus> stable_followers = 23;
+  // a map of unstable followers, where the key is the peer ID and the value is the status of the follower
+  map<string, RaftPeerStatus> unstable_followers = 24;
+}
+
+// vector index metrics
+message VectorIndexMetrics {
+  // vector index type . reserve to do one of for each different algorithm.
+  VectorIndexType vector_index_type = 1;
+
+  // current count
+  int64 current_count = 2;
+
+  // deleted count
+  int64 deleted_count = 3;
+
+  // max id
+  int64 max_id = 4;
+
+  // min id
+  int64 min_id = 5;
+
+  // memeory unit bytes
+  int64 memory_bytes = 6;
+}
+
+message VectorIndexStatus {
+  bool is_stop = 1;
+  bool is_ready = 2;
+  bool is_own_ready = 3;
+  bool is_build_error = 4;
+  bool is_rebuild_error = 5;
+  bool is_switching = 6;
+  bool is_hold_vector_index = 7;  // is hold vector index
+  int64 apply_log_id = 8;
+  int64 snapshot_log_id = 9;
+  int64 last_build_epoch_version = 10;
+}
+
+message DocumentIndexStatus {
+  bool is_stop = 1;
+  bool is_ready = 2;
+  bool is_own_ready = 3;
+  bool is_build_error = 4;
+  bool is_rebuild_error = 5;
+  bool is_switching = 6;
+  bool is_hold_document_index = 7;  // is hold document index
+  int64 apply_log_id = 8;
+  int64 snapshot_log_id = 9;
+  int64 last_build_epoch_version = 10;
+}
+
+message StoreOwnMetrics {
+  int64 id = 1;                 // store id
+  bool is_ready_only = 2;       // is read only
+  string read_only_reason = 3;  // read only reason
+
+  int64 system_total_capacity = 11;  // total capacity of this store
+  int64 system_free_capacity = 12;   // free capacity of this store
+
+  int64 system_cpu_usage = 13;         // cpu usage of this store process
+  int64 system_total_memory = 14;      // total memory of the host this store process running on
+  int64 system_free_memory = 15;       // total free memory of the host this store process running on
+  int64 system_shared_memory = 16;     // shared memory of the host this store process running on
+  int64 system_buffer_memory = 17;     // buffer memory of the host this store process running on
+  int64 system_cached_memory = 18;     // cache memory of the host this store process running on
+  int64 system_available_memory = 19;  // available memory of the host this store process running on
+  int64 system_total_swap = 20;        // total swap of the host this store process running on
+  int64 system_free_swap = 21;         // total free swap of the host this store process running on
+  int64 system_io_util = 22;           // io utilization of the host this store process running on , NOT IMPLEMENTED
+
+  int64 process_used_cpu = 23;       // cpu usage of this store process, this value / 100 is the real cpu usage percent
+  int64 process_used_memory = 24;    // total used memory of this store process
+  int64 process_used_capacity = 25;  // free capacity of this store , NOT IMPLEMENTED
+}
+
+// StoreMetrics
+message StoreMetrics {
+  int64 id = 1;  // store id
+
+  StoreOwnMetrics store_own_metrics = 10;  // store own metrics
+
+  // the key of the map is region_id,  the value is RegionMetrics
+  // this map contains all region's metrics include follower on this store
+  map<int64, RegionMetrics> region_metrics_map = 40;
+  // true: region_metrics_map only contain partial region metrics, false: contain full region metrics
+  bool is_partial_region_metrics = 41;
+  // allow update epoch version(split/merge), leader change not allow update epoch version.
+  bool is_update_epoch_version = 42;
+}
+
+// CoordinatorServiceType
+enum CoordinatorServiceType {
+  ServiceTypeCoordinator = 0;
+  ServiceTypeMeta = 1;
+  ServiceTypeAutoIncrement = 2;
+  ServiceTypeVersion = 3;
+}
+
+message RequestInfo {
+  int64 request_id = 1;
+}
+
+message TimeInfo {
+  int64 total_rpc_time_ns = 1;
+
+  int64 service_queue_wait_time_ns = 2;
+  int64 prepair_commit_time_ns = 3;
+  int64 raft_commit_time_ns = 4;
+  int64 raft_queue_wait_time_ns = 5;
+  int64 raft_apply_time_ns = 6;
+}
+
+message ResponseInfo {
+  TimeInfo time_info = 1;
+}
+
+message VersionInfo {
+  string git_commit_hash = 10;
+  string git_tag_name = 20;
+  string git_commit_user = 21;
+  string git_commit_mail = 22;
+  string git_commit_time = 23;
+  string major_version = 30;
+  string minor_version = 40;
+  string dingo_build_type = 50;
+  string dingo_contrib_build_type = 60;
+  bool use_mkl = 70;
+  bool use_openblas = 80;
+  bool use_tcmalloc = 90;
+  bool use_profiler = 100;
+  bool use_sanitizer = 110;
+}
+
+message DocumentValue {
+  // data type of scalar field
+  // for document, only INT64, DOUBLE and STRING is supported
+  ScalarFieldType field_type = 1;
+  // scalar field
+  ScalarField field_value = 2;
+}
+
+message Document {
+  // scalar data of this document, key: scalar key, value: scalar value data.
+  map<string, DocumentValue> document_data = 1;
+}
+
+message DocumentWithId {
+  int64 id = 1;
+  Document document = 2;  // document data
+}
+
+message DocumentSearchParameter {
+  // The number of top results to return.
+  uint32 top_n = 1;
+
+  // The query_string for search
+  string query_string = 2;
+
+  // use id filter
+  bool use_id_filter = 3;
+  repeated int64 document_ids = 4;  // if use_id_filter = true, use this field
+
+  // use column filter
+  // if query_string is simple string, use column_names to select columns
+  // if query_string is full functional expr, like "col1: value1 AND col2: value2", column_names is ignored
+  repeated string column_names = 5;
+
+  // for output, if only id is needed, set without_scalar_data = true
+  // else set without_scalar_data = false, and set selected_keys to select scalar data
+  bool without_scalar_data = 10;       // Default false, if true, response without scalar data.
+  repeated string selected_keys = 11;  // If without_scalar_data is false, selected_keys is used to select scalar data,
+                                       // if this parameter is null, all scalar data will be returned.
+}
+
+message DocumentWithScore {
+  DocumentWithId document_with_id = 1;
+  float score = 2;
+}
+
+// document index metrics
+message DocumentIndexMetrics {
+  // total num docs
+  int64 total_num_docs = 1;
+
+  // total num tokens
+  int64 total_num_tokens = 2;
+
+  // max id
+  int64 max_id = 3;
+
+  // min id
+  int64 min_id = 4;
+
+  // meta json
+  string meta_json = 5;
+
+  // json parameter
+  string json_parameter = 6;
+}

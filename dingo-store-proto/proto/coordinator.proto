@@ -1,0 +1,1151 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "error.proto";
+
+package dingodb.pb.coordinator;
+
+option java_package = "io.dingodb.coordinator";
+
+option cc_generic_services = true;
+
+enum TaskPreCheckType {
+  NONE = 0;  // this is a placeholder
+  REGION_CHECK = 1;
+  STORE_REGION_CHECK = 2;
+}
+
+message RegionCheck {
+  int64 region_id = 1;
+  dingodb.pb.common.Range range = 2;
+  dingodb.pb.common.RegionState state = 3;
+  dingodb.pb.common.RegionRaftStatus raft_status = 4;
+  dingodb.pb.common.ReplicaStatus replica_status = 5;
+  repeated dingodb.pb.common.Peer peers = 6;
+
+  // check vector index
+  int64 vector_snapshot_log_id = 12;  // check if vector index snapshot log id is equal to or bigger than this value
+}
+
+message StoreRegionCheck {
+  int64 store_id = 1;
+  int64 region_id = 2;
+  dingodb.pb.common.Range range = 3;
+  dingodb.pb.common.StoreRegionState store_region_state = 4;
+  dingodb.pb.common.RaftNodeState raft_node_status = 5;
+  repeated dingodb.pb.common.Peer peers = 6;
+
+  // check vector index
+  // if check_vector_index is true, check vector index status equal to is_hold_vector_index
+  // else ignore vector index status
+  bool check_vector_index_is_hold = 7;
+  bool is_hold_vector_index = 8;
+  bool check_vector_index_is_ready = 9;
+  bool is_ready = 10;
+  int64 vector_index_version = 11;  // check if vector index version is equal to this value
+}
+
+message TaskPreCheck {
+  TaskPreCheckType type = 1;
+  oneof PreCheck {
+    RegionCheck region_check = 2;
+    StoreRegionCheck store_region_check = 3;
+  }
+}
+
+enum CoordinatorOperationType {
+  COORDINATOR_OP_TYPE_NONE = 0;  // this is a placeholder
+  COORDINATOR_OP_TYPE_DROP_REGION = 1;
+}
+
+message CoordinatorDropRegionOperation {
+  int64 region_id = 1;  // region id to be droped
+}
+
+message CoordinatorOperation {
+  CoordinatorOperationType coordinator_op_type = 1;
+  oneof Operation {
+    CoordinatorDropRegionOperation drop_region_operation = 2;
+  }
+}
+
+message Task {
+  int32 step = 1;
+  TaskPreCheck pre_check = 2;
+  repeated StoreOperation store_operations = 3;
+  repeated CoordinatorOperation coordinator_operations = 4;
+}
+
+message TaskList {
+  int64 id = 1;  // this is the id of coordinator task list
+  string name = 2;
+  int64 next_step = 3;  // the next index of tasks to execute
+  repeated Task tasks = 4;
+  string create_time = 10;
+  string finish_time = 11;
+}
+
+message CreateRequest {
+  dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition
+  int64 split_from_region_id = 2;  // this is a sub-region, its state need to be STANDBY, will split from region id, if
+                                   // this value is 0, means this is a normal new region
+}
+
+message DeleteRequest {
+  int64 region_id = 1;  // region id to be deleted
+}
+
+message SplitRequest {
+  int64 split_from_region_id = 1;  // split from region id
+  int64 split_to_region_id = 2;    // split to region id
+  bytes split_watershed_key = 3;   // split watershed key
+  bool store_create_region = 4;    // if true, store will create region, else coordinator pre-create region
+}
+
+message MergeRequest {
+  int64 source_region_id = 1;
+  int64 target_region_id = 2;
+}
+
+message ChangePeerRequest {
+  dingodb.pb.common.RegionDefinition region_definition = 1;  // region definition contains new peer
+}
+
+message TransferLeaderRequest {
+  dingodb.pb.common.Peer peer = 1;  // transfer leadership to the peer
+  bool is_force = 2;
+}
+
+message SnapshotVectorIndexRequest {
+  int64 vector_index_id = 1;  // vector index id
+  int64 raft_log_index = 2;   // if snapshot_log_id < raft_log_index, no need to save snapshot
+}
+
+message UpdateDefinitionRequest {
+  dingodb.pb.common.RegionDefinition new_region_definition = 1;  // new region definition
+}
+
+message PurgeRequest {
+  int64 region_id = 1;  // region id to be purged
+}
+
+message SwitchSplitRequest {
+  int64 region_id = 1;
+  bool disable_split = 2;  // false: enable split true: disable split.
+}
+
+message HoldVectorIndexRequest {
+  int64 region_id = 1;
+  bool is_hold = 2;
+}
+
+message StopRequest {
+  int64 region_id = 1;  // region id to be stop
+}
+
+message DestroyExecutorRequest {
+  int64 region_id = 1;
+}
+
+message DeleteDataRequest {
+  dingodb.pb.common.Range range = 1;
+  repeated string raw_cf_names = 2;
+  repeated string txn_cf_names = 3;
+}
+
+// RegionCmdType
+enum RegionCmdType {
+  CMD_NONE = 0;                   // this is a placeholder
+  CMD_CREATE = 1;                 // create region
+  CMD_DELETE = 2;                 // delete region
+  CMD_SPLIT = 3;                  // split region
+  CMD_MERGE = 4;                  // merge region
+  CMD_CHANGE_PEER = 5;            // change peer for region raft group
+  CMD_TRANSFER_LEADER = 6;        // transfer leader for region raft group
+  CMD_SNAPSHOT = 7;               // save region snapshot
+  CMD_PURGE = 8;                  // purge region's meta for deleted region
+  CMD_SNAPSHOT_VECTOR_INDEX = 9;  // save vector index snapshot
+  CMD_UPDATE_DEFINITION = 10;     // update definition, now only support hnsw index change max_elements
+  CMD_SWITCH_SPLIT = 11;          // switch region enable/disable split.
+  CMD_HOLD_VECTOR_INDEX = 12;     // control follower hold vector index
+
+  CMD_STOP = 30;              // when region state ORPHAN, stop region
+  CMD_DESTROY_EXECUTOR = 31;  // destroy region executor
+  CMD_DELETE_DATA = 32;       // bdb engine delete data when delete region
+}
+
+// Region cmd status
+enum RegionCmdStatus {
+  STATUS_NONE = 0;
+  STATUS_DONE = 1;
+  STATUS_FAIL = 2;
+}
+
+// RegionCmd
+message RegionCmd {
+  int64 id = 1;                       // this is a global nonrepetitive ID for cmd
+  int64 job_id = 2;                   // task list id
+  int64 region_id = 3;                // this is region id
+  RegionCmdType region_cmd_type = 4;  // the cmd want to be executed
+  int64 create_timestamp = 5;         // the timestamp when this cmd is created
+  int64 store_id = 6;                 // the store id of this cmd
+  oneof Request {
+    CreateRequest create_request = 11;           // create parameters
+    DeleteRequest delete_request = 12;           // delete parameters
+    SplitRequest split_request = 13;             // split parameters
+    MergeRequest merge_request = 14;             // merge parameters
+    ChangePeerRequest change_peer_request = 15;  // change peer parameters
+    PurgeRequest purge_request = 16;  // purge region meta on store, this region is deleted and already purge on
+    TransferLeaderRequest transfer_leader_request = 17;  // change peer parameters
+
+    SnapshotVectorIndexRequest snapshot_vector_index_request = 18;  // save vector index snapshot
+    UpdateDefinitionRequest update_definition_request = 19;         // update region definition
+    SwitchSplitRequest switch_split_request = 20;                   // switch region split
+    HoldVectorIndexRequest hold_vector_index_request = 21;          // follower hold vector index
+
+    StopRequest stop_request = 30;                         // when region state ORPHAN, stop region
+    DestroyExecutorRequest destroy_executor_request = 31;  // destroy region executor
+    DeleteDataRequest delete_data_request = 32;
+  }
+
+  bool is_notify = 40;                // store need to notify coordinator when this cmd is done
+  RegionCmdStatus status = 50;        // the status of this cmd
+  dingodb.pb.error.Error error = 51;  // the error of this cmd
+}
+
+// StoreOperation
+message StoreOperation {
+  int64 id = 1;  // this is store id
+  repeated RegionCmd region_cmds = 2;
+}
+
+// Store report self status and region (this node is leader) status
+message StoreHeartbeatRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 self_storemap_epoch = 2;                     // storemap epoch in this Store
+  dingodb.pb.common.Store store = 3;                 // self store info
+  dingodb.pb.common.StoreMetrics store_metrics = 4;  // self store metrics
+}
+
+// StoreHeartbeatResponse
+message StoreHeartbeatResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 storemap_epoch = 3;                 // the lates epoch of storemap
+  dingodb.pb.common.StoreMap storemap = 4;  // new storemap
+  ClusterState cluster_state = 5;           // cluster state, ag. cluster is read only
+}
+
+message ExecutorHeartbeatRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 self_executormap_epoch = 2;         // executormap epoch in this Executor
+  dingodb.pb.common.Executor executor = 3;  // self executor info
+}
+
+message ExecutorHeartbeatResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 executormap_epoch = 3;                    // the lates epoch of executormap
+  dingodb.pb.common.ExecutorMap executormap = 4;  // new executormap
+}
+
+message CoordinatorMemoryInfo {
+  int64 applied_term = 1;
+  int64 applied_index = 2;
+
+  int64 total_size = 3;
+
+  // common
+  int64 id_epoch_safe_map_temp_count = 4;
+  int64 id_epoch_safe_map_temp_size = 5;
+
+  int64 id_epoch_map_count = 6;
+  int64 id_epoch_map_size = 7;
+
+  int64 coordinator_map_count = 8;
+  int64 coordinator_map_size = 9;
+
+  int64 store_map_count = 10;
+  int64 store_map_size = 11;
+
+  int64 executor_map_count = 12;
+  int64 executor_map_size = 13;
+
+  int64 executor_user_map_count = 14;
+  int64 executor_user_map_size = 15;
+
+  // schema
+  int64 schema_map_count = 21;
+  int64 schema_map_size = 22;
+
+  int64 region_map_count = 23;
+  int64 region_map_size = 24;
+
+  int64 range_region_map_count = 25;
+  int64 range_region_map_size = 26;
+
+  int64 table_map_count = 27;
+  int64 table_map_size = 28;
+
+  int64 index_map_count = 29;
+  int64 index_map_size = 30;
+
+  // metrics
+  int64 store_metrics_map_count = 41;
+  int64 store_metrics_map_size = 42;
+
+  int64 table_metrics_map_count = 43;
+  int64 table_metrics_map_size = 44;
+
+  int64 index_metrics_map_count = 48;
+  int64 index_metrics_map_size = 49;
+
+  int64 region_metrics_map_count = 50;
+  int64 region_metrics_map_size = 51;
+
+  int64 store_region_metrics_map_count = 52;
+  int64 store_region_metrics_map_size = 53;
+
+  // store operation
+  int64 store_operation_map_count = 61;
+  int64 store_operation_map_size = 62;
+
+  int64 region_cmd_map_count = 63;
+  int64 region_cmd_map_size = 64;
+
+  int64 task_list_map_count = 65;
+  int64 task_list_map_size = 66;
+
+  // deleted
+  int64 deleted_region_map_count = 71;
+  int64 deleted_region_map_size = 72;
+
+  int64 deleted_table_map_count = 73;
+  int64 deleted_table_map_size = 74;
+
+  int64 deleted_index_map_count = 75;
+  int64 deleted_index_map_size = 76;
+
+  // table index
+  int64 table_index_map_count = 77;
+  int64 table_index_map_size = 78;
+
+  // common disk map
+  int64 common_disk_map_count = 79;
+  int64 common_disk_map_size = 80;
+
+  // common mem map
+  int64 common_mem_map_count = 81;
+  int64 common_mem_map_size = 82;
+
+  // tenant map
+  int64 tenant_map_count = 83;
+  int64 tenant_map_size = 84;
+
+  // kv
+  int64 kv_lease_map_count = 91;
+  int64 kv_lease_map_size = 92;
+
+  int64 kv_index_map_count = 93;
+  int64 kv_index_map_size = 94;
+
+  int64 kv_rev_map_count = 95;
+  int64 kv_rev_map_size = 96;
+
+  int64 kv_watch_count = 97;
+
+  // meta watch
+  int64 meta_watch_count = 101;
+  int64 meta_event_count = 102;
+
+  // auto increment
+  int64 auto_increment_map_count = 111;
+  int64 auto_increment_map_size = 112;
+
+  repeated dingodb.pb.common.KeyValue id_epoch_values = 100;
+}
+
+message HelloRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 hello = 2;
+  bool get_memory_info = 3;
+  bool is_just_version_info = 4;
+}
+
+message ClusterState {
+  bool cluster_is_read_only = 1;
+  bool cluster_is_force_read_only = 2;
+  string cluster_read_only_reason = 3;
+  string cluster_force_read_only_reason = 4;
+}
+
+message HelloResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.CoordinatorState state = 3;
+  string status_detail = 4;
+  CoordinatorMemoryInfo memory_info = 5;
+  ClusterState cluster_state = 6;
+  dingodb.pb.common.VersionInfo version_info = 7;
+}
+
+message GetRegionMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+}
+
+message GetRegionMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.RegionMap regionmap = 4;
+}
+
+message GetRangeRegionMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
+
+message RangeRegion {
+  bytes start_key = 1;
+  int64 region_id = 2;
+  bytes end_key = 3;
+}
+
+message GetRangeRegionMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated RangeRegion range_regions = 3;
+}
+
+message GetDeletedRegionMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+}
+
+message GetDeletedRegionMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.RegionMap regionmap = 4;
+}
+
+message AddDeletedRegionMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+  bool force = 3;
+}
+
+message AddDeletedRegionMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message CleanDeletedRegionMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message CleanDeletedRegionMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetRegionCountRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+}
+
+message GetRegionCountResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 region_count = 3;
+}
+
+message GetStoreMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+
+  // if filter_store_types is not empty, only return the store with the store type in filter_store_types
+  repeated dingodb.pb.common.StoreType filter_store_types = 3;
+}
+
+message GetStoreMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.StoreMap storemap = 4;
+}
+
+message GetStoreMetricsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+  int64 store_id = 3;
+  int64 region_id = 4;
+}
+
+message GetStoreMetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  repeated dingodb.pb.common.StoreMetrics store_metrics = 4;
+}
+
+message DeleteStoreMetricsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 store_id = 2;
+}
+
+message DeleteStoreMetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetRegionMetricsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message GetRegionMetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated dingodb.pb.common.RegionMetrics region_metrics = 3;
+}
+
+message DeleteRegionMetricsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message DeleteRegionMetricsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetStoreOperationRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 store_id = 2;  // this is store_id, if 0, means get all store operation
+}
+
+message GetStoreOperationResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated StoreOperation store_operations = 3;
+}
+
+message CreateStoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+}
+
+message CreateStoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 store_id = 3;
+  string keyring = 4;
+}
+
+message GetCoordinatorMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  bool get_coordinator_map = 3;
+}
+
+message GetCoordinatorMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.Location leader_location = 4;
+  dingodb.pb.common.Location kv_leader_location = 5;
+  dingodb.pb.common.Location tso_leader_location = 6;
+  dingodb.pb.common.Location auto_increment_leader_location = 7;
+  repeated dingodb.pb.common.Location coordinator_locations = 8;  // deprcated
+  dingodb.pb.common.CoordinatorMap coordinator_map = 9;
+}
+
+message ConfigCoordinatorRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  bool set_force_read_only = 2;
+  bool is_force_read_only = 3;
+  string force_read_only_reason = 4;
+}
+
+message ConfigCoordinatorResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message CreateRegionIdRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;  // not used now, just a place holder for future
+  uint32 count = 3;      // the count of region-id to create
+}
+
+message CreateRegionIdResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated int64 region_ids = 3;
+}
+
+message DeleteStoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  int64 store_id = 3;
+  string keyring = 4;
+}
+
+message DeleteStoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UpdateStoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  int64 store_id = 3;
+  string keyring = 4;
+  dingodb.pb.common.StoreInState store_in_state = 5;
+}
+
+message UpdateStoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message CreateExecutorRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  dingodb.pb.common.Executor executor = 3;
+}
+
+message CreateExecutorResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.Executor executor = 3;
+}
+
+message DeleteExecutorRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  dingodb.pb.common.Executor executor = 3;
+}
+
+message DeleteExecutorResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message CreateExecutorUserRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 3;
+}
+
+message CreateExecutorUserResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.ExecutorUser executor_user = 3;
+}
+
+message DeleteExecutorUserRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 3;
+}
+
+message DeleteExecutorUserResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UpdateExecutorUserRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;  // set to 0 now
+  dingodb.pb.common.ExecutorUser executor_user = 3;
+  dingodb.pb.common.ExecutorUser executor_user_update = 4;  // user name is ignored, only update keyring
+}
+
+message UpdateExecutorUserResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.ExecutorUser executor_user = 3;
+}
+
+message GetExecutorMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 epoch = 2;
+}
+
+message GetExecutorMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.ExecutorMap executormap = 4;
+}
+
+message GetExecutorUserMapRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;  // set to 0 now
+  int64 epoch = 3;       // set to 0 now
+}
+
+message GetExecutorUserMapResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 epoch = 3;
+  dingodb.pb.common.ExecutorUserMap executor_user_map = 4;
+}
+
+message CleanStoreOperationRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 store_id = 2;
+}
+
+message CleanStoreOperationResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message AddStoreOperationRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  StoreOperation store_operation = 2;
+}
+
+message AddStoreOperationResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message RemoveStoreOperationRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 store_id = 2;
+  int64 region_cmd_id = 3;
+}
+
+message RemoveStoreOperationResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetRegionCmdRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 store_id = 2;
+  int64 start_region_cmd_id = 3;
+  int64 end_region_cmd_id = 4;
+}
+
+message GetRegionCmdResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated RegionCmd region_cmds = 3;
+  repeated dingodb.pb.error.Error region_cmd_errors = 4;
+}
+
+message GetTaskListRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  int64 task_list_id = 3;
+  bool get_task_list_id_only = 4;
+  bool include_archive = 5;
+  int64 archive_start_id = 6;  // task_list range [archive_start_id, ~)
+  int32 archive_limit = 7;     // return task_list num
+}
+
+message GetTaskListResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated TaskList task_lists = 3;
+}
+
+message CleanTaskListRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 task_list_id = 2;
+}
+
+message CleanTaskListResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UpdateRegionCmdStatusRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 task_list_id = 2;            // the task_list_id of the region_cmd to update
+  int64 region_cmd_id = 3;           // the region_cmd_id to update
+  RegionCmdStatus status = 4;        // If status is STATUS_FAIL, error is required
+  dingodb.pb.error.Error error = 5;  // The error of this region cmd
+}
+
+message UpdateRegionCmdStatusResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message QueryRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message QueryRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  dingodb.pb.common.Region region = 3;
+}
+
+message CreateRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string region_name = 2;
+  string resource_tag = 3;
+  int64 replica_num = 4;
+  dingodb.pb.common.Range range = 5;
+  dingodb.pb.common.RawEngine raw_engine = 6;
+  // optional if set, will create a store engine with this type, this is type is default raft store engine
+  dingodb.pb.common.StorageEngine store_engine = 7;
+
+  int64 schema_id = 11;  // optional
+  int64 table_id = 12;   // optional
+  int64 index_id = 13;   // optional, if region_type is INDEX, this field is required
+  int64 part_id = 14;    // optional, if region_type is INDEX, this field is required
+  int64 tenant_id = 15;  // optional, if not provided or zero, means default tenant
+
+  repeated int64 store_ids = 20;  // optional if not set, will create choose from all stores
+
+  int64 split_from_region_id = 25;  // optional, if set, will split from this region
+
+  // optional, if set, will create a region with this type, this type is default STORE
+  dingodb.pb.common.RegionType region_type = 30;
+  dingodb.pb.common.IndexParameter index_parameter = 40;  // optional, if region_type is INDEX, this field is required
+}
+
+message CreateRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 region_id = 3;
+}
+
+message DropRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message DropRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message DropRegionPermanentlyRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  int64 region_id = 3;
+}
+
+message DropRegionPermanentlyResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message SplitRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  SplitRequest split_request = 2;
+}
+
+message SplitRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message MergeRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  MergeRequest merge_request = 2;
+}
+
+message MergeRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message ChangePeerRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  ChangePeerRequest change_peer_request = 2;
+}
+
+message ChangePeerRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TransferLeaderRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+  int64 leader_store_id = 3;
+}
+
+message TransferLeaderRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message GetOrphanRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 cluster_id = 2;
+  int64 store_id = 3;
+}
+
+message GetOrphanRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  map<int64, dingodb.pb.common.RegionMetrics> orphan_regions = 3;
+}
+
+message ScanRegionsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  // key is the first key for the range. If range_end is not given, the request only looks up key.
+  bytes key = 2;
+  // range_end is the upper bound on the requested range [key, range_end).
+  // If range_end is '\0', the range is all keys >= key.
+  // If range_end is key plus one (e.g., "aa"+1 == "ab", "a\xff"+1 == "b"),
+  // then the range request gets all keys prefixed with key.
+  // If both key and range_end are '\0', then the range request returns all keys.
+  bytes range_end = 3;
+  // limit is a limit on the number of keys returned for the request. When limit is set to 0,
+  // it is treated as no limit.
+  int64 limit = 4;
+}
+
+message RegionStatus {
+  // RegionState
+  // REGION_NEW: the region is creating, wait for store to finish the creation
+  // REGION_NORMAL: the region is normal and can serve all request
+  // other status refer to common.proto
+  dingodb.pb.common.RegionState state = 1;
+  // RegionRaftStatus
+  // this status describe the data constistency of the raft region
+  dingodb.pb.common.RegionRaftStatus raft_status = 2;
+  // ReplicaStatus
+  // this status describe the data safety of the raft region
+  // if this region is degraded, it means one or more replica is down
+  dingodb.pb.common.ReplicaStatus replica_status = 3;
+  // RegionHeartbeatState
+  // REGION_ONLINE: the leader of this region is online
+  // REGION_DOWN: the leader of this region cannot heartbeat to coordinator
+  dingodb.pb.common.RegionHeartbeatState heartbeat_state = 4;
+  // RegionType
+  // describe this region is a store region or index region
+  // for table, the region is store
+  // for index, the region is index (including vector index and scalar index)
+  dingodb.pb.common.RegionType region_type = 5;
+  // the create timestamp in ms of region
+  int64 create_timestamp = 10;
+  // the last update(heartbeat) timestamp in ms of region
+  int64 last_update_timestamp = 11;
+}
+
+message ScanRegionInfo {
+  // this is really region id, its parent entity is part_id
+  int64 region_id = 1;
+  // the range of this part
+  dingodb.pb.common.Range range = 2;
+  // the leader's store location
+  dingodb.pb.common.Location leader = 3;
+  // all members of the region that have right to vote, this field is
+  // equal to the old replicates field of Part.
+  repeated dingodb.pb.common.Location voters = 4;
+  // all members of the region that is learners, have no right to vote
+  repeated dingodb.pb.common.Location learners = 5;
+  // region_epoch is used to check whether the region info is stale
+  dingodb.pb.common.RegionEpoch region_epoch = 6;
+  // RegionStatus
+  RegionStatus status = 7;
+}
+
+message ScanRegionsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  repeated ScanRegionInfo regions = 3;
+}
+
+enum RaftControlOp {
+  None = 0;            // just a placeholder
+  AddPeer = 1;         // only to leader
+  RemovePeer = 2;      // only to leader
+  ResetPeer = 3;       // only to leader
+  TransferLeader = 4;  // only to leader
+  Snapshot = 5;        // to leader and follower
+  GetLeader = 6;       // get leader
+  ShutDown = 7;        // leader and follower both can do, only shutdown not remove from raft group
+  Vote = 8;            // call node vote
+  ResetVoteTime = 9;   // call reset reset_election_timeout_ms
+};
+
+enum RaftControlNodeIndex {
+  CoordinatorNodeIndex = 0;
+  KvNodeIndex = 1;
+  TsoNodeIndex = 2;
+  AutoIncrementNodeIndex = 3;
+};
+
+message RaftControlRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  RaftControlOp op_type = 2;
+  RaftControlNodeIndex node_index = 3;
+  string new_leader = 4;
+  string add_peer = 5;     // the peer to add
+  string remove_peer = 6;  // the peer to remove
+  repeated string old_peers = 7;
+  repeated string new_peers = 8;
+  int64 election_time = 9;
+  bool force = 10;
+};
+
+message RaftControlResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  string leader = 3;
+};
+
+message UpdateGCSafePointRequest {
+  enum GcFlagType {
+    GC_NONE = 0;
+    GC_START = 1;
+    GC_STOP = 2;
+  }
+
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 safe_point = 2;  // this is for default tenant
+  GcFlagType gc_flag = 3;
+
+  // if tenant_safe_points is not null, coordinator will update tenant's safe point in this map
+  map<int64, int64> tenant_safe_points = 5;
+}
+
+message UpdateGCSafePointResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 new_safe_point = 3;  // this for default tenant
+  bool gc_stop = 4;          // if this is true, store will not do gc.
+
+  // if tenant_safe_points is not null, this field is filled
+  map<int64, int64> tenant_safe_points = 6;  // if get_all_tenant is true, this field is filled
+}
+
+message GetGCSafePointRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  // if tenant_ids is empty, the coordinator will only return the safe_point_ts for default tenant
+  // else, the coordinator will return the safe_point_ts for all tenant in tenant_ids, including default tenant
+  repeated int64 tenant_ids = 2;
+  bool get_all_tenant = 3;  // if this is true, coordinator will return all tenant's safe point
+}
+
+message GetGCSafePointResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+  int64 safe_point = 3;                      // this is the safe_point of default tenant
+  bool gc_stop = 4;                          // if this is true, store will not do gc.
+  map<int64, int64> tenant_safe_points = 5;  // for other tenants that are not default tenant
+}
+
+message BalanceLeaderRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.StoreType store_type = 5;
+  bool dryrun = 6;
+}
+
+message BalanceLeaderResponse {
+  message TransferLeaderTask {
+    int64 region_id = 1;
+    int64 source_store_id = 2;
+    int64 target_store_id = 3;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  string leader_score = 10;
+  string expect_leader_score = 11;
+  repeated TransferLeaderTask tasks = 12;
+}
+
+service CoordinatorService {
+  // Hello, this is for coordinator and meta
+  rpc Hello(HelloRequest) returns (HelloResponse);
+  rpc GetMemoryInfo(HelloRequest) returns (HelloResponse);
+
+  // Store
+  rpc StoreHeartbeat(StoreHeartbeatRequest) returns (StoreHeartbeatResponse);
+  rpc GetRegionMap(GetRegionMapRequest) returns (GetRegionMapResponse);
+  rpc GetDeletedRegionMap(GetDeletedRegionMapRequest) returns (GetDeletedRegionMapResponse);
+  rpc AddDeletedRegionMap(AddDeletedRegionMapRequest) returns (AddDeletedRegionMapResponse);
+  rpc CleanDeletedRegionMap(CleanDeletedRegionMapRequest) returns (CleanDeletedRegionMapResponse);
+  rpc GetRegionCount(GetRegionCountRequest) returns (GetRegionCountResponse);
+  rpc GetStoreMap(GetStoreMapRequest) returns (GetStoreMapResponse);
+  rpc GetStoreMetrics(GetStoreMetricsRequest) returns (GetStoreMetricsResponse);
+  rpc DeleteStoreMetrics(DeleteStoreMetricsRequest) returns (DeleteStoreMetricsResponse);
+  rpc GetRegionMetrics(GetRegionMetricsRequest) returns (GetRegionMetricsResponse);
+  rpc DeleteRegionMetrics(DeleteRegionMetricsRequest) returns (DeleteRegionMetricsResponse);
+
+  rpc CreateStore(CreateStoreRequest) returns (CreateStoreResponse);
+  rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
+  rpc UpdateStore(UpdateStoreRequest) returns (UpdateStoreResponse);
+
+  // Executor
+  rpc ExecutorHeartbeat(ExecutorHeartbeatRequest) returns (ExecutorHeartbeatResponse);
+  rpc CreateExecutor(CreateExecutorRequest) returns (CreateExecutorResponse);
+  rpc DeleteExecutor(DeleteExecutorRequest) returns (DeleteExecutorResponse);
+  rpc GetExecutorMap(GetExecutorMapRequest) returns (GetExecutorMapResponse);
+  rpc CreateExecutorUser(CreateExecutorUserRequest) returns (CreateExecutorUserResponse);
+  rpc DeleteExecutorUser(DeleteExecutorUserRequest) returns (DeleteExecutorUserResponse);
+  rpc UpdateExecutorUser(UpdateExecutorUserRequest) returns (UpdateExecutorUserResponse);
+  rpc GetExecutorUserMap(GetExecutorUserMapRequest) returns (GetExecutorUserMapResponse);
+
+  // Coordinator
+  rpc GetCoordinatorMap(GetCoordinatorMapRequest) returns (GetCoordinatorMapResponse);
+  rpc ConfigCoordinator(ConfigCoordinatorRequest) returns (ConfigCoordinatorResponse);
+  rpc CreateRegionId(CreateRegionIdRequest) returns (CreateRegionIdResponse);
+
+  // Region
+  rpc QueryRegion(QueryRegionRequest) returns (QueryRegionResponse);
+  rpc CreateRegion(CreateRegionRequest) returns (CreateRegionResponse);
+  rpc DropRegion(DropRegionRequest) returns (DropRegionResponse);
+  rpc DropRegionPermanently(DropRegionPermanentlyRequest) returns (DropRegionPermanentlyResponse);
+  rpc SplitRegion(SplitRegionRequest) returns (SplitRegionResponse);
+  rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
+  rpc ChangePeerRegion(ChangePeerRegionRequest) returns (ChangePeerRegionResponse);
+  rpc TransferLeaderRegion(TransferLeaderRegionRequest) returns (TransferLeaderRegionResponse);
+  rpc GetOrphanRegion(GetOrphanRegionRequest) returns (GetOrphanRegionResponse);
+  rpc ScanRegions(ScanRegionsRequest) returns (ScanRegionsResponse);
+  rpc GetRangeRegionMap(GetRangeRegionMapRequest) returns (GetRangeRegionMapResponse);
+
+  // StoreOperation
+  rpc GetStoreOperation(GetStoreOperationRequest) returns (GetStoreOperationResponse);
+  rpc CleanStoreOperation(CleanStoreOperationRequest) returns (CleanStoreOperationResponse);
+  rpc AddStoreOperation(AddStoreOperationRequest) returns (AddStoreOperationResponse);
+  rpc RemoveStoreOperation(RemoveStoreOperationRequest) returns (RemoveStoreOperationResponse);
+  rpc GetRegionCmd(GetRegionCmdRequest) returns (GetRegionCmdResponse);
+
+  // TaskList
+  rpc GetTaskList(GetTaskListRequest) returns (GetTaskListResponse);
+  rpc CleanTaskList(CleanTaskListRequest) returns (CleanTaskListResponse);
+  rpc UpdateRegionCmdStatus(UpdateRegionCmdStatusRequest) returns (UpdateRegionCmdStatusResponse);
+
+  // RaftControl
+  rpc RaftControl(RaftControlRequest) returns (RaftControlResponse);
+
+  // Gc
+  rpc UpdateGCSafePoint(UpdateGCSafePointRequest) returns (UpdateGCSafePointResponse);
+  rpc GetGCSafePoint(GetGCSafePointRequest) returns (GetGCSafePointResponse);
+
+  // Balance leader
+  rpc BalanceLeader(BalanceLeaderRequest) returns (BalanceLeaderResponse);
+}

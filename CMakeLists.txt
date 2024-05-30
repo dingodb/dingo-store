@@ -249,7 +249,7 @@ message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
 message(STATUS "protobuf lib: ${PROTOBUF_LIBRARIES}")
 message(STATUS "protobuf lite lib: ${PROTOBUF_LITE_LIBRARY}")
 
-SET(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/contrib/dingo-store-proto/proto)
+SET(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/dingo-store-proto/proto)
 SET(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
 
 if(EXISTS ${MESSAGE_DIR} AND IS_DIRECTORY ${MESSAGE_DIR})

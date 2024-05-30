@@ -138,7 +138,7 @@ if(SDK_ENABLE_GRPC)
     set(GRPC_PROTO_GRPC_SRCS "")
     set(GRPC_PROTO_GRPC_HDRS "")
 
-    set(PROTOS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../contrib/dingo-store-proto/proto)
+    set(PROTOS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../dingo-store-proto/proto)
     message(STATUS "PROTOS_DIR:${PROTOS_DIR}")
     file(GLOB_RECURSE MSG_PROTOS ${PROTOS_DIR}/*.proto)
     foreach(msg ${MSG_PROTOS})

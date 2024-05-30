@@ -1,0 +1,60 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package dingodb.pb.cluster;
+
+option java_package = "io.dingodb.cluster";
+
+option cc_generic_services = true;
+
+message ClusterStatRequest {};
+message ClusterStatResponse {};
+message DingoRequest {};
+message DingoResponse {};
+message TableRequest {};
+message TableResponse {};
+message RegionRequest {};
+message RegionResponse {};
+message StoreMetricsRequest {};
+message StoreMetricsResponse {};
+message TaskListRequest {};
+message TaskListResponse {};
+message StoreOperationRequest {};
+message StoreOperationResponse {};
+
+service dingo {
+  rpc default_method(ClusterStatRequest) returns (ClusterStatResponse);
+}
+
+service table {
+  rpc default_method(TableRequest) returns (TableResponse);
+}
+
+service region {
+  rpc default_method(RegionRequest) returns (RegionResponse);
+}
+
+service store_metrics {
+  rpc default_method(StoreMetricsRequest) returns (StoreMetricsResponse);
+}
+
+service task_list {
+  rpc default_method(TaskListRequest) returns (TaskListResponse);
+}
+
+service store_operation {
+  rpc default_method(StoreOperationRequest) returns (StoreOperationResponse);
+}
