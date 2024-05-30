@@ -298,6 +298,8 @@ add_custom_target(build_proto ALL
 
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/serial/src/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libexpr/src/)
 include_directories(${ZSTD_INCLUDE_DIR})
 include_directories(${ZLIB_INCLUDE_DIR})
 include_directories(${BRAFT_INCLUDE_DIR})
@@ -496,6 +498,14 @@ if(LINK_TCMALLOC)
 endif()
 
 # source file
+file(GLOB_RECURSE DINGO_SERIAL_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/*.cc)
+file(GLOB_RECURSE DINGO_SERIAL_SCHEMA_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/schema*.cc)
+
+set(SERIAL_SRCS
+    ${DINGO_SERIAL_SOURCES}
+    ${DINGO_SERIAL_SCHEMA_SOURCES}
+    )
+
 file(GLOB COMMON_SRCS ${PROJECT_SOURCE_DIR}/src/common/*.cc)
 file(GLOB CONFIG_SRCS ${PROJECT_SOURCE_DIR}/src/config/*.cc)
 file(GLOB LOG_SRCS ${PROJECT_SOURCE_DIR}/src/log/*.cc)
@@ -515,8 +525,6 @@ file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 file(GLOB SCAN_SRCS ${PROJECT_SOURCE_DIR}/src/scan/*.cc)
 file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
 file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
-file(GLOB SERIAL1_SRCS ${PROJECT_SOURCE_DIR}/src/serial/*.cc)
-file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/src/serial/schema/*.cc)
 file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
@@ -605,8 +613,7 @@ add_library(DINGODB_OBJS
             ${SERVER_SRCS}
             ${SCAN_SRCS}
             ${METRICS_SRCS}
-            ${SERIAL1_SRCS}
-            ${SERIAL2_SRCS}
+            ${SERIAL_SRCS}
             ${COPROCESSOR_SRCS}
             ${LIBEXPR_SRCS}
             )
@@ -685,8 +692,7 @@ add_executable(dingodb_client
                 src/coprocessor/utils.cc
                 src/vector/codec.cc
                 src/document/codec.cc
-                ${SERIAL1_SRCS}
-                ${SERIAL2_SRCS}
+                ${SERIAL_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
@@ -748,8 +754,6 @@ else()
         endif()
     endif()
 endif()
-
-
 
 if(NOT SDK_ENABLE_GRPC)
     if(BUILD_UNIT_TESTS)

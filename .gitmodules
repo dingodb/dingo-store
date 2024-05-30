@@ -88,3 +88,6 @@
 [submodule "contrib/dingo-store-proto"]
 	path = dingo-store-proto
 	url = https://github.com/dingodb/dingo-store-proto
+[submodule "src/serial"]
+	path = src/serial
+	url = https://github.com/dingodb/dingo-serial

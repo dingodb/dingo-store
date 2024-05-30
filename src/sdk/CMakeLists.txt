@@ -74,6 +74,16 @@ endif()
 set(SDK_LIBS "")
 message(STATUS "search path${CMAKE_PREFIX_PATH}")
 
+file(GLOB DINGO_SERIAL_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../serial/src/serial/*.cc)
+file(GLOB DINGO_SERIAL_SCHEMA_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../serial/src/serial/schema/*.cc)
+
+set(SERIAL_SRCS
+    ${DINGO_SERIAL_SOURCES}
+    ${DINGO_SERIAL_SCHEMA_SOURCES}
+    )
+
+message(STATUS "SDK SERIAL_SRCS: " ${SERIAL_SRCS})
+
 if(SDK_ENABLE_GRPC)
     message(STATUS "Build sdk with grpc")
     add_definitions(-DUSE_GRPC=1)
@@ -196,14 +206,11 @@ if(SDK_ENABLE_GRPC)
         ${GRPC_PROTO_GRPC_HDRS} 
     )
 
-    file(GLOB SERIAL1_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/../serial/*.cc)
-    file(GLOB SERIAL2_SRCS ${PROJECT_SOURCE_DIR}/../serial/schema/*.cc)
 
     add_library(sdk
         ${SDK_SRCS}
         # TODO: use libary
-        ${SERIAL1_SRCS}
-        ${SERIAL2_SRCS}
+        ${SERIAL_SRCS}
     )
 
     if(ENABLE_COVERAGE)
@@ -267,8 +274,7 @@ else()
     add_library(sdk
         ${SDK_SRCS}
         # TODO: use libary
-        ${SERIAL1_SRCS}
-        ${SERIAL2_SRCS}
+        ${SERIAL_SRCS}
     )
 
 
