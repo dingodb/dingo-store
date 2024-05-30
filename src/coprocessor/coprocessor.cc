@@ -25,8 +25,8 @@
 #include "common/logging.h"
 #include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/utils.h"
+#include "expr/runner.h"
 #include "fmt/core.h"
-#include "libexpr/src/expr/runner.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "rel_expr_helper.h"
@@ -486,7 +486,8 @@ butil::Status Coprocessor::DoExecuteForSelection(const std::vector<std::any>& se
   pb::common::KeyValue result_key_value;
   int ret = 0;
   try {
-    ret = result_record_encoder.Encode(prefix_, selection_record, *result_key_value.mutable_key(), *result_key_value.mutable_value());
+    ret = result_record_encoder.Encode(prefix_, selection_record, *result_key_value.mutable_key(),
+                                       *result_key_value.mutable_value());
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
@@ -580,7 +581,8 @@ butil::Status Coprocessor::GetKeyValueFromAggregation(bool key_only, size_t max_
       pb::common::KeyValue result_key_value;
       ret = 0;
       try {
-        ret = result_record_encoder.Encode(prefix_, result_record, *result_key_value.mutable_key(), *result_key_value.mutable_value());
+        ret = result_record_encoder.Encode(prefix_, result_record, *result_key_value.mutable_key(),
+                                           *result_key_value.mutable_value());
       } catch (const std::exception& my_exception) {
         std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
         DINGO_LOG(ERROR) << error_message;

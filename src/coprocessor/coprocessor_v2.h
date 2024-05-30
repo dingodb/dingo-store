@@ -26,8 +26,8 @@
 #include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/rel_expr_helper.h"  // IWYU pragma: keep
 #include "engine/iterator.h"
-#include "libexpr/src/rel/rel_runner.h"  // IWYU pragma: keep
 #include "proto/common.pb.h"
+#include "rel/rel_runner.h"  // IWYU pragma: keep
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 

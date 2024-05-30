@@ -22,8 +22,8 @@
 #include <memory>
 #include <vector>
 
-#include "../libexpr/src/expr/operand.h"
 #include "butil/status.h"
+#include "expr/operand.h"
 
 namespace dingodb {
 
