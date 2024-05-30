@@ -20,8 +20,6 @@
 #include <memory>
 #include <vector>
 
-#include "proto/common.pb.h"
-#include "proto/meta.pb.h"
 #include "schema/base_schema.h"
 #include "schema/boolean_schema.h"
 #include "schema/double_list_schema.h"
@@ -46,9 +44,6 @@ bool VectorFindAndRemove(std::vector<int>* v, int t);
 inline bool VectorFind(const std::vector<int>& v, int t, int n) { return v[n] == t; }
 
 bool IsLE();
-
-std::string ConvertColumnValueToString(const pb::meta::ColumnDefinition& column_definition, const std::any& value);
-pb::common::Schema::Type TransformSchemaType(const std::string& name);
 
 }  // namespace dingodb
 

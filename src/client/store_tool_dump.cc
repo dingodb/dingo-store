@@ -165,7 +165,7 @@ void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition, con
   for (int i = 0; i < values.size(); ++i) {
     const auto& column_definition = table_definition.columns().at(i);
 
-    std::string str = dingodb::ConvertColumnValueToString(column_definition, values[i]);
+    std::string str = dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]);
     if (str.size() >= FLAGS_print_column_width) {
       str = str.substr(0, FLAGS_print_column_width - 3) + "...";
     }
@@ -185,7 +185,7 @@ void PrintValuesPretty(const dingodb::pb::meta::TableDefinition& table_definitio
   for (int i = 0; i < values.size(); ++i) {
     const auto& column_definition = table_definition.columns().at(i);
 
-    std::string str = dingodb::ConvertColumnValueToString(column_definition, values[i]);
+    std::string str = dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]);
     if (str.size() >= FLAGS_print_column_width) {
       str = str.substr(0, FLAGS_print_column_width - 3) + "...";
     }
@@ -203,7 +203,7 @@ std::string RecordToString(const dingodb::pb::meta::TableDefinition& table_defin
     }
     const auto& column_definition = table_definition.columns().at(i);
 
-    result.push_back(dingodb::ConvertColumnValueToString(column_definition, values[i]));
+    result.push_back(dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]));
   }
 
   return dingodb::Helper::VectorToString(result);

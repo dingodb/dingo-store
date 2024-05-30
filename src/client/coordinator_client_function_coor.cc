@@ -119,6 +119,8 @@ dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   } else {
     DINGO_LOG(FATAL) << "raw_engine_name is illegal, please input -raw-engine=[rocksdb, bdb]";
   }
+
+  return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
 }
 
 // raft control
