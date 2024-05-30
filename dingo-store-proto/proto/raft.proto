@@ -1,0 +1,337 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "coordinator_internal.proto";
+import "error.proto";
+
+package dingodb.pb.raft;
+
+option java_package = "io.dingodb.raft";
+
+enum CmdType {
+  NONE = 0;
+  PUT = 1;
+  PUTIFABSENT = 2;
+  DELETERANGE = 3;
+  DELETEBATCH = 4;
+  SPLIT = 5;
+  COMPAREANDSET = 6;
+  PREPARE_MERGE = 7;
+  COMMIT_MERGE = 8;
+  ROLLBACK_MERGE = 9;
+
+  SAVE_RAFT_SNAPSHOT = 100;
+
+  // Coordinator State Machine Operator
+  META_WRITE = 2000;
+
+  // vector [3000,4000]
+  VECTOR_ADD = 3000;
+  VECTOR_DELETE = 3001;
+  REBUILD_VECTOR_INDEX = 3010;
+
+  // document [5000,6000]
+  DOCUMENT_ADD = 5000;
+  DOCUMENT_DELETE = 5001;
+
+  // txn
+  TXN = 4000;
+}
+
+message PutRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+}
+
+message PutResponse {}
+
+message PutIfAbsentRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+  bool is_atomic = 3;
+}
+
+message PutIfAbsentResponse {
+  repeated bytes put_keys = 1;
+}
+
+message CompareAndSetRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+  repeated bytes expect_values = 3;
+  bool is_atomic = 4;
+}
+
+message CompareAndSetResponse {
+  repeated bytes put_keys = 1;
+}
+
+message DeleteRangeRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.Range ranges = 2;
+}
+
+message DeleteRangeResponse {
+  repeated int64 delete_counts = 1;
+}
+
+message DeleteBatchRequest {
+  string cf_name = 1;
+  repeated bytes keys = 2;
+}
+
+message DeleteBatchResponse {}
+
+enum SplitStrategy {
+  PRE_CREATE_REGION = 0;
+  POST_CREATE_REGION = 1;
+}
+
+message SplitRequest {
+  int64 job_id = 1;                         // the split job id
+  int64 from_region_id = 2;                 // split from region id
+  int64 to_region_id = 3;                   // split to region id
+  bytes split_key = 4;                      // split watershed key
+  dingodb.pb.common.RegionEpoch epoch = 5;  // current region epoch
+  SplitStrategy split_strategy = 6;
+}
+
+message SplitResponse {}
+
+message PrepareMergeRequest {
+  int64 job_id = 1;                                       // the merge job id
+  int64 min_applied_log_id = 2;                           // leader/follower min applied log id
+  int64 target_region_id = 3;                             // target region id
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;  // target region epoch
+  dingodb.pb.common.Range target_region_range = 5;        // target region range
+}
+
+message PrepareMergeResponse {}
+
+message LogEntry {
+  int64 index = 1;
+  int64 term = 2;
+  bytes data = 3;
+}
+
+message CommitMergeRequest {
+  int64 job_id = 1;  // the merge job id
+  int64 source_region_id = 2;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3;  // source region epoch
+  dingodb.pb.common.Range source_region_range = 4;        // source region range
+  int64 prepare_merge_log_id = 5;
+  repeated LogEntry entries = 6;  // source region raft log [min_applied_log_id, prepare_merge_log_id)
+}
+
+message CommitMergeResponse {}
+
+message RollbackMergeRequest {
+  int64 job_id = 1;  // the merge job id
+  int64 min_applied_log_id = 2;
+  int64 target_region_id = 3;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 4;
+}
+
+message RollbackMergeResponse {}
+
+message SaveSnapshotRequest {
+  int64 region_id = 1;
+}
+
+message SaveSnapshotResponse {}
+
+message RaftCreateSchemaRequest {}
+message RaftCreateSchemaResponse {}
+
+message RaftCreateTableRequest {}
+message RaftCreateTableResponse {}
+
+message RaftMetaRequest {
+  dingodb.pb.coordinator_internal.MetaIncrement meta_increment = 1;
+}
+
+// vector
+message VectorAddRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.VectorWithId vectors = 2;
+  bool is_update = 3;
+}
+
+message VectorAddResponse {}
+
+message VectorDeleteRequest {
+  string cf_name = 1;
+  repeated int64 ids = 2;
+}
+
+message VectorDeleteResponse {}
+
+message RebuildVectorIndexRequest {
+  int64 cmd_id = 1;  // the merge request unique id
+}
+
+message RebuildVectorIndexResponse {}
+
+// document
+message DocumentAddRequest {
+  string cf_name = 1;
+  repeated dingodb.pb.common.DocumentWithId documents = 2;
+  bool is_update = 3;
+}
+
+message DocumentAddResponse {}
+
+message DocumentDeleteRequest {
+  string cf_name = 1;
+  repeated int64 ids = 2;
+}
+
+message DocumentDeleteResponse {}
+
+// txn
+message PutsWithCf {
+  bytes cf_name = 1;
+  repeated dingodb.pb.common.KeyValue kvs = 2;
+}
+
+message DeletesWithCf {
+  bytes cf_name = 1;
+  repeated bytes keys = 2;
+}
+
+message MultiCfPutAndDeleteRequest {
+  repeated PutsWithCf puts_with_cf = 1;
+  repeated DeletesWithCf deletes_with_cf = 2;
+  VectorAddRequest vector_add = 3;
+  VectorDeleteRequest vector_del = 4;
+  DocumentAddRequest document_add = 5;
+  DocumentDeleteRequest document_del = 6;
+}
+
+message MultiCfPutAndDeleteResponse {}
+
+// Delete a range of data from dingo-store.
+// All keys in the range will be deleted permanently regardless of their
+// timestamps. This means that deleted keys will not be retrievable by
+// specifying an older timestamp.
+message TxnDeleteRangeRequest {
+  bytes start_key = 2;
+  bytes end_key = 3;
+}
+
+message TxnDeleteRangeResponse {
+  // error code
+  dingodb.pb.error.Error error = 1;
+}
+
+message TxnRaftRequest {
+  oneof cmd_body {
+    MultiCfPutAndDeleteRequest multi_cf_put_and_delete = 4000;
+    TxnDeleteRangeRequest mvcc_delete_range = 4001;
+  }
+}
+
+message TxnRaftResponse {
+  oneof cmd_body {
+    MultiCfPutAndDeleteResponse multi_cf_put_and_delete = 4000;
+    TxnDeleteRangeResponse mvcc_delete_range = 4007;
+  }
+}
+
+message Request {
+  CmdType cmd_type = 1;
+
+  oneof cmd_body {
+    // Store Operation[1000, 2000]
+    PutRequest put = 1000;
+    PutIfAbsentRequest put_if_absent = 1001;
+    DeleteRangeRequest delete_range = 1002;
+    DeleteBatchRequest delete_batch = 1003;
+    SplitRequest split = 1004;
+    CompareAndSetRequest compare_and_set = 1005;
+    PrepareMergeRequest prepare_merge = 1006;
+    CommitMergeRequest commit_merge = 1007;
+    RollbackMergeRequest rollback_merge = 1008;
+
+    SaveSnapshotRequest save_snapshot = 1100;
+
+    // Coordinator Operation[2000, 3000]
+    RaftMetaRequest meta_req = 2000;
+
+    // vector [3000,4000]
+    VectorAddRequest vector_add = 3000;
+    VectorDeleteRequest vector_delete = 3001;
+    RebuildVectorIndexRequest rebuild_vector_index = 3010;
+
+    // document [5000,6000]
+    DocumentAddRequest document_add = 5000;
+    DocumentDeleteRequest document_delete = 5001;
+
+    // txn
+    TxnRaftRequest txn_raft_req = 4000;
+  }
+}
+
+message Response {
+  CmdType cmd_type = 1;
+
+  oneof cmd_body {
+    PutResponse put = 1000;
+    PutIfAbsentResponse put_if_absent = 1001;
+    DeleteRangeResponse delete_range = 1002;
+    DeleteBatchResponse delete_batch = 1003;
+    SplitResponse split = 1004;
+    CompareAndSetResponse compare_and_set = 1005;
+    PrepareMergeResponse prepare_merge = 1006;
+    CommitMergeResponse commit_merge = 1007;
+    RollbackMergeResponse rollback_merge = 1008;
+
+    SaveSnapshotResponse save_snapshot = 1100;
+
+    RaftCreateSchemaResponse create_schema_req = 2001;
+    RaftCreateTableResponse create_table_req = 2002;
+
+    // vector [3000,4000]
+    VectorAddResponse vector_add = 3000;
+    VectorDeleteResponse vector_delete = 3001;
+    RebuildVectorIndexResponse rebuild_vector_index = 3010;
+
+    // document [5000,5000]
+    DocumentAddResponse document_add = 5000;
+    DocumentDeleteResponse document_delete = 5001;
+
+    // txn
+    TxnRaftResponse txn_raft_resp = 4000;
+  }
+}
+
+message RequestHeader {
+  int64 region_id = 1;
+  dingodb.pb.common.RegionEpoch epoch = 2;
+}
+
+message RaftCmdRequest {
+  RequestHeader header = 1;
+  repeated Request requests = 2;
+}
+
+message ResponseHeader {}
+
+message RaftCmdResponse {
+  ResponseHeader header = 1;
+  repeated Response responses = 2;
+}

@@ -1,0 +1,417 @@
+// Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+import "common.proto";
+import "error.proto";
+import "coordinator.proto";
+import "store_internal.proto";
+
+package dingodb.pb.debug;
+
+option java_package = "io.dingodb.debug";
+
+option cc_generic_services = true;
+
+message AddRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.RegionDefinition region = 2;
+}
+
+message AddRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message ChangeRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  dingodb.pb.common.RegionDefinition region = 2;
+}
+
+message ChangeRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message MergeRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 source_region_id = 2;
+  dingodb.pb.common.RegionEpoch source_region_epoch = 3;
+  int64 target_region_id = 4;
+  dingodb.pb.common.RegionEpoch target_region_epoch = 5;
+}
+
+message MergeRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message DestroyRegionRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message DestroyRegionResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message SnapshotRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+}
+
+message SnapshotResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TransferLeaderRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+  dingodb.pb.common.Peer peer = 3;
+}
+
+message TransferLeaderResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message ModifyRegionMetaRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 region_id = 2;
+
+  repeated string fields = 10;
+  dingodb.pb.common.StoreRegionState state = 11;
+}
+
+message ModifyRegionMetaResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message SnapshotVectorIndexRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+}
+
+message SnapshotVectorIndexResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TriggerVectorIndexSnapshotRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+  string type = 3;  // install or pull
+  dingodb.pb.common.Location location = 4;
+}
+
+message TriggerVectorIndexSnapshotResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TriggerRebuildVectorIndexRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+}
+
+message TriggerRebuildVectorIndexResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message TriggerSaveVectorIndexRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  int64 vector_index_id = 2;
+}
+
+message TriggerSaveVectorIndexResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message CompactRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string cf_name = 2;
+}
+
+message CompactResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+enum DebugType {
+  NONE = 0;
+  STORE_REGION_META_STAT = 1;
+  STORE_REGION_META_DETAILS = 2;
+  STORE_REGION_CONTROL_COMMAND = 3;
+  STORE_RAFT_META = 4;
+  STORE_REGION_EXECUTOR = 5;
+  STORE_REGION_METRICS = 6;
+  STORE_FILE_READER = 7;
+  STORE_REGION_ACTUAL_METRICS = 8;
+  STORE_METRICS = 9;
+  STORE_REGION_CHANGE_RECORD = 10;
+  INDEX_VECTOR_INDEX_METRICS = 100;
+}
+
+message DebugRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  DebugType type = 2;  // debug type
+  repeated int64 region_ids = 3;
+}
+
+message DebugResponse {
+  message RegionMetaStat {
+    map<string, int32> state_counts = 1;
+    int32 leader_count = 2;
+    repeated int64 leader_regoin_ids = 3;
+    int32 follower_count = 4;
+    repeated int64 follower_regoin_ids = 5;
+  }
+
+  message RegionMetaDetails {
+    repeated dingodb.pb.store_internal.Region regions = 1;
+  }
+
+  message RegionControlCommand {
+    repeated dingodb.pb.coordinator.RegionCmd region_cmds = 1;
+  }
+
+  message RaftMeta {
+    repeated dingodb.pb.store_internal.RaftMeta raft_metas = 1;
+  }
+
+  message RegionExecutor {
+    repeated int64 region_ids = 1;
+  }
+
+  message RegionMetrics {
+    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
+  }
+
+  message FileReader {
+    int32 count = 1;
+    repeated int64 reader_ids = 2;
+  }
+
+  message RegionActualMetrics {
+    repeated dingodb.pb.common.RegionMetrics region_metricses = 1;
+  }
+
+  message StoreMetrics {
+    dingodb.pb.common.StoreMetrics metrics = 1;
+  }
+
+  message RegionChange {
+    repeated dingodb.pb.store_internal.RegionChangeRecord records = 1;
+  }
+
+  message RawVectorIndexState {
+    int64 id = 1;
+    dingodb.pb.common.VectorIndexType type = 2;
+    dingodb.pb.common.VectorIndexType sub_type = 3;
+    int64 apply_log_id = 10;
+    int64 snapshot_log_id = 11;
+    dingodb.pb.common.RegionEpoch epoch = 12;
+    string start_key = 20;
+    string end_key = 21;
+    int64 key_count = 22;
+    int64 deleted_key_count = 23;
+    int64 memory_size = 24;
+    dingodb.pb.common.VectorIndexParameter parameter = 30;
+    string comment = 40;
+  }
+
+  message VectorIndexMetricsEntry {
+    int64 id = 1;
+    int64 version = 2;
+    int64 last_build_epoch_version = 3;
+    uint32 dimension = 10;
+    int64 apply_log_index = 20;
+    int64 snapshot_log_index = 30;
+    int64 key_count = 40;
+    int64 deleted_key_count = 50;
+    int64 memory_size = 60;
+
+    repeated RawVectorIndexState entries = 70;
+  }
+
+  message VectorIndexMetrics {
+    repeated VectorIndexMetricsEntry entries = 1;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  RegionMetaStat region_meta_stat = 10;
+  RegionMetaDetails region_meta_details = 11;
+  RegionControlCommand region_control_command = 12;
+  RaftMeta raft_meta = 13;
+  RegionExecutor region_executor = 14;
+  RegionMetrics region_metrics = 15;
+  FileReader file_reader = 16;
+  RegionActualMetrics region_actual_metrics = 17;
+  StoreMetrics store_metrics = 18;
+  RegionChange region_change_record = 19;
+  VectorIndexMetrics vector_index_metrics = 20;
+}
+
+message GetMemoryStatsRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+}
+
+message GetMemoryStatsResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  string memory_stats = 10;
+}
+
+message ReleaseFreeMemoryRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
+  bool is_force = 2;
+  double rate = 3;
+}
+
+message ReleaseFreeMemoryResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+enum WorkQueueType {
+  WORK_QUEUE_NONE = 0;
+
+  WORK_QUEUE_STORE_SERVICE_READ = 10;
+  WORK_QUEUE_STORE_SERVICE_WRITE = 11;
+
+  WORK_QUEUE_INDEX_SERVICE_READ = 20;
+  WORK_QUEUE_INDEX_SERVICE_WRITE = 21;
+  WORK_QUEUE_VECTOR_INDEX_BACKGROUND = 22;
+}
+
+message TraceWorkQueueRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+
+  WorkQueueType type = 10;
+}
+
+message TraceWorkQueueResponse {
+  message WorkerTrace {
+    uint32 count = 1;
+    repeated string traces = 2;
+  }
+
+  message WorkerSetTrace {
+    uint32 count = 1;
+    repeated WorkerTrace worker_traces = 2;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  repeated WorkerSetTrace worker_set_traces = 10;
+}
+
+message AdjustThreadPoolSizeRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string name = 10;
+  uint32 size = 11;
+}
+
+message AdjustThreadPoolSizeResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message BindCoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+  repeated uint32 threads = 11;
+  repeated uint32 cores = 12;
+}
+
+message BindCoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message UnbindCoreRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+}
+
+message UnbindCoreResponse {
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+}
+
+message ShowAffinityRequest {
+  dingodb.pb.common.RequestInfo request_info = 1;
+  string thread_pool_name = 10;
+}
+
+message ShowAffinityResponse {
+  message ThreadCorePair {
+    string thread_name = 1;
+    uint32 core = 2;
+  }
+
+  dingodb.pb.common.ResponseInfo response_info = 1;
+  dingodb.pb.error.Error error = 2;
+
+  repeated ThreadCorePair pairs = 10;
+}
+
+service DebugService {
+  // region
+  rpc AddRegion(AddRegionRequest) returns (AddRegionResponse);
+  rpc ChangeRegion(ChangeRegionRequest) returns (ChangeRegionResponse);
+  rpc MergeRegion(MergeRegionRequest) returns (MergeRegionResponse);
+  rpc DestroyRegion(DestroyRegionRequest) returns (DestroyRegionResponse);
+  rpc Snapshot(SnapshotRequest) returns (SnapshotResponse);
+  rpc TransferLeader(TransferLeaderRequest) returns (TransferLeaderResponse);
+
+  // regoin meta
+  rpc ModifyRegionMeta(ModifyRegionMetaRequest) returns (ModifyRegionMetaResponse);
+
+  // vector index
+  rpc SnapshotVectorIndex(SnapshotVectorIndexRequest) returns (SnapshotVectorIndexResponse);
+  rpc TriggerVectorIndexSnapshot(TriggerVectorIndexSnapshotRequest) returns (TriggerVectorIndexSnapshotResponse);
+  rpc TriggerRebuildVectorIndex(TriggerRebuildVectorIndexRequest) returns (TriggerRebuildVectorIndexResponse);
+  rpc TriggerSaveVectorIndex(TriggerSaveVectorIndexRequest) returns (TriggerSaveVectorIndexResponse);
+
+  // rocksdb
+  rpc Compact(CompactRequest) returns (CompactResponse);
+
+  // debug
+  rpc Debug(DebugRequest) returns (DebugResponse);
+
+  // tcmalloc
+  rpc GetMemoryStats(GetMemoryStatsRequest) returns (GetMemoryStatsResponse);
+  rpc ReleaseFreeMemory(ReleaseFreeMemoryRequest) returns (ReleaseFreeMemoryResponse);
+
+  // work queue
+  rpc TraceWorkQueue(TraceWorkQueueRequest) returns (TraceWorkQueueResponse);
+
+  // adjust thread pool size
+  rpc AdjustThreadPoolSize(AdjustThreadPoolSizeRequest) returns (AdjustThreadPoolSizeResponse);
+  rpc BindCore(BindCoreRequest) returns (BindCoreResponse);
+  rpc UnbindCore(UnbindCoreRequest) returns (UnbindCoreResponse);
+  rpc ShowAffinity(ShowAffinityRequest) returns (ShowAffinityResponse);
+}

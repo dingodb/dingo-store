@@ -86,5 +86,5 @@
 	path = contrib/grpc
 	url = https://github.com/grpc/grpc.git
 [submodule "contrib/dingo-store-proto"]
-	path = contrib/dingo-store-proto
+	path = dingo-store-proto
 	url = https://github.com/dingodb/dingo-store-proto
