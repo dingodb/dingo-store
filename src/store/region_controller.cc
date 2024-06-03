@@ -47,6 +47,8 @@
 DEFINE_int64(merge_committed_log_gap, 16, "merge commited log gap");
 DEFINE_int32(init_election_timeout_ms, 1000, "init election timeout");
 
+DEFINE_int64(transfer_leader_last_serving_gap_time_s, 6, "transfer leader last serving gap time");
+
 namespace dingodb {
 // Notify coordinator region command execute result.
 static void NotifyRegionCmdStatus(RegionCmdPtr region_cmd, butil::Status status) {
@@ -1038,6 +1040,10 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
     int32_t serving_request_count = region->GetServingRequestCount();
     if (serving_request_count > 0) {
       return butil::Status(pb::error::EREGION_BUSY, "Region is busy.");
+    }
+
+    if (region->GetLastServingTime() + FLAGS_transfer_leader_last_serving_gap_time_s >= Helper::Timestamp()) {
+      return butil::Status(pb::error::EREGION_BUSY, "Region is busy, has serving recently.");
     }
   }
 

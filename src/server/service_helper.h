@@ -231,6 +231,7 @@ void ServiceClosure<T, U, need_region>::Run() {
 
   if (region) {
     region->DecServingRequestCount();
+    region->UpdateLastServingTime();
   }
 }
 
