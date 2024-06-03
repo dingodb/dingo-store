@@ -29,6 +29,7 @@
 #include "bthread/types.h"
 #include "butil/endpoint.h"
 #include "common/constant.h"
+#include "common/helper.h"
 #include "common/latch.h"
 #include "common/safe_map.h"
 #include "document/document_index.h"
@@ -53,6 +54,7 @@ class Region {
  public:
   struct Statistics {
     std::atomic<int32_t> serving_request_count{0};
+    std::atomic<int64_t> last_serving_time_s{0};
   };
 
   Region(int64_t region_id);
@@ -155,6 +157,11 @@ class Region {
   int32_t GetServingRequestCount() { return statistics_.serving_request_count.load(std::memory_order_relaxed); }
   void IncServingRequestCount() { statistics_.serving_request_count.fetch_add(1, std::memory_order_relaxed); }
   void DecServingRequestCount() { statistics_.serving_request_count.fetch_sub(1, std::memory_order_relaxed); }
+
+  int64_t GetLastServingTime() const { return statistics_.last_serving_time_s.load(std::memory_order_relaxed); }
+  void UpdateLastServingTime() {
+    statistics_.last_serving_time_s.store(Helper::Timestamp(), std::memory_order_relaxed);
+  }
 
  private:
   bthread_mutex_t mutex_;

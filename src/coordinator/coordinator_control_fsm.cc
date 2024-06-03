@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "coordinator/coordinator_control.h"
 #include "engine/snapshot.h"
+#include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "google/protobuf/unknown_field_set.h"
 #include "proto/common.pb.h"

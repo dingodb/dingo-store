@@ -4831,18 +4831,27 @@ void CoordinatorControl::GetTaskList(int64_t task_list_id, pb::coordinator::Task
 }
 
 void CoordinatorControl::UpdateTaskListError(int64_t task_list_id, int64_t region_cmd_id, pb::error::Error error) {
-  DINGO_LOG(INFO) << fmt::format("update task list error: {} {}", task_list_id, region_cmd_id);
+  if (task_list_id == 0) {
+    return;
+  }
+
   pb::coordinator::TaskList task_list;
   task_list_map_.Get(task_list_id, task_list);
+  if (task_list.id() == 0) {
+    DINGO_LOG(INFO) << fmt::format("Not found tasklist {}", task_list_id);
+    return;
+  }
   for (auto& mut_task : *task_list.mutable_tasks()) {
-    for (auto& store_operation : *mut_task.mutable_store_operations()) {
-      for (auto& region_cmd : *store_operation.mutable_region_cmds()) {
+    for (auto& store_operation : *(mut_task.mutable_store_operations())) {
+      for (auto& region_cmd : *(store_operation.mutable_region_cmds())) {
         if (region_cmd.id() == region_cmd_id) {
-          *region_cmd.mutable_error() = error;
+          *(region_cmd.mutable_error()) = error;
         }
       }
     }
   }
+
+  task_list_meta_->PutIfExists(task_list_id, task_list);
 }
 
 void CoordinatorControl::RecycleArchiveTaskList() {
