@@ -30,7 +30,9 @@ Status VectorBatchQueryTask::Init() {
 
   std::unique_lock<std::shared_mutex> w(rw_lock_);
   for (long id : query_param_.vector_ids) {
-    CHECK(vector_ids_.insert(id).second) << "duplicate vector id: " << id;
+    if (!vector_ids_.insert(id).second) {
+      return Status::InvalidArgument("duplicate vector id: " + std::to_string(id));
+    }
   }
 
   return Status::OK();
@@ -137,8 +139,13 @@ void VectorBatchQueryTask::VectorBatchQueryRpcCallback(const Status& status, Vec
 
     std::unique_lock<std::shared_mutex> w(rw_lock_);
     for (const auto& vectorid_pb : rpc->Response()->vectors()) {
-      out_result_.vectors.emplace_back(InternalVectorIdPB2VectorWithId(vectorid_pb));
-      vector_ids_.erase(vectorid_pb.id());
+      if (vectorid_pb.id() > 0) {
+        out_result_.vectors.emplace_back(InternalVectorIdPB2VectorWithId(vectorid_pb));
+      }
+    }
+
+    for (const auto& vector_id : rpc->Request()->vector_ids()) {
+      vector_ids_.erase(vector_id);
     }
   }
 
