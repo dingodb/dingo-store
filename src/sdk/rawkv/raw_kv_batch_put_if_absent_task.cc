@@ -37,7 +37,7 @@ void RawKvBatchPutIfAbsentTask::DoAsync() {
   std::set<std::string_view> next_batch;
   {
     std::unique_lock<std::shared_mutex> w(rw_lock_);
-    if (!next_keys_.empty()) {
+    if (next_keys_.empty()) {
       DoAsyncDone(Status::OK());
       return;
     }

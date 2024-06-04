@@ -77,7 +77,9 @@ Status VectorAddTask::Init() {
 
   for (int64_t i = 0; i < vectors_.size(); i++) {
     int64_t id = vectors_[i].id;
-    CHECK(vector_id_to_idx_.insert(std::make_pair(id, i)).second) << "duplicate vector id: " << id;
+    if(!vector_id_to_idx_.insert(std::make_pair(id, i)).second) {
+      return Status::InvalidArgument("duplicate vector id: " + std::to_string(id));
+    }
   }
 
   return Status::OK();

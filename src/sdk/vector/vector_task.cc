@@ -70,11 +70,12 @@ bool VectorTask::NeedRetry() {
   if (status_.IsIncomplete()) {
     auto error_code = status_.Errno();
     if (error_code == pb::error::EREGION_VERSION || error_code == pb::error::EREGION_NOT_FOUND ||
-        error_code == pb::error::EKEY_OUT_OF_RANGE) {
+        error_code == pb::error::EKEY_OUT_OF_RANGE || error_code == pb::error::EVECTOR_INDEX_NOT_READY ||
+        error_code == pb::error::ERAFT_NOT_FOUND) {
       retry_count_++;
       if (retry_count_ < FLAGS_vector_op_max_retry) {
-        std::string msg = fmt::format("Task:{} will retry, retry_count_:{}, max_retry:{}", Name(), retry_count_,
-                                      FLAGS_vector_op_max_retry);
+        std::string msg = fmt::format("Task:{} will retry, reason:{}, retry_count_:{}, max_retry:{}", Name(),
+                                      pb::error::Errno_Name(error_code), retry_count_, FLAGS_vector_op_max_retry);
         DINGO_LOG(INFO) << msg;
         return true;
       } else {

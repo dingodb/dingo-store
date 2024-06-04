@@ -32,7 +32,9 @@ Status VectorDeleteTask::Init() {
   next_vector_ids_.clear();
 
   for (const auto& id : vector_ids_) {
-    CHECK(next_vector_ids_.insert(id).second) << "duplicate vector id: " << id;
+    if(!next_vector_ids_.insert(id).second) {
+      return Status::InvalidArgument("duplicate vector id: " + std::to_string(id));
+    }
   }
 
   return Status::OK();
