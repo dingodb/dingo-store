@@ -229,7 +229,6 @@ include(brpc)
 include(braft)
 include(nlohmann)
 include(tantivy-search)
-
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
 message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
 message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
@@ -515,6 +514,7 @@ file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
 file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
+file(GLOB CLIENT_V2_SRCS ${PROJECT_SOURCE_DIR}/src/client_v2/*.cc)
 
 if (NOT ENABLE_XDPROCKS)
     list(REMOVE_ITEM ENGINE_SRCS "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
@@ -684,10 +684,24 @@ add_executable(dingodb_client
                 src/document/codec.cc
                 ${SERIAL_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_client_v2
+                ${CLIENT_V2_SRCS}
+                src/coordinator/coordinator_interaction.cc
+                src/common/role.cc
+                src/common/helper.cc
+                src/common/serial_helper.cc
+                src/common/service_access.cc
+                src/coprocessor/utils.cc
+                src/mvcc/codec.cc
+                src/vector/codec.cc
+                src/document/codec.cc
+                ${SERIAL_SRCS}
+                ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client ${DEPEND_LIBS})
+add_dependencies(dingodb_client_v2 ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
@@ -706,7 +720,7 @@ else ()
         set(CMAKE_EXE_LINKER_FLAGS "-static-libasan")
     endif()
 endif()
-
+add_subdirectory(contrib/cli11)
 target_link_libraries(dingodb_server
                       ${DYNAMIC_LIB}
                       ${VECTOR_LIB}
@@ -717,7 +731,13 @@ target_link_libraries(dingodb_server
 target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB})
 
+target_link_libraries(dingodb_client_v2
+                      ${DYNAMIC_LIB}  CLI11::CLI11)
+                      
 if(BUILD_UNIT_TESTS)
     message(STATUS "Build unit test")
     add_subdirectory(test/unit_test)
 endif()
+
+#add_subdirectory(contrib/cli11)
+#target_link_libraries(dingodb_client_v2 PRIVATE CLI11::CLI11)
