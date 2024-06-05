@@ -57,6 +57,7 @@ DECLARE_bool(ip2hostname);
 DEFINE_int32(table_delete_after_deleted_time, 86400, "delete table after deleted time in seconds");
 DEFINE_int32(index_delete_after_deleted_time, 86400, "delete index after deleted time in seconds");
 DEFINE_int64(store_metrics_keep_time_s, 3600, "store metrics keep time in seconds");
+DEFINE_bool(enable_region_split_and_merge_for_lite, false, "enable region split and merge for lite");
 
 DEFINE_int32(
     region_update_timeout, 25,
@@ -2600,16 +2601,20 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
     return validate_ret;
   }
 
-  if (split_to_region_id > 0) {
-    return SplitRegion(split_from_region_id, split_to_region_id, split_watershed_key, meta_increment);
-  }
-
   // validate split_from_region_id
   pb::coordinator_internal::RegionInternal split_from_region;
   int ret = region_map_.Get(split_from_region_id, split_from_region);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "SplitRegion from region not exists, id = " << split_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "SplitRegion from region not exists");
+  }
+  if (split_from_region.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE &&
+      !FLAGS_enable_region_split_and_merge_for_lite) {
+    DINGO_LOG(ERROR) << "SplitRegion region =" << split_from_region_id << " disable split ";
+    return butil::Status(pb::error::Errno::EREGION_DISABLE_SPLIT, "SplitRegion disable");
+  }
+  if (split_to_region_id > 0) {
+    return SplitRegion(split_from_region_id, split_to_region_id, split_watershed_key, meta_increment);
   }
 
   // validate split_watershed_key
@@ -2794,7 +2799,12 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
     DINGO_LOG(ERROR) << "MergeRegion to region not exists, id = " << merge_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MergeRegion to region not exists");
   }
-
+  //
+  if (merge_to_region.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE &&
+      !FLAGS_enable_region_split_and_merge_for_lite) {
+    DINGO_LOG(ERROR) << "MergeRegion region=" << merge_from_region_id << " disable merge";
+    return butil::Status(pb::error::Errno::EREGION_DISABLE_MERGE, "MergeRegion disable");
+  }
   auto merge_from_region_metrics = GetRegionMetrics(merge_from_region_id);
   auto merge_to_region_metrics = GetRegionMetrics(merge_to_region_id);
 
