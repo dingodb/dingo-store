@@ -83,6 +83,15 @@ function deploy_store() {
             echo "enable_rocksdb_sync is set"
           fi
         fi
+        if [ -z "${DINGODB_ENABLE_REGION_SPLIT_AND_MERGE_FOR_LITE}" ]; then
+          echo "DINGODB_ENABLE_REGION_SPLIT_AND_MERGE_FOR_LITE is not set"
+        else
+          if [ "${DINGODB_ENABLE_REGION_SPLIT_AND_MERGE_FOR_LITE}" = "1" ]; then
+            echo "" >> $dstpath/conf/gflags.conf
+            echo "-enable_rocksdb_sync=true" >> $dstpath/conf/gflags.conf
+            echo "enable_rocksdb_sync is set"
+          fi
+        fi
     fi
   fi
 
