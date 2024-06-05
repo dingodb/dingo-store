@@ -37,6 +37,7 @@
 #include "vector/vector_index_manager.h"
 
 namespace dingodb {
+DECLARE_bool(enable_region_split_and_merge_for_lite);
 
 MergedIterator::MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
                                const std::string& end_key)
@@ -347,6 +348,11 @@ void SplitCheckTask::SplitCheck() {
     }
     if (!CheckLeaderAndFollowerStatus(region_->Id())) {
       reason = "not leader or follower abnormal";
+      need_split = false;
+      break;
+    }
+    if (region_->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE && !FLAGS_enable_region_split_and_merge_for_lite) {
+      reason = fmt::format(" mono_store region {} disable split ", region_->Id());
       need_split = false;
       break;
     }
