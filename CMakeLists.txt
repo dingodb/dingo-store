@@ -227,6 +227,7 @@ include(rocksdb)
 include(bdb)
 include(brpc)
 include(braft)
+include(nlohmann)
 include(tantivy-search)
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
@@ -381,6 +382,7 @@ set(DEPEND_LIBS
     libbacktrace
     bdb
     rapidjson
+    nlohmann-json
     tantivy-search
     )
 
