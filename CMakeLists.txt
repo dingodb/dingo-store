@@ -38,9 +38,6 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" OFF)
 option(ENABLE_COVERAGE "Enable unit test code coverage" OFF)
-option(BUILD_INTEGRATION_TESTS "Build integration test" OFF)
-option(BUILD_BENCHMARK "Build benchmark" OFF)
-option(BUILD_SDK_EXAMPLE "Build sdk example" OFF)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
@@ -49,9 +46,7 @@ option(BOOST_SEARCH_PATH "")
 option(BUILD_GOOGLE_SANITIZE "Enable google sanitize" OFF)
 option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
-option(BUILD_PYTHON_SDK "Build python sdk" OFF)
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
-option(SDK_ENABLE_GRPC "Build sdk with grpc instead brpc" OFF)
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -232,16 +227,7 @@ include(rocksdb)
 include(bdb)
 include(brpc)
 include(braft)
-include(nlohmann)
 include(tantivy-search)
-
-if(SDK_ENABLE_GRPC)
-    include(grpc)
-endif()
-
-if(BUILD_BENCHMARK STREQUAL "ON")
-    include(hdf5)
-endif()
 
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
 message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
@@ -320,7 +306,6 @@ include_directories(${FMT_INCLUDE_DIR})
 include_directories(${OPENSSL_INCLUDE_DIR})
 include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
-include_directories(${HDF5_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${TANTIVY_SEARCH_INCLUDE_DIR})
 
@@ -396,7 +381,6 @@ set(DEPEND_LIBS
     libbacktrace
     bdb
     rapidjson
-    nlohmann-json
     tantivy-search
     )
 
@@ -727,48 +711,7 @@ target_link_libraries(dingodb_server
 target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB})
 
-if(SDK_ENABLE_GRPC)
-    add_subdirectory(src/sdk/externalproject)
-
-    if(BUILD_SDK_EXAMPLE)
-        message(STATUS "Build sdk example")
-        add_subdirectory(src/example/externalproject)
-    endif()
-
-    if(BUILD_PYTHON_SDK)
-        message(STATUS "Build python sdk using grpc")
-        add_subdirectory(src/pysdk/externalproject)
-    endif()
-else()
-    add_subdirectory(src/sdk)
-
-    if(BUILD_SDK_EXAMPLE)
-        message(STATUS "Build sdk example")
-        add_subdirectory(src/example)
-    endif()
-
-    if(NOT BRPC_ENABLE_CPU_PROFILER)
-        if(BUILD_PYTHON_SDK)
-            message(STATUS "Build python sdk using brpc")
-            add_subdirectory(src/pysdk)
-        endif()
-    endif()
-endif()
-
-if(NOT SDK_ENABLE_GRPC)
-    if(BUILD_UNIT_TESTS)
-        message(STATUS "Build unit test")
-        add_subdirectory(test/unit_test)
-    endif()
-
-    if(BUILD_INTEGRATION_TESTS)
-        message(STATUS "Build integration test")
-        add_subdirectory(test/integration_test)
-    endif()
-
-    if(BUILD_BENCHMARK)
-        message(STATUS "Build benchmark")
-        add_subdirectory(src/benchmark)
-    endif()
-
+if(BUILD_UNIT_TESTS)
+    message(STATUS "Build unit test")
+    add_subdirectory(test/unit_test)
 endif()

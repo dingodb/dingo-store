@@ -1,14 +1,13 @@
 enable_testing()
 
 add_subdirectory(legacy)
-add_subdirectory(sdk)
 add_subdirectory(document)
 
 SET(UNIT_TEST_BIN "dingodb_unit_test")
 
 add_executable(${UNIT_TEST_BIN} main.cc)
 
-add_dependencies(${UNIT_TEST_BIN} ${DEPEND_LIBS} sdk)
+add_dependencies(${UNIT_TEST_BIN} ${DEPEND_LIBS})
 
 set(UNIT_TEST_LIBS
   $<TARGET_OBJECTS:PROTO_OBJS>
@@ -16,8 +15,6 @@ set(UNIT_TEST_LIBS
   ${DYNAMIC_LIB}
   ${VECTOR_LIB}
   $<TARGET_OBJECTS:LEGACY_UNIT_TEST_OBJS>
-  sdk
-  $<TARGET_OBJECTS:SDK_UNIT_TEST_OBJS>
   $<TARGET_OBJECTS:DOCUMENT_UNIT_TEST_OBJS>
 )
 

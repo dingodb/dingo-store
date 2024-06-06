@@ -73,18 +73,9 @@
 [submodule "contrib/rapidjson"]
 	path = contrib/rapidjson
 	url = https://github.com/Tencent/rapidjson.git
-[submodule "contrib/hdf5"]
-	path = contrib/hdf5
-	url = https://github.com/HDFGroup/hdf5.git
-[submodule "contrib/nlohmann-json"]
-	path = contrib/nlohmann-json
-	url = https://github.com/nlohmann/json.git
 [submodule "contrib/tantivy-search"]
 	path = contrib/tantivy-search
 	url = https://github.com/dingodb/tantivy-search
-[submodule "contrib/grpc"]
-	path = contrib/grpc
-	url = https://github.com/grpc/grpc.git
 [submodule "src/serial"]
 	path = src/serial
 	url = https://github.com/dingodb/dingo-serial
