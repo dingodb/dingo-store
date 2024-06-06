@@ -74,12 +74,14 @@ function deploy_store() {
           echo "-min_system_memory_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO}" >> $dstpath/conf/gflags.conf
           echo "-min_system_memory_capacity_free_ratio=${DEFAULT_MIN_SYSTEM_MEMORY_CAPACITY_FREE_RATIO}"
         fi
-        if [ ${DINGODB_ENABLE_ROCKSDB_SYNC} = "1" ];then
-          echo "" >> $dstpath/conf/gflags.conf
-          echo "-enable_rocksdb_sync=true" >> $dstpath/conf/gflags.conf
-          echo "enable_rocksdb_sync is set"
+        if [ -z "${DINGODB_ENABLE_ROCKSDB_SYNC}" ]; then
+          echo "DINGODB_ENABLE_ROCKSDB_SYNC is not set"
         else
-          echo "enable_rocksdb_sync is not set"
+          if [ "${DINGODB_ENABLE_ROCKSDB_SYNC}" = "1" ]; then
+            echo "" >> $dstpath/conf/gflags.conf
+            echo "-enable_rocksdb_sync=true" >> $dstpath/conf/gflags.conf
+            echo "enable_rocksdb_sync is set"
+          fi
         fi
     fi
   fi
