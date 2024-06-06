@@ -200,54 +200,54 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
 
   } else if (dingodb::Helper::IsExecutorRaw(origin_range.start_key()) ||
              dingodb::Helper::IsExecutorTxn(origin_range.start_key())) {
-    pb::meta::TableDefinitionWithId table_definition_with_id;
+    // pb::meta::TableDefinitionWithId table_definition_with_id;
 
-    coordinator_controller->GetTable(region_definition.schema_id(), region_definition.table_id(),
-                                     table_definition_with_id);
-    if (table_definition_with_id.table_id().entity_id() == 0) {
-      coordinator_controller->GetIndex(region_definition.schema_id(), region_definition.index_id(), true,
-                                       table_definition_with_id);
-    }
+    // coordinator_controller->GetTable(region_definition.schema_id(), region_definition.table_id(),
+    //                                  table_definition_with_id);
+    // if (table_definition_with_id.table_id().entity_id() == 0) {
+    //   coordinator_controller->GetIndex(region_definition.schema_id(), region_definition.index_id(), true,
+    //                                    table_definition_with_id);
+    // }
 
-    if (table_definition_with_id.table_id().entity_id() == 0) {
-      DINGO_LOG(ERROR) << fmt::format(
-          "Get table/index definition failed, table_id/index_id({}).",
-          region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id());
-      return plaintext_range;
-    }
+    // if (table_definition_with_id.table_id().entity_id() == 0) {
+    //   DINGO_LOG(ERROR) << fmt::format(
+    //       "Get table/index definition failed, table_id/index_id({}).",
+    //       region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id());
+    //   return plaintext_range;
+    // }
 
-    if (origin_range.start_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
-      auto record_decoder = std::make_shared<RecordDecoder>(
-          1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
-      std::vector<std::any> record;
-      int ret = record_decoder->DecodeKey(origin_range.start_key(), record);
-      if (ret != 0) {
-        DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
-      }
+    // if (origin_range.start_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
+    //   auto record_decoder = std::make_shared<RecordDecoder>(
+    //       1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
+    //   std::vector<std::any> record;
+    //   int ret = record_decoder->DecodeKey(origin_range.start_key(), record);
+    //   if (ret != 0) {
+    //     DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
+    //   }
 
-      plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
-                                                region_definition.part_id(),
-                                                GetPrimaryString(table_definition_with_id.table_definition(), record)));
-    } else {
-      plaintext_range.set_start_key(
-          fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.start_key()), region_definition.part_id()));
-    }
+    //   plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
+    //                                             region_definition.part_id(),
+    //                                             GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    // } else {
+    //   plaintext_range.set_start_key(
+    //       fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.start_key()), region_definition.part_id()));
+    // }
 
-    if (origin_range.end_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
-      auto record_decoder = std::make_shared<RecordDecoder>(
-          1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
-      std::vector<std::any> record;
-      int ret = record_decoder->DecodeKey(origin_range.end_key(), record);
-      if (ret != 0) {
-        DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
-      }
-      plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-                                              VectorCodec::DecodePartitionId(origin_range.end_key()),
-                                              GetPrimaryString(table_definition_with_id.table_definition(), record)));
-    } else {
-      plaintext_range.set_end_key(fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-                                              VectorCodec::DecodePartitionId(origin_range.end_key())));
-    }
+    // if (origin_range.end_key().size() > Constant::kVectorKeyMinLenWithPrefix) {
+    //   auto record_decoder = std::make_shared<RecordDecoder>(
+    //       1, Utils::GenSerialSchema(table_definition_with_id.table_definition()), region_definition.part_id());
+    //   std::vector<std::any> record;
+    //   int ret = record_decoder->DecodeKey(origin_range.end_key(), record);
+    //   if (ret != 0) {
+    //     DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
+    //   }
+    //   plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+    //                                           VectorCodec::DecodePartitionId(origin_range.end_key()),
+    //                                           GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    // } else {
+    //   plaintext_range.set_end_key(fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
+    //                                           VectorCodec::DecodePartitionId(origin_range.end_key())));
+    // }
 
   } else {
     std::string start_key = origin_range.start_key().substr(1, origin_range.start_key().size());
