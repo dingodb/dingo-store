@@ -474,6 +474,38 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   return butil::Status();
 }
 
+butil::Status Writer::KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) {
+  if (BAIDU_UNLIKELY(kvskvs.empty())) {
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty keys.");
+    return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  auto column_family = GetColumnFamily(cf_name);
+
+  xdprocks::WriteBatch batch;
+  for (const auto& kv : kvs) {
+    if (BAIDU_UNLIKELY(kv.key().empty())) {
+      DINGO_LOG(ERROR) << fmt::format("[xdprocks] not support empty key.");
+      return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+    } else {
+      xdprocks::Status s = batch.Put(column_family->GetHandle(), kv.key(), kv.value());
+      if (BAIDU_UNLIKELY(!s.ok())) {
+        DINGO_LOG(ERROR) << fmt::format("[xdprocks] batch put failed, error: {}.", s.ToString());
+        return butil::Status(pb::error::EINTERNAL, "Internal put error");
+      }
+    }
+  }
+
+  xdprocks::WriteOptions write_options;
+  xdprocks::Status s = GetDB()->Write(write_options, &batch);
+  if (!s.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[xdprocks] write failed, error: {}", s.ToString());
+    return butil::Status(pb::error::EINTERNAL, "Internal write error");
+  }
+
+  return butil::Status();
+}
+
 butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
                                           const std::vector<pb::common::KeyValue>& kvs_to_put,
                                           const std::vector<std::string>& keys_to_delete) {

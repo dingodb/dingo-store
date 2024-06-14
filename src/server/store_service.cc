@@ -112,6 +112,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
@@ -205,6 +206,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -439,7 +441,8 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
-  status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
+  auto kvs = Helper::PbRepeatedToVector(mut_request->mutable_kvs());
+  status = storage->KvPut(ctx, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -802,12 +805,18 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
+  std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
-  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
+  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+    return;
+  }
+
+  for (const auto& key_state : key_states) {
+    response->add_key_states(key_state);
   }
 }
 
@@ -899,13 +908,17 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
+  int64_t deleted_count = 0;
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
-  status = storage->KvDeleteRange(ctx, correction_range);
+  status = storage->KvDeleteRange(ctx, correction_range, deleted_count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+    return;
   }
+
+  response->set_delete_count(deleted_count);
 }
 
 void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller,
@@ -1232,6 +1245,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 
@@ -1519,6 +1533,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
 

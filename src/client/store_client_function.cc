@@ -74,6 +74,8 @@ DECLARE_string(csv_output);
 DECLARE_int32(dimension);
 DECLARE_string(scalar_key);
 DECLARE_string(scalar_value);
+DECLARE_int64(ttl);
+DECLARE_int64(ts);
 
 // for calc distance
 DEFINE_string(vector_data1, "", "vector data 1");
@@ -3057,6 +3059,10 @@ void SendKvGet(int64_t region_id, const std::string& key, std::string& value) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.set_key(key);
 
+  if (FLAGS_ts > 0) {
+    request.set_ts(FLAGS_ts);
+  }
+
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvGet", request, response);
 
   value = response.value();
@@ -3072,6 +3078,10 @@ void SendKvBatchGet(int64_t region_id, const std::string& prefix, int count) {
     request.add_keys(key);
   }
 
+  if (FLAGS_ts > 0) {
+    request.set_ts(FLAGS_ts);
+  }
+
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchGet", request, response);
 }
 
@@ -3085,7 +3095,12 @@ int SendKvPut(int64_t region_id, const std::string& key, std::string value) {
   kv->set_key(key);
   kv->set_value(value.empty() ? Helper::GenRandomString(256) : value);
 
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
+
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPut", request, response);
+  DINGO_LOG(INFO) << fmt::format("response: {}", response.ShortDebugString());
   return response.error().errcode();
 }
 
@@ -3114,6 +3129,10 @@ void SendKvBatchPut(int64_t region_id, const std::string& prefix, int count) {
     kv->set_value(Helper::GenRandomString(256));
   }
 
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
+
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPut", request, response);
 }
 
@@ -3125,6 +3144,10 @@ void SendKvPutIfAbsent(int64_t region_id, const std::string& key) {
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
   kv->set_value(Helper::GenRandomString(64));
+
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPutIfAbsent", request, response);
 }
@@ -3139,6 +3162,10 @@ void SendKvBatchPutIfAbsent(int64_t region_id, const std::string& prefix, int co
     auto* kv = request.add_kvs();
     kv->set_key(key);
     kv->set_value(Helper::GenRandomString(64));
+  }
+
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
   }
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchPutIfAbsent", request, response);

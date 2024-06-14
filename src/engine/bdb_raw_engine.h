@@ -205,6 +205,8 @@ class Writer : public RawEngine::Writer {
   ~Writer() override = default;
 
   butil::Status KvPut(const std::string& cf_name, const pb::common::KeyValue& kv) override;
+  butil::Status KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) override;
+
   butil::Status KvDelete(const std::string& cf_name, const std::string& key) override;
 
   butil::Status KvBatchPutAndDelete(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs_to_put,

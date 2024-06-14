@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -73,7 +74,14 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
     virtual butil::Status KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                   const std::string& end_key, int64_t& count) = 0;
+
+    virtual dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts,  // NOLINT
+                                             IteratorOptions options) {               // NOLINT
+      throw std::runtime_error("No support new iterator.");
+      return nullptr;
+    }
   };
+  using ReaderPtr = std::shared_ptr<Reader>;
 
   // raw kv writer
   class Writer {
@@ -82,14 +90,17 @@ class Engine : public std::enable_shared_from_this<Engine> {
     virtual ~Writer() = default;
 
     virtual butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) = 0;
-    virtual butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) = 0;
-    virtual butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) = 0;
+    virtual butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                   std::vector<bool>& key_states) = 0;
+    virtual butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range,
+                                        int64_t& count) = 0;
     virtual butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                         bool is_atomic, std::vector<bool>& key_states) = 0;
     virtual butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                           const std::vector<std::string>& expect_values, bool is_atomic,
                                           std::vector<bool>& key_states) = 0;
   };
+  using WriterPtr = std::shared_ptr<Writer>;
 
   // Vector reader
   class VectorReader {
@@ -148,6 +159,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                                  int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
                                                  int64_t& search_time_us) = 0;
   };
+  using VectorReaderPtr = std::shared_ptr<VectorReader>;
 
   // Document reader
   class DocumentReader {
@@ -196,6 +208,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
     virtual butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) = 0;
   };
+  using DocumentReaderPtr = std::shared_ptr<DocumentReader>;
 
   class TxnReader {
    public:
@@ -217,6 +230,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                       std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,
                                       std::string& end_scan_key) = 0;
   };
+  using TxnReaderPtr = std::shared_ptr<TxnReader>;
 
   class TxnWriter {
    public:
@@ -249,6 +263,9 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                          const std::string& end_key) = 0;
     virtual butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) = 0;
   };
+  using TxnWriterPtr = std::shared_ptr<TxnWriter>;
+
+  virtual std::shared_ptr<Reader> NewMVCCReader(pb::common::RawEngine type) = 0;
 
   virtual std::shared_ptr<Reader> NewReader(pb::common::RawEngine type) = 0;
   virtual std::shared_ptr<Writer> NewWriter(pb::common::RawEngine type) = 0;

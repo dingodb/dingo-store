@@ -1116,6 +1116,10 @@ butil::Status Writer::KvPut(const std::string& cf_name, const pb::common::KeyVal
   return butil::Status(pb::error::EBDB_UNKNOW, "unknown error.");
 }
 
+butil::Status Writer::KvBatchPut(const std::string& cf_name, const std::vector<pb::common::KeyValue>& kvs) {
+  return KvBatchPutAndDelete(cf_name, kvs, {});
+}
+
 butil::Status Writer::KvBatchPutAndDelete(const std::string& cf_name,
                                           const std::vector<pb::common::KeyValue>& kvs_to_put,
                                           const std::vector<std::string>& keys_to_delete) {
