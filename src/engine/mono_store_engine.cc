@@ -21,20 +21,25 @@
 #include "engine/write_data.h"
 #include "event/store_state_machine_event.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
+#include "mvcc/reader.h"
 #include "vector/vector_reader.h"
 
 namespace dingodb {
 
-MonoStoreEngine::MonoStoreEngine(std::shared_ptr<RawEngine> rocks_engine, std::shared_ptr<RawEngine> bdb_engine,
-                                 std::shared_ptr<EventListenerCollection> listeners)
-    : raw_rocks_engine(rocks_engine), raw_bdb_engine(bdb_engine), listeners(listeners) {}
+MonoStoreEngine::MonoStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
+                                 EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider)
+    : rocks_raw_engine_(rocks_raw_engine),
+      bdb_raw_engine_(bdb_raw_engine),
+      listeners_(listeners),
+      ts_provider_(ts_provider) {}
 
 bool MonoStoreEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
 std::string MonoStoreEngine::GetName() {
   return pb::common::StorageEngine_Name(pb::common::StorageEngine::STORE_ENG_MONO_STORE);
 }
 
-std::shared_ptr<MonoStoreEngine> MonoStoreEngine::GetSelfPtr() {
+MonoStoreEnginePtr MonoStoreEngine::GetSelfPtr() {
   return std::dynamic_pointer_cast<MonoStoreEngine>(shared_from_this());
 }
 
@@ -73,11 +78,11 @@ bool MonoStoreEngine::Recover() {
 
 pb::common::StorageEngine MonoStoreEngine::GetID() { return pb::common::StorageEngine::STORE_ENG_MONO_STORE; }
 
-std::shared_ptr<RawEngine> MonoStoreEngine::GetRawEngine(pb::common::RawEngine type) {
+RawEnginePtr MonoStoreEngine::GetRawEngine(pb::common::RawEngine type) {
   if (type == pb::common::RawEngine::RAW_ENG_ROCKSDB) {
-    return raw_rocks_engine;
+    return rocks_raw_engine_;
   } else if (type == pb::common::RawEngine::RAW_ENG_BDB) {
-    return raw_bdb_engine;
+    return bdb_raw_engine_;
   }
 
   DINGO_LOG(FATAL) << "[rocks.engine] unknown raw engine type.";
@@ -87,9 +92,9 @@ std::shared_ptr<RawEngine> MonoStoreEngine::GetRawEngine(pb::common::RawEngine t
 bvar::LatencyRecorder g_rocks_write_latency("dingo_rocks_store_engine_write_latency");
 
 int MonoStoreEngine::DispatchEvent(dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event) {
-  if (listeners == nullptr) return -1;
+  if (listeners_ == nullptr) return -1;
 
-  for (auto& listener : listeners->Get(event_type)) {
+  for (auto& listener : listeners_->Get(event_type)) {
     int ret = listener->OnEvent(event);
     if (ret != 0) {
       return ret;
@@ -120,7 +125,7 @@ butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region metrics {}", region->Id()));
   }
   DINGO_LOG(INFO) << fmt::format("[rock.engine][region({})] rocksengine write.", region->Id());
-  std::shared_ptr<RawEngine> raw_engine = GetRawEngine(region->GetRawEngineType());
+  RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
   auto event = std::make_shared<SmApplyEvent>();
   auto raft_cmd = dingodb::GenRaftCmdRequest(ctx, write_data);
   event->region = region;
@@ -164,7 +169,7 @@ butil::Status MonoStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::sha
   }
   DINGO_LOG(INFO) << fmt::format("[rock.engine][region({})] rocksengine async write.", region->Id());
   ctx->SetWriteCb(write_cb);
-  std::shared_ptr<RawEngine> raw_engine = GetRawEngine(region->GetRawEngineType());
+  RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
   auto event = std::make_shared<SmApplyEvent>();
   auto raft_cmd = dingodb::GenRaftCmdRequest(ctx, write_data);
   event->region = region;
@@ -197,6 +202,10 @@ butil::Status MonoStoreEngine::Reader::KvScan(std::shared_ptr<Context> ctx, cons
 butil::Status MonoStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, const std::string& start_key,
                                                const std::string& end_key, int64_t& count) {
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
+}
+
+std::shared_ptr<Engine::Reader> MonoStoreEngine::NewMVCCReader(pb::common::RawEngine type) {
+  return std::make_shared<mvcc::Reader>(GetRawEngine(type)->Reader());
 }
 
 std::shared_ptr<Engine::Reader> MonoStoreEngine::NewReader(pb::common::RawEngine type) {
@@ -289,21 +298,44 @@ butil::Status MonoStoreEngine::DocumentReader::DocumentCount(const pb::common::R
 
 // normal
 
-std::shared_ptr<Engine::Writer> MonoStoreEngine::NewWriter(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::Writer>(GetRawEngine(type), GetSelfPtr());
+std::shared_ptr<Engine::Writer> MonoStoreEngine::NewWriter(pb::common::RawEngine) {
+  return std::make_shared<MonoStoreEngine::Writer>(GetSelfPtr(), ts_provider_);
 }
 
 butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
-  return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), kvs));
+  int64_t ts = ts_provider_->GetTs();
+  auto encode_kvs = mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs);
+  return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_kvs, ts));
 }
 
-butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) {
-  return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), keys));
+butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                                                std::vector<bool>& key_states) {
+  int64_t ts = ts_provider_->GetTs();
+  auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
+
+  key_states.resize(keys.size(), false);
+  for (int i = 0; i < keys.size(); ++i) {
+    const auto& key = keys[i];
+    std::string value;
+    auto status = reader->KvGet(ctx, key, value);
+    if (status.ok()) {
+      key_states[i] = true;
+    }
+  }
+
+  auto encode_keys = mvcc::Codec::EncodeKeys(ts, keys);
+
+  return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_keys, ts));
 }
 
-butil::Status MonoStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
-  return rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
+butil::Status MonoStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range,
+                                                     int64_t& count) {
+  auto encode_range = mvcc::Codec::EncodeRange(range);
+  auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
+
+  reader->KvCount(ctx, encode_range.start_key(), encode_range.end_key(), count);
+  return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
 }
 
 butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ctx,
@@ -318,6 +350,8 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
   std::vector<bool> temp_key_states;
   temp_key_states.resize(kvs.size(), false);
 
+  int64_t ts = ts_provider_->GetTs();
+  auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {
     const auto& kv = kvs[i];
@@ -325,8 +359,11 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
+    auto encode_key = mvcc::Codec::EncodeKey(kv.key(), ts);
+    auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
+
     std::string old_value;
-    auto status = writer_raw_engine_->Reader()->KvGet(ctx->CfName(), kv.key(), old_value);
+    auto status = reader->KvGet(ctx, kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -341,7 +378,12 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
       }
     }
 
-    put_kvs.push_back(kv);
+    pb::common::KeyValue encode_kv;
+    encode_kv.mutable_key()->swap(encode_key);
+    mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, kv.value(), *encode_kv.mutable_value());
+
+    put_kvs.push_back(std::move(encode_kv));
+
     temp_key_states[i] = true;
   }
 
@@ -349,7 +391,7 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     return butil::Status::OK();
   }
 
-  auto status = rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), put_kvs));
+  auto status = mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), put_kvs, ts));
   if (!status.ok()) {
     return status;
   }
@@ -375,16 +417,20 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   std::vector<bool> temp_key_states;
   temp_key_states.resize(kvs.size(), false);
 
+  int64_t ts = ts_provider_->GetTs();
+  auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
-  std::vector<std::string> delete_keys;
   for (int i = 0; i < kvs.size(); ++i) {
     const auto& kv = kvs[i];
     if (BAIDU_UNLIKELY(kv.key().empty())) {
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
+    auto encode_key = mvcc::Codec::EncodeKey(kv.key(), ts);
+    auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
+
     std::string old_value;
-    auto status = writer_raw_engine_->Reader()->KvGet(ctx->CfName(), kv.key(), old_value);
+    auto status = reader->KvGet(ctx, kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -411,41 +457,26 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
       }
     }
 
+    pb::common::KeyValue encode_kv;
+    encode_kv.mutable_key()->swap(encode_key);
+
     // value empty means delete
     if (kv.value().empty()) {
-      delete_keys.push_back(kv.key());
+      encode_kv.set_value(mvcc::Codec::ValueFlagDelete());
     } else {
-      put_kvs.push_back(kv);
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, kv.value(), *encode_kv.mutable_value());
     }
+
+    put_kvs.push_back(std::move(encode_kv));
 
     temp_key_states[i] = true;
   }
 
-  if (put_kvs.empty() && delete_keys.empty()) {
-    return butil::Status();
+  if (put_kvs.empty()) {
+    return butil::Status::OK();
   }
 
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto* cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-  // after all is processed, write into raft engine
-  if (!put_kvs.empty()) {
-    auto* default_puts = cf_put_delete->add_puts_with_cf();
-    default_puts->set_cf_name(ctx->CfName());
-    for (auto& kv : put_kvs) {
-      *default_puts->add_kvs() = kv;
-    }
-  }
-
-  if (!delete_keys.empty()) {
-    auto* default_dels = cf_put_delete->add_deletes_with_cf();
-    default_dels->set_cf_name(ctx->CfName());
-    for (auto& key : delete_keys) {
-      default_dels->add_keys(key);
-    }
-  }
-
-  auto status = rocks_engine_->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  auto status = mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), put_kvs, ts));
   if (!status.ok()) {
     return status;
   }
@@ -502,15 +533,14 @@ butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Con
                                                              const std::vector<pb::store::Mutation>& mutations,
                                                              const std::string& primary_lock, int64_t start_ts,
                                                              int64_t lock_ttl, int64_t for_update_ts) {
-  return TxnEngineHelper::PessimisticLock(txn_writer_raw_engine_, rocks_engine_, ctx, mutations, primary_lock, start_ts,
+  return TxnEngineHelper::PessimisticLock(txn_writer_raw_engine_, mono_engine_, ctx, mutations, primary_lock, start_ts,
                                           lock_ttl, for_update_ts);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
                                                                  int64_t for_update_ts,
                                                                  const std::vector<std::string>& keys) {
-  return TxnEngineHelper::PessimisticRollback(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, for_update_ts,
-                                              keys);
+  return TxnEngineHelper::PessimisticRollback(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, for_update_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPrewrite(
@@ -518,45 +548,44 @@ butil::Status MonoStoreEngine::TxnWriter::TxnPrewrite(
     int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
     const std::vector<int64_t>& pessimistic_checks, const std::map<int64_t, int64_t>& for_update_ts_checks,
     const std::map<int64_t, std::string>& lock_extra_datas) {
-  return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, rocks_engine_, ctx, mutations, primary_lock, start_ts,
+  return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, mono_engine_, ctx, mutations, primary_lock, start_ts,
                                    lock_ttl, txn_size, try_one_pc, max_commit_ts, pessimistic_checks,
                                    for_update_ts_checks, lock_extra_datas);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                                     const std::vector<std::string>& keys) {
-  return TxnEngineHelper::Commit(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, commit_ts, keys);
+  return TxnEngineHelper::Commit(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, commit_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,
                                                             const std::string& primary_key, int64_t lock_ts,
                                                             int64_t caller_start_ts, int64_t current_ts) {
-  return TxnEngineHelper::CheckTxnStatus(txn_writer_raw_engine_, rocks_engine_, ctx, primary_key, lock_ts,
+  return TxnEngineHelper::CheckTxnStatus(txn_writer_raw_engine_, mono_engine_, ctx, primary_key, lock_ts,
                                          caller_start_ts, current_ts);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts,
                                                          int64_t commit_ts, const std::vector<std::string>& keys) {
-  return TxnEngineHelper::ResolveLock(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, commit_ts, keys);
+  return TxnEngineHelper::ResolveLock(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, commit_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
                                                            const std::vector<std::string>& keys) {
-  return TxnEngineHelper::BatchRollback(txn_writer_raw_engine_, rocks_engine_, ctx, start_ts, keys);
+  return TxnEngineHelper::BatchRollback(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock,
                                                        int64_t start_ts, int64_t advise_lock_ttl) {
-  return TxnEngineHelper::HeartBeat(txn_writer_raw_engine_, rocks_engine_, ctx, primary_lock, start_ts,
-                                    advise_lock_ttl);
+  return TxnEngineHelper::HeartBeat(txn_writer_raw_engine_, mono_engine_, ctx, primary_lock, start_ts, advise_lock_ttl);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
                                                          const std::string& end_key) {
-  return TxnEngineHelper::DeleteRange(txn_writer_raw_engine_, rocks_engine_, ctx, start_key, end_key);
+  return TxnEngineHelper::DeleteRange(txn_writer_raw_engine_, mono_engine_, ctx, start_key, end_key);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
-  return TxnEngineHelper::Gc(txn_writer_raw_engine_, rocks_engine_, ctx, safe_point_ts);
+  return TxnEngineHelper::Gc(txn_writer_raw_engine_, mono_engine_, ctx, safe_point_ts);
 }
 }  // namespace dingodb

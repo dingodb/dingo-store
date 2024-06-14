@@ -70,7 +70,8 @@ class ScanContext {
 
   virtual void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
 
-  virtual butil::Status Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine, const std::string& cf_name);
+  virtual butil::Status Open(const std::string& scan_id, Engine::ReaderPtr reader, const std::string& cf_name,
+                             int64_t ts);
 
   // Is it possible to delete this object
   virtual bool IsRecyclable();
@@ -93,6 +94,8 @@ class ScanContext {
 
   int64_t region_id_;
 
+  int64_t ts_;
+
   pb::common::Range range_;
 
   int64_t max_fetch_cnt_;
@@ -103,7 +106,7 @@ class ScanContext {
 
   ScanState state_;
 
-  std::shared_ptr<RawEngine> engine_;
+  Engine::ReaderPtr reader_;
 
   std::string cf_name_;
 

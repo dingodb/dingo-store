@@ -36,6 +36,7 @@
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
+#include "mvcc/ts_provider.h"
 #include "proto/common.pb.h"
 #include "split/split_checker.h"
 #include "store/heartbeat.h"
@@ -107,6 +108,9 @@ class Server {
 
   // Init PreSplitChecker
   bool InitPreSplitChecker();
+
+  // Init TsProvider
+  bool InitTsProvider();
 
   butil::Status StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
   butil::Status StartKvRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
@@ -222,6 +226,8 @@ class Server {
 
   ThreadPoolPtr GetVectorIndexThreadPool();
 
+  mvcc::TsProviderPtr GetTsProvider();
+
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
 
@@ -272,7 +278,7 @@ class Server {
   // All store engine, include MemEngine/RaftStoreEngine/RocksEngine
   std::shared_ptr<Engine> raft_engine_;
 
-  std::shared_ptr<Engine> rocks_engine_;
+  std::shared_ptr<Engine> mono_engine_;
 
   // Meta reader
   std::shared_ptr<MetaReader> meta_reader_;
@@ -355,6 +361,9 @@ class Server {
 
   // RaftApply worker queue
   SimpleWorkerSetPtr raft_apply_worker_set_{nullptr};
+
+  // ts provider
+  mvcc::TsProviderPtr ts_provider_{nullptr};
 };
 
 // Shortcut
