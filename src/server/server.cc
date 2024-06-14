@@ -37,6 +37,7 @@
 #include "engine/rocks_raw_engine.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "mvcc/ts_provider.h"
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
@@ -251,26 +252,26 @@ bool Server::InitEngine() {
 
 #ifdef ENABLE_XDPROCKS
   // init xdprocks
-  auto raw_rocks_engine = std::make_shared<XDPRocksRawEngine>();
-  if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  auto rocks_raw_engine = std::make_shared<XDPRocksRawEngine>();
+  if (!rocks_raw_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init XDPRocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 #else
   // init rocksdb
-  auto raw_rocks_engine = std::make_shared<RocksRawEngine>();
-  if (!raw_rocks_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  auto rocks_raw_engine = std::make_shared<RocksRawEngine>();
+  if (!rocks_raw_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 #endif
 
-  meta_reader_ = std::make_shared<MetaReader>(raw_rocks_engine);
-  meta_writer_ = std::make_shared<MetaWriter>(raw_rocks_engine);
+  meta_reader_ = std::make_shared<MetaReader>(rocks_raw_engine);
+  meta_writer_ = std::make_shared<MetaWriter>(rocks_raw_engine);
 
   // init bdb
-  auto raw_bdb_engine = std::make_shared<BdbRawEngine>();
-  if (!raw_bdb_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  auto bdb_raw_engine = std::make_shared<BdbRawEngine>();
+  if (!bdb_raw_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init BdbRawEngine Failed with Config[" << config->ToString();
     return false;
   }
@@ -279,8 +280,8 @@ bool Server::InitEngine() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     // 1.init CoordinatorController
     coordinator_control_ =
-        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(raw_rocks_engine),
-                                             std::make_shared<MetaWriter>(raw_rocks_engine), raw_rocks_engine);
+        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(rocks_raw_engine),
+                                             std::make_shared<MetaWriter>(rocks_raw_engine), rocks_raw_engine);
 
     if (!coordinator_control_->Recover()) {
       DINGO_LOG(ERROR) << "coordinator_control_->Recover Failed";
@@ -292,13 +293,13 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, ts_provider_);
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
 
     // 2.init KvController
-    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(raw_rocks_engine),
-                                              std::make_shared<MetaWriter>(raw_rocks_engine), raw_rocks_engine);
+    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(rocks_raw_engine),
+                                              std::make_shared<MetaWriter>(rocks_raw_engine), rocks_raw_engine);
 
     if (!kv_control_->Recover()) {
       DINGO_LOG(ERROR) << "kv_control_->Recover Failed";
@@ -342,14 +343,14 @@ bool Server::InitEngine() {
 
   } else {
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-    rocks_engine_ = std::make_shared<MonoStoreEngine>(raw_rocks_engine, raw_bdb_engine, listener_factory->Build());
-    if (!rocks_engine_->Init(config)) {
+    mono_engine_ = MonoStoreEngine::New(rocks_raw_engine, bdb_raw_engine, listener_factory->Build(), ts_provider_);
+    if (!mono_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RocksEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
     DINGO_LOG(INFO) << "Init rocks_engine";
 
-    raft_engine_ = std::make_shared<RaftStoreEngine>(raw_rocks_engine, raw_bdb_engine);
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, ts_provider_);
     DINGO_LOG(INFO) << "Init raft_store_engine";
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
@@ -432,7 +433,7 @@ bool Server::InitLogStorageManager() {
 }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(raft_engine_, rocks_engine_);
+  storage_ = std::make_shared<Storage>(raft_engine_, mono_engine_);
   return true;
 }
 
@@ -789,6 +790,11 @@ bool Server::InitPreSplitChecker() {
   return pre_split_checker_->Init(split_check_concurrency);
 }
 
+bool Server::InitTsProvider() {
+  ts_provider_ = mvcc::TsProvider::New();
+  return ts_provider_->Init();
+}
+
 bool Server::Recover() {
   if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX || GetRole() == pb::common::DOCUMENT) {
     // Recover engine state.
@@ -797,8 +803,8 @@ bool Server::Recover() {
       return false;
     }
 
-    if (!rocks_engine_->Recover()) {
-      DINGO_LOG(ERROR) << "Recover engine failed, engine " << rocks_engine_->GetName();
+    if (!mono_engine_->Recover()) {
+      DINGO_LOG(ERROR) << "Recover engine failed, engine " << mono_engine_->GetName();
       return false;
     }
 
@@ -929,10 +935,11 @@ std::shared_ptr<Engine> Server::GetEngine(pb::common::StorageEngine store_engine
     assert(raft_engine_ != nullptr);
     return raft_engine_;
   } else if (store_engine_type == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    assert(rocks_engine_ != nullptr);
-    return rocks_engine_;
+    assert(mono_engine_ != nullptr);
+    return mono_engine_;
   }
-  DINGO_LOG(FATAL) << fmt::format("GetEngine not support sotre engine:{}", pb::common::StorageEngine_Name(store_engine_type));
+  DINGO_LOG(FATAL) << fmt::format("GetEngine not support sotre engine:{}",
+                                  pb::common::StorageEngine_Name(store_engine_type));
   return nullptr;
 }
 
@@ -1211,6 +1218,8 @@ std::string Server::GetAllWorkSetPendingTaskCount() {
 }
 
 ThreadPoolPtr Server::GetVectorIndexThreadPool() { return vector_index_thread_pool_; }
+
+mvcc::TsProviderPtr Server::GetTsProvider() { return ts_provider_; }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const int64_t region_id,

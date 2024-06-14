@@ -85,6 +85,8 @@ class CoordinatorInteraction {
                                      int64_t time_out_ms);
 };
 
+using CoordinatorInteractionPtr = std::shared_ptr<CoordinatorInteraction>;
+
 template <typename Request, typename Response>
 butil::Status CoordinatorInteraction::SendRequest(const std::string& api_name, const Request& request,
                                                   Response& response, int64_t time_out_ms) {

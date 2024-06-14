@@ -47,7 +47,6 @@ ScanContext::ScanContext(bvar::LatencyRecorder* scan_latency)
       key_only_(false),
       disable_auto_release_(false),
       state_(ScanState::kUninit),
-      engine_(nullptr),
       iter_(nullptr),
       last_time_ms_(GetCurrentTime())
 #if defined(ENABLE_SCAN_OPTIMIZATION)
@@ -71,16 +70,16 @@ void ScanContext::Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fe
   max_fetch_cnt_by_server_ = max_fetch_cnt_by_server;
 }
 
-butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine,
-                                const std::string& cf_name) {
+butil::Status ScanContext::Open(const std::string& scan_id, Engine::ReaderPtr reader, const std::string& cf_name,
+                                int64_t ts) {
   if (BAIDU_UNLIKELY(scan_id.empty())) {
     DINGO_LOG(ERROR) << fmt::format("scan_id empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
-  if (BAIDU_UNLIKELY(!engine)) {
-    DINGO_LOG(ERROR) << fmt::format("engine empty not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "engine is empty");
+  if (BAIDU_UNLIKELY(!reader)) {
+    DINGO_LOG(ERROR) << fmt::format("reader empty not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "reader is empty");
   }
 
   if (BAIDU_UNLIKELY(cf_name.empty())) {
@@ -97,21 +96,23 @@ butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawE
   }
   state_ = ScanState::kOpening;
   scan_id_ = scan_id;
-  engine_ = engine;
+  reader_ = reader;
   cf_name_ = cf_name;
   state_ = ScanState::kOpened;
+  ts_ = ts;
   return butil::Status();
 }
 
 void ScanContext::Close() {
   scan_id_.clear();
   region_id_ = 0;
+  ts_ = 0;
   range_.Clear();
   max_fetch_cnt_ = 0;
   key_only_ = false;
   disable_auto_release_ = false;
   state_ = ScanState::kUninit;
-  engine_ = nullptr;
+  reader_ = nullptr;
   cf_name_.clear();
   iter_ = nullptr;
   last_time_ms_.zero();
@@ -416,15 +417,12 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
     }
   }
 
-  auto reader = context->engine_->Reader();
-
   IteratorOptions options;
   options.upper_bound = context->range_.end_key();
 
-  context->iter_ = reader->NewIterator(context->cf_name_, options);
+  context->iter_ = context->reader_->NewIterator(context->cf_name_, context->ts_, options);
   if (!context->iter_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("RawEngine::Reader::NewIterator failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error : create iter failed");
   }
   context->iter_->Seek(context->range_.start_key());

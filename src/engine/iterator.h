@@ -31,6 +31,7 @@ enum class IteratorType {
   kRaftEngine = 4,
   kColumnarEngine = 5,
   kBdbEngine = 6,
+  kMVCC = 7,
 };
 
 struct IteratorOptions {

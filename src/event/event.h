@@ -15,6 +15,8 @@
 #ifndef DINGODB_EVENT_EVENT_H_
 #define DINGODB_EVENT_EVENT_H_
 
+#include <memory>
+
 #include "braft/raft.h"
 #include "brpc/controller.h"
 #include "common/helper.h"
@@ -105,6 +107,7 @@ class EventListenerCollection {
  private:
   std::unordered_map<EventType, EventListenerChain> listeners_;
 };
+using EventListenerCollectionPtr = std::shared_ptr<EventListenerCollection>;
 
 // Event listerner abstract factory.
 class EventListenerFactory {

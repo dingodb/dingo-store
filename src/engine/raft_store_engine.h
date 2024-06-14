@@ -27,6 +27,7 @@
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
+#include "mvcc/ts_provider.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
@@ -34,6 +35,9 @@
 #include "vector/vector_index.h"
 
 namespace dingodb {
+
+class RaftStoreEngine;
+using RaftStoreEnginePtr = std::shared_ptr<RaftStoreEngine>;
 
 class RaftControlAble {
  public:
@@ -51,7 +55,7 @@ class RaftControlAble {
 
     store::RaftMetaPtr raft_meta;
     store::RegionMetricsPtr region_metrics;
-    std::shared_ptr<EventListenerCollection> listeners;
+    EventListenerCollectionPtr listeners;
   };
 
   virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) = 0;
@@ -72,10 +76,15 @@ class RaftControlAble {
 
 class RaftStoreEngine : public Engine, public RaftControlAble {
  public:
-  RaftStoreEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine);
+  RaftStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine, mvcc::TsProviderPtr ts_provider);
   ~RaftStoreEngine() override;
 
-  std::shared_ptr<RaftStoreEngine> GetSelfPtr();
+  RaftStoreEnginePtr GetSelfPtr();
+
+  static RaftStoreEnginePtr New(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
+                                mvcc::TsProviderPtr ts_provider) {
+    return std::make_shared<RaftStoreEngine>(rocks_raw_engine, bdb_raw_engine, ts_provider);
+  }
 
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
@@ -83,7 +92,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   std::string GetName() override;
   pb::common::StorageEngine GetID() override;
 
-  std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type) override;
+  RawEnginePtr GetRawEngine(pb::common::RawEngine type) override;
 
   butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) override;
   butil::Status AddNode(std::shared_ptr<pb::common::RegionDefinition> region, std::shared_ptr<MetaControl> meta_control,
@@ -125,11 +134,13 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
   class Writer : public Engine::Writer {
    public:
-    Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
-        : writer_raw_engine_(raw_engine), raft_engine_(raft_engine) {}
+    Writer(RaftStoreEnginePtr raft_engine, mvcc::TsProviderPtr ts_provider)
+        : raft_engine_(raft_engine), ts_provider_(ts_provider) {}
+
     butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
-    butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) override;
-    butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
+    butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                           std::vector<bool>& key_states) override;
+    butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range, int64_t& count) override;
     butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 bool is_atomic, std::vector<bool>& key_states) override;
     butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
@@ -137,8 +148,8 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                   std::vector<bool>& key_states) override;
 
    private:
-    std::shared_ptr<RawEngine> writer_raw_engine_;
-    std::shared_ptr<RaftStoreEngine> raft_engine_;
+    RaftStoreEnginePtr raft_engine_;
+    mvcc::TsProviderPtr ts_provider_;
   };
 
   // Vector reader
@@ -191,7 +202,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
 
   class TxnReader : public Engine::TxnReader {
    public:
-    TxnReader(std::shared_ptr<RawEngine> engine) : txn_reader_raw_engine_(engine) {}
+    TxnReader(RawEnginePtr engine) : txn_reader_raw_engine_(engine) {}
 
     butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs, const std::set<int64_t>& resolved_locks,
@@ -207,12 +218,12 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                               std::string& end_scan_key) override;
 
    private:
-    std::shared_ptr<RawEngine> txn_reader_raw_engine_;
+    RawEnginePtr txn_reader_raw_engine_;
   };
 
   class TxnWriter : public Engine::TxnWriter {
    public:
-    TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<RaftStoreEngine> raft_engine)
+    TxnWriter(RawEnginePtr raw_engine, RaftStoreEnginePtr raft_engine)
         : txn_writer_raw_engine_(raw_engine), raft_engine_(raft_engine) {}
 
     butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
@@ -240,9 +251,11 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) override;
 
    private:
-    std::shared_ptr<RawEngine> txn_writer_raw_engine_;
-    std::shared_ptr<RaftStoreEngine> raft_engine_;
+    RawEnginePtr txn_writer_raw_engine_;
+    RaftStoreEnginePtr raft_engine_;
   };
+
+  std::shared_ptr<Engine::Reader> NewMVCCReader(pb::common::RawEngine type) override;
 
   std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
@@ -251,10 +264,12 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
   std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
 
- protected:
-  std::shared_ptr<RawEngine> raw_rocks_engine;  // RocksDB, the system engine, for meta and data
-  std::shared_ptr<RawEngine> raw_bdb_engine;    // BDB, the engine for data
-  std::unique_ptr<RaftNodeManager> raft_node_manager;
+ private:
+  RawEnginePtr rocks_raw_engine_;  // RocksDB, the system engine, for meta and data
+  RawEnginePtr bdb_raw_engine_;    // BDB, the engine for data
+  std::unique_ptr<RaftNodeManager> raft_node_manager_;
+
+  mvcc::TsProviderPtr ts_provider_;
 };
 
 std::shared_ptr<pb::raft::RaftCmdRequest> GenRaftCmdRequest(const std::shared_ptr<Context> ctx,  // NOLINT

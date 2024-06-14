@@ -44,6 +44,7 @@ class RaftNodeManager {
 
   std::map<int64_t, std::shared_ptr<RaftNode>> nodes_;
 };
+using RaftNodeManagerPtr = std::shared_ptr<RaftNodeManager>;
 
 }  // namespace dingodb
 

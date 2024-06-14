@@ -1302,6 +1302,10 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
       return -1;
     }
+    if (!dingo_server.InitTsProvider()) {
+      DINGO_LOG(ERROR) << "InitTsProvider failed!";
+      return -1;
+    }
     if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
@@ -1431,6 +1435,10 @@ int main(int argc, char *argv[]) {
     }
     if (!dingo_server.ValiateCoordinator()) {
       DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
+      return -1;
+    }
+    if (!dingo_server.InitTsProvider()) {
+      DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
     }
     if (!dingo_server.InitStorage()) {

@@ -4143,12 +4143,6 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     ctx->SetStoreEngineType(region_ptr->GetStoreEngineType());
 
     auto writer = storage->GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
-    if (nullptr == writer) {
-      DINGO_LOG(ERROR) << fmt::format("writer is nullptr, region_id : {}.  start_key : {} end_key : {} ",
-                                      ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
-                                      Helper::StringToHex(region_ptr->Range().end_key()));
-      return;
-    }
 
     status = writer->TxnGc(ctx, safe_point_ts);
 

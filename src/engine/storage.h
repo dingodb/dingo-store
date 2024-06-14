@@ -35,25 +35,6 @@ class Storage {
   Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine);
   ~Storage() = default;
 
-  std::shared_ptr<Engine::Reader> GetEngineReader(pb::common::StorageEngine store_engine_type,
-                                                  pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<Engine::TxnReader> GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
-                                                        pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<Engine::Writer> GetEngineWriter(pb::common::StorageEngine store_engine_type,
-                                                  pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<Engine::TxnWriter> GetEngineTxnWriter(pb::common::StorageEngine store_engine_type,
-                                                        pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<Engine::VectorReader> GetEngineVectorReader(pb::common::StorageEngine store_engine_type,
-                                                              pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<Engine::DocumentReader> GetEngineDocumentReader(pb::common::StorageEngine store_engine_type,
-                                                                  pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<RawEngine> GetRawEngine(pb::common::StorageEngine store_engine_type,
-                                          pb::common::RawEngine raw_engine_type);
-  std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
-
-  static Snapshot* GetSnapshot();
-  void ReleaseSnapshot();
-
   // kv read
   butil::Status KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                       std::vector<pb::common::KeyValue>& kvs);
@@ -81,14 +62,15 @@ class Storage {
   static butil::Status KvScanReleaseV2(std::shared_ptr<Context> ctx, int64_t scan_id);
 
   // kv write
-  butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs);
+  butil::Status KvPut(std::shared_ptr<Context> ctx, std::vector<pb::common::KeyValue>& kvs);
 
   butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                               bool is_atomic, std::vector<bool>& key_states);
 
-  butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys);
+  butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                         std::vector<bool>& key_states);
 
-  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
+  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range, int64_t& count);
 
   butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 const std::vector<std::string>& expect_values, bool is_atomic,
@@ -184,6 +166,28 @@ class Storage {
   butil::Status DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t& count);
 
   // common functions
+  RaftStoreEnginePtr GetRaftStoreEngine();
+
+  std::shared_ptr<Engine> GetStoreEngine(pb::common::StorageEngine store_engine_type);
+
+  Engine::ReaderPtr GetEngineMVCCReader(pb::common::StorageEngine store_engine_type,
+                                        pb::common::RawEngine raw_engine_type);
+
+  Engine::ReaderPtr GetEngineReader(pb::common::StorageEngine store_engine_type, pb::common::RawEngine raw_engine_type);
+  Engine::TxnReaderPtr GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
+                                          pb::common::RawEngine raw_engine_type);
+  Engine::WriterPtr GetEngineWriter(pb::common::StorageEngine store_engine_type, pb::common::RawEngine raw_engine_type);
+  Engine::TxnWriterPtr GetEngineTxnWriter(pb::common::StorageEngine store_engine_type,
+                                          pb::common::RawEngine raw_engine_type);
+  Engine::VectorReaderPtr GetEngineVectorReader(pb::common::StorageEngine store_engine_type,
+                                                pb::common::RawEngine raw_engine_type);
+  Engine::DocumentReaderPtr GetEngineDocumentReader(pb::common::StorageEngine store_engine_type,
+                                                    pb::common::RawEngine raw_engine_type);
+  RawEnginePtr GetRawEngine(pb::common::StorageEngine store_engine_type, pb::common::RawEngine raw_engine_type);
+
+  static Snapshot* GetSnapshot();
+  void ReleaseSnapshot();
+
   butil::Status ValidateLeader(int64_t region_id);
   butil::Status ValidateLeader(store::RegionPtr region);
   bool IsLeader(int64_t region_id);

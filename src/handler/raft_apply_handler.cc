@@ -36,6 +36,7 @@
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -57,12 +58,12 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
 
   auto writer = engine->Writer();
   if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] get writer failed.", region->Id());
   }
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.cf_name(), request.kvs().Get(0));
   } else {
-    status = writer->KvBatchPutAndDelete(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()), {});
+    status = writer->KvBatchPut(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()));
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -70,6 +71,14 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   }
 
   if (ctx) {
+    if (ctx->Response() && request.kvs().size() == 1) {
+      auto *response = dynamic_cast<pb::store::KvPutResponse *>(ctx->Response());
+      response->set_ts(req.ts());
+    } else if (ctx->Response() && request.kvs().size() > 1) {
+      auto *response = dynamic_cast<pb::store::KvBatchPutResponse *>(ctx->Response());
+      response->set_ts(req.ts());
+    }
+
     ctx->SetStatus(status);
   }
 
@@ -87,42 +96,20 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr /*
   butil::Status status;
   const auto &request = req.delete_range();
 
-  auto reader = engine->Reader();
   auto writer = engine->Writer();
-  int64_t delete_count = 0;
-  if (1 == request.ranges().size()) {
-    int64_t internal_delete_count = 0;
-    const auto &range = request.ranges()[0];
-    status = reader->KvCount(request.cf_name(), range.start_key(), range.end_key(), internal_delete_count);
-    if (status.ok() && 0 != internal_delete_count) {
-      status = writer->KvDeleteRange(request.cf_name(), range);
-    }
-    delete_count = internal_delete_count;
-  } else {
-    auto snapshot = engine->GetSnapshot();
-    for (const auto &range : request.ranges()) {
-      int64_t internal_delete_count = 0;
-      status = reader->KvCount(request.cf_name(), snapshot, range.start_key(), range.end_key(), internal_delete_count);
-      if (!status.ok()) {
-        delete_count = 0;
-        break;
-      }
-      delete_count += internal_delete_count;
-    }
 
-    if (status.ok() && 0 != delete_count) {
-      std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
-      range_with_cfs[request.cf_name()] = Helper::PbRepeatedToVector(request.ranges());
-      status = writer->KvBatchDeleteRange(range_with_cfs);
-    }
+  if (1 == request.ranges().size()) {
+    const auto &range = request.ranges()[0];
+    status = writer->KvDeleteRange(request.cf_name(), range);
+
+  } else {
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[request.cf_name()] = Helper::PbRepeatedToVector(request.ranges());
+    status = writer->KvBatchDeleteRange(range_with_cfs);
   }
 
   if (ctx && ctx->Response()) {
-    auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
-    if (response) {
-      ctx->SetStatus(status);
-      response->set_delete_count(delete_count);
-    }
+    ctx->SetStatus(status);
   }
 
   // Update region metrics min/max key policy
@@ -139,27 +126,24 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   butil::Status status;
   const auto &request = req.delete_batch();
 
-  auto reader = engine->Reader();
-  std::vector<bool> key_states(request.keys().size(), false);
-  auto snapshot = engine->GetSnapshot();
-  size_t i = 0;
-  for (const auto &key : request.keys()) {
-    std::string value;
-    status = reader->KvGet(request.cf_name(), snapshot, key, value);
-    if (status.ok()) {
-      key_states[i] = true;
-    }
-    i++;
-  }
-
   auto writer = engine->Writer();
-  if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-  }
+
   if (request.keys().size() == 1) {
-    status = writer->KvDelete(request.cf_name(), request.keys().Get(0));
+    pb::common::KeyValue kv;
+    kv.set_key(request.keys().Get(0));
+    kv.set_value(mvcc::Codec::ValueFlagDelete());
+    status = writer->KvPut(request.cf_name(), kv);
   } else {
-    status = writer->KvBatchPutAndDelete(request.cf_name(), {}, Helper::PbRepeatedToVector(request.keys()));
+    std::vector<pb::common::KeyValue> kvs;
+    kvs.reserve(request.keys().size());
+    for (const auto &key : request.keys()) {
+      pb::common::KeyValue kv;
+      kv.set_key(key);
+      kv.set_value(mvcc::Codec::ValueFlagDelete());
+      kvs.push_back(std::move(kv));
+    }
+
+    status = writer->KvBatchPutAndDelete(request.cf_name(), kvs, {});
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -168,11 +152,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   if (ctx && ctx->Response()) {
-    auto *response = dynamic_cast<pb::store::KvBatchDeleteResponse *>(ctx->Response());
     ctx->SetStatus(status);
-    for (const auto &state : key_states) {
-      response->add_key_states(state);
-    }
   }
 
   // Update region metrics min/max key policy
@@ -888,7 +868,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
                                       request.job_id(), request.source_region_id(), target_region->Id());
       return 0;
     }
-    
+
     if (!request.entries().empty()) {
       actual_apply_log_count = state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
     }
