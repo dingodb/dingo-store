@@ -556,7 +556,7 @@ void BalanceLeaderScheduler::CommitTransferLeaderTaskList(const std::vector<Tran
 
     auto* mut_region_cmd = mut_store_operation->add_region_cmds();
     mut_region_cmd->set_id(
-        coordinator_controller_->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+        coordinator_controller_->GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     mut_region_cmd->set_job_id(task_list->id());
     mut_region_cmd->set_region_id(task->region_id);
     mut_region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);

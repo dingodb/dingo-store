@@ -109,6 +109,9 @@ DECLARE_int32(store_type);
 DECLARE_bool(include_archive);
 DECLARE_bool(show_pretty);
 
+DEFINE_string(id_epoch_type, "", "id_epoch_type, like ID_NEXT_TABLE");
+DEFINE_int64(id_count, 0, "id_count");
+
 dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
     return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
@@ -2135,6 +2138,38 @@ void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> co
                   << ", reason: " << FLAGS_force_read_only_reason;
 
   auto status = coordinator_interaction->SendRequest("ConfigCoordinator", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SendCreateIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::CreateIdsRequest request;
+  dingodb::pb::coordinator::CreateIdsResponse response;
+
+  if (FLAGS_id_epoch_type.empty()) {
+    DINGO_LOG(ERROR)
+        << "id_epoch_type is empty, like ID_NEXT_TABLE, ID_NEXT_SCHEMA, ID_SCHEMA_VERSION, ID_DDL_JOB, ID_NEXT_TENANT";
+    return;
+  }
+
+  if (FLAGS_id_count <= 0) {
+    DINGO_LOG(ERROR) << "id_count is empty";
+    return;
+  }
+
+  const google::protobuf::EnumDescriptor* descriptor =
+      google::protobuf::GetEnumDescriptor<dingodb::pb::coordinator::IdEpochType>();
+  const google::protobuf::EnumValueDescriptor* enum_value = descriptor->FindValueByName(FLAGS_id_epoch_type);
+  if (enum_value == nullptr) {
+    DINGO_LOG(ERROR) << "id_epoch_type is invalid, like ID_NEXT_TABLE, ID_NEXT_SCHEMA, ID_SCHEMA_VERSION, ID_DDL_JOB, "
+                        "ID_NEXT_TENANT";
+    return;
+  }
+
+  request.set_id_epoch_type(static_cast<dingodb::pb::coordinator::IdEpochType>(enum_value->number()));
+  request.set_count(FLAGS_id_count);
+
+  auto status = coordinator_interaction->SendRequest("CreateIds", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

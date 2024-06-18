@@ -174,14 +174,13 @@ class KvControl : public MetaControl {
   void GetRaftLocation(pb::common::Location &server_location, pb::common::Location &raft_location);
 
   // get next id/epoch
-  int64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
-                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  int64_t GetNextId(const pb::coordinator::IdEpochType &key, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get present id/epoch
-  int64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
+  int64_t GetPresentId(const pb::coordinator::IdEpochType &key);
 
   // update present id/epoch
-  int64_t UpdatePresentId(const pb::coordinator_internal::IdEpochType &key, int64_t new_id,
+  int64_t UpdatePresentId(const pb::coordinator::IdEpochType &key, int64_t new_id,
                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // init ids

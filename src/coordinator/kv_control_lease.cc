@@ -62,7 +62,7 @@ butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64
   }
 
   if (lease_id == 0) {
-    granted_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_LEASE, meta_increment);
+    granted_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_LEASE, meta_increment);
   } else {
     granted_id = lease_id;
   }

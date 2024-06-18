@@ -147,35 +147,35 @@ CoordinatorControl::~CoordinatorControl() {
 // InitIds
 // Setup some initial ids for human readable
 void CoordinatorControl::InitIds() {
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_COORINATOR, 20000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_COORINATOR) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_COORINATOR, 20000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, 30000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_STORE) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_STORE, 30000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR, 40000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR, 40000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, 50000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_SCHEMA) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_SCHEMA, 50000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 60000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_TABLE) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_TABLE, 60000);
   }
-  // if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX) == 0) {
-  //   id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, 70000);
+  // if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_INDEX) == 0) {
+  //   id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_INDEX, 70000);
   // }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, 80000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION, 80000);
   }
-  // if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_LEASE) == 0) {
-  //   id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_LEASE, 90000);
+  // if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE) == 0) {
+  //   id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE, 90000);
   // }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, 1000000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, 1000000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT, 1000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_TENANT) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_TENANT, 1000);
   }
 }
 
@@ -199,9 +199,8 @@ bool CoordinatorControl::Recover() {
     InitIds();
 
     DINGO_LOG(WARNING) << "id_epoch_map_ size=" << id_epoch_map_.Size();
-    DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
-    DINGO_LOG(WARNING) << "index="
-                       << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+    DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_TERM);
+    DINGO_LOG(WARNING) << "index=" << id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -530,7 +529,7 @@ void CoordinatorControl::GetLeaderLocation(pb::common::Location& leader_server_l
 // GetNextId only update id_epoch_map_temp_ in leader, the persistent id_epoch_map_ will be updated in on_apply
 // When on_leader_start, the id_epoch_map_temp_ will init from id_epoch_map_
 // only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
-int64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
+int64_t CoordinatorControl::GetNextId(const pb::coordinator::IdEpochType& key,
                                       pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   int64_t next_id = 0;
@@ -552,7 +551,7 @@ int64_t CoordinatorControl::GetNextId(const pb::coordinator_internal::IdEpochTyp
   return next_id;
 }
 
-std::vector<int64_t> CoordinatorControl::GetNextIds(const pb::coordinator_internal::IdEpochType& key, int64_t count,
+std::vector<int64_t> CoordinatorControl::GetNextIds(const pb::coordinator::IdEpochType& key, int64_t count,
                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   std::vector<int64_t> next_ids_temp;
 
@@ -591,14 +590,14 @@ std::vector<int64_t> CoordinatorControl::GetNextIds(const pb::coordinator_intern
   return next_ids_temp;
 }
 
-int64_t CoordinatorControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
+int64_t CoordinatorControl::GetPresentId(const pb::coordinator::IdEpochType& key) {
   int64_t value = 0;
   id_epoch_map_safe_temp_.GetPresentId(key, value);
 
   return value;
 }
 
-int64_t CoordinatorControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& key, int64_t new_id,
+int64_t CoordinatorControl::UpdatePresentId(const pb::coordinator::IdEpochType& key, int64_t new_id,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   id_epoch_map_safe_temp_.UpdatePresentId(key, new_id);
