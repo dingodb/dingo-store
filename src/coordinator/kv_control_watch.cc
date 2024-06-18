@@ -65,7 +65,7 @@ butil::Status KvControl::OneTimeWatch(const std::string& watch_key, int64_t star
   }
 
   if (start_revision == 0) {
-    start_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
+    start_revision = GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REVISION);
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_watch)
         << "OneTimeWatch, start_revision is 0, set to next revision, watch_key:" << watch_key
         << ", hex_key:" << Helper::StringToHex(watch_key) << ", start_revision:" << start_revision;

@@ -71,11 +71,11 @@ KvControl::~KvControl() {
 // InitIds
 // Setup some initial ids for human readable
 void KvControl::InitIds() {
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION, 10000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REVISION) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_REVISION, 10000);
   }
-  if (id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_LEASE) == 0) {
-    id_epoch_map_.UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_LEASE, 90000);
+  if (id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE) == 0) {
+    id_epoch_map_.UpdatePresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE, 90000);
   }
 }
 
@@ -99,9 +99,8 @@ bool KvControl::Recover() {
     InitIds();
 
     DINGO_LOG(WARNING) << "id_epoch_map_ size=" << id_epoch_map_.Size();
-    DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM);
-    DINGO_LOG(WARNING) << "index="
-                       << id_epoch_map_.GetPresentId(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX);
+    DINGO_LOG(WARNING) << "term=" << id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_TERM);
+    DINGO_LOG(WARNING) << "index=" << id_epoch_map_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX);
   }
   DINGO_LOG(INFO) << "Recover id_epoch_meta, count=" << kvs.size();
   kvs.clear();
@@ -225,7 +224,7 @@ void KvControl::GetLeaderLocation(pb::common::Location& leader_server_location) 
 // GetNextId only update id_epoch_map_temp_ in leader, the persistent id_epoch_map_ will be updated in on_apply
 // When on_leader_start, the id_epoch_map_temp_ will init from id_epoch_map_
 // only id_epoch_map_ is in state machine, and will persistent to raft and local rocksdb
-int64_t KvControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
+int64_t KvControl::GetNextId(const pb::coordinator::IdEpochType& key,
                              pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   int64_t next_id = 0;
@@ -247,14 +246,14 @@ int64_t KvControl::GetNextId(const pb::coordinator_internal::IdEpochType& key,
   return next_id;
 }
 
-int64_t KvControl::GetPresentId(const pb::coordinator_internal::IdEpochType& key) {
+int64_t KvControl::GetPresentId(const pb::coordinator::IdEpochType& key) {
   int64_t value = 0;
   id_epoch_map_.GetPresentId(key, value);
 
   return value;
 }
 
-int64_t KvControl::UpdatePresentId(const pb::coordinator_internal::IdEpochType& key, int64_t new_id,
+int64_t KvControl::UpdatePresentId(const pb::coordinator::IdEpochType& key, int64_t new_id,
                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
   // get next id from id_epoch_map_safe_temp_
   id_epoch_map_.UpdatePresentId(key, new_id);
@@ -282,8 +281,8 @@ void KvControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_inf
     // set term & index
     pb::coordinator_internal::IdEpochInternal temp_term;
     pb::coordinator_internal::IdEpochInternal temp_index;
-    int ret_term = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, temp_term);
-    int ret_index = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, temp_index);
+    int ret_term = id_epoch_map_.Get(pb::coordinator::IdEpochType::RAFT_APPLY_TERM, temp_term);
+    int ret_index = id_epoch_map_.Get(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX, temp_index);
 
     if (ret_term >= 0) {
       memory_info.set_applied_term(temp_term.value());
@@ -301,8 +300,7 @@ void KvControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& memory_inf
     id_epoch_map_temp.init(100);
     int ret = id_epoch_map_.GetRawMapCopy(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temp) {
-      const google::protobuf::EnumDescriptor* enum_descriptor =
-          dingodb::pb::coordinator_internal::IdEpochType_descriptor();
+      const google::protobuf::EnumDescriptor* enum_descriptor = dingodb::pb::coordinator::IdEpochType_descriptor();
       const google::protobuf::EnumValueDescriptor* enum_value_descriptor = enum_descriptor->FindValueByNumber(it.first);
       std::string name = enum_value_descriptor->name();
 

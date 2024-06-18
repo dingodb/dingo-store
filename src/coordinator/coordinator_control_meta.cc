@@ -58,7 +58,7 @@ butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, i
                                                             pb::coordinator_internal::MetaIncrement& meta_increment,
                                                             pb::meta::TableIdWithPartIds* ids) {
   std::vector<int64_t> new_ids =
-      GetNextIds(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, 1 + part_count, meta_increment);
+      GetNextIds(pb::coordinator::IdEpochType::ID_NEXT_TABLE, 1 + part_count, meta_increment);
 
   if (new_ids.empty()) {
     DINGO_LOG(ERROR) << "GenerateTableIdAndPartIds GetNextIds failed";
@@ -187,7 +187,7 @@ butil::Status CoordinatorControl::CreateSchema(int64_t tenant_id, std::string sc
   }
 
   // create new schema id
-  new_schema_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_SCHEMA, meta_increment);
+  new_schema_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_SCHEMA, meta_increment);
 
   // update schema_name_map_safe_temp_
   if (schema_name_map_safe_temp_.PutIfAbsent(new_check_name, new_schema_id) < 0) {
@@ -213,7 +213,7 @@ butil::Status CoordinatorControl::CreateSchema(int64_t tenant_id, std::string sc
   *schema_increment_schema = new_schema_internal;
 
   // bump up schema map epoch
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_SCHEMA, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_SCHEMA, meta_increment);
 
   // on_apply
   //  schema_map_.insert(std::make_pair(new_schema_id, new_schema));  // raft_kv_put
@@ -263,7 +263,7 @@ butil::Status CoordinatorControl::DropSchema(int64_t tenant_id, int64_t schema_i
   }
 
   // bump up epoch
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_SCHEMA, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_SCHEMA, meta_increment);
 
   // delete schema
   auto* schema_to_delete = meta_increment.add_schemas();
@@ -438,7 +438,7 @@ butil::Status CoordinatorControl::CreateTableId(int64_t schema_id, int64_t& new_
   }
 
   // create table id
-  new_table_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  new_table_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateTableId new_table_id=" << new_table_id;
 
   return butil::Status::OK();
@@ -462,7 +462,7 @@ butil::Status CoordinatorControl::CreateTableIds(int64_t schema_id, int64_t coun
   }
 
   // create table id
-  new_table_ids = GetNextIds(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, count, meta_increment);
+  new_table_ids = GetNextIds(pb::coordinator::IdEpochType::ID_NEXT_TABLE, count, meta_increment);
   if (new_table_ids.empty()) {
     DINGO_LOG(ERROR) << "CreateTableIds GetNextIds failed";
     return butil::Status(pb::error::Errno::EINTERNAL, "CreateTableIds GetNextIds failed");
@@ -762,7 +762,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
   }
 
   // bumper up EPOCH_REGION
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_REGION, meta_increment);
 
   // create table_internal, set id & table_definition
   pb::coordinator_internal::TableInternal table_internal;
@@ -776,7 +776,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
 
   // add table_internal to table_map_
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_TABLE, meta_increment);
   auto* table_increment = meta_increment.add_tables();
   table_increment->set_id(new_table_id);
   table_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -859,7 +859,7 @@ butil::Status CoordinatorControl::DropTable(int64_t schema_id, int64_t table_id,
   }
 
   // bump up table map epoch
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_TABLE, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_TABLE, meta_increment);
 
   // delete table_name from table_name_safe_map_temp_
   std::string new_table_check_name = Helper::GenNewTableCheckName(schema_id, table_internal.definition().name());
@@ -891,8 +891,8 @@ butil::Status CoordinatorControl::CreateIndexId(int64_t schema_id, int64_t& new_
   }
 
   // create index id
-  // new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_INDEX, meta_increment);
-  new_index_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TABLE, meta_increment);
+  // new_index_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_INDEX, meta_increment);
+  new_index_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_TABLE, meta_increment);
   DINGO_LOG(INFO) << "CreateIndexId new_index_id=" << new_index_id;
 
   return butil::Status::OK();
@@ -1357,7 +1357,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   }
 
   // bumper up EPOCH_REGION
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_REGION, meta_increment);
 
   // create table_internal, set id & table_definition
   pb::coordinator_internal::TableInternal table_internal;
@@ -1371,7 +1371,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
 
   // add table_internal to index_map_
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_INDEX, meta_increment);
   auto* index_increment = meta_increment.add_indexes();
   index_increment->set_id(new_index_id);
   index_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -1519,7 +1519,7 @@ butil::Status CoordinatorControl::UpdateIndex(int64_t schema_id, int64_t index_i
           store_operation.set_id(peer.store_id());
 
           auto* region_cmd = store_operation.add_region_cmds();
-          region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+          region_cmd->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
           region_cmd->set_create_timestamp(butil::gettimeofday_ms());
           region_cmd->set_region_id(region_id);
           region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_UPDATE_DEFINITION);
@@ -1636,7 +1636,7 @@ butil::Status CoordinatorControl::DropIndex(int64_t schema_id, int64_t index_id,
   }
 
   // bump up index map epoch
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_INDEX, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_INDEX, meta_increment);
 
   // delete index_name from index_name_safe_map_temp_
   std::string new_index_check_name = Helper::GenNewTableCheckName(schema_id, table_internal.definition().name());
@@ -2105,11 +2105,11 @@ butil::Status CoordinatorControl::GetTableRange(int64_t schema_id, int64_t table
     }
 
     // range_distribution regionmap_epoch
-    int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+    int64_t region_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION);
     range_distribution->set_regionmap_epoch(region_map_epoch);
 
     // range_distribution storemap_epoch
-    int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+    int64_t store_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
     range_distribution->set_storemap_epoch(store_map_epoch);
   }
 
@@ -2230,11 +2230,11 @@ butil::Status CoordinatorControl::GetIndexRange(int64_t schema_id, int64_t index
     }
 
     // range_distribution regionmap_epoch
-    int64_t region_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION);
+    int64_t region_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION);
     range_distribution->set_regionmap_epoch(region_map_epoch);
 
     // range_distribution storemap_epoch
-    int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+    int64_t store_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
     range_distribution->set_storemap_epoch(store_map_epoch);
   }
 
@@ -2926,7 +2926,7 @@ butil::Status CoordinatorControl::SwitchAutoSplit(int64_t schema_id, int64_t tab
 
     // send region_cmd to update auto_split
     pb::coordinator::RegionCmd region_cmd;
-    region_cmd.set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd.set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd.set_region_id(region_id);
     region_cmd.set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SWITCH_SPLIT);
     region_cmd.set_create_timestamp(butil::gettimeofday_ms());
@@ -3388,7 +3388,7 @@ void CoordinatorControl::GetDefaultTenant(pb::coordinator_internal::TenantIntern
   tenant_internal.set_create_timestamp(butil::gettimeofday_ms());
   tenant_internal.set_update_timestamp(butil::gettimeofday_ms());
 
-  tenant_internal.set_safe_point_ts(GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT));
+  tenant_internal.set_safe_point_ts(GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT));
 }
 
 butil::Status CoordinatorControl::CreateTenant(pb::meta::Tenant& tenant,
@@ -3403,7 +3403,7 @@ butil::Status CoordinatorControl::CreateTenant(pb::meta::Tenant& tenant,
 
   if (tenant.id() == 0) {
     // get new tenant_id
-    auto new_tenant_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TENANT, meta_increment);
+    auto new_tenant_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_TENANT, meta_increment);
     if (new_tenant_id <= 0) {
       DINGO_LOG(ERROR) << "ERRROR: GetNextId failed, new_tenant_id=" << new_tenant_id;
       return butil::Status(pb::error::Errno::EINTERNAL, "GetNextId failed");

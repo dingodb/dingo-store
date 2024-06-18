@@ -813,6 +813,8 @@ int CoordinatorSender() {
     SendGetRegionMetrics(coordinator_interaction);
   } else if (FLAGS_method == "DeleteRegionMetrics") {
     SendDeleteRegionMetrics(coordinator_interaction);
+  } else if (FLAGS_method == "CreateIds") {
+    SendCreateIds(coordinator_interaction);
   } else if (FLAGS_method == "MetaHello") {
     SendMetaHello(coordinator_interaction_meta);
   } else if (FLAGS_method == "GetSchemas") {  // meta control

@@ -344,6 +344,13 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateTableIds(int64_t schema_id, int64_t count, std::vector<int64_t> &new_table_ids,
                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // create ids
+  // in: id_epoch_type
+  // out: ids
+  // return: errno
+  butil::Status CreateIds(pb::coordinator::IdEpochType id_epoch_type, int64_t count, std::vector<int64_t> &ids,
+                          pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create table
   // in: schema_id
   // in: table_definition
@@ -726,18 +733,17 @@ class CoordinatorControl : public MetaControl {
                          std::vector<pb::common::Location> &locations, pb::common::CoordinatorMap &coordinator_map);
 
   // get next id/epoch
-  int64_t GetNextId(const pb::coordinator_internal::IdEpochType &key,
-                    pb::coordinator_internal::MetaIncrement &meta_increment);
+  int64_t GetNextId(const pb::coordinator::IdEpochType &key, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get next ids/epochs
-  std::vector<int64_t> GetNextIds(const pb::coordinator_internal::IdEpochType &key, int64_t count,
+  std::vector<int64_t> GetNextIds(const pb::coordinator::IdEpochType &key, int64_t count,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get present id/epoch
-  int64_t GetPresentId(const pb::coordinator_internal::IdEpochType &key);
+  int64_t GetPresentId(const pb::coordinator::IdEpochType &key);
 
   // update present id/epoch
-  int64_t UpdatePresentId(const pb::coordinator_internal::IdEpochType &key, int64_t new_id,
+  int64_t UpdatePresentId(const pb::coordinator::IdEpochType &key, int64_t new_id,
                           pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // init ids

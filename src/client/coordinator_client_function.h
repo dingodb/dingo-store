@@ -191,6 +191,9 @@ void SendCreateWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
 void SendCancelWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendProgressWatch(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// create ids
+void SendCreateIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // debug
 void SendDebug();
 std::string EncodeUint64(int64_t value);

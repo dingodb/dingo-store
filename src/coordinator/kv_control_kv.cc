@@ -892,7 +892,7 @@ void KvControl::CompactionTask() {
   // build revision struct
   pb::coordinator_internal::RevisionInternal compact_revision;
 
-  int64_t now_revision = GetPresentId(pb::coordinator_internal::IdEpochType::ID_NEXT_REVISION);
+  int64_t now_revision = GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REVISION);
   if (now_revision < FLAGS_compaction_retention_rev_count) {
     DINGO_LOG(INFO) << "compaction task skip, now_revision: " << now_revision
                     << ", compaction_retention_rev_count: " << FLAGS_compaction_retention_rev_count;

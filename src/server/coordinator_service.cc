@@ -3690,4 +3690,96 @@ void CoordinatorServiceImpl::BalanceLeader(google::protobuf::RpcController *,
   }
 }
 
+void DoCreateIds(google::protobuf::RpcController * /*controller*/, const pb::coordinator::CreateIdsRequest *request,
+                 pb::coordinator::CreateIdsResponse *response, TrackClosure *done,
+                 std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << "CreateIds request:  id_epoch_type = ["
+                  << pb::coordinator::IdEpochType_Name(request->id_epoch_type()) << "], count=[" << request->count()
+                  << "]";
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  if (request->count() <= 0) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg("count must be greater than 0");
+    return;
+  }
+
+  if (request->id_epoch_type() != pb::coordinator::IdEpochType::ID_DDL_JOB &&
+      request->id_epoch_type() != pb::coordinator::IdEpochType::ID_SCHEMA_VERSION &&
+      request->id_epoch_type() != pb::coordinator::IdEpochType::ID_NEXT_TENANT &&
+      request->id_epoch_type() != pb::coordinator::IdEpochType::ID_NEXT_TABLE &&
+      request->id_epoch_type() != pb::coordinator::IdEpochType::ID_NEXT_SCHEMA) {
+    response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    response->mutable_error()->set_errmsg(
+        "id_epoch_type must be in [ID_DDL_JOB, ID_SCHEMA_VERSION, ID_NEXT_TENANT, "
+        "ID_NEXT_TABLE, ID_NEXT_SCHEMA]");
+    return;
+  }
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  std::vector<int64_t> new_ids;
+  auto ret = coordinator_control->CreateIds(request->id_epoch_type(), request->count(), new_ids, meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "CreateIds failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+  DINGO_LOG(INFO) << "CreateIds new_ids count=" << new_ids.size();
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "CreateIds failed in meta_service, error code=" << ret2.error_code()
+                     << ", error str=" << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+    return;
+  }
+
+  for (const auto id : new_ids) {
+    response->add_ids(id);
+  }
+
+  DINGO_LOG(INFO) << "CreateIds Success in coordinator_service ids count =" << new_ids.size();
+}
+
+void CoordinatorServiceImpl::CreateIds(google::protobuf::RpcController *controller,
+                                       const pb::coordinator::CreateIdsRequest *request,
+                                       pb::coordinator::CreateIdsResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  if (request->count() == 0) {
+    response->mutable_error()->set_errcode(Errno::EILLEGAL_PARAMTETERS);
+    return;
+  }
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateIds(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
 }  // namespace dingodb
