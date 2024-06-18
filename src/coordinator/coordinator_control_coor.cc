@@ -84,7 +84,7 @@ void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, p
   if (cluster_id < 0) {
     return;
   }
-  epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_COORINATOR);
+  epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_COORINATOR);
 
   if (raft_node_ == nullptr) {
     DINGO_LOG(ERROR) << "GetCoordinatorMap raft_node_ is nullptr";
@@ -143,7 +143,7 @@ std::mt19937 CoordinatorControl::GetUrbg() {
 }
 
 void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
-  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  int64_t store_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
   store_map.set_epoch(store_map_epoch);
 
   {
@@ -160,7 +160,7 @@ void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map) {
 }
 
 void CoordinatorControl::GetStoreMap(pb::common::StoreMap& store_map, pb::common::StoreType store_type) {
-  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  int64_t store_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
   store_map.set_epoch(store_map_epoch);
 
   {
@@ -397,7 +397,7 @@ butil::Status CoordinatorControl::CreateStore(int64_t cluster_id, int64_t& store
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "cluster_id <= 0");
   }
 
-  store_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_STORE, meta_increment);
+  store_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_STORE, meta_increment);
   keyring = Helper::GenerateRandomString(16);
 
   pb::common::Store store;
@@ -408,7 +408,7 @@ butil::Status CoordinatorControl::CreateStore(int64_t cluster_id, int64_t& store
   store.set_create_timestamp(butil::gettimeofday_ms());
 
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_STORE, meta_increment);
   auto* store_increment = meta_increment.add_stores();
   store_increment->set_id(store_id);
   store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -452,7 +452,7 @@ butil::Status CoordinatorControl::DeleteStore(int64_t cluster_id, int64_t store_
   }
 
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_STORE, meta_increment);
   auto* store_increment = meta_increment.add_stores();
   store_increment->set_id(store_id);
   store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
@@ -498,7 +498,7 @@ butil::Status CoordinatorControl::UpdateStore(int64_t cluster_id, int64_t store_
   }
 
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_STORE, meta_increment);
   auto* store_increment = meta_increment.add_stores();
   store_increment->set_id(store_id);
   store_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::UPDATE);
@@ -515,7 +515,7 @@ butil::Status CoordinatorControl::UpdateStore(int64_t cluster_id, int64_t store_
 // UpdateStoreMap
 int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
-  int64_t store_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  int64_t store_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
 
   bool need_update_epoch = false;
   {
@@ -608,7 +608,7 @@ int64_t CoordinatorControl::UpdateStoreMap(const pb::common::Store& store,
   }
 
   if (need_update_epoch) {
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_STORE, meta_increment);
+    GetNextId(pb::coordinator::IdEpochType::EPOCH_STORE, meta_increment);
   }
 
   DINGO_LOG(INFO) << "UpdateStoreMap store_id=" << store.id();
@@ -827,7 +827,7 @@ void CoordinatorControl::UpdateRegionState() {
       //   purge_region_operation->set_id(it_peer.store_id());  // this is store_id
       //   auto* purge_region_cmd = purge_region_operation->add_region_cmds();
       //   purge_region_cmd->set_id(
-      //       coordinator_control->GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
+      //       coordinator_control->GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD,
       //       meta_increment));
       //   purge_region_cmd->set_region_id(it.id());  // this is region_id
       //   DINGO_LOG(INFO) << " purge set_region_id " << it.id();
@@ -908,7 +908,7 @@ void CoordinatorControl::GetRegionLeaderAndStatus(int64_t region_id, pb::common:
 }
 
 void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
-  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  region_map.set_epoch(GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
@@ -923,7 +923,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
 }
 
 void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
-  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  region_map.set_epoch(GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
@@ -938,7 +938,7 @@ void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map) {
 }
 
 void CoordinatorControl::GetRegionMapFull(pb::common::RegionMap& region_map, pb::common::RegionType region_type) {
-  region_map.set_epoch(GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_REGION));
+  region_map.set_epoch(GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
     butil::FlatMap<int64_t, pb::coordinator_internal::RegionInternal> region_internal_map_copy;
@@ -1337,7 +1337,7 @@ butil::Status CoordinatorControl::CreateRegionId(uint32_t count, std::vector<int
   DINGO_LOG(INFO) << "CreateRegionId count=" << count;
 
   for (uint32_t i = 0; i < count; i++) {
-    int64_t region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+    int64_t region_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION, meta_increment);
     region_ids.push_back(region_id);
   }
 
@@ -1989,7 +1989,7 @@ butil::Status CoordinatorControl::CreateShadowRegion(
 
   // generate new region
   if (new_region_id <= 0) {
-    new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+    new_region_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION, meta_increment);
   }
 
   int64_t const create_region_id = new_region_id;
@@ -2176,7 +2176,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(
 
   // generate new region
   if (new_region_id <= 0) {
-    new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+    new_region_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION, meta_increment);
   }
 
   int64_t const create_region_id = new_region_id;
@@ -2235,7 +2235,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(
 
     store_operation.set_id(store.id());
     auto* region_cmd = store_operation.add_region_cmds();
-    region_cmd->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+    region_cmd->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
     region_cmd->set_region_id(create_region_id);
     region_cmd->set_create_timestamp(butil::gettimeofday_ms());
     region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_CREATE);
@@ -2411,7 +2411,7 @@ butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
   }
 
   if (need_update_epoch) {
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+    GetNextId(pb::coordinator::IdEpochType::EPOCH_REGION, meta_increment);
   }
 
   return butil::Status::OK();
@@ -2456,7 +2456,7 @@ butil::Status CoordinatorControl::DropRegionPermanently(int64_t region_id,
   }
 
   if (need_update_epoch) {
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_REGION, meta_increment);
+    GetNextId(pb::coordinator::IdEpochType::EPOCH_REGION, meta_increment);
   }
 
   return butil::Status::OK();
@@ -2686,7 +2686,7 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
 
   // call create_region to get store_operations
   pb::coordinator_internal::MetaIncrement meta_increment_tmp;
-  int64_t new_region_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION, meta_increment);
+  int64_t new_region_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION, meta_increment);
   std::vector<pb::coordinator::StoreOperation> store_operations;
   auto status_ret = CreateRegionForSplitInternal(split_from_region_id, new_region_id, store_create_region,
                                                  store_operations, meta_increment_tmp);
@@ -3584,7 +3584,7 @@ butil::Status CoordinatorControl::AddRegionCmd(int64_t store_id, int64_t job_id,
 
   int64_t region_cmd_id = region_cmd.id();
   if (region_cmd_id <= 0) {
-    region_cmd_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment);
+    region_cmd_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment);
     if (region_cmd_id == 0) {
       DINGO_LOG(ERROR) << "AddRegionCmd GetNextId failed, store_id = " << store_id;
       return butil::Status(pb::error::Errno::EINTERNAL, "AddRegionCmd GetNextId failed");
@@ -3776,7 +3776,7 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
 }
 
 void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
-  int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+  int64_t executor_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
   {
     std::map<std::string, pb::common::Executor> executor_map_copy;
@@ -3858,7 +3858,7 @@ butil::Status CoordinatorControl::CreateExecutor(int64_t cluster_id, pb::common:
   executor = executor_to_create;
 
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR, meta_increment);
   auto* executor_increment = meta_increment.add_executors();
   executor_increment->set_id(executor_to_create.id());
   executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
@@ -3892,7 +3892,7 @@ butil::Status CoordinatorControl::DeleteExecutor(int64_t cluster_id, const pb::c
   }
 
   // update meta_increment
-  GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+  GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR, meta_increment);
   auto* executor_increment = meta_increment.add_executors();
   executor_increment->set_id(executor.id());
   executor_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::DELETE);
@@ -3915,14 +3915,14 @@ butil::Status CoordinatorControl::CreateExecutorUser(int64_t cluster_id, pb::com
   }
 
   // executor_id =
-  // GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR,
   // meta_increment);
   if (executor_user.keyring().length() <= 0) {
     executor_user.set_keyring(Helper::GenerateRandomString(16));
   }
 
   // update meta_increment
-  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR,
   // meta_increment);
   auto* executor_increment = meta_increment.add_executor_users();
   executor_increment->set_id(executor_user.user());
@@ -3955,11 +3955,11 @@ butil::Status CoordinatorControl::UpdateExecutorUser(int64_t cluster_id, const p
   }
 
   // executor_id =
-  // GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR,
   // meta_increment);
 
   // update meta_increment
-  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR,
   // meta_increment);
   auto* executor_increment = meta_increment.add_executor_users();
   executor_increment->set_id(executor_user.user());
@@ -3990,11 +3990,11 @@ butil::Status CoordinatorControl::DeleteExecutorUser(int64_t cluster_id, pb::com
   }
 
   // executor_id =
-  // GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR,
   // meta_increment);
 
   // update meta_increment
-  // GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR,
+  // GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR,
   // meta_increment);
   auto* executor_increment = meta_increment.add_executor_users();
   executor_increment->set_id(executor_user.user());
@@ -4008,7 +4008,7 @@ butil::Status CoordinatorControl::DeleteExecutorUser(int64_t cluster_id, pb::com
 // UpdateExecutorMap
 int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& executor,
                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
-  int64_t executor_map_epoch = GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR);
+  int64_t executor_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR);
 
   bool need_update_epoch = false;
   {
@@ -4087,7 +4087,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
   }
 
   if (need_update_epoch) {
-    GetNextId(pb::coordinator_internal::IdEpochType::EPOCH_EXECUTOR, meta_increment);
+    GetNextId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR, meta_increment);
   }
 
   DINGO_LOG(DEBUG) << "UpdateExecutorMap executor_id=" << executor.id();
@@ -4464,7 +4464,7 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
 int64_t CoordinatorControl::UpdateStoreMetrics(const pb::common::StoreMetrics& store_metrics,
                                                pb::coordinator_internal::MetaIncrement& meta_increment) {
   //   int64_t store_map_epoch =
-  //   GetPresentId(pb::coordinator_internal::IdEpochType::EPOCH_STORE);
+  //   GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
   if (store_metrics.id() <= 0) {
     DINGO_LOG(ERROR) << "ERROR: UpdateStoreMetrics store_metrics.id() <= "
                         "0, store_metrics.id() = "
@@ -4532,8 +4532,8 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     // set term & index
     pb::coordinator_internal::IdEpochInternal temp_term;
     pb::coordinator_internal::IdEpochInternal temp_index;
-    int ret_term = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_TERM, temp_term);
-    int ret_index = id_epoch_map_.Get(pb::coordinator_internal::IdEpochType::RAFT_APPLY_INDEX, temp_index);
+    int ret_term = id_epoch_map_.Get(pb::coordinator::IdEpochType::RAFT_APPLY_TERM, temp_term);
+    int ret_index = id_epoch_map_.Get(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX, temp_index);
 
     if (ret_term >= 0) {
       memory_info.set_applied_term(temp_term.value());
@@ -4551,8 +4551,7 @@ void CoordinatorControl::GetMemoryInfo(pb::coordinator::CoordinatorMemoryInfo& m
     id_epoch_map_temp.init(100);
     int ret = id_epoch_map_.GetRawMapCopy(id_epoch_map_temp);
     for (auto& it : id_epoch_map_temp) {
-      const google::protobuf::EnumDescriptor* enum_descriptor =
-          dingodb::pb::coordinator_internal::IdEpochType_descriptor();
+      const google::protobuf::EnumDescriptor* enum_descriptor = dingodb::pb::coordinator::IdEpochType_descriptor();
       const google::protobuf::EnumValueDescriptor* enum_value_descriptor = enum_descriptor->FindValueByNumber(it.first);
       std::string name = enum_value_descriptor->name();
 
@@ -4914,7 +4913,7 @@ void CoordinatorControl::GetArchiveTaskList(int64_t task_list_id, pb::coordinato
 pb::coordinator::TaskList* CoordinatorControl::CreateTaskList(pb::coordinator_internal::MetaIncrement& meta_increment,
                                                               const std::string& name) {
   auto* task_list_increment = meta_increment.add_task_lists();
-  task_list_increment->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
+  task_list_increment->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_TASK_LIST, meta_increment));
   task_list_increment->set_op_type(::dingodb::pb::coordinator_internal::MetaIncrementOpType::CREATE);
   auto* increment_task_list = task_list_increment->mutable_task_list();
   increment_task_list->set_id(task_list_increment->id());
@@ -4932,7 +4931,7 @@ void CoordinatorControl::AddCreateTask(pb::coordinator::TaskList* task_list, int
   auto* store_operation_add = new_task->add_store_operations();
   store_operation_add->set_id(store_id);
   auto* region_cmd_to_add = store_operation_add->add_region_cmds();
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_CREATE);
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_create_timestamp(butil::gettimeofday_ms());
@@ -4961,7 +4960,7 @@ void CoordinatorControl::GenDeleteRegionStoreOperation(pb::coordinator::StoreOpe
   auto* store_operation_delete = &store_operation;
   store_operation_delete->set_id(store_id);
   auto* region_cmd_delete = store_operation_delete->add_region_cmds();
-  region_cmd_delete->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_delete->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_delete->set_region_id(region_id);
   region_cmd_delete->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_DELETE);
   region_cmd_delete->set_create_timestamp(butil::gettimeofday_ms());
@@ -5006,7 +5005,7 @@ void CoordinatorControl::AddDeleteTaskWithCheck(
 //   purge_region_task->add_store_operations();
 //   store_operation_purge->set_id(store_id);
 //   auto* region_cmd_to_purge = store_operation_purge->add_region_cmds();
-//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD,
+//   region_cmd_to_purge->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD,
 //   meta_increment)); region_cmd_to_purge->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_PURGE);
 //   region_cmd_to_purge->set_region_id(region_id);
 //   region_cmd_to_purge->set_create_timestamp(butil::gettimeofday_ms());
@@ -5034,7 +5033,7 @@ void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list,
   auto* store_operation_change = new_task->add_store_operations();
   store_operation_change->set_id(store_id);
   auto* region_cmd_to_change = store_operation_change->add_region_cmds();
-  region_cmd_to_change->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_change->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_change->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_CHANGE_PEER);
   region_cmd_to_change->set_region_id(region_id);
   region_cmd_to_change->set_create_timestamp(butil::gettimeofday_ms());
@@ -5051,7 +5050,7 @@ void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_l
   store_operation_transfer->set_id(store_id);
   auto* region_cmd_to_transfer = store_operation_transfer->add_region_cmds();
 
-  region_cmd_to_transfer->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_transfer->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_transfer->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
   region_cmd_to_transfer->set_region_id(region_id);
   region_cmd_to_transfer->set_create_timestamp(butil::gettimeofday_ms());
@@ -5069,7 +5068,7 @@ void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int6
   store_operation_merge->set_id(store_id);
   auto* region_cmd_to_add = store_operation_merge->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(merge_from_region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_MERGE);
   region_cmd_to_add->mutable_merge_request()->set_source_region_id(merge_from_region_id);
@@ -5089,7 +5088,7 @@ void CoordinatorControl::AddSnapshotVectorIndexTask(pb::coordinator::TaskList* t
   store_operation_save_vector->set_id(store_id);
   auto* region_cmd_to_add = store_operation_save_vector->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SNAPSHOT_VECTOR_INDEX);
   region_cmd_to_add->mutable_snapshot_vector_index_request()->set_vector_index_id(region_id);
@@ -5126,7 +5125,7 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::TaskList* task_list, int6
   store_operation_split->set_id(store_id);
   auto* region_cmd_to_add = store_operation_split->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_SPLIT);
   region_cmd_to_add->mutable_split_request()->set_split_watershed_key(water_shed_key);
@@ -5190,7 +5189,7 @@ void CoordinatorControl::AddLoadVectorIndexTask(pb::coordinator::TaskList* task_
   store_operation->set_id(store_id);
   auto* region_cmd_to_add = store_operation->add_region_cmds();
 
-  region_cmd_to_add->set_id(GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
+  region_cmd_to_add->set_id(GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
   region_cmd_to_add->set_region_id(region_id);
   region_cmd_to_add->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_HOLD_VECTOR_INDEX);
   region_cmd_to_add->mutable_hold_vector_index_request()->set_region_id(region_id);
@@ -5680,7 +5679,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
   }
 
   // update safe_point_ts
-  int64_t now_safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  int64_t now_safe_point = GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT);
 
   if (now_safe_point >= safe_point) {
     DINGO_LOG(WARNING) << "UpdateGCSafePoint now_safe_point=" << now_safe_point << " >= safe_point=" << safe_point
@@ -5688,7 +5687,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
     new_safe_point = now_safe_point;
   } else {
     new_safe_point = safe_point;
-    UpdatePresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT, new_safe_point, meta_increment);
+    UpdatePresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT, new_safe_point, meta_increment);
   }
 
   // check and update tenant safe_points
@@ -5724,7 +5723,7 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
 butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop,
                                                  const std::vector<int64_t>& tenant_ids, bool get_all_tenant,
                                                  std::map<int64_t, int64_t>& tenant_safe_points) {
-  safe_point = GetPresentId(pb::coordinator_internal::IdEpochType::ID_GC_SAFE_POINT);
+  safe_point = GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT);
   pb::coordinator_internal::CommonInternal common;
   common_disk_meta_->Get(Constant::kGcStopKey, common);
   gc_stop = (common.value() == Constant::kGcStopValueTrue);
@@ -6512,6 +6511,27 @@ butil::Status CoordinatorControl::ValidateReadOnly() {
       return butil::Status(pb::error::Errno::ESYSTEM_CLUSTER_READ_ONLY, s);
     }
   }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::CreateIds(pb::coordinator::IdEpochType id_epoch_type, int64_t count,
+                                            std::vector<int64_t>& ids,
+                                            pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (count <= 0) {
+    DINGO_LOG(ERROR) << "count is illegal " << count;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "count is illegal");
+  }
+
+  // create table id
+  ids = GetNextIds(id_epoch_type, count, meta_increment);
+  if (ids.empty()) {
+    DINGO_LOG(ERROR) << "CreateIds GetNextIds failed";
+    return butil::Status(pb::error::Errno::EINTERNAL, "CreateIds GetNextIds failed");
+  }
+
+  DINGO_LOG(INFO) << "CreateIds new_ids req_count=" << count << ", get_count: " << ids.size()
+                  << ", from: " << ids.front() << " to: " << ids.back();
 
   return butil::Status::OK();
 }

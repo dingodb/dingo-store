@@ -232,7 +232,7 @@ butil::Status CoordinatorControl::MetaWatchCreate(const pb::meta::WatchRequest *
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
-  watch_id = GetNextId(pb::coordinator_internal::IdEpochType::ID_NEXT_META_WATCH, meta_increment);
+  watch_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_META_WATCH, meta_increment);
 
   if (watch_id <= 0) {
     return butil::Status(pb::error::Errno::EINTERNAL, "Generate watch_id failed");
