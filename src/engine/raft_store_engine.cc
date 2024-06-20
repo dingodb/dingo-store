@@ -475,14 +475,6 @@ butil::Status RaftStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, con
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> RaftStoreEngine::NewMVCCReader(pb::common::RawEngine type) {
-  return std::make_shared<mvcc::Reader>(GetRawEngine(type)->Reader());
-}
-
-std::shared_ptr<Engine::Reader> RaftStoreEngine::NewReader(pb::common::RawEngine type) {
-  return std::make_shared<RaftStoreEngine::Reader>(GetRawEngine(type)->Reader());
-}
-
 // vector
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearch(
     std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
@@ -496,10 +488,10 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Ve
   return vector_reader->VectorBatchQuery(ctx, vector_with_ids);
 }
 
-butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                               int64_t& vector_id) {
+butil::Status RaftStoreEngine::VectorReader::VectorGetBorderId(int64_t ts, const pb::common::Range& region_range,
+                                                               bool get_min, int64_t& vector_id) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
-  return vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
+  return vector_reader->VectorGetBorderId(ts, region_range, get_min, vector_id);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
@@ -516,9 +508,9 @@ butil::Status RaftStoreEngine::VectorReader::VectorGetRegionMetrics(int64_t regi
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
-butil::Status RaftStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
+butil::Status RaftStoreEngine::VectorReader::VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
-  return vector_reader->VectorCount(range, count);
+  return vector_reader->VectorCount(ts, range, count);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
@@ -530,10 +522,6 @@ butil::Status RaftStoreEngine::VectorReader::VectorBatchSearchDebug(
                                                search_time_us);
 }
 
-std::shared_ptr<Engine::VectorReader> RaftStoreEngine::NewVectorReader(pb::common::RawEngine type) {
-  return std::make_shared<RaftStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
-}
-
 // document
 butil::Status RaftStoreEngine::DocumentReader::DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
                                                               std::vector<pb::common::DocumentWithScore>& results) {
@@ -542,42 +530,34 @@ butil::Status RaftStoreEngine::DocumentReader::DocumentSearch(std::shared_ptr<Do
 }
 
 butil::Status RaftStoreEngine::DocumentReader::DocumentBatchQuery(
-    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& vector_with_ids) {
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& document_with_ids) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentBatchQuery(ctx, vector_with_ids);
+  return document_reader->DocumentBatchQuery(ctx, document_with_ids);
 }
 
-butil::Status RaftStoreEngine::DocumentReader::DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                                   int64_t& vector_id) {
+butil::Status RaftStoreEngine::DocumentReader::DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range,
+                                                                   bool get_min, int64_t& document_id) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentGetBorderId(region_range, get_min, vector_id);
+  return document_reader->DocumentGetBorderId(ts, region_range, get_min, document_id);
 }
 
 butil::Status RaftStoreEngine::DocumentReader::DocumentScanQuery(
-    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& vector_with_ids) {
+    std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& document_with_ids) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentScanQuery(ctx, vector_with_ids);
+  return document_reader->DocumentScanQuery(ctx, document_with_ids);
 }
 
 butil::Status RaftStoreEngine::DocumentReader::DocumentGetRegionMetrics(
-    int64_t region_id, const pb::common::Range& region_range, DocumentIndexWrapperPtr vector_index,
+    int64_t region_id, const pb::common::Range& region_range, DocumentIndexWrapperPtr document_index,
     pb::common::DocumentIndexMetrics& region_metrics) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
+  return document_reader->DocumentGetRegionMetrics(region_id, region_range, document_index, region_metrics);
 }
 
-butil::Status RaftStoreEngine::DocumentReader::DocumentCount(const pb::common::Range& range, int64_t& count) {
+butil::Status RaftStoreEngine::DocumentReader::DocumentCount(int64_t ts, const pb::common::Range& range,
+                                                             int64_t& count) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentCount(range, count);
-}
-
-std::shared_ptr<Engine::DocumentReader> RaftStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
-  return std::make_shared<RaftStoreEngine::DocumentReader>(GetRawEngine(type)->Reader());
-}
-
-// txn
-std::shared_ptr<Engine::TxnReader> RaftStoreEngine::NewTxnReader(pb::common::RawEngine type) {
-  return std::make_shared<RaftStoreEngine::TxnReader>(GetRawEngine(type));
+  return document_reader->DocumentCount(ts, range, count);
 }
 
 butil::Status RaftStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
@@ -605,10 +585,6 @@ butil::Status RaftStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /
                                                       bool& has_more, std::string& end_scan_key) {
   return TxnEngineHelper::ScanLockInfo(txn_reader_raw_engine_, min_lock_ts, max_lock_ts, range, limit, lock_infos,
                                        has_more, end_scan_key);
-}
-
-std::shared_ptr<Engine::TxnWriter> RaftStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
-  return std::make_shared<RaftStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
@@ -671,14 +647,12 @@ butil::Status RaftStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, in
   return TxnEngineHelper::Gc(txn_writer_raw_engine_, raft_engine_, ctx, safe_point_ts);
 }
 
-std::shared_ptr<Engine::Writer> RaftStoreEngine::NewWriter(pb::common::RawEngine) {
-  return std::make_shared<RaftStoreEngine::Writer>(GetSelfPtr(), ts_provider_);
-}
-
 butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
   int64_t ts = ts_provider_->GetTs();
-  auto encode_kvs = mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs);
+  auto encode_kvs = ctx->Ttl() == 0 ? mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs)
+                                    : mvcc::Codec::EncodeKeyValuesWithTTL(ts, ctx->Ttl(), kvs);
+
   return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_kvs, ts));
 }
 
@@ -691,7 +665,7 @@ butil::Status RaftStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, co
   for (int i = 0; i < keys.size(); ++i) {
     const auto& key = keys[i];
     std::string value;
-    auto status = reader->KvGet(ctx, key, value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
     if (status.ok()) {
       key_states[i] = true;
     }
@@ -707,7 +681,7 @@ butil::Status RaftStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ct
   auto encode_range = mvcc::Codec::EncodeRange(range);
   auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
 
-  reader->KvCount(ctx, encode_range.start_key(), encode_range.end_key(), count);
+  reader->KvCount(ctx->CfName(), ctx->Ts(), encode_range.start_key(), encode_range.end_key(), count);
 
   return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_range));
 }
@@ -736,7 +710,7 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
 
     std::string old_value;
-    auto status = reader->KvGet(ctx, std::string(encode_key_without_ts), old_value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), std::string(encode_key_without_ts), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -801,7 +775,7 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
     auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
 
     std::string old_value;
-    auto status = reader->KvGet(ctx, std::string(encode_key_without_ts), old_value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), std::string(encode_key_without_ts), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -855,6 +829,35 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   key_states = temp_key_states;
 
   return butil::Status();
+}
+
+mvcc::ReaderPtr RaftStoreEngine::NewMVCCReader(pb::common::RawEngine type) {
+  return std::make_shared<mvcc::KvReader>(GetRawEngine(type)->Reader());
+}
+
+Engine::ReaderPtr RaftStoreEngine::NewReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::Reader>(GetRawEngine(type)->Reader());
+}
+
+Engine::WriterPtr RaftStoreEngine::NewWriter(pb::common::RawEngine) {
+  return std::make_shared<RaftStoreEngine::Writer>(GetSelfPtr(), ts_provider_);
+}
+
+Engine::VectorReaderPtr RaftStoreEngine::NewVectorReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::VectorReader>(mvcc::VectorReader::New(GetRawEngine(type)->Reader()));
+}
+
+Engine::DocumentReaderPtr RaftStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::DocumentReader>(mvcc::DocumentReader::New(GetRawEngine(type)->Reader()));
+}
+
+// txn
+Engine::TxnReaderPtr RaftStoreEngine::NewTxnReader(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::TxnReader>(GetRawEngine(type));
+}
+
+Engine::TxnWriterPtr RaftStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
+  return std::make_shared<RaftStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
 }
 
 }  // namespace dingodb

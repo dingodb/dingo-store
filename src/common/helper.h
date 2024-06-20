@@ -49,6 +49,7 @@ class Helper {
   static bool IsClientTxn(const std::string& key);
 
   static char GetKeyPrefix(const std::string& key);
+  static char GetKeyPrefix(const pb::common::Range& range);
 
   // static butil::EndPoint GetEndPoint(const std::string& host, int port);
   // static butil::EndPoint GetEndPoint(const std::string& addr);

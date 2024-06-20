@@ -13,6 +13,8 @@
 // limitations under the License.
 #include "engine/mono_store_engine.h"
 
+#include <cstdint>
+
 #include "common/role.h"
 #include "document/document_reader.h"
 #include "engine/engine.h"
@@ -204,14 +206,6 @@ butil::Status MonoStoreEngine::Reader::KvCount(std::shared_ptr<Context> ctx, con
   return reader_->KvCount(ctx->CfName(), start_key, end_key, count);
 }
 
-std::shared_ptr<Engine::Reader> MonoStoreEngine::NewMVCCReader(pb::common::RawEngine type) {
-  return std::make_shared<mvcc::Reader>(GetRawEngine(type)->Reader());
-}
-
-std::shared_ptr<Engine::Reader> MonoStoreEngine::NewReader(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::Reader>(GetRawEngine(type)->Reader());
-}
-
 // vector
 butil::Status MonoStoreEngine::VectorReader::VectorBatchSearch(
     std::shared_ptr<VectorReader::Context> ctx, std::vector<pb::index::VectorWithDistanceResult>& results) {
@@ -225,10 +219,10 @@ butil::Status MonoStoreEngine::VectorReader::VectorBatchQuery(std::shared_ptr<Ve
   return vector_reader->VectorBatchQuery(ctx, vector_with_ids);
 }
 
-butil::Status MonoStoreEngine::VectorReader::VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                               int64_t& vector_id) {
+butil::Status MonoStoreEngine::VectorReader::VectorGetBorderId(int64_t ts, const pb::common::Range& region_range,
+                                                               bool get_min, int64_t& vector_id) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
-  return vector_reader->VectorGetBorderId(region_range, get_min, vector_id);
+  return vector_reader->VectorGetBorderId(ts, region_range, get_min, vector_id);
 }
 
 butil::Status MonoStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
@@ -245,9 +239,9 @@ butil::Status MonoStoreEngine::VectorReader::VectorGetRegionMetrics(int64_t regi
   return vector_reader->VectorGetRegionMetrics(region_id, region_range, vector_index, region_metrics);
 }
 
-butil::Status MonoStoreEngine::VectorReader::VectorCount(const pb::common::Range& range, int64_t& count) {
+butil::Status MonoStoreEngine::VectorReader::VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
-  return vector_reader->VectorCount(range, count);
+  return vector_reader->VectorCount(ts, range, count);
 }
 
 butil::Status MonoStoreEngine::VectorReader::VectorBatchSearchDebug(
@@ -272,10 +266,10 @@ butil::Status MonoStoreEngine::DocumentReader::DocumentBatchQuery(
   return vector_reader->DocumentBatchQuery(ctx, document_with_ids);
 }
 
-butil::Status MonoStoreEngine::DocumentReader::DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                                                   int64_t& document_id) {
+butil::Status MonoStoreEngine::DocumentReader::DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range,
+                                                                   bool get_min, int64_t& document_id) {
   auto vector_reader = dingodb::DocumentReader::New(reader_);
-  return vector_reader->DocumentGetBorderId(region_range, get_min, document_id);
+  return vector_reader->DocumentGetBorderId(ts, region_range, get_min, document_id);
 }
 
 butil::Status MonoStoreEngine::DocumentReader::DocumentScanQuery(
@@ -291,16 +285,13 @@ butil::Status MonoStoreEngine::DocumentReader::DocumentGetRegionMetrics(
   return document_reader->DocumentGetRegionMetrics(region_id, region_range, document_index, region_metrics);
 }
 
-butil::Status MonoStoreEngine::DocumentReader::DocumentCount(const pb::common::Range& range, int64_t& count) {
+butil::Status MonoStoreEngine::DocumentReader::DocumentCount(int64_t ts, const pb::common::Range& range,
+                                                             int64_t& count) {
   auto document_reader = dingodb::DocumentReader::New(reader_);
-  return document_reader->DocumentCount(range, count);
+  return document_reader->DocumentCount(ts, range, count);
 }
 
 // normal
-
-std::shared_ptr<Engine::Writer> MonoStoreEngine::NewWriter(pb::common::RawEngine) {
-  return std::make_shared<MonoStoreEngine::Writer>(GetSelfPtr(), ts_provider_);
-}
 
 butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
@@ -318,7 +309,7 @@ butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, co
   for (int i = 0; i < keys.size(); ++i) {
     const auto& key = keys[i];
     std::string value;
-    auto status = reader->KvGet(ctx, key, value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
     if (status.ok()) {
       key_states[i] = true;
     }
@@ -334,7 +325,7 @@ butil::Status MonoStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ct
   auto encode_range = mvcc::Codec::EncodeRange(range);
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
 
-  reader->KvCount(ctx, encode_range.start_key(), encode_range.end_key(), count);
+  reader->KvCount(ctx->CfName(), ctx->Ts(), encode_range.start_key(), encode_range.end_key(), count);
   return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), range));
 }
 
@@ -363,7 +354,7 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
 
     std::string old_value;
-    auto status = reader->KvGet(ctx, kv.key(), old_value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -430,7 +421,7 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
     auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
 
     std::string old_value;
-    auto status = reader->KvGet(ctx, kv.key(), old_value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
       return butil::Status(pb::error::EINTERNAL, "Internal get error");
     }
@@ -486,18 +477,6 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   return butil::Status();
 }
 
-std::shared_ptr<Engine::VectorReader> MonoStoreEngine::NewVectorReader(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::VectorReader>(GetRawEngine(type)->Reader());
-}
-
-std::shared_ptr<Engine::DocumentReader> MonoStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::DocumentReader>(GetRawEngine(type)->Reader());
-}
-
-std::shared_ptr<Engine::TxnReader> MonoStoreEngine::NewTxnReader(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::TxnReader>(GetRawEngine(type));
-}
-
 butil::Status MonoStoreEngine::TxnReader::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts,
                                                       const std::vector<std::string>& keys,
                                                       std::vector<pb::common::KeyValue>& kvs,
@@ -523,10 +502,6 @@ butil::Status MonoStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /
                                                       bool& has_more, std::string& end_scan_key) {
   return TxnEngineHelper::ScanLockInfo(txn_reader_raw_engine_, min_lock_ts, max_lock_ts, range, limit, lock_infos,
                                        has_more, end_scan_key);
-}
-
-std::shared_ptr<Engine::TxnWriter> MonoStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
-  return std::make_shared<MonoStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
@@ -588,4 +563,33 @@ butil::Status MonoStoreEngine::TxnWriter::TxnDeleteRange(std::shared_ptr<Context
 butil::Status MonoStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
   return TxnEngineHelper::Gc(txn_writer_raw_engine_, mono_engine_, ctx, safe_point_ts);
 }
+
+mvcc::ReaderPtr MonoStoreEngine::NewMVCCReader(pb::common::RawEngine type) {
+  return std::make_shared<mvcc::KvReader>(GetRawEngine(type)->Reader());
+}
+
+Engine::ReaderPtr MonoStoreEngine::NewReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::Reader>(GetRawEngine(type)->Reader());
+}
+
+Engine::WriterPtr MonoStoreEngine::NewWriter(pb::common::RawEngine) {
+  return std::make_shared<MonoStoreEngine::Writer>(GetSelfPtr(), ts_provider_);
+}
+
+Engine::VectorReaderPtr MonoStoreEngine::NewVectorReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::VectorReader>(mvcc::VectorReader::New(GetRawEngine(type)->Reader()));
+}
+
+Engine::DocumentReaderPtr MonoStoreEngine::NewDocumentReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::DocumentReader>(mvcc::DocumentReader::New(GetRawEngine(type)->Reader()));
+}
+
+Engine::TxnReaderPtr MonoStoreEngine::NewTxnReader(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::TxnReader>(GetRawEngine(type));
+}
+
+Engine::TxnWriterPtr MonoStoreEngine::NewTxnWriter(pb::common::RawEngine type) {
+  return std::make_shared<MonoStoreEngine::TxnWriter>(GetRawEngine(type), GetSelfPtr());
+}
+
 }  // namespace dingodb
