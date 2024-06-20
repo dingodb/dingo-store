@@ -102,6 +102,9 @@ static butil::Status ValidateVectorBatchQueryRequest(StoragePtr storage,
                          fmt::format("Param vector_ids size {} is exceed max batch count {}",
                                      request->vector_ids().size(), FLAGS_vector_max_batch_count));
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -140,6 +143,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   ctx->with_table_data = !request->without_table_data();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage->VectorBatchQuery(ctx, vector_with_ids);
@@ -362,6 +366,9 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -465,6 +472,7 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<pb::common::VectorWithId> vectors;
   for (const auto& vector : request->vectors()) {
@@ -580,7 +588,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  status = storage->VectorDelete(ctx, is_sync, Helper::PbRepeatedToVector(request->ids()));
+  status = storage->VectorDelete(ctx, is_sync, region, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -628,6 +636,9 @@ static butil::Status ValidateVectorGetBorderIdRequest(StoragePtr storage,
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -655,7 +666,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
     return;
   }
   int64_t vector_id = 0;
-  status = storage->VectorGetBorderId(region, request->get_min(), vector_id);
+  status = storage->VectorGetBorderId(region, request->get_min(), request->ts(), vector_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -717,6 +728,10 @@ static butil::Status ValidateVectorScanQueryRequest(StoragePtr storage,
                          FLAGS_vector_max_batch_count);
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -761,6 +776,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->scalar_data_for_filter = request->scalar_for_filter();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage->VectorScanQuery(ctx, vector_with_ids);
@@ -901,6 +917,9 @@ static butil::Status ValidateVectorCountRequest(StoragePtr storage, const pb::in
   if (request->vector_id_start() > request->vector_id_end()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_id_start/vector_id_end range is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -962,8 +981,8 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   int64_t count = 0;
-  status =
-      storage->VectorCount(region, GenCountRange(region, request->vector_id_start(), request->vector_id_end()), count);
+  status = storage->VectorCount(region, GenCountRange(region, request->vector_id_start(), request->vector_id_end()),
+                                request->ts(), count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

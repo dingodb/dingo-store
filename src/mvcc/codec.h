@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "proto/common.pb.h"
+#include "vector/codec.h"
 
 namespace dingodb {
 
@@ -70,6 +71,7 @@ class Codec {
   static void PackageValue(ValueFlag flag, int64_t ttl, std::string& value);
   static void PackageValue(ValueFlag flag, int64_t ttl, const std::string& value, std::string& output);
 
+  static void UnPackageValueInPlace(std::string& value);
   static std::string_view UnPackageValue(const std::string& value);
   static std::string_view UnPackageValue(const std::string_view& value);
 

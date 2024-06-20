@@ -34,12 +34,22 @@ class DocumentCodec {
  public:
   static void EncodeDocumentKey(char prefix, int64_t partition_id, std::string& result);
   static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& result);
+  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts,
+                                std::string& result);
   static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
                                 std::string& result);
+  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
+                                int64_t ts, std::string& result);
 
-  static int64_t DecodeDocumentId(const std::string& value);
-  static int64_t DecodePartitionId(const std::string& value);
-  static std::string DecodeScalarKey(const std::string& value);
+  static int64_t DecodePartitionId(const std::string& key);
+  static int64_t DecodeDocumentId(const std::string& key);
+  static std::string DecodeScalarKey(const std::string& key);
+
+  static std::string_view TruncateTsForKey(const std::string& key);
+  static std::string_view TruncateTsForKey(const std::string_view& key);
+
+  static int64_t TruncateKeyForTs(const std::string& key);
+  static int64_t TruncateKeyForTs(const std::string_view& key);
 
   static std::string DecodeKeyToString(const std::string& key);
   static std::string DecodeRangeToString(const pb::common::Range& range);

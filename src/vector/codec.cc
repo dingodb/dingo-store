@@ -16,107 +16,124 @@
 
 #include <cstdint>
 
-#include "butil/compiler_specific.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/serial_helper.h"
 #include "fmt/core.h"
-#include "serial/buf.h"
-#include "serial/schema/long_schema.h"
 
 namespace dingodb {
 
-// TODO: refact
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& result) {
-  if (BAIDU_UNLIKELY(prefix == 0)) {
-    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "]";
-  }
-
-  // Buf buf(17);
-  Buf buf(Constant::kVectorKeyMinLenWithPrefix);
-  buf.Write(prefix);
-  buf.WriteLong(partition_id);
-  buf.GetBytes(result);
+  result.resize(Constant::kVectorKeyMinLenWithPrefix);
+  result.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, result);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
-  if (BAIDU_UNLIKELY(prefix == 0)) {
-    // Buf buf(16);
-    // Buf buf(Constant::kVectorKeyMaxLen);
-    // buf.WriteLong(partition_id);
-    // DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-    // buf.GetBytes(result);
+  result.resize(Constant::kVectorKeyMaxLenWithPrefix);
+  result.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, result);
+  SerialHelper::WriteLongComparable(vector_id, result);
+}
 
-    // prefix == 0 is not allowed
-    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "], vector_id:["
-                     << vector_id << "]";
-  }
-
-  // Buf buf(17);
-  Buf buf(Constant::kVectorKeyMaxLenWithPrefix);
-  buf.Write(prefix);
-  buf.WriteLong(partition_id);
-  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-  buf.GetBytes(result);
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts,
+                                  std::string& result) {
+  result.resize(Constant::kVectorKeyMaxLenWithPrefix);
+  result.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, result);
+  SerialHelper::WriteLongComparable(vector_id, result);
+  SerialHelper::WriteLongWithNegation(ts, result);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
                                   std::string& result) {
-  if (BAIDU_UNLIKELY(prefix == 0)) {  // prefix == 0 is not allowed
-    DINGO_LOG(FATAL) << "Encode vector key failed, prefix is 0, partition_id:[" << partition_id << "], vector_id:["
-                     << vector_id << "]";
-  }
-
   if (BAIDU_UNLIKELY(scalar_key.empty())) {
-    DINGO_LOG(FATAL) << "Encode vector key failed, scalar_key is empty, prefix:[" << prefix << "], partition_id:["
-                     << partition_id << "], vector_id:[" << vector_id << "]";
+    DINGO_LOG(FATAL) << fmt::format("scalar key is empty, {}/{}/{}", prefix, partition_id, vector_id);
   }
 
-  // Buf buf(17 +  scalar_key.size());
-  Buf buf(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-  buf.Write(prefix);
-  buf.WriteLong(partition_id);
-  DingoSchema<std::optional<int64_t>>::InternalEncodeKey(&buf, vector_id);
-  buf.Write(scalar_key);
-  buf.GetBytes(result);
+  result.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  result.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, result);
+  SerialHelper::WriteLongComparable(vector_id, result);
+  result.append(scalar_key);
 }
 
-int64_t VectorCodec::DecodeVectorId(const std::string& value) {
-  Buf buf(value);
-  if (value.size() >= Constant::kVectorKeyMaxLenWithPrefix) {
-    buf.Skip(9);
-  } else if (value.size() == Constant::kVectorKeyMinLenWithPrefix) {
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
+                                  int64_t ts, std::string& result) {
+  if (BAIDU_UNLIKELY(scalar_key.empty())) {
+    DINGO_LOG(FATAL) << fmt::format("scalar key is empty, {}/{}/{}", prefix, partition_id, vector_id);
+  }
+
+  result.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  result.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, result);
+  SerialHelper::WriteLongComparable(vector_id, result);
+  result.append(scalar_key);
+  SerialHelper::WriteLongWithNegation(ts, result);
+}
+
+int64_t VectorCodec::DecodePartitionId(const std::string& key) {
+  if (key.size() < Constant::kVectorKeyMinLenWithPrefix) {
+    DINGO_LOG(FATAL) << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(key));
+  }
+
+  return SerialHelper::ReadLong(key.substr(1, 9));
+}
+
+int64_t VectorCodec::DecodeVectorId(const std::string& key) {
+  if (key.size() >= Constant::kVectorKeyMaxLenWithPrefix) {
+    return SerialHelper::ReadLongComparable(
+        key.substr(Constant::kVectorKeyMinLenWithPrefix, Constant::kVectorKeyMinLenWithPrefix + 8));
+
+  } else if (key.size() == Constant::kVectorKeyMinLenWithPrefix) {
     return 0;
+
   } else {
-    DINGO_LOG(FATAL) << "Decode vector id failed, value size is not 9 or >=17, value:[" << Helper::StringToHex(value)
-                     << "]";
+    DINGO_LOG(FATAL) << fmt::format("Decode vector id failed, value({}) size too small", Helper::StringToHex(key));
     return 0;
   }
-
-  // return buf.ReadLong();
-  return DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
 }
 
-int64_t VectorCodec::DecodePartitionId(const std::string& value) {
-  Buf buf(value);
-
-  if (value.size() >= Constant::kVectorKeyMaxLenWithPrefix || value.size() == Constant::kVectorKeyMinLenWithPrefix) {
-    buf.Skip(1);
-  }
-
-  return buf.ReadLong();
-}
-
-std::string VectorCodec::DecodeScalarKey(const std::string& value) {
-  Buf buf(value);
-  if (value.size() <= Constant::kVectorKeyMaxLenWithPrefix) {
-    DINGO_LOG(FATAL) << "Decode scalar key failed, value size <=17, value:[" << Helper::StringToHex(value) << "]";
+std::string VectorCodec::DecodeScalarKey(const std::string& key) {
+  if (key.size() <= Constant::kVectorKeyMaxLenWithPrefix) {
+    DINGO_LOG(FATAL) << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(key));
     return "";
   }
 
-  buf.Skip(Constant::kVectorKeyMaxLenWithPrefix);
+  return key.substr(Constant::kVectorKeyMaxLenWithPrefix);
+}
 
-  return buf.ReadString();
+// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
+std::string_view VectorCodec::TruncateTsForKey(const std::string& key) {
+  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+
+  return std::string_view(key).substr(0, key.size() - 8);
+}
+
+// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
+std::string_view VectorCodec::TruncateTsForKey(const std::string_view& key) {
+  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+
+  return std::string_view(key).substr(0, key.size() - 8);
+}
+
+// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
+int64_t VectorCodec::TruncateKeyForTs(const std::string& key) {
+  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+
+  auto ts_str = key.substr(key.size() - 8, key.size());
+
+  return SerialHelper::ReadLongWithNegation(ts_str);
+}
+
+// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
+int64_t VectorCodec::TruncateKeyForTs(const std::string_view& key) {
+  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+
+  auto ts_str = key.substr(key.size() - 8, key.size());
+
+  return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
 std::string VectorCodec::DecodeKeyToString(const std::string& key) {
@@ -141,7 +158,6 @@ void VectorCodec::DecodeRangeToVectorId(const pb::common::Range& range, int64_t&
 }
 
 bool VectorCodec::IsValidKey(const std::string& key) {
-  // return (key.size() == 8 || key.size() == 9 || key.size() == 16 || key.size() == 17);
   return (key.size() == Constant::kVectorKeyMinLenWithPrefix || key.size() >= Constant::kVectorKeyMaxLenWithPrefix);
 }
 

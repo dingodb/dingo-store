@@ -38,6 +38,11 @@
 
 namespace dingodb {
 
+namespace mvcc {
+class Reader;
+using ReaderPtr = std::shared_ptr<Reader>;
+}  // namespace mvcc
+
 class Engine : public std::enable_shared_from_this<Engine> {
   using Errno = pb::error::Errno;
 
@@ -117,6 +122,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
       pb::common::Range region_range;
 
+      int64_t ts{0};
+
       std::vector<pb::common::VectorWithId> vector_with_ids;
       std::vector<int64_t> vector_ids;
       pb::common::VectorSearchParameter parameter;
@@ -143,7 +150,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
     virtual butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
                                            std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
 
-    virtual butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min,
+    virtual butil::Status VectorGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
                                             int64_t& vector_id) = 0;
     virtual butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                           std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
@@ -151,7 +158,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                                  VectorIndexWrapperPtr vector_index,
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
 
-    virtual butil::Status VectorCount(const pb::common::Range& range, int64_t& count) = 0;
+    virtual butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) = 0;
 
     // This function is for testing only
     virtual butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
@@ -176,6 +183,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
       pb::common::Range region_range;
 
+      int64_t ts{0};
+
       std::vector<int64_t> document_ids;
       pb::common::DocumentSearchParameter parameter;
       std::vector<std::string> selected_scalar_keys;
@@ -196,17 +205,17 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                          std::vector<pb::common::DocumentWithScore>& results) = 0;
 
     virtual butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
-                                             std::vector<pb::common::DocumentWithId>& vector_with_ids) = 0;
+                                             std::vector<pb::common::DocumentWithId>& doc_with_ids) = 0;
 
-    virtual butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
-                                              int64_t& vector_id) = 0;
+    virtual butil::Status DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                              int64_t& document_id) = 0;
     virtual butil::Status DocumentScanQuery(std::shared_ptr<DocumentReader::Context> ctx,
-                                            std::vector<pb::common::DocumentWithId>& vector_with_ids) = 0;
+                                            std::vector<pb::common::DocumentWithId>& doc_with_ids) = 0;
     virtual butil::Status DocumentGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
-                                                   DocumentIndexWrapperPtr vector_index,
+                                                   DocumentIndexWrapperPtr document_index,
                                                    pb::common::DocumentIndexMetrics& region_metrics) = 0;
 
-    virtual butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) = 0;
+    virtual butil::Status DocumentCount(int64_t ts, const pb::common::Range& range, int64_t& count) = 0;
   };
   using DocumentReaderPtr = std::shared_ptr<DocumentReader>;
 
@@ -265,15 +274,15 @@ class Engine : public std::enable_shared_from_this<Engine> {
   };
   using TxnWriterPtr = std::shared_ptr<TxnWriter>;
 
-  virtual std::shared_ptr<Reader> NewMVCCReader(pb::common::RawEngine type) = 0;
+  virtual mvcc::ReaderPtr NewMVCCReader(pb::common::RawEngine type) = 0;
 
-  virtual std::shared_ptr<Reader> NewReader(pb::common::RawEngine type) = 0;
-  virtual std::shared_ptr<Writer> NewWriter(pb::common::RawEngine type) = 0;
-  virtual std::shared_ptr<VectorReader> NewVectorReader(pb::common::RawEngine type) = 0;
-  virtual std::shared_ptr<DocumentReader> NewDocumentReader(pb::common::RawEngine type) = 0;
+  virtual ReaderPtr NewReader(pb::common::RawEngine type) = 0;
+  virtual WriterPtr NewWriter(pb::common::RawEngine type) = 0;
+  virtual VectorReaderPtr NewVectorReader(pb::common::RawEngine type) = 0;
+  virtual DocumentReaderPtr NewDocumentReader(pb::common::RawEngine type) = 0;
 
-  virtual std::shared_ptr<TxnReader> NewTxnReader(pb::common::RawEngine type) = 0;
-  virtual std::shared_ptr<TxnWriter> NewTxnWriter(pb::common::RawEngine type) = 0;
+  virtual TxnReaderPtr NewTxnReader(pb::common::RawEngine type) = 0;
+  virtual TxnWriterPtr NewTxnWriter(pb::common::RawEngine type) = 0;
 
   //  This is used by RaftStoreEngine to Persist Meta
   //  This is a alternative method, will be replace by zihui new Interface.

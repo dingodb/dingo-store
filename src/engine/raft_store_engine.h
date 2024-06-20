@@ -27,12 +27,14 @@
 #include "event/event.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
+#include "mvcc/reader.h"
 #include "mvcc/ts_provider.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
 #include "raft/raft_node_manager.h"
 #include "vector/vector_index.h"
+#include "vector/vector_reader.h"
 
 namespace dingodb {
 
@@ -155,20 +157,21 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
   // Vector reader
   class VectorReader : public Engine::VectorReader {
    public:
-    VectorReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+    VectorReader(mvcc::ReaderPtr reader) : reader_(reader) {}
 
     butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
                                     std::vector<pb::index::VectorWithDistanceResult>& results) override;
     butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
-    butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) override;
+    butil::Status VectorGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                    int64_t& vector_id) override;
     butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
     butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                          VectorIndexWrapperPtr vector_index,
                                          pb::common::VectorIndexMetrics& region_metrics) override;
 
-    butil::Status VectorCount(const pb::common::Range& range, int64_t& count) override;
+    butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) override;
 
     butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
                                          std::vector<pb::index::VectorWithDistanceResult>& results,
@@ -176,28 +179,29 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                                          int64_t& search_time_us) override;
 
    private:
-    RawEngine::ReaderPtr reader_;
+    mvcc::ReaderPtr reader_;
   };
 
   // Document reader
   class DocumentReader : public Engine::DocumentReader {
    public:
-    DocumentReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+    DocumentReader(mvcc::ReaderPtr reader) : reader_(reader) {}
 
     butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
                                  std::vector<pb::common::DocumentWithScore>& results) override;
     butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
-                                     std::vector<pb::common::DocumentWithId>& vector_with_ids) override;
-    butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) override;
+                                     std::vector<pb::common::DocumentWithId>& document_with_ids) override;
+    butil::Status DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                      int64_t& document_id) override;
     butil::Status DocumentScanQuery(std::shared_ptr<DocumentReader::Context> ctx,
-                                    std::vector<pb::common::DocumentWithId>& vector_with_ids) override;
+                                    std::vector<pb::common::DocumentWithId>& document_with_ids) override;
     butil::Status DocumentGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
-                                           DocumentIndexWrapperPtr vector_index,
+                                           DocumentIndexWrapperPtr document_index,
                                            pb::common::DocumentIndexMetrics& region_metrics) override;
-    butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) override;
+    butil::Status DocumentCount(int64_t ts, const pb::common::Range& range, int64_t& count) override;
 
    private:
-    RawEngine::ReaderPtr reader_;
+    mvcc::ReaderPtr reader_;
   };
 
   class TxnReader : public Engine::TxnReader {
@@ -255,14 +259,13 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     RaftStoreEnginePtr raft_engine_;
   };
 
-  std::shared_ptr<Engine::Reader> NewMVCCReader(pb::common::RawEngine type) override;
-
-  std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::DocumentReader> NewDocumentReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
+  mvcc::ReaderPtr NewMVCCReader(pb::common::RawEngine type) override;
+  Engine::ReaderPtr NewReader(pb::common::RawEngine type) override;
+  Engine::WriterPtr NewWriter(pb::common::RawEngine type) override;
+  Engine::VectorReaderPtr NewVectorReader(pb::common::RawEngine type) override;
+  Engine::DocumentReaderPtr NewDocumentReader(pb::common::RawEngine type) override;
+  Engine::TxnReaderPtr NewTxnReader(pb::common::RawEngine type) override;
+  Engine::TxnWriterPtr NewTxnWriter(pb::common::RawEngine type) override;
 
  private:
   RawEnginePtr rocks_raw_engine_;  // RocksDB, the system engine, for meta and data

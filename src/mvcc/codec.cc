@@ -21,9 +21,12 @@
 #include <string_view>
 #include <utility>
 
+#include "common/constant.h"
 #include "common/helper.h"
+#include "common/serial_helper.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "server/service_helper.h"
 
 namespace dingodb {
 
@@ -35,52 +38,6 @@ const uint8_t kMarker = 255;
 
 const uint32_t kTsLength = 8;
 const uint32_t kValidEncodeKeyMinLength = 17;
-
-static inline void WriteLong(int64_t value, std::string& output) {
-  output.push_back(static_cast<char>(value >> 56));
-  output.push_back(static_cast<char>(value >> 48));
-  output.push_back(static_cast<char>(value >> 40));
-  output.push_back(static_cast<char>(value >> 32));
-  output.push_back(static_cast<char>(value >> 24));
-  output.push_back(static_cast<char>(value >> 16));
-  output.push_back(static_cast<char>(value >> 8));
-  output.push_back(static_cast<char>(value));
-}
-
-static inline void WriteLongWithNegation(int64_t value, std::string& output) {
-  int64_t nvalue = ~value;
-  output.push_back(static_cast<char>(nvalue >> 56));
-  output.push_back(static_cast<char>(nvalue >> 48));
-  output.push_back(static_cast<char>(nvalue >> 40));
-  output.push_back(static_cast<char>(nvalue >> 32));
-  output.push_back(static_cast<char>(nvalue >> 24));
-  output.push_back(static_cast<char>(nvalue >> 16));
-  output.push_back(static_cast<char>(nvalue >> 8));
-  output.push_back(static_cast<char>(nvalue));
-}
-
-static inline int64_t ReadLong(const std::string_view& output) {
-  uint64_t l = 0;
-  l |= (output.at(0) & 0xFF);
-  l <<= 8;
-  l |= (output.at(1) & 0xFF);
-  l <<= 8;
-  l |= (output.at(2) & 0xFF);
-  l <<= 8;
-  l |= (output.at(3) & 0xFF);
-  l <<= 8;
-  l |= (output.at(4) & 0xFF);
-  l <<= 8;
-  l |= (output.at(5) & 0xFF);
-  l <<= 8;
-  l |= (output.at(6) & 0xFF);
-  l <<= 8;
-  l |= (output.at(7) & 0xFF);
-
-  return static_cast<int64_t>(l);
-}
-
-static inline int64_t ReadLongWithNegation(const std::string_view& output) { return ~ReadLong(output); }
 
 std::string Codec::EncodeBytes(const std::string& user_key) {
   std::string output;
@@ -156,7 +113,7 @@ std::string Codec::EncodeKey(const std::string& key, int64_t ts) {
   encode_key.reserve(key.size() + 256);
 
   EncodeBytes(key, encode_key);
-  WriteLongWithNegation(ts, encode_key);
+  SerialHelper::WriteLongWithNegation(ts, encode_key);
 
   return std::move(encode_key);
 }
@@ -166,7 +123,7 @@ std::string Codec::EncodeKey(const std::string_view& key, int64_t ts) {
   encode_key.reserve(key.size() + 256);
 
   EncodeBytes(key, encode_key);
-  WriteLongWithNegation(ts, encode_key);
+  SerialHelper::WriteLongWithNegation(ts, encode_key);
 
   return std::move(encode_key);
 }
@@ -191,7 +148,7 @@ bool Codec::DecodeKey(const std::string_view& key, std::string& decode_key, int6
   // decode ts
   {
     auto sub_str = key.substr(key.length() - 8);
-    ts = ~ReadLong(sub_str);
+    ts = ~SerialHelper::ReadLong(sub_str);
   }
 
   return true;
@@ -224,7 +181,7 @@ int64_t Codec::TruncateKeyForTs(const std::string& key) {
 
   auto ts_str = key.substr(key.size() - 8, key.size());
 
-  return ReadLongWithNegation(ts_str);
+  return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
 int64_t Codec::TruncateKeyForTs(const std::string_view& key) {
@@ -232,7 +189,7 @@ int64_t Codec::TruncateKeyForTs(const std::string_view& key) {
 
   auto ts_str = key.substr(key.size() - 8, key.size());
 
-  return ReadLongWithNegation(ts_str);
+  return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
 void Codec::PackageValue(ValueFlag flag, std::string& value) { value.push_back(static_cast<char>(flag)); }
@@ -246,7 +203,7 @@ void Codec::PackageValue(ValueFlag flag, const std::string& value, std::string& 
 }
 
 void Codec::PackageValue(ValueFlag flag, int64_t ttl, std::string& value) {
-  WriteLong(ttl, value);
+  SerialHelper::WriteLong(ttl, value);
   value.push_back(static_cast<char>(flag));
 }
 
@@ -255,15 +212,35 @@ void Codec::PackageValue(ValueFlag flag, int64_t ttl, const std::string& value, 
   output.resize(value.size());
 
   memcpy(output.data(), value.data(), value.size());
-  WriteLong(ttl, output);
+  SerialHelper::WriteLong(ttl, output);
   output.push_back(static_cast<char>(flag));
 }
 
-std::string_view Codec::UnPackageValue(const std::string& value) {
-  return std::string_view(value.data(), value.size() - 1);
+void Codec::UnPackageValueInPlace(std::string& value) {
+  if (value.back() == static_cast<char>(ValueFlag::kPut)) {
+    value.resize(value.size() - 1);
+
+  } else if (value.back() == static_cast<char>(ValueFlag::kPutTTL)) {
+    value.resize(value.size() - 9);
+
+  } else if (value.back() == static_cast<char>(ValueFlag::kDelete)) {
+    value.resize(0);
+  }
 }
 
-std::string_view Codec::UnPackageValue(const std::string_view& value) { return value.substr(0, value.size() - 1); }
+std::string_view Codec::UnPackageValue(const std::string& value) { return UnPackageValue(std::string_view(value)); }
+
+std::string_view Codec::UnPackageValue(const std::string_view& value) {
+  if (value.back() == static_cast<char>(ValueFlag::kPut)) {
+    return std::string_view(value.data(), value.size() - 1);
+  } else if (value.back() == static_cast<char>(ValueFlag::kPutTTL)) {
+    return std::string_view(value.data(), value.size() - 9);
+  } else if (value.back() == static_cast<char>(ValueFlag::kDelete)) {
+    return "";
+  }
+
+  return std::string_view(value);
+}
 
 ValueFlag Codec::GetValueFlag(const std::string& value) {
   CHECK(!value.empty()) << "Value is empty.";
@@ -300,7 +277,7 @@ int64_t Codec::GetValueTTL(const std::string_view& value) {
   CHECK(flag == static_cast<uint8_t>(ValueFlag::kPutTTL)) << fmt::format("Value flag({}) is not kPutTTL.", flag);
 
   auto ttl_str = value.substr(value.size() - 9, value.size() - 1);
-  return ReadLong(ttl_str);
+  return SerialHelper::ReadLong(ttl_str);
 }
 
 std::vector<std::string> Codec::EncodeKeys(int64_t ts, const std::vector<std::string>& keys) {

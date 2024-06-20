@@ -70,7 +70,7 @@ void ScanContext::Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fe
   max_fetch_cnt_by_server_ = max_fetch_cnt_by_server;
 }
 
-butil::Status ScanContext::Open(const std::string& scan_id, Engine::ReaderPtr reader, const std::string& cf_name,
+butil::Status ScanContext::Open(const std::string& scan_id, mvcc::ReaderPtr reader, const std::string& cf_name,
                                 int64_t ts) {
   if (BAIDU_UNLIKELY(scan_id.empty())) {
     DINGO_LOG(ERROR) << fmt::format("scan_id empty not support");

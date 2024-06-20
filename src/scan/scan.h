@@ -25,7 +25,7 @@
 #include "butil/status.h"
 #include "coprocessor/raw_coprocessor.h"
 #include "engine/iterator.h"
-#include "engine/raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -70,7 +70,7 @@ class ScanContext {
 
   virtual void Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fetch_cnt_by_server);
 
-  virtual butil::Status Open(const std::string& scan_id, Engine::ReaderPtr reader, const std::string& cf_name,
+  virtual butil::Status Open(const std::string& scan_id, mvcc::ReaderPtr reader, const std::string& cf_name,
                              int64_t ts);
 
   // Is it possible to delete this object
@@ -106,7 +106,7 @@ class ScanContext {
 
   ScanState state_;
 
-  Engine::ReaderPtr reader_;
+  mvcc::ReaderPtr reader_;
 
   std::string cf_name_;
 

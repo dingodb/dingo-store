@@ -101,6 +101,10 @@ static butil::Status ValidateDocumentBatchQueryRequest(StoragePtr storage,
                                      request->document_ids().size(), FLAGS_document_max_batch_count));
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -141,6 +145,7 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   ctx->with_scalar_data = !request->without_scalar_data();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::DocumentWithId> document_with_ids;
   status = storage->DocumentBatchQuery(ctx, document_with_ids);
@@ -326,6 +331,9 @@ static butil::Status ValidateDocumentAddRequest(StoragePtr storage, const pb::do
                          fmt::format("Param documents size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_document_max_request_size));
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -412,6 +420,7 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<pb::common::DocumentWithId> documents;
   for (const auto& document : request->documents()) {
@@ -572,6 +581,9 @@ static butil::Status ValidateDocumentGetBorderIdRequest(StoragePtr storage,
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -604,7 +616,7 @@ void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* 
     return;
   }
   int64_t document_id = 0;
-  status = storage->DocumentGetBorderId(region, request->get_min(), document_id);
+  status = storage->DocumentGetBorderId(region, request->get_min(), request->ts(), document_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -661,6 +673,10 @@ static butil::Status ValidateDocumentScanQueryRequest(StoragePtr storage,
                          FLAGS_document_max_batch_count);
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -706,6 +722,7 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   ctx->limit = request->max_scan_count();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::DocumentWithId> document_with_ids;
   status = storage->DocumentScanQuery(ctx, document_with_ids);
@@ -842,6 +859,10 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document_id_start/document_id_end range is error");
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -907,7 +928,7 @@ void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* contro
 
   int64_t count = 0;
   status = storage->DocumentCount(
-      region, GenCountRange(region, request->document_id_start(), request->document_id_end()), count);
+      region, GenCountRange(region, request->document_id_start(), request->document_id_end()), request->ts(), count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

@@ -78,6 +78,10 @@ static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   std::vector<std::string_view> keys = {request->key()};
   status = ServiceHelper::ValidateRegion(region, keys);
   if (!status.ok()) {
@@ -162,6 +166,10 @@ static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatch
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
+  }
+
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
   }
 
   std::vector<std::string_view> keys;
@@ -259,6 +267,9 @@ static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   std::vector<std::string_view> keys = {request->kv().key()};
   status = ServiceHelper::ValidateRegion(region, keys);
@@ -320,6 +331,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -367,6 +379,10 @@ static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatch
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
+  }
+
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
   }
 
   std::vector<std::string_view> keys;
@@ -439,6 +455,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   auto kvs = Helper::PbRepeatedToVector(mut_request->mutable_kvs());
@@ -494,6 +511,9 @@ static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPu
 
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
   }
 
   std::vector<std::string_view> keys = {request->kv().key()};
@@ -556,6 +576,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
@@ -608,6 +629,10 @@ static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store:
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
+  }
+
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
   }
 
   std::vector<std::string_view> keys;
@@ -680,6 +705,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -961,6 +987,9 @@ static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::Kv
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   std::vector<std::string_view> keys = {request->kv().key()};
   status = ServiceHelper::ValidateRegion(region, keys);
@@ -1017,6 +1046,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
@@ -1197,6 +1227,10 @@ static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScan
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
+  }
+
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
   }
 
   status = ServiceHelper::ValidateRange(req_range);
@@ -1482,6 +1516,10 @@ static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvSc
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
+  }
+
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
   }
 
   status = ServiceHelper::ValidateRange(req_range);

@@ -122,19 +122,20 @@ class Storage {
   // vector index
   butil::Status VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
                           const std::vector<pb::common::VectorWithId>& vectors, bool is_update);
-  butil::Status VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids);
+  butil::Status VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, store::RegionPtr region,
+                             const std::vector<int64_t>& ids);
 
   butil::Status VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                  std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                   std::vector<pb::index::VectorWithDistanceResult>& results);
-  butil::Status VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t& vector_id);
+  butil::Status VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& vector_id);
   butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
   butil::Status VectorGetRegionMetrics(store::RegionPtr region, VectorIndexWrapperPtr vector_index_wrapper,
                                        pb::common::VectorIndexMetrics& region_metrics);
 
-  butil::Status VectorCount(store::RegionPtr region, pb::common::Range range, int64_t& count);
+  butil::Status VectorCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count);
 
   static butil::Status VectorCalcDistance(
       const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
@@ -150,28 +151,28 @@ class Storage {
 
   // document index
   butil::Status DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
-                            const std::vector<pb::common::DocumentWithId>& documents, bool is_update);
+                            const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_update);
   butil::Status DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids);
 
   butil::Status DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<pb::common::DocumentWithScore>& results);
-  butil::Status DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t& document_id);
+  butil::Status DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id);
   butil::Status DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                   std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status DocumentGetRegionMetrics(store::RegionPtr region, DocumentIndexWrapperPtr document_index_wrapper,
                                          pb::common::DocumentIndexMetrics& region_metrics);
 
-  butil::Status DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t& count);
+  butil::Status DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count);
 
   // common functions
   RaftStoreEnginePtr GetRaftStoreEngine();
 
   std::shared_ptr<Engine> GetStoreEngine(pb::common::StorageEngine store_engine_type);
 
-  Engine::ReaderPtr GetEngineMVCCReader(pb::common::StorageEngine store_engine_type,
-                                        pb::common::RawEngine raw_engine_type);
+  mvcc::ReaderPtr GetEngineMVCCReader(pb::common::StorageEngine store_engine_type,
+                                      pb::common::RawEngine raw_engine_type);
 
   Engine::ReaderPtr GetEngineReader(pb::common::StorageEngine store_engine_type, pb::common::RawEngine raw_engine_type);
   Engine::TxnReaderPtr GetEngineTxnReader(pb::common::StorageEngine store_engine_type,
@@ -202,6 +203,8 @@ class Storage {
  private:
   std::shared_ptr<Engine> raft_engine_;
   std::shared_ptr<Engine> mono_engine_;
+
+  mvcc::TsProviderPtr ts_provider_;
 };
 
 using StoragePtr = std::shared_ptr<Storage>;

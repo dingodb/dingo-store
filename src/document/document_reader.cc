@@ -32,15 +32,15 @@
 
 namespace dingodb {
 
-butil::Status DocumentReader::QueryDocumentWithId(const pb::common::Range& region_range, int64_t partition_id,
-                                                  int64_t document_id, bool with_scalar_data,
+butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::Range& region_range,
+                                                  int64_t partition_id, int64_t document_id, bool with_scalar_data,
                                                   std::vector<std::string>& selected_scalar_keys,
                                                   pb::common::DocumentWithId& document_with_id) {
   std::string key;
   DocumentCodec::EncodeDocumentKey(region_range.start_key()[0], partition_id, document_id, key);
 
   std::string value;
-  auto status = reader_->KvGet(Constant::kStoreDataCF, key, value);
+  auto status = reader_->KvGet(Constant::kStoreDataCF, ts, key, value);
   if (!status.ok()) {
     return status;
   }
@@ -72,7 +72,7 @@ butil::Status DocumentReader::QueryDocumentWithId(const pb::common::Range& regio
   return butil::Status();
 }
 
-butil::Status DocumentReader::SearchDocument(int64_t partition_id, DocumentIndexWrapperPtr document_index,
+butil::Status DocumentReader::SearchDocument(int64_t ts, int64_t partition_id, DocumentIndexWrapperPtr document_index,
                                              pb::common::Range region_range,
                                              const pb::common::DocumentSearchParameter& parameter,
                                              std::vector<pb::common::DocumentWithScore>& document_with_score_results) {
@@ -91,7 +91,7 @@ butil::Status DocumentReader::SearchDocument(int64_t partition_id, DocumentIndex
   if (with_scalar_data) {
     for (auto& document_with_score : document_with_score_results) {
       pb::common::DocumentWithId document_with_id;
-      auto status = QueryDocumentWithId(region_range, partition_id, document_with_score.document_with_id().id(),
+      auto status = QueryDocumentWithId(ts, region_range, partition_id, document_with_score.document_with_id().id(),
                                         with_scalar_data, selected_scalar_keys, document_with_id);
       if (!status.ok()) {
         return status;
@@ -107,7 +107,8 @@ butil::Status DocumentReader::SearchDocument(int64_t partition_id, DocumentIndex
 butil::Status DocumentReader::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                              std::vector<pb::common::DocumentWithScore>& results) {
   // Search documents by documents
-  auto status = SearchDocument(ctx->partition_id, ctx->document_index, ctx->region_range, ctx->parameter, results);
+  auto status =
+      SearchDocument(ctx->ts, ctx->partition_id, ctx->document_index, ctx->region_range, ctx->parameter, results);
   if (!status.ok()) {
     return status;
   }
@@ -119,7 +120,7 @@ butil::Status DocumentReader::DocumentBatchQuery(std::shared_ptr<Engine::Documen
                                                  std::vector<pb::common::DocumentWithId>& document_with_ids) {
   for (auto document_id : ctx->document_ids) {
     pb::common::DocumentWithId document_with_id;
-    auto status = QueryDocumentWithId(ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
+    auto status = QueryDocumentWithId(ctx->ts, ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
                                       ctx->selected_scalar_keys, document_with_id);
     if ((!status.ok()) && status.error_code() != pb::error::EKEY_NOT_FOUND) {
       DINGO_LOG(WARNING) << fmt::format("Query document_with_id failed, document_id: {} error: {}", document_id,
@@ -133,9 +134,9 @@ butil::Status DocumentReader::DocumentBatchQuery(std::shared_ptr<Engine::Documen
   return butil::Status::OK();
 }
 
-butil::Status DocumentReader::DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
+butil::Status DocumentReader::DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
                                                   int64_t& document_id) {
-  auto status = GetBorderId(region_range, get_min, document_id);
+  auto status = GetBorderId(ts, region_range, get_min, document_id);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "Get border document id failed, error: " << status.error_str();
     return status;
@@ -166,7 +167,7 @@ butil::Status DocumentReader::DocumentScanQuery(std::shared_ptr<Engine::Document
   // query document_with id
   for (auto document_id : document_ids) {
     pb::common::DocumentWithId document_with_id;
-    auto status = QueryDocumentWithId(ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
+    auto status = QueryDocumentWithId(ctx->ts, ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
                                       ctx->selected_scalar_keys, document_with_id);
     if (!status.ok()) {
       DINGO_LOG(WARNING) << fmt::format("Query document data failed, document_id {} error: {}", document_id,
@@ -205,12 +206,12 @@ butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, co
     return status;
   }
 
-  status = GetBorderId(region_range, true, min_id);
+  status = GetBorderId(0, region_range, true, min_id);
   if (!status.ok()) {
     return status;
   }
 
-  status = GetBorderId(region_range, false, max_id);
+  status = GetBorderId(0, region_range, false, max_id);
   if (!status.ok()) {
     return status;
   }
@@ -223,71 +224,34 @@ butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, co
   return butil::Status();
 }
 
-butil::Status DocumentReader::DocumentCount(const pb::common::Range& range, int64_t& count) {
+butil::Status DocumentReader::DocumentCount(int64_t ts, const pb::common::Range& range, int64_t& count) {
   const std::string& begin_key = range.start_key();
   const std::string& end_key = range.end_key();
 
-  IteratorOptions options;
-  options.upper_bound = end_key;
-  auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
-  for (iter->Seek(begin_key); iter->Valid(); iter->Next()) {
-    ++count;
-  }
-
-  return butil::Status::OK();
+  return reader_->KvCount(Constant::kStoreDataCF, ts, begin_key, end_key, count);
 }
 
 // GetBorderId
-butil::Status DocumentReader::GetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& document_id) {
+butil::Status DocumentReader::GetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                          int64_t& document_id) {
   const std::string& start_key = region_range.start_key();
   const std::string& end_key = region_range.end_key();
 
+  std::string key;
   if (get_min) {
-    IteratorOptions options;
-    options.lower_bound = start_key;
-    options.upper_bound = end_key;
-    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
-    if (iter == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                      Helper::StringToHex(region_range.start_key()),
-                                      Helper::StringToHex(region_range.end_key()));
-      return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+    auto status = reader_->KvMinKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    if (!status.ok()) {
+      return status;
     }
 
-    iter->Seek(start_key);
-    if (!iter->Valid()) {
-      document_id = 0;
-      return butil::Status();
-    }
-
-    std::string key(iter->Key());
-    document_id = DocumentCodec::DecodeDocumentId(key);
   } else {
-    IteratorOptions options;
-    options.lower_bound = start_key;
-    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
-    if (iter == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                      Helper::StringToHex(region_range.start_key()),
-                                      Helper::StringToHex(region_range.end_key()));
-      return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
+    auto status = reader_->KvMaxKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    if (!status.ok()) {
+      return status;
     }
-
-    iter->SeekForPrev(end_key);
-    if (iter->Valid()) {
-      if (iter->Key() == end_key) {
-        iter->Prev();
-      }
-    }
-
-    if (!iter->Valid()) {
-      document_id = 0;
-      return butil::Status();
-    }
-
-    std::string key(iter->Key());
-    document_id = DocumentCodec::DecodeDocumentId(key);
   }
+
+  document_id = key.empty() ? 0 : DocumentCodec::DecodeDocumentId(key);
 
   return butil::Status::OK();
 }
@@ -312,7 +276,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
 
     options.lower_bound = range_start_key;
     options.upper_bound = range_end_key;
-    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(ctx->region_range.start_key()),
@@ -324,7 +288,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
 
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentId(key);
-      if (document_id == 0 || document_id == INT64_MAX || document_id < 0) {
+      if (document_id <= 0 || document_id == INT64_MAX) {
         continue;
       }
 
@@ -347,7 +311,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
     }
 
     options.lower_bound = range_start_key;
-    auto iter = reader_->NewIterator(Constant::kStoreDataCF, options);
+    auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
                                       Helper::StringToHex(ctx->region_range.start_key()),
@@ -362,7 +326,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
 
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentId(key);
-      if (document_id == 0 || document_id == INT64_MAX || document_id < 0) {
+      if (document_id <= 0 || document_id == INT64_MAX) {
         continue;
       }
 

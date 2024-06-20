@@ -31,6 +31,7 @@
 #include "glog/logging.h"
 #include "meta/store_meta_manager.h"
 #include "mvcc/codec.h"
+#include "mvcc/ts_provider.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -39,6 +40,7 @@
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
 #include "server/server.h"
+#include "vector/codec.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -65,8 +67,8 @@ std::shared_ptr<Engine> Storage::GetStoreEngine(pb::common::StorageEngine store_
   return nullptr;
 }
 
-Engine::ReaderPtr Storage::GetEngineMVCCReader(pb::common::StorageEngine store_engine_type,
-                                               pb::common::RawEngine raw_engine_type) {
+mvcc::ReaderPtr Storage::GetEngineMVCCReader(pb::common::StorageEngine store_engine_type,
+                                             pb::common::RawEngine raw_engine_type) {
   return GetStoreEngine(store_engine_type)->NewMVCCReader(raw_engine_type);
 }
 
@@ -188,7 +190,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
 
   for (const auto& key : keys) {
     std::string value;
-    auto status = reader->KvGet(ctx, key, value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
     if (!status.ok()) {
       if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
         continue;
@@ -432,59 +434,68 @@ butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t
 
 butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
                                  const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
-  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
-    }
+  int64_t ts = ts_provider_->GetTs();
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    if (is_sync) {
-      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update));
-    }
-
-    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), vectors, is_update),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else {
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  if (is_sync) {
+    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, is_update));
   }
+
+  return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, is_update),
+                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                              if (!status.ok()) {
+                                Helper::SetPbMessageError(status, ctx->Response());
+                              }
+                            });
 }
 
-butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
-  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
-    }
+butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, store::RegionPtr region,
+                                    const std::vector<int64_t>& ids) {
+  int64_t ts = ts_provider_->GetTs();
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    if (is_sync) {
-      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
-    }
+  // get key state
+  char prefix = Helper::GetKeyPrefix(region->Range());
+  auto reader = engine->NewMVCCReader(region->GetRawEngineType());
 
-    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else {
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  std::vector<bool> key_states(ids.size(), false);
+  for (int i = 0; i < ids.size(); ++i) {
+    std::string key;
+    VectorCodec::EncodeVectorKey(prefix, region->PartitionId(), ids[i], ts, key);
+
+    std::string value;
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
+    if (status.ok()) {
+      key_states[i] = true;
+    }
   }
+
+  if (is_sync) {
+    auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids));
+    auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
+    if (status.ok()) {
+      for (auto state : key_states) {
+        response->add_key_states(state);
+      }
+    } else {
+      response->mutable_key_states()->Resize(ids.size(), false);
+    }
+
+    return status;
+  }
+
+  return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids),
+                            [&ids, &key_states](std::shared_ptr<Context> ctx, butil::Status status) {
+                              auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
+                              if (!status.ok()) {
+                                response->mutable_key_states()->Resize(ids.size(), false);
+                                Helper::SetPbMessageError(status, ctx->Response());
+                              } else {
+                                for (auto state : key_states) {
+                                  response->add_key_states(state);
+                                }
+                              }
+                            });
 }
 
 butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
@@ -531,7 +542,7 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
   return butil::Status();
 }
 
-butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t& vector_id) {
+butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& vector_id) {
   auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -539,7 +550,7 @@ butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, 
 
   auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
-  status = vector_reader->VectorGetBorderId(region->Range(), get_min, vector_id);
+  status = vector_reader->VectorGetBorderId(ts, region->Range(), get_min, vector_id);
   if (!status.ok()) {
     return status;
   }
@@ -581,7 +592,7 @@ butil::Status Storage::VectorGetRegionMetrics(store::RegionPtr region, VectorInd
   return butil::Status();
 }
 
-butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range range, int64_t& count) {
+butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count) {
   auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -589,7 +600,7 @@ butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range ra
 
   auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
-  status = vector_reader->VectorCount(range, count);
+  status = vector_reader->VectorCount(ts, range, count);
   if (!status.ok()) {
     return status;
   }
@@ -700,60 +711,36 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 // document
 
 butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
-                                   const std::vector<pb::common::DocumentWithId>& documents, bool is_update) {
-  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update));
-    }
+                                   const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_update) {
+  int64_t ts = ts_provider_->GetTs();
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    if (is_sync) {
-      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update));
-    }
-
-    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), documents, is_update),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else {
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  if (is_sync) {
+    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, document_with_ids, is_update));
   }
+
+  return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, document_with_ids, is_update),
+                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                              if (!status.ok()) {
+                                Helper::SetPbMessageError(status, ctx->Response());
+                              }
+                            });
 }
 
 butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
-  if (BAIDU_LIKELY(ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE)) {
-    if (is_sync) {
-      return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids, true));
-    }
+  int64_t ts = ts_provider_->GetTs();
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
 
-    return raft_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids, true),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else if (ctx->StoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
-    if (is_sync) {
-      return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids));
-    }
-
-    return mono_engine_->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ids),
-                                    [](std::shared_ptr<Context> ctx, butil::Status status) {
-                                      if (!status.ok()) {
-                                        Helper::SetPbMessageError(status, ctx->Response());
-                                      }
-                                    });
-  } else {
-    return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
+  if (is_sync) {
+    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true));
   }
+
+  return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true),
+                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                              if (!status.ok()) {
+                                Helper::SetPbMessageError(status, ctx->Response());
+                              }
+                            });
 }
 
 butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
@@ -800,7 +787,7 @@ butil::Status Storage::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Co
   return butil::Status();
 }
 
-butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t& document_id) {
+butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id) {
   auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -808,7 +795,7 @@ butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min
 
   auto document_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
-  status = document_reader->DocumentGetBorderId(region->Range(), get_min, document_id);
+  status = document_reader->DocumentGetBorderId(ts, region->Range(), get_min, document_id);
   if (!status.ok()) {
     return status;
   }
@@ -851,7 +838,7 @@ butil::Status Storage::DocumentGetRegionMetrics(store::RegionPtr region, Documen
   return butil::Status();
 }
 
-butil::Status Storage::DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t& count) {
+butil::Status Storage::DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count) {
   auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -859,7 +846,7 @@ butil::Status Storage::DocumentCount(store::RegionPtr region, pb::common::Range 
 
   auto document_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
-  status = document_reader->DocumentCount(range, count);
+  status = document_reader->DocumentCount(ts, range, count);
   if (!status.ok()) {
     return status;
   }
