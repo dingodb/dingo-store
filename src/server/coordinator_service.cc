@@ -1266,9 +1266,10 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     return;
   }
 
-  if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key())) {
+  if (!Helper::IsClientRaw(range.start_key()) && !Helper::IsClientTxn(range.start_key()) &&
+      !Helper::IsExecutorRaw(range.start_key()) && !Helper::IsExecutorTxn(range.start_key())) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
-    response->mutable_error()->set_errmsg("This api can only create client raw/txn region");
+    response->mutable_error()->set_errmsg("This api can only create client or executor raw/txn region");
     return;
   }
 
