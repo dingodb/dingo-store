@@ -24,6 +24,7 @@
 #include "butil/status.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "proto/document.pb.h"
 
@@ -32,9 +33,9 @@ namespace dingodb {
 // Document reader
 class DocumentReader {
  public:
-  DocumentReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+  DocumentReader(mvcc::ReaderPtr reader) : reader_(reader) {}
 
-  static std::shared_ptr<DocumentReader> New(RawEngine::ReaderPtr reader) {
+  static std::shared_ptr<DocumentReader> New(mvcc::ReaderPtr reader) {
     return std::make_shared<DocumentReader>(reader);
   }
 
@@ -44,7 +45,8 @@ class DocumentReader {
   butil::Status DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
 
-  butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& document_id);
+  butil::Status DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                    int64_t& document_id);
 
   butil::Status DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                   std::vector<pb::common::DocumentWithId>& document_with_ids);
@@ -53,21 +55,21 @@ class DocumentReader {
                                          DocumentIndexWrapperPtr document_index,
                                          pb::common::DocumentIndexMetrics& region_metrics);
 
-  butil::Status DocumentCount(const pb::common::Range& range, int64_t& count);
+  butil::Status DocumentCount(int64_t ts, const pb::common::Range& range, int64_t& count);
 
  private:
-  butil::Status QueryDocumentWithId(const pb::common::Range& region_range, int64_t partition_id, int64_t document_id,
-                                    bool with_scalar_data, std::vector<std::string>& selected_scalar_keys,
+  butil::Status QueryDocumentWithId(int64_t ts, const pb::common::Range& region_range, int64_t partition_id,
+                                    int64_t document_id, bool with_scalar_data,
+                                    std::vector<std::string>& selected_scalar_keys,
                                     pb::common::DocumentWithId& document_with_id);
-  butil::Status SearchDocument(int64_t partition_id, DocumentIndexWrapperPtr document_index,
+  butil::Status SearchDocument(int64_t ts, int64_t partition_id, DocumentIndexWrapperPtr document_index,
                                pb::common::Range region_range, const pb::common::DocumentSearchParameter& parameter,
                                std::vector<pb::common::DocumentWithScore>& document_with_score_results);
 
-  butil::Status GetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& document_id);
+  butil::Status GetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min, int64_t& document_id);
   butil::Status ScanDocumentId(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<int64_t>& document_ids);
-
-  RawEngine::ReaderPtr reader_;
+  mvcc::ReaderPtr reader_;
 };
 
 }  // namespace dingodb

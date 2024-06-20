@@ -31,13 +31,13 @@ void Iterator::SeekToFirst() { iter_->SeekToFirst(); }
 void Iterator::SeekToLast() { iter_->SeekToLast(); }
 
 void Iterator::Seek(const std::string& target) {
-  now_time_ = Helper::Timestamp();
+  now_time_ = Helper::TimestampMs();
   iter_->Seek(target);
   NextVisibleKey();
 }
 
 void Iterator::SeekForPrev(const std::string& target) {
-  now_time_ = Helper::Timestamp();
+  now_time_ = Helper::TimestampMs();
   iter_->SeekForPrev(target);
   PrevVisibleKey();
 }

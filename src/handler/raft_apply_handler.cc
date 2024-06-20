@@ -1026,6 +1026,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
+  int64_t ttl = req.ttl();
   const auto &request = req.vector_add();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
@@ -1041,24 +1043,36 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   auto region_start_key = region->Range().start_key();
   auto region_part_id = region->PartitionId();
   for (const auto &vector : request.vectors()) {
+    std::string key;
+    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), ts, key);
+
     // vector data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
 
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.vector().SerializeAsString());
-      kvs_default.push_back(kv);
+      kv.set_key(key);
+      std::string value = vector.vector().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_default.push_back(std::move(kv));
     }
     // vector scalar data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.scalar_data().SerializeAsString());
-      kvs_scalar.push_back(kv);
+
+      kv.set_key(key);
+      std::string value = vector.scalar_data().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_scalar.push_back(std::move(kv));
     }
 
     // vector scalar data key speed up
@@ -1069,10 +1083,18 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
       for (const auto &[key, scalar_value] : scalar_key_value_pairs) {
         pb::common::KeyValue kv;
-        std::string result;
-        VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key, result);
-        kv.mutable_key()->swap(result);
-        kv.set_value(scalar_value.SerializeAsString());
+        std::string temp_key;
+        VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key, ts, temp_key);
+        kv.mutable_key()->swap(temp_key);
+
+        std::string value = scalar_value.SerializeAsString();
+        if (req.ttl() == 0) {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+        } else {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+        }
+
+        kv.mutable_value()->swap(value);
         kvs_scalar_speed_up.push_back(std::move(kv));
       }
     }
@@ -1080,11 +1102,15 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     // vector table data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.table_data().SerializeAsString());
-      kvs_table.push_back(kv);
+      kv.set_key(key);
+      std::string value = vector.table_data().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_table.push_back(std::move(kv));
     }
   }
   kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
@@ -1114,6 +1140,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       for (int i = 0; i < request.vectors_size(); i++) {
         response->add_key_states(key_state);
       }
+      response->set_ts(ts);
     }
 
     ctx->SetStatus(status);
@@ -1174,15 +1201,9 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
   const auto &request = req.vector_delete();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
-
-  auto reader = engine->Reader();
-  auto snapshot = engine->GetSnapshot();
-  if (!snapshot) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})][cf_name({})] GetSnapshot failed.", region->Id(),
-                                    request.cf_name());
-  }
 
   if (request.ids_size() == 0) {
     DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector id is empty.", region->Id());
@@ -1195,49 +1216,37 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
   std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
 
-  std::vector<std::string> kv_deletes_default;
-  std::vector<std::string> kv_deletes_for_scalar_data_key_speed_up;
-
-  std::vector<bool> key_states(request.ids_size(), false);
-  // std::vector<std::string> keys;
-  std::vector<int64_t> delete_ids;
+  std::vector<std::string> delete_keys;
+  std::vector<std::string> deletes_keys_for_scalar_speed_up;
 
   auto region_start_key = region->Range().start_key();
   auto region_part_id = region->PartitionId();
   pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-  for (int i = 0; i < request.ids_size(); i++) {
-    // set key_states
+
+  for (int i = 0; i < request.ids_size(); ++i) {
     std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), key);
+    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), ts, key);
+    delete_keys.push_back(key);
 
-    std::string value;
-    auto ret = reader->KvGet(request.cf_name(), snapshot, key, value);
-    if (ret.ok()) {
-      kv_deletes_default.push_back(key);
-
-      key_states[i] = true;
-      delete_ids.push_back(request.ids(i));
-
-      for (const auto &field : scalar_schema.fields()) {
-        if (field.enable_speed_up()) {
-          std::string result;
-          VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), field.key(), result);
-          kv_deletes_for_scalar_data_key_speed_up.push_back(std::move(result));
-        }
+    for (const auto &field : scalar_schema.fields()) {
+      if (field.enable_speed_up()) {
+        std::string key;
+        VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), field.key(), ts, key);
+        deletes_keys_for_scalar_speed_up.push_back(std::move(key));
       }
-
-      DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
     }
+
+    DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
   }
 
-  if (!kv_deletes_default.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCF, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, kv_deletes_default);
+  if (!delete_keys.empty()) {
+    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, delete_keys);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCF, delete_keys);
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, delete_keys);
   }
 
-  if (!kv_deletes_for_scalar_data_key_speed_up.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kv_deletes_for_scalar_data_key_speed_up);
+  if (!deletes_keys_for_scalar_speed_up.empty()) {
+    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, deletes_keys_for_scalar_speed_up);
   }
 
   // Delete vector and write wal
@@ -1255,13 +1264,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (ctx) {
     if (ctx->Response()) {
       auto *response = dynamic_cast<pb::index::VectorDeleteResponse *>(ctx->Response());
-      if (status.ok()) {
-        for (const auto &state : key_states) {
-          response->add_key_states(state);
-        }
-      } else {
-        response->mutable_key_states()->Resize(key_states.size(), false);
-      }
+      response->set_ts(ts);
     }
 
     ctx->SetStatus(status);
@@ -1270,12 +1273,12 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   auto vector_index_wrapper = region->VectorIndexWrapper();
   int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
-  if (is_ready && !delete_ids.empty()) {
+  if (is_ready && !request.ids().empty()) {
     if (log_id > vector_index_wrapper->ApplyLogId() ||
         region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
       try {
         auto start_time = Helper::TimestampNs();
-        auto status = vector_index_wrapper->Delete(delete_ids);
+        auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
@@ -1283,7 +1286,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           }
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                            vector_index_id, delete_ids.size(), Helper::PrintStatus(status));
+                                            vector_index_id, request.ids().size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,

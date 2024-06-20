@@ -100,6 +100,11 @@ char Helper::GetKeyPrefix(const std::string& key) {
   return key[0];
 }
 
+char Helper::GetKeyPrefix(const pb::common::Range& range) {
+  CHECK(!range.start_key().empty()) << "key is empty";
+  return range.start_key()[0];
+}
+
 std::string Helper::Ip2HostName(const std::string& ip) {
   std::string hostname;
   butil::ip_t ip_t;

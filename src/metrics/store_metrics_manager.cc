@@ -532,11 +532,11 @@ bool StoreRegionMetrics::CollectMetrics() {
         region_metrics->SetVectorDeletedCount(deleted_count);
 
         int64_t max_id = 0;
-        vector_reader->VectorGetBorderId(region->Range(), false, max_id);
+        vector_reader->VectorGetBorderId(0, region->Range(), false, max_id);
         region_metrics->SetVectorMaxId(max_id);
 
         int64_t min_id = 0;
-        vector_reader->VectorGetBorderId(region->Range(), true, min_id);
+        vector_reader->VectorGetBorderId(0, region->Range(), true, min_id);
         region_metrics->SetVectorMinId(min_id);
 
         int64_t total_memory_usage = 0;
