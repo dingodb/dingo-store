@@ -96,9 +96,12 @@ class Region {
   int64_t LeaderId();
   void SetLeaderId(int64_t leader_id);
 
-  pb::common::Range Range(bool lock = true);
-  std::string RangeToString();
+  // encode user key range
+  pb::common::Range Range(bool is_encode = true, bool lock = true);
+  std::string RangeToString(bool is_encode = true);
   bool CheckKeyInRange(const std::string& key);
+
+  char GetKeyPrefix();
 
   void SetIndexParameter(const pb::common::IndexParameter& index_parameter);
 
@@ -167,6 +170,7 @@ class Region {
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
+  pb::common::Range encode_range_;
 
   pb::raft::SplitStrategy split_strategy_{};
 

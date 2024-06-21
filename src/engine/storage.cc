@@ -243,10 +243,10 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   return butil::Status();
 }
 
-butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range, int64_t& count) {
+butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  auto status = writer->KvDeleteRange(ctx, range, count);
+  auto status = writer->KvDeleteRange(ctx, range);
   if (!status.ok()) {
     return status;
   }
@@ -455,7 +455,7 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   // get key state
-  char prefix = Helper::GetKeyPrefix(region->Range());
+  char prefix = region->GetKeyPrefix();
   auto reader = engine->NewMVCCReader(region->GetRawEngineType());
 
   std::vector<bool> key_states(ids.size(), false);

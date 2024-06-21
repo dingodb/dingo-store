@@ -97,8 +97,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
     virtual butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) = 0;
     virtual butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                                    std::vector<bool>& key_states) = 0;
-    virtual butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range,
-                                        int64_t& count) = 0;
+    virtual butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) = 0;
     virtual butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                         bool is_atomic, std::vector<bool>& key_states) = 0;
     virtual butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,

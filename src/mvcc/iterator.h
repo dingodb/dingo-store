@@ -53,10 +53,23 @@ class Iterator : public dingodb::Iterator {
   void NextVisibleKey();
   void PrevVisibleKey();
 
+  enum class Type {
+    kNone = 0,
+    kBackward = 1,
+    kForward = 2,
+  };
+
+  Type type_{Type::kNone};
   int64_t ts_;
-  dingodb::IteratorPtr iter_;
-  std::string prev_encode_key_;
   int64_t now_time_;
+  dingodb::IteratorPtr iter_;
+
+  // used by backward iterate
+  std::string prev_encode_key_;
+
+  // used by forward iterate
+  std::string key_;
+  std::string value_;
 };
 
 using IteratorPtr = std::shared_ptr<Iterator>;
