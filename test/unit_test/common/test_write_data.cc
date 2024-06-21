@@ -34,7 +34,7 @@ TEST_F(WriteDataBuilderTest, BuildWriteData) {
     kvs.push_back(kv);
   }
 
-  auto writedata = dingodb::WriteDataBuilder::BuildWrite("default", kvs);
+  auto writedata = dingodb::WriteDataBuilder::BuildWrite("default", kvs, 100);
   for (auto& datum : writedata->Datums()) {
     auto* request = datum->TransformToRaft();
     delete request;

@@ -24,6 +24,7 @@
 #include "common/helper.h"
 #include "config/yaml_config.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/codec.h"
@@ -406,7 +407,7 @@ TEST_F(VectorIndexReaderTest, Coprocessor) {
   GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
 #endif
   butil::Status ok;
-  VectorReader vector_reader(engine->Reader());
+  VectorReader vector_reader(mvcc::VectorReader::New(engine->Reader()));
   pb::common::Range region_range;
 
   std::vector<pb::index::VectorWithDistanceResult> vector_with_distance_results;
@@ -1347,7 +1348,7 @@ TEST_F(VectorIndexReaderTest, Coprocessor) {
 
 TEST_F(VectorIndexReaderTest, IdPreFilter) {
   butil::Status ok;
-  VectorReader vector_reader(engine->Reader());
+  VectorReader vector_reader(mvcc::VectorReader::New(engine->Reader()));
   pb::common::Range region_range;
 
   pb::common::VectorSearchParameter parameter;
