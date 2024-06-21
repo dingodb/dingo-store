@@ -934,17 +934,14 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  int64_t deleted_count = 0;
   auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
-  status = storage->KvDeleteRange(ctx, correction_range, deleted_count);
+  status = storage->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
     return;
   }
-
-  response->set_delete_count(deleted_count);
 }
 
 void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller,

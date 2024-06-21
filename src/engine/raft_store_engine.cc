@@ -676,12 +676,8 @@ butil::Status RaftStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, co
   return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_keys, ts));
 }
 
-butil::Status RaftStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range,
-                                                     int64_t& count) {
+butil::Status RaftStoreEngine::Writer::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) {
   auto encode_range = mvcc::Codec::EncodeRange(range);
-  auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
-
-  reader->KvCount(ctx->CfName(), ctx->Ts(), encode_range.start_key(), encode_range.end_key(), count);
 
   return raft_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_range));
 }

@@ -142,7 +142,7 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
     butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
     butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                            std::vector<bool>& key_states) override;
-    butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range, int64_t& count) override;
+    butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
     butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 bool is_atomic, std::vector<bool>& key_states) override;
     butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,

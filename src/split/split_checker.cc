@@ -96,10 +96,10 @@ void MergedIterator::Next(IteratorPtr iter, int iter_pos) {
 }
 
 // base physics key, contain key of multi version.
-std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
                                        const std::vector<std::string>& cf_names, uint32_t& count) {
-  MergedIterator iter(raw_engine_, cf_names, physical_range.end_key());
-  iter.Seek(physical_range.start_key());
+  MergedIterator iter(raw_engine_, cf_names, range.end_key());
+  iter.Seek(range.start_key());
 
   int64_t size = 0;
   int64_t chunk_size = 0;
@@ -137,10 +137,10 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common
 }
 
 // base physics key, contain key of multi version.
-std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
                                        const std::vector<std::string>& cf_names, uint32_t& count) {
-  MergedIterator iter(raw_engine_, cf_names, physical_range.end_key());
-  iter.Seek(physical_range.start_key());
+  MergedIterator iter(raw_engine_, cf_names, range.end_key());
+  iter.Seek(range.start_key());
 
   int64_t size = 0;
   std::string prev_key;
@@ -172,10 +172,10 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common
 }
 
 // base logic key, ignore key of multi version.
-std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
                                        const std::vector<std::string>& cf_names, uint32_t& count) {
-  MergedIterator iter(raw_engine_, cf_names, physical_range.end_key());
-  iter.Seek(physical_range.start_key());
+  MergedIterator iter(raw_engine_, cf_names, range.end_key());
+  iter.Seek(range.start_key());
 
   int64_t size = 0;
   int64_t split_key_count = 0;
@@ -256,12 +256,11 @@ void SplitCheckTask::SplitCheck() {
 
   int64_t start_time = Helper::TimestampMs();
   auto epoch = region_->Epoch();
-  uint32_t key_count = 0;
-  std::string split_key{};
+  auto range = region_->Range();
 
   std::vector<std::string> raw_cf_names;
   std::vector<std::string> txn_cf_names;
-  Helper::GetColumnFamilyNames(region_->Range().start_key(), raw_cf_names, txn_cf_names);
+  Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
 
   std::vector<std::string> cf_names = txn_cf_names.empty() ? raw_cf_names : txn_cf_names;
 
@@ -269,10 +268,10 @@ void SplitCheckTask::SplitCheck() {
   // for txn region, we need to translate the user key to padding key.
   // for raw region, we use the user key directly.
   // todo: transform range?
-  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] Will check SplitKey for raw_range({}, {}) cf_names({})",
-                                 region_->Id(), Helper::StringToHex(region_->Range().start_key()),
-                                 Helper::StringToHex(region_->Range().end_key()), Helper::VectorToString(cf_names));
-  split_key = split_checker_->SplitKey(region_, region_->Range(), cf_names, key_count);
+  DINGO_LOG(INFO) << fmt::format("[split.check][region({})] Will check SplitKey for raw_range{} cf_names({})",
+                                 region_->Id(), Helper::RangeToString(range), Helper::VectorToString(cf_names));
+  uint32_t key_count = 0;
+  std::string split_key = split_checker_->SplitKey(region_, range, cf_names, key_count);
 
   // Update region key count metrics.
   if (region_metrics_ != nullptr && key_count > 0) {
@@ -294,7 +293,7 @@ void SplitCheckTask::SplitCheck() {
       break;
     }
     if (!region_->CheckKeyInRange(split_key)) {
-      reason = fmt::format("invalid split key, not in region range {}", region_->RangeToString());
+      reason = fmt::format("invalid split key, not in region range {}", Helper::RangeToString(range));
       need_split = false;
       break;
     }
@@ -335,12 +334,9 @@ void SplitCheckTask::SplitCheck() {
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] split check result({}) reason({}) split_policy({}) split_key({}) epoch({}-{}) "
-      "range([{}-{})) "
-      "elapsed time({}ms)",
+      "range({}) elapsed time({}ms)",
       region_->Id(), need_split, reason, split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
-      region_->Epoch().conf_version(), region_->Epoch().version(), Helper::StringToHex(region_->Range().start_key()),
-      Helper::StringToHex(region_->Range().end_key()),
-
+      region_->Epoch().conf_version(), region_->Epoch().version(), Helper::RangeToString(range),
       Helper::TimestampMs() - start_time);
   if (!need_split) {
     return;
