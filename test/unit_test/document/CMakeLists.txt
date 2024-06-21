@@ -1,10 +1,7 @@
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/)
 
-file(GLOB DOCUMENT_UNIT_TEST_SRCS "./*.cc")
+file(GLOB UNIT_TEST_DOCUMENT_SRCS "./*.cc")
 
-add_library(DOCUMENT_UNIT_TEST_OBJS
-            OBJECT
-            ${DOCUMENT_UNIT_TEST_SRCS}
-)
+add_library(UNIT_TEST_DOCUMENT_OBJS OBJECT ${UNIT_TEST_DOCUMENT_SRCS})
 
-add_dependencies(DOCUMENT_UNIT_TEST_OBJS ${DEPEND_LIBS})
+add_dependencies(UNIT_TEST_DOCUMENT_OBJS ${DEPEND_LIBS})

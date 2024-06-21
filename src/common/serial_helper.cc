@@ -15,6 +15,8 @@
 #include "common/serial_helper.h"
 
 #include "butil/compiler_specific.h"
+#include "common/logging.h"
+#include "glog/logging.h"
 
 namespace dingodb {
 
@@ -50,28 +52,32 @@ void SerialHelper::WriteLong(int64_t value, std::string& output) {
   }
 }
 
-int64_t SerialHelper::ReadLong(const std::string_view& output) {
+int64_t SerialHelper::ReadLong(const std::string_view& value) {
+  CHECK(value.size() >= 8) << "value size must is gt 8.";
+
   uint64_t l = 0;
-  l |= (output.at(0) & 0xFF);
+  l |= (value.at(0) & 0xFF);
   l <<= 8;
-  l |= (output.at(1) & 0xFF);
+  l |= (value.at(1) & 0xFF);
   l <<= 8;
-  l |= (output.at(2) & 0xFF);
+  l |= (value.at(2) & 0xFF);
   l <<= 8;
-  l |= (output.at(3) & 0xFF);
+  l |= (value.at(3) & 0xFF);
   l <<= 8;
-  l |= (output.at(4) & 0xFF);
+  l |= (value.at(4) & 0xFF);
   l <<= 8;
-  l |= (output.at(5) & 0xFF);
+  l |= (value.at(5) & 0xFF);
   l <<= 8;
-  l |= (output.at(6) & 0xFF);
+  l |= (value.at(6) & 0xFF);
   l <<= 8;
-  l |= (output.at(7) & 0xFF);
+  l |= (value.at(7) & 0xFF);
 
   return static_cast<int64_t>(l);
 }
 
 void SerialHelper::WriteLongWithNegation(int64_t value, std::string& output) {
+  CHECK(value >= 0) << "value must be positive.";
+
   int64_t nvalue = ~value;
   if (BAIDU_LIKELY(IsLE())) {
     // value is little endian
@@ -96,7 +102,7 @@ void SerialHelper::WriteLongWithNegation(int64_t value, std::string& output) {
   }
 }
 
-int64_t SerialHelper::ReadLongWithNegation(const std::string_view& output) { return ~ReadLong(output); }
+int64_t SerialHelper::ReadLongWithNegation(const std::string_view& value) { return ~ReadLong(value); }
 
 void SerialHelper::WriteLongComparable(int64_t data, std::string& output) {
   uint64_t* l = (uint64_t*)&data;
@@ -124,33 +130,67 @@ void SerialHelper::WriteLongComparable(int64_t data, std::string& output) {
   }
 }
 
-int64_t SerialHelper::ReadLongComparable(const std::string& output) {
-  uint64_t l = output.at(0) & 0xFF ^ 0x80;
-  if (IsLE()) {
-    for (int i = 1; i < 8; ++i) {
-      l <<= 8;
-      l |= output.at(i) & 0xFF;
-    }
+int64_t SerialHelper::ReadLongComparable(const std::string& value) {
+  CHECK(value.size() >= 8) << "value size must is gt 8.";
+
+  uint64_t l = value.at(0) & 0xFF ^ 0x80;
+  if (BAIDU_LIKELY(IsLE())) {
+    l <<= 8;
+    l |= value.at(1) & 0xFF;
+    l <<= 8;
+    l |= value.at(2) & 0xFF;
+    l <<= 8;
+    l |= value.at(3) & 0xFF;
+    l <<= 8;
+    l |= value.at(4) & 0xFF;
+    l <<= 8;
+    l |= value.at(5) & 0xFF;
+    l <<= 8;
+    l |= value.at(6) & 0xFF;
+    l <<= 8;
+    l |= value.at(7) & 0xFF;
+
   } else {
-    for (int i = 1; i < 8; ++i) {
-      l |= (((uint64_t)output.at(i) & 0xFF) << (8 * i));
-    }
+    l |= (static_cast<uint64_t>(value.at(1) & 0xFF) << 8);
+    l |= (static_cast<uint64_t>(value.at(2) & 0xFF) << (8 * 2));
+    l |= (static_cast<uint64_t>(value.at(3) & 0xFF) << (8 * 3));
+    l |= (static_cast<uint64_t>(value.at(4) & 0xFF) << (8 * 4));
+    l |= (static_cast<uint64_t>(value.at(5) & 0xFF) << (8 * 5));
+    l |= (static_cast<uint64_t>(value.at(6) & 0xFF) << (8 * 6));
+    l |= (static_cast<uint64_t>(value.at(7) & 0xFF) << (8 * 7));
   }
 
   return static_cast<int64_t>(l);
 }
 
-int64_t SerialHelper::ReadLongComparable(const std::string_view& output) {
-  uint64_t l = output.at(0) & 0xFF ^ 0x80;
-  if (IsLE()) {
-    for (int i = 1; i < 8; ++i) {
-      l <<= 8;
-      l |= output.at(i) & 0xFF;
-    }
+int64_t SerialHelper::ReadLongComparable(const std::string_view& value) {
+  CHECK(value.size() >= 8) << "value size must is gt 8.";
+
+  uint64_t l = value.at(0) & 0xFF ^ 0x80;
+  if (BAIDU_LIKELY(IsLE())) {
+    l <<= 8;
+    l |= value.at(1) & 0xFF;
+    l <<= 8;
+    l |= value.at(2) & 0xFF;
+    l <<= 8;
+    l |= value.at(3) & 0xFF;
+    l <<= 8;
+    l |= value.at(4) & 0xFF;
+    l <<= 8;
+    l |= value.at(5) & 0xFF;
+    l <<= 8;
+    l |= value.at(6) & 0xFF;
+    l <<= 8;
+    l |= value.at(7) & 0xFF;
+
   } else {
-    for (int i = 1; i < 8; ++i) {
-      l |= (((uint64_t)output.at(i) & 0xFF) << (8 * i));
-    }
+    l |= (static_cast<uint64_t>(value.at(1) & 0xFF) << 8);
+    l |= (static_cast<uint64_t>(value.at(2) & 0xFF) << (8 * 2));
+    l |= (static_cast<uint64_t>(value.at(3) & 0xFF) << (8 * 3));
+    l |= (static_cast<uint64_t>(value.at(4) & 0xFF) << (8 * 4));
+    l |= (static_cast<uint64_t>(value.at(5) & 0xFF) << (8 * 5));
+    l |= (static_cast<uint64_t>(value.at(6) & 0xFF) << (8 * 6));
+    l |= (static_cast<uint64_t>(value.at(7) & 0xFF) << (8 * 7));
   }
 
   return static_cast<int64_t>(l);
