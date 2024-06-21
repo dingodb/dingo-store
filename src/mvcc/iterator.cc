@@ -15,40 +15,72 @@
 #include "mvcc/iterator.h"
 
 #include <cstdint>
+#include <string>
 
 #include "butil/status.h"
 #include "common/helper.h"
+#include "glog/logging.h"
 #include "mvcc/codec.h"
 
 namespace dingodb {
 
 namespace mvcc {
 
-bool Iterator::Valid() const { return iter_->Valid(); }
+bool Iterator::Valid() const {
+  CHECK(type_ != Type::kNone) << "Not already seek.";
+
+  if (type_ == Type::kBackward) {
+    return iter_->Valid();
+  } else {
+    return !key_.empty();
+  }
+}
 
 void Iterator::SeekToFirst() { iter_->SeekToFirst(); }
 
 void Iterator::SeekToLast() { iter_->SeekToLast(); }
 
 void Iterator::Seek(const std::string& target) {
+  CHECK(type_ == Type::kNone) << "can't repeat seek.";
+
+  type_ = Type::kBackward;
   now_time_ = Helper::TimestampMs();
   iter_->Seek(target);
   NextVisibleKey();
 }
 
 void Iterator::SeekForPrev(const std::string& target) {
+  CHECK(type_ == Type::kNone) << "can't repeat seek.";
+
+  type_ = Type::kForward;
   now_time_ = Helper::TimestampMs();
   iter_->SeekForPrev(target);
   PrevVisibleKey();
 }
 
-void Iterator::Next() { NextVisibleKey(); }
+void Iterator::Next() {
+  CHECK(type_ == Type::kBackward) << "not match seek type.";
 
-void Iterator::Prev() { PrevVisibleKey(); }
+  NextVisibleKey();
+}
 
-std::string_view Iterator::Key() const { return iter_->Key(); }
+void Iterator::Prev() {
+  CHECK(type_ == Type::kForward) << "not match seek type.";
 
-std::string_view Iterator::Value() const { return iter_->Value(); }
+  PrevVisibleKey();
+}
+
+std::string_view Iterator::Key() const {
+  CHECK(type_ != Type::kNone) << "Not already seek.";
+
+  return type_ == Type::kBackward ? iter_->Key() : key_;
+}
+
+std::string_view Iterator::Value() const {
+  CHECK(type_ != Type::kNone) << "Not already seek.";
+
+  return type_ == Type::kBackward ? iter_->Value() : value_;
+}
 
 butil::Status Iterator::Status() const { return butil::Status::OK(); }
 
@@ -65,7 +97,6 @@ void Iterator::NextVisibleKey() {
     }
 
     int64_t ts = Codec::TruncateKeyForTs(key);
-    std::cout << "ts_: " << ts_ << " ts: " << ts << std::endl;
     if (ts > ts_) {
       continue;
     }
@@ -93,13 +124,19 @@ void Iterator::NextVisibleKey() {
 // 2. deleted key
 // 3. ttl expires
 void Iterator::PrevVisibleKey() {
-  for (;;) {
-    iter_->Prev();
-    if (!iter_->Valid()) {
-      break;
+  std::string prev_key;
+  std::string prev_value;
+  for (; iter_->Valid(); iter_->Prev()) {
+    auto key = iter_->Key();
+
+    auto encode_key = Codec::TruncateTsForKey(key);
+    if (!prev_key.empty()) {
+      auto prev_encode_key = Codec::TruncateTsForKey(prev_key);
+      if (encode_key != prev_encode_key) {
+        break;
+      }
     }
 
-    auto key = iter_->Key();
     int64_t ts = Codec::TruncateKeyForTs(key);
     if (ts > ts_) {
       continue;
@@ -108,16 +145,24 @@ void Iterator::PrevVisibleKey() {
     auto value = iter_->Value();
     auto flag = Codec::GetValueFlag(value);
     if (flag == ValueFlag::kDelete) {
+      prev_key.clear();
+      prev_value.clear();
       continue;
     } else if (flag == ValueFlag::kPutTTL) {
       int64_t ttl = Codec::GetValueTTL(value);
       if (ttl < now_time_) {
+        prev_key.clear();
+        prev_value.clear();
         continue;
       }
     }
 
-    break;
+    prev_key = key;
+    prev_value = value;
   }
+
+  key_.swap(prev_key);
+  value_.swap(prev_value);
 }
 
 }  // namespace mvcc

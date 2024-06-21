@@ -70,7 +70,7 @@ class Storage {
   butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                          std::vector<bool>& key_states);
 
-  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range, int64_t& count);
+  butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range);
 
   butil::Status KvCompareAndSet(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 const std::vector<std::string>& expect_values, bool is_atomic,
