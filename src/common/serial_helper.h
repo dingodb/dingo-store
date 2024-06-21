@@ -30,18 +30,18 @@ class SerialHelper {
     return *c == 1;
   }
 
+  // write value
   static void WriteLong(int64_t value, std::string& output);
+  static int64_t ReadLong(const std::string_view& value);
 
+  // write ~value
   static void WriteLongWithNegation(int64_t value, std::string& output);
+  static int64_t ReadLongWithNegation(const std::string_view& value);
 
-  static int64_t ReadLong(const std::string_view& output);
-
-  static int64_t ReadLongWithNegation(const std::string_view& output);
-
+  // highest bit ~
   static void WriteLongComparable(int64_t data, std::string& output);
-
-  static int64_t ReadLongComparable(const std::string& output);
-  static int64_t ReadLongComparable(const std::string_view& output);
+  static int64_t ReadLongComparable(const std::string& value);
+  static int64_t ReadLongComparable(const std::string_view& value);
 };
 
 }  // namespace dingodb

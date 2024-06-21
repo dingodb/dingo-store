@@ -382,7 +382,7 @@ TEST_F(MvccIteratorTest, IteratorForTTL) {
 
   std::vector<pb::common::KeyValue> kvs;
 
-  int64_t ttl = Helper::Timestamp() + 100;
+  int64_t ttl = Helper::TimestampMs() + 100000;
 
   {
     pb::common::KeyValue kv;
@@ -520,7 +520,7 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
 
   std::vector<pb::common::KeyValue> kvs;
 
-  int64_t ttl = Helper::Timestamp() - 100;
+  int64_t ttl = Helper::TimestampMs() - 100000;
 
   {
     pb::common::KeyValue kv;
