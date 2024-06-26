@@ -94,7 +94,7 @@ void RebuildVectorIndexTask::Run() {
     return;
   }
 
-  if (Helper::InvalidRange(region->Range())) {
+  if (Helper::InvalidRange(region->Range(false))) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.rebuild][index_id({})][trace({})] region range invalid.",
                                       vector_index_wrapper_->Id(), trace_);
     return;
@@ -1039,7 +1039,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   }
 
   int64_t min_vector_id = 0, max_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(vector_index->Range(), min_vector_id, max_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, vector_index->Range(false), min_vector_id, max_vector_id);
 
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
@@ -1127,7 +1127,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     return nullptr;
   }
 
-  auto range = region->Range();
+  auto range = region->Range(false);
   auto vector_index =
       VectorIndexFactory::New(vector_index_id, vector_index_wrapper->IndexParameter(), region->Epoch(), range);
   if (!vector_index) {
@@ -1157,18 +1157,16 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  const std::string& start_key = range.start_key();
-  const std::string& end_key = range.end_key();
+  auto encode_range = vector_index->Range(true);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.build][index_id({})][trace({})] Build vector index, range: [{}({})-{}({})) parallel: {}",
-      vector_index_id, trace, Helper::StringToHex(start_key), VectorCodec::DecodeVectorId(start_key),
-      Helper::StringToHex(end_key), VectorCodec::DecodeVectorId(end_key), vector_index->WriteOpParallelNum());
+      "[vector_index.build][index_id({})][trace({})] Build vector index, range: {} parallel: {}", vector_index_id,
+      trace, vector_index->RangeString(), vector_index->WriteOpParallelNum());
 
   int64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
   IteratorOptions options;
-  options.upper_bound = end_key;
+  options.upper_bound = encode_range.end_key();
 
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
@@ -1183,7 +1181,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   // build if need
   if (vector_index->NeedTrain() && !vector_index->IsTrained()) {
-    auto status = TrainForBuild(vector_index, iter, start_key, end_key);
+    auto status = TrainForBuild(vector_index, iter, encode_range);
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.build][index_id({})][trace({})] Train finish, elapsed_time: {}ms error: {} {}", vector_index_id,
         trace, Helper::TimestampMs() - start_time, status.error_code(), status.error_cstr());
@@ -1201,7 +1199,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
   int64_t upsert_use_time = 0;
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_range.start_key()); iter->Valid(); iter->Next()) {
     pb::common::VectorWithId vector;
 
     std::string key(iter->Key());
@@ -1250,11 +1248,10 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.build][index_id({})][trace({})] Build vector index finish, parallel({}) count({}) epoch({}) "
-      "range({}) "
-      "elapsed time({}/{}ms)",
+      "range({}) elapsed time({}/{}ms)",
       vector_index_id, trace, vector_index->WriteOpParallelNum(), count,
-      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()),
-      upsert_use_time, Helper::TimestampMs() - start_time);
+      Helper::RegionEpochToString(vector_index->Epoch()), vector_index->RangeString(), upsert_use_time,
+      Helper::TimestampMs() - start_time);
 
   return vector_index;
 }
@@ -1567,12 +1564,12 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
   return butil::Status::OK();
 }
 
+// range is encode range
 butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index,
-                                                std::shared_ptr<Iterator> iter, const std::string& start_key,
-                                                [[maybe_unused]] const std::string& end_key) {
+                                                std::shared_ptr<Iterator> iter, const pb::common::Range& range) {
   std::vector<float> train_vectors;
   train_vectors.reserve(100000 * vector_index->GetDimension());  // todo opt
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
     pb::common::VectorWithId vector;
 
     std::string value(iter->Value());

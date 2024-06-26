@@ -650,6 +650,9 @@ butil::Status RaftStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, in
 butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto encode_kvs = ctx->Ttl() == 0 ? mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs)
                                     : mvcc::Codec::EncodeKeyValuesWithTTL(ts, ctx->Ttl(), kvs);
 
@@ -659,6 +662,9 @@ butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
 butil::Status RaftStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                                                 std::vector<bool>& key_states) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
 
   key_states.resize(keys.size(), false);
@@ -694,6 +700,9 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
   std::vector<bool> temp_key_states(kvs.size(), false);
 
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {
@@ -759,6 +768,9 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   std::vector<bool> temp_key_states(kvs.size(), false);
 
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {

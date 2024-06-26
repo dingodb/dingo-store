@@ -74,6 +74,7 @@ class Codec {
   static void UnPackageValueInPlace(std::string& value);
   static std::string_view UnPackageValue(const std::string& value);
   static std::string_view UnPackageValue(const std::string_view& value);
+  static std::string_view UnPackageValue(const std::string_view& value, ValueFlag& flag, int64_t& ttl);
 
   // Get value flag
   // value: user value|flag

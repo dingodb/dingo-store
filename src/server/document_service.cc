@@ -139,7 +139,7 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->document_ids = Helper::PbRepeatedToVector(request->document_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
@@ -266,7 +266,7 @@ void DoDocumentSearch(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->document_index = region->DocumentIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter.Swap(mut_request->mutable_parameter());
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -393,26 +393,6 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
-  // if (!request->ignore_check_exists()) {
-  //   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
-  //   ctx->partition_id = region->PartitionId();
-  //   ctx->region_id = region->Id();
-  //   ctx->region_range = region->Range();
-  //   for (const auto& document_with_id : request->documents()) {
-  //     ctx->document_ids.push_back(document_with_id.id());
-  //   }
-  //   ctx->with_scalar_data = false;
-  //   ctx->raw_engine_type = region->GetRawEngineType();
-  //   ctx->store_engine_type = region->GetStoreEngineType();
-
-  //   std::vector<pb::common::DocumentWithId> document_with_ids;
-  //   status = storage->DocumentBatchQuery(ctx, document_with_ids);
-  //   if (!status.ok()) {
-  //     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-  //     return;
-  //   }
-  // }
-
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -537,7 +517,7 @@ void DoDocumentDelete(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  status = storage->DocumentDelete(ctx, is_sync, Helper::PbRepeatedToVector(request->ids()));
+  status = storage->DocumentDelete(ctx, is_sync, region, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -713,7 +693,7 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
   ctx->start_id = request->document_id_start();
@@ -880,27 +860,28 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
 }
 
 static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_document_id, int64_t end_document_id) {
-  pb::common::Range range;
+  pb::common::Range result;
 
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto range = region->Range(true);
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
   if (start_document_id == 0) {
-    range.set_start_key(region->Range().start_key());
+    result.set_start_key(range.start_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, start_document_id, key);
-    range.set_start_key(key);
+    DocumentCodec::EncodeDocumentKey(prefix, partition_id, start_document_id, key);
+    result.set_start_key(key);
   }
 
   if (end_document_id == 0) {
-    range.set_end_key(region->Range().end_key());
+    result.set_end_key(range.end_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, end_document_id, key);
-    range.set_end_key(key);
+    DocumentCodec::EncodeDocumentKey(prefix, partition_id, end_document_id, key);
+    result.set_end_key(key);
   }
 
-  return range;
+  return result;
 }
 
 void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -1089,7 +1070,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1148,7 +1129,7 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());

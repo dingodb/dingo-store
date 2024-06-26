@@ -135,7 +135,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->vector_ids = Helper::PbRepeatedToVector(request->vector_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
@@ -279,7 +279,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter.Swap(mut_request->mutable_parameter());
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -763,7 +763,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
   ctx->with_scalar_data = !request->without_scalar_data();
@@ -939,27 +939,28 @@ static butil::Status ValidateVectorCountRequest(StoragePtr storage, const pb::in
 
 static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_vector_id,  // NOLINT
                                        int64_t end_vector_id) {                           // NOLINT
-  pb::common::Range range;
+  pb::common::Range result;
 
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto range = region->Range(true);
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
   if (start_vector_id == 0) {
-    range.set_start_key(region->Range().start_key());
+    result.set_start_key(range.start_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, start_vector_id, key);
-    range.set_start_key(key);
+    VectorCodec::EncodeVectorKey(prefix, partition_id, start_vector_id, key);
+    result.set_start_key(key);
   }
 
   if (end_vector_id == 0) {
-    range.set_end_key(region->Range().end_key());
+    result.set_end_key(range.end_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, end_vector_id, key);
-    range.set_end_key(key);
+    VectorCodec::EncodeVectorKey(prefix, partition_id, end_vector_id, key);
+    result.set_end_key(key);
   }
 
-  return range;
+  return result;
 }
 
 void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -1114,7 +1115,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter = request->parameter();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -1301,7 +1302,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1355,7 +1356,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());

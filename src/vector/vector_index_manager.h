@@ -300,7 +300,7 @@ class VectorIndexManager {
                                               int64_t end_log_id);
 
   static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, std::shared_ptr<Iterator> iter,
-                                     const std::string& start_key, [[maybe_unused]] const std::string& end_key);
+                                     const pb::common::Range& range);
 
   // Execute all vector index load/build/rebuild/save task.
   ExecqWorkerSetPtr background_workers_;

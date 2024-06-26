@@ -892,7 +892,7 @@ static butil::Status ValidateKvDeleteRangeRequest(const pb::store::KvDeleteRange
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -934,7 +934,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1235,7 +1235,7 @@ static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScan
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1278,7 +1278,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetStoreEngineType(region->GetStoreEngineType());
   ctx->SetTs(request->ts());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   std::string scan_id;                    // NOLINT
@@ -1525,7 +1525,7 @@ static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvSc
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1570,7 +1570,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetStoreEngineType(region->GetStoreEngineType());
   ctx->SetTs(request->ts());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   int64_t scan_id = request->scan_id();
@@ -1866,7 +1866,7 @@ static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* req
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1919,7 +1919,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
@@ -3059,7 +3059,7 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
   req_range.set_start_key(request->start_key());
   req_range.set_end_key(request->end_key());
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -3365,7 +3365,7 @@ static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::Txn
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }

@@ -24,6 +24,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "document/codec.h"
 #include "engine/raft_store_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
@@ -435,6 +436,10 @@ butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t
 butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
                                  const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
+
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   if (is_sync) {
@@ -452,6 +457,10 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
 butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, store::RegionPtr region,
                                     const std::vector<int64_t>& ids) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
+
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   // get key state
@@ -472,7 +481,7 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
 
   if (is_sync) {
     auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids));
-    auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
+    auto* response = dynamic_cast<pb::index::VectorDeleteResponse*>(ctx->Response());
     if (status.ok()) {
       for (auto state : key_states) {
         response->add_key_states(state);
@@ -486,7 +495,7 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids),
                             [&ids, &key_states](std::shared_ptr<Context> ctx, butil::Status status) {
-                              auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
+                              auto* response = dynamic_cast<pb::index::VectorDeleteResponse*>(ctx->Response());
                               if (!status.ok()) {
                                 response->mutable_key_states()->Resize(ids.size(), false);
                                 Helper::SetPbMessageError(status, ctx->Response());
@@ -713,6 +722,10 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
                                    const std::vector<pb::common::DocumentWithId>& document_with_ids, bool is_update) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
+
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   if (is_sync) {
@@ -727,18 +740,54 @@ butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
                             });
 }
 
-butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, const std::vector<int64_t>& ids) {
+butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync, store::RegionPtr region,
+                                      const std::vector<int64_t>& ids) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
+
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
+  // get key state
+  char prefix = region->GetKeyPrefix();
+  auto reader = engine->NewMVCCReader(region->GetRawEngineType());
+
+  std::vector<bool> key_states(ids.size(), false);
+  for (int i = 0; i < ids.size(); ++i) {
+    std::string key;
+    DocumentCodec::EncodeDocumentKey(prefix, region->PartitionId(), ids[i], ts, key);
+
+    std::string value;
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
+    if (status.ok()) {
+      key_states[i] = true;
+    }
+  }
+
   if (is_sync) {
-    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true));
+    auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true));
+    auto* response = dynamic_cast<pb::document::DocumentDeleteResponse*>(ctx->Response());
+    if (status.ok()) {
+      for (auto state : key_states) {
+        response->add_key_states(state);
+      }
+    } else {
+      response->mutable_key_states()->Resize(ids.size(), false);
+    }
+
+    return status;
   }
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true),
-                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                            [&ids, &key_states](std::shared_ptr<Context> ctx, butil::Status status) {
+                              auto* response = dynamic_cast<pb::document::DocumentDeleteResponse*>(ctx->Response());
                               if (!status.ok()) {
                                 Helper::SetPbMessageError(status, ctx->Response());
+                              } else {
+                                for (auto state : key_states) {
+                                  response->add_key_states(state);
+                                }
                               }
                             });
 }

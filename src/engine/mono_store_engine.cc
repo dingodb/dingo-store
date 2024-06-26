@@ -15,6 +15,7 @@
 
 #include <cstdint>
 
+#include "butil/status.h"
 #include "common/role.h"
 #include "document/document_reader.h"
 #include "engine/engine.h"
@@ -296,6 +297,9 @@ butil::Status MonoStoreEngine::DocumentReader::DocumentCount(int64_t ts, const p
 butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto encode_kvs = mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs);
   return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_kvs, ts));
 }
@@ -303,6 +307,9 @@ butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
 butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                                                 std::vector<bool>& key_states) {
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
 
   key_states.resize(keys.size(), false);
@@ -339,6 +346,9 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
   temp_key_states.resize(kvs.size(), false);
 
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {
@@ -406,6 +416,9 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   temp_key_states.resize(kvs.size(), false);
 
   int64_t ts = ts_provider_->GetTs();
+  if (ts == 0) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {

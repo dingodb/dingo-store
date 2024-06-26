@@ -18,6 +18,8 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "common/runnable.h"
 #include "common/synchronization.h"
@@ -29,89 +31,197 @@ using CoordinatorInteractionPtr = std::shared_ptr<CoordinatorInteraction>;
 
 namespace mvcc {
 
+class BatchTsList;
+using BatchTsListPtr = std::shared_ptr<BatchTsList>;
+
 class TsProvider;
 using TsProviderPtr = std::shared_ptr<TsProvider>;
 
-struct BatchTs {
-  std::atomic<int64_t> start_ts;
-  int64_t end_ts;
+// one batch ts, take from tso service
+class BatchTs {
+ public:
+  BatchTs(int64_t physical, int64_t logical, uint32_t count);
+  ~BatchTs() = default;
+
+  BatchTs(const BatchTs& batch_ts) {
+    physical_ = batch_ts.physical_;
+    start_ts_.store(batch_ts.start_ts_.load());
+    end_ts_ = batch_ts.end_ts_;
+  }
+
+  BatchTs& operator=(const BatchTs& batch_ts) {
+    physical_ = batch_ts.physical_;
+    start_ts_.store(batch_ts.start_ts_.load());
+    end_ts_ = batch_ts.end_ts_;
+
+    return *this;
+  }
+
+  static BatchTs* New(int64_t physical, int64_t logical, uint32_t count) {
+    return new BatchTs(physical, logical, count);
+  }
+
+  static BatchTs* New() { return New(0, 0, 0); }
+
+  int64_t GetTs() {
+    int64_t ts = start_ts_.fetch_add(1, std::memory_order_relaxed);
+    return ts < end_ts_ ? ts : 0;
+  }
+
+  int64_t Remain() {
+    int64_t remain = end_ts_ - start_ts_.load(std::memory_order_relaxed);
+    return remain >= 0 ? remain : 0;
+  }
+
+  int64_t Physical() const { return physical_; }
+
+  void SetDeadTime(int64_t dead_time) { dead_time_ = dead_time; }
+  int64_t DeadTime() const { return dead_time_; };
+
+  void Flush() { start_ts_.store(end_ts_); }
 
   std::atomic<BatchTs*> next{nullptr};
-};
-
-class TakeBatchTsTask : public TaskRunnable {
- public:
-  TakeBatchTsTask() = default;
-  ~TakeBatchTsTask() override = default;
-
-  void Run() override;
 
  private:
-  TsProviderPtr ts_provider_{nullptr};
+  int64_t physical_{0};
+  std::atomic<int64_t> start_ts_{0};
+  int64_t end_ts_{0};
+
+  // dead time ms
+  int64_t dead_time_{0};
 };
 
-class TsProvider {
+// manage BatchTs cache
+// use lock-free list
+class BatchTsList {
  public:
-  TsProvider() = default;
+  BatchTsList();
+  ~BatchTsList();
+
+  static BatchTsListPtr New() { return std::make_shared<BatchTsList>(); }
+
+  void Push(BatchTs* batch_ts);
+  int64_t GetTs();
+
+  void Flush();
+
+  uint32_t ActualCount();
+  uint32_t ActualDeadCount();
+
+  int64_t ActiveCount() const { return active_count_.load(std::memory_order_relaxed); }
+  int64_t DeadCount() const { return dead_count_.load(std::memory_order_relaxed); }
+
+  void CleanDead();
+
+  std::string DebugInfo();
+
+ private:
+  void PushDead(BatchTs* batch_ts);
+
+  bool IsStale(BatchTs* batch_ts);
+
+  // available BatchTs
+  std::atomic<BatchTs*> head_{nullptr};
+  std::atomic<BatchTs*> tail_{nullptr};
+
+  // temporary save dead BatchTs, for delay delete.
+  std::atomic<BatchTs*> dead_head_{nullptr};
+  std::atomic<BatchTs*> dead_tail_{nullptr};
+
+  std::atomic<int64_t> last_physical_{0};
+
+  // statistics
+  std::atomic<int64_t> active_count_{1};
+  std::atomic<int64_t> dead_count_{1};
+
+  std::atomic<int64_t> push_count_{1};
+  std::atomic<int64_t> pop_count_{0};
+
+  std::atomic<int64_t> dead_push_count_{1};
+  std::atomic<int64_t> dead_pop_count_{0};
+};
+
+// manage local tso, provide ts to customer
+class TsProvider : public std::enable_shared_from_this<TsProvider> {
+ public:
+  TsProvider(CoordinatorInteractionPtr interaction) : interaction_(interaction) {
+    worker_ = Worker::New();
+    batch_ts_list_ = BatchTsList::New();
+  }
   ~TsProvider() = default;
 
-  static TsProviderPtr New() { return std::make_shared<TsProvider>(); }
+  TsProviderPtr GetSelfPtr() { return shared_from_this(); }
+
+  static TsProviderPtr New(CoordinatorInteractionPtr interaction) { return std::make_shared<TsProvider>(interaction); }
 
   bool Init();
 
-  int64_t GetTs() {
-    static int64_t ts = 100000000;
-    return ++ts;
+  int64_t GetTs();
 
-    if (head_.load() == nullptr) {
-      // sync trigger crawl ts
-      TakeBatchTsFromTSOWrapper();
-    }
+  void TriggerRenewBatchTs();
 
-    auto* head = head_.load(std::memory_order_relaxed);
-    do {
-      int64_t ts = head->start_ts.fetch_add(1, std::memory_order_relaxed);
-      if (ts < head->end_ts) {
-        if (head->end_ts - ts < 100) {
-          // async trigger crawl ts
-        }
-        return ts;
-      } else if (ts == head->end_ts) {
-        if (head->next.load(std::memory_order_relaxed) == nullptr) {
-          // sync trigger crawl ts
-          TakeBatchTsFromTSOWrapper();
-        } else {
-          head = head->next.load(std::memory_order_relaxed);
-        }
-      } else {
-      }
-
-    } while (true);
-
-    return 0;
-  };
+  std::string DebugInfo();
 
  private:
   friend class TakeBatchTsTask;
 
-  void AddBatchTs(const BatchTs& batch_ts);
-  void AddBatchTs(BatchTs* batch_ts);
+  BatchTs* SendTsoRequest();
 
-  bool TakeBatchTsFromTSO(BatchTs& batch_ts);
-  void TakeBatchTsFromTSOWrapper();
-  void LaunchTakeBatchTs();
+  void RenewBatchTs();
+  void LaunchRenewBatchTs(bool is_sync);
 
-  std::atomic<BatchTs*> head_{nullptr};
+  // manage BatchTs cache
+  BatchTsListPtr batch_ts_list_;
 
-  std::atomic<int> taking_count_{0};
-  BthreadCond cond_;
-
+  // for run take BatchTs task
   WorkerPtr worker_;
 
-  CoordinatorInteractionPtr coordinator_interaction_;
+  // access coodinator tso service
+  CoordinatorInteractionPtr interaction_;
+
+  // statistics
+  std::atomic<uint64_t> get_ts_count_{0};
+  std::atomic<uint64_t> get_ts_fail_count_{0};
+  std::atomic<uint64_t> sync_renew_count_{0};
+  std::atomic<uint64_t> async_renew_count_{0};
 };
 
-using TsProviderPtr = std::shared_ptr<TsProvider>;
+// take BatchTs task, run at worker
+class TakeBatchTsTask : public TaskRunnable {
+ public:
+  TakeBatchTsTask(bool is_sync, TsProviderPtr ts_provider) : ts_provider_(ts_provider) {
+    if (is_sync) {
+      cond_ = std::make_shared<BthreadCond>();
+    }
+  }
+  ~TakeBatchTsTask() override = default;
+
+  std::string Type() override { return "BatchTsTask"; }
+
+  void Run() override {
+    ts_provider_->RenewBatchTs();
+    Notify();
+  }
+
+  void Wait() {
+    if (cond_ != nullptr) {
+      // std::cout << "renew batchts waiting" << std::endl;
+      cond_->IncreaseWait();
+      // std::cout << "renew batchts wakeup" << std::endl;
+    }
+  }
+
+  void Notify() {
+    if (cond_ != nullptr) {
+      // std::cout << "renew batchts nofify" << std::endl;
+      cond_->DecreaseSignal();
+    }
+  }
+
+ private:
+  BthreadCondPtr cond_{nullptr};
+  TsProviderPtr ts_provider_{nullptr};
+};
 
 }  // namespace mvcc
 

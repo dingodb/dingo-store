@@ -42,8 +42,11 @@ class DocumentCodec {
                                 int64_t ts, std::string& result);
 
   static int64_t DecodePartitionId(const std::string& key);
+  static int64_t DecodePartitionIdFromEncodeKey(const std::string& key);
   static int64_t DecodeDocumentId(const std::string& key);
+  static int64_t DecodeDocumentIdFromEncodeKey(const std::string& key);
   static std::string DecodeScalarKey(const std::string& key);
+  static std::string DecodeScalarKeyFromEncodeKey(const std::string& key);
 
   static std::string_view TruncateTsForKey(const std::string& key);
   static std::string_view TruncateTsForKey(const std::string_view& key);
@@ -51,10 +54,11 @@ class DocumentCodec {
   static int64_t TruncateKeyForTs(const std::string& key);
   static int64_t TruncateKeyForTs(const std::string_view& key);
 
-  static std::string DecodeKeyToString(const std::string& key);
-  static std::string DecodeRangeToString(const pb::common::Range& range);
+  static std::string DebugKey(bool is_encode, const std::string& key);
+  static std::string DebugRange(bool is_encode, const pb::common::Range& range);
+  static void DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key, std::string& end_key);
 
-  static void DecodeRangeToDocumentId(const pb::common::Range& range, int64_t& begin_document_id,
+  static void DecodeRangeToDocumentId(bool is_encode, const pb::common::Range& range, int64_t& begin_document_id,
                                       int64_t& end_document_id);
 
   static bool IsValidKey(const std::string& key);
