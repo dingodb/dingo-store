@@ -215,7 +215,8 @@ class VectorIndex {
   void SetSnapshotLogId(int64_t snapshot_log_id);
 
   pb::common::RegionEpoch Epoch() const;
-  pb::common::Range Range() const;
+  pb::common::Range Range(bool is_encode) const;
+  std::string RangeString() const;
   void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
   static void SetSimdHook();
@@ -234,6 +235,7 @@ class VectorIndex {
   std::atomic<int64_t> snapshot_log_id;
 
   pb::common::RegionEpoch epoch;
+  // plain range
   pb::common::Range range;
 
   pb::common::VectorIndexParameter vector_index_parameter;

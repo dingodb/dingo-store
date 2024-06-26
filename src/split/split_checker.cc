@@ -126,9 +126,6 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common
   int mid = keys.size() / 2;
   std::string split_key = keys.empty() ? "" : keys[mid];
 
-  // remove ts
-  split_key = mvcc::Codec::TruncateTsForKey(split_key);
-
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] policy(HALF) split_threshold_size({}) split_chunk_size({}) actual_size({}) count({})",
       region->Id(), split_threshold_size_, split_chunk_size_, size, count);
@@ -160,9 +157,6 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common
       ++count;
     }
   }
-
-  // remove ts
-  split_key = mvcc::Codec::TruncateTsForKey(split_key);
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] policy(SIZE) split_size({}) split_ratio({}) actual_size({}) count({})", region->Id(),
@@ -197,9 +191,6 @@ std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common
       is_split = true;
     }
   }
-
-  // remove ts
-  split_key = mvcc::Codec::TruncateTsForKey(split_key);
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] policy(KEYS) split_key_number({}) split_key_ratio({}) actual_size({}) count({})",
@@ -256,7 +247,7 @@ void SplitCheckTask::SplitCheck() {
 
   int64_t start_time = Helper::TimestampMs();
   auto epoch = region_->Epoch();
-  auto range = region_->Range();
+  auto range = region_->Range(true);
 
   std::vector<std::string> raw_cf_names;
   std::vector<std::string> txn_cf_names;
@@ -272,6 +263,12 @@ void SplitCheckTask::SplitCheck() {
                                  region_->Id(), Helper::RangeToString(range), Helper::VectorToString(cf_names));
   uint32_t key_count = 0;
   std::string split_key = split_checker_->SplitKey(region_, range, cf_names, key_count);
+
+  int64_t ts = 0;
+  std::string decode_key;
+  if (!mvcc::Codec::DecodeKey(split_key, decode_key, ts)) {
+    DINGO_LOG(FATAL) << fmt::format("Decode key fail, key: {}", Helper::StringToHex(split_key));
+  }
 
   // Update region key count metrics.
   if (region_metrics_ != nullptr && key_count > 0) {

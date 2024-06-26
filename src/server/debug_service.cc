@@ -20,6 +20,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include "butil/endpoint.h"
@@ -28,8 +30,12 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "document/codec.h"
+#include "engine/raw_engine.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
@@ -381,19 +387,16 @@ static pb::common::RegionMetrics GetRegionActualMetrics(int64_t region_id) {
   int64_t size = 0;
   int32_t key_count = 0;
   std::string min_key, max_key;
-  auto range = region->Range();
+  auto encode_range = region->Range(true);
 
-  std::string start_key = region->IsTxn() ? Helper::EncodeTxnKey(range.start_key(), 0) : range.start_key();
-  std::string end_key = region->IsTxn() ? Helper::EncodeTxnKey(range.end_key(), 0) : range.end_key();
-
-  auto column_family_names = Helper::GetColumnFamilyNames(range.start_key());
+  auto column_family_names = Helper::GetColumnFamilyNames(encode_range.start_key());
   for (const auto& name : column_family_names) {
     IteratorOptions options;
-    options.upper_bound = end_key;
+    options.upper_bound = encode_range.end_key();
 
     auto iter = raw_engine->Reader()->NewIterator(name, options);
     int32_t temp_key_count = 0;
-    for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+    for (iter->Seek(encode_range.start_key()); iter->Valid(); iter->Next()) {
       size += iter->Key().size() + iter->Value().size();
 
       ++temp_key_count;
@@ -614,11 +617,12 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
           vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
-          auto range = vector_index->Range();
-          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
-                                                        VectorCodec::DecodeVectorId(range.start_key())));
-          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
-                                                      VectorCodec::DecodeVectorId(range.end_key())));
+
+          std::string start_key, end_key;
+          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          vector_index_state->set_start_key(start_key);
+          vector_index_state->set_end_key(end_key);
+
           int64_t key_count = 0;
           vector_index->GetCount(key_count);
           vector_index_state->set_key_count(key_count);
@@ -642,11 +646,12 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
           vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
-          auto range = vector_index->Range();
-          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
-                                                        VectorCodec::DecodeVectorId(range.start_key())));
-          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
-                                                      VectorCodec::DecodeVectorId(range.end_key())));
+
+          std::string start_key, end_key;
+          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          vector_index_state->set_start_key(start_key);
+          vector_index_state->set_end_key(end_key);
+
           int64_t key_count = 0;
           vector_index->GetCount(key_count);
           vector_index_state->set_key_count(key_count);
@@ -670,11 +675,12 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           vector_index_state->set_apply_log_id(vector_index->ApplyLogId());
           vector_index_state->set_snapshot_log_id(vector_index->SnapshotLogId());
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
-          auto range = vector_index->Range();
-          vector_index_state->set_start_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.start_key()),
-                                                        VectorCodec::DecodeVectorId(range.start_key())));
-          vector_index_state->set_end_key(fmt::format("{} {}", VectorCodec::DecodePartitionId(range.end_key()),
-                                                      VectorCodec::DecodeVectorId(range.end_key())));
+
+          std::string start_key, end_key;
+          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          vector_index_state->set_start_key(start_key);
+          vector_index_state->set_end_key(end_key);
+
           int64_t key_count = 0;
           vector_index->GetCount(key_count);
           vector_index_state->set_key_count(key_count);
@@ -876,6 +882,233 @@ void DebugServiceImpl::ShowAffinity(google::protobuf::RpcController* controller,
     auto* mut_pair = response->add_pairs();
     mut_pair->set_thread_name(pair.first);
     mut_pair->set_core(pair.second);
+  }
+}
+
+std::vector<pb::debug::DumpRegionResponse::KV> DumpRawKvRegion(RawEnginePtr raw_engine, const pb::common::Range& range,
+                                                               int64_t offset, int64_t limit) {
+  auto reader = raw_engine->Reader();
+
+  dingodb::IteratorOptions options;
+  options.upper_bound = range.end_key();
+
+  std::vector<pb::debug::DumpRegionResponse::KV> kvs;
+  int64_t count = -1;
+  auto iter = reader->NewIterator(Constant::kStoreDataCF, options);
+  for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+    ++count;
+    if (count < offset) {
+      continue;
+    }
+    if (count > offset + limit) {
+      break;
+    }
+
+    std::string decode_key;
+    int64_t ts;
+    mvcc::Codec::DecodeKey(iter->Key(), decode_key, ts);
+    pb::debug::DumpRegionResponse::KV kv;
+    kv.set_key(decode_key);
+    kv.set_ts(ts);
+
+    mvcc::ValueFlag flag;
+    int64_t ttl;
+    auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
+
+    kv.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
+    kv.set_ttl(ttl);
+    kv.set_value(std::string(value));
+  }
+
+  return std::move(kvs);
+}
+
+std::vector<pb::debug::DumpRegionResponse::Vector> DumpRawVectorRegion(RawEnginePtr raw_engine,
+                                                                       const pb::common::Range& range, int64_t offset,
+                                                                       int64_t limit) {
+  auto reader = raw_engine->Reader();
+
+  std::vector<pb::debug::DumpRegionResponse::Vector> vectors;
+
+  // vector data
+  {
+    int64_t count = -1;
+    dingodb::IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = reader->NewIterator(Constant::kVectorDataCF, options);
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+      ++count;
+      if (count < offset) {
+        continue;
+      }
+      if (count > offset + limit) {
+        break;
+      }
+
+      const auto& key = iter->Key();
+      pb::debug::DumpRegionResponse::Vector vector;
+      vector.set_key(std::string(key));
+
+      std::string decode_key;
+      int64_t ts;
+      mvcc::Codec::DecodeKey(key, decode_key, ts);
+
+      vector.set_vector_id(VectorCodec::DecodeVectorId(decode_key));
+      vector.set_ts(ts);
+
+      mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
+
+      vector.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
+      vector.set_ttl(ttl);
+
+      if (flag == mvcc::ValueFlag::kPut || flag == mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_vector()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
+        }
+      }
+
+      vectors.push_back(vector);
+    }
+  }
+
+  // scalar data
+  if (!vectors.empty()) {
+    auto first_vector = vectors.front();
+    auto last_vector = vectors.back();
+
+    dingodb::IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(last_vector.key());
+    uint32_t count = 0;
+    auto iter = reader->NewIterator(Constant::kVectorScalarCF, options);
+    for (iter->Seek(first_vector.key()); iter->Valid(); iter->Next()) {
+      auto vector = vectors.at(count++);
+      CHECK(iter->Key() == vector.key()) << "Not match key.";
+
+      mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
+      if (flag == mvcc::ValueFlag::kPut || flag == mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
+        }
+      }
+    }
+  }
+
+  // table data
+  if (!vectors.empty()) {
+    auto first_vector = vectors.front();
+    auto last_vector = vectors.back();
+
+    dingodb::IteratorOptions options;
+    options.upper_bound = Helper::PrefixNext(last_vector.key());
+    uint32_t count = 0;
+    auto iter = reader->NewIterator(Constant::kVectorTableCF, options);
+    for (iter->Seek(first_vector.key()); iter->Valid(); iter->Next()) {
+      auto vector = vectors.at(count++);
+      CHECK(iter->Key() == vector.key()) << "Not match key.";
+
+      mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
+      if (flag == mvcc::ValueFlag::kPut || flag == mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_table_data()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector table proto failed, value size: {}.", value.size());
+        }
+      }
+    }
+  }
+
+  return std::move(vectors);
+}
+
+std::vector<pb::debug::DumpRegionResponse::Ducument> DumpRawDucmentRegion(RawEnginePtr raw_engine,
+                                                                          const pb::common::Range& range,
+                                                                          int64_t offset, int64_t limit) {
+  auto reader = raw_engine->Reader();
+
+  std::vector<pb::debug::DumpRegionResponse::Ducument> documents;
+
+  // vector data
+  {
+    int64_t count = -1;
+    dingodb::IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = reader->NewIterator(Constant::kVectorDataCF, options);
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+      ++count;
+      if (count < offset) {
+        continue;
+      }
+      if (count > offset + limit) {
+        break;
+      }
+
+      const auto& key = iter->Key();
+      pb::debug::DumpRegionResponse::Ducument ducument;
+
+      std::string decode_key;
+      int64_t ts;
+      mvcc::Codec::DecodeKey(key, decode_key, ts);
+
+      ducument.set_document_id(DocumentCodec::DecodeDocumentId(decode_key));
+      ducument.set_ts(ts);
+
+      mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
+
+      ducument.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
+      ducument.set_ttl(ttl);
+
+      if (flag == mvcc::ValueFlag::kPut || flag == mvcc::ValueFlag::kPutTTL) {
+        if (!ducument.mutable_document()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
+        }
+      }
+
+      documents.push_back(ducument);
+    }
+  }
+
+  return std::move(documents);
+}
+
+void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
+                                  const pb::debug::DumpRegionRequest* request, pb::debug::DumpRegionResponse* response,
+                                  ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  if (request->offset() < 0 || request->limit() < 0) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "Param offset/limit is error");
+    return;
+  }
+
+  auto region = Server::GetInstance().GetRegion(request->region_id());
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND, "Not found region");
+    return;
+  }
+
+  if (region->IsTxn()) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ENOT_SUPPORT, "Not support dump txn");
+    return;
+  }
+
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+  if (region->Type() == pb::common::RegionType::STORE_REGION) {
+    auto kvs = DumpRawKvRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+    Helper::VectorToPbRepeated(kvs, response->mutable_data()->mutable_kvs());
+  } else if (region->Type() == pb::common::RegionType::INDEX_REGION) {
+    auto vectors = DumpRawVectorRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+    Helper::VectorToPbRepeated(vectors, response->mutable_data()->mutable_vectors());
+  } else {
+    auto documents = DumpRawDucmentRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+    Helper::VectorToPbRepeated(documents, response->mutable_data()->mutable_ducuments());
   }
 }
 

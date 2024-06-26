@@ -1076,7 +1076,7 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   }
 
   int64_t min_document_id = 0, max_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(document_index->Range(), min_document_id, max_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, document_index->Range(false), min_document_id, max_document_id);
 
   std::vector<pb::common::DocumentWithId> documents;
   documents.reserve(Constant::kBuildDocumentIndexBatchSize);
@@ -1311,8 +1311,9 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
       "range({}) "
       "elapsed time({}/{}ms)",
       document_index_id, trace, document_index->WriteOpParallelNum(), count,
-      Helper::RegionEpochToString(document_index->Epoch()), DocumentCodec::DecodeRangeToString(document_index->Range()),
-      upsert_use_time, Helper::TimestampMs() - start_time);
+      Helper::RegionEpochToString(document_index->Epoch()),
+      DocumentCodec::DebugRange(false, document_index->Range(false)), upsert_use_time,
+      Helper::TimestampMs() - start_time);
 
   return document_index;
 }

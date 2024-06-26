@@ -242,6 +242,27 @@ std::string_view Codec::UnPackageValue(const std::string_view& value) {
   return std::string_view(value);
 }
 
+std::string_view Codec::UnPackageValue(const std::string_view& value, ValueFlag& flag, int64_t& ttl) {
+  if (value.back() == static_cast<char>(ValueFlag::kPut)) {
+    flag = ValueFlag::kPut;
+    ttl = 0;
+    return std::string_view(value.data(), value.size() - 1);
+  } else if (value.back() == static_cast<char>(ValueFlag::kPutTTL)) {
+    flag = ValueFlag::kPutTTL;
+
+    std::string_view ttl_str = value.substr(value.size() - 9, value.size() - 1);
+    ttl = Helper::StringToInt64(std::string(ttl_str));
+
+    return std::string_view(value.data(), value.size() - 9);
+  } else if (value.back() == static_cast<char>(ValueFlag::kDelete)) {
+    flag = ValueFlag::kDelete;
+    ttl = 0;
+    return "";
+  }
+
+  return std::string_view(value);
+}
+
 ValueFlag Codec::GetValueFlag(const std::string& value) {
   CHECK(!value.empty()) << "Value is empty.";
 

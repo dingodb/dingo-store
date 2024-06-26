@@ -24,6 +24,7 @@ namespace dingodb {
 
 class VectorCodec {
  public:
+  // result is encode key(padding key)
   static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& result);
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result);
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts, std::string& result);
@@ -33,9 +34,13 @@ class VectorCodec {
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
                               int64_t ts, std::string& result);
 
+  // key is encode key or plain key
   static int64_t DecodePartitionId(const std::string& key);
+  static int64_t DecodePartitionIdFromEncodeKey(const std::string& key);
   static int64_t DecodeVectorId(const std::string& key);
+  static int64_t DecodeVectorIdFromEncodeKey(const std::string& key);
   static std::string DecodeScalarKey(const std::string& key);
+  static std::string DecodeScalarKeyFromEncodeKey(const std::string& key);
 
   static std::string_view TruncateTsForKey(const std::string& key);
   static std::string_view TruncateTsForKey(const std::string_view& key);
@@ -43,11 +48,14 @@ class VectorCodec {
   static int64_t TruncateKeyForTs(const std::string& key);
   static int64_t TruncateKeyForTs(const std::string_view& key);
 
-  static std::string DecodeKeyToString(const std::string& key);
-  static std::string DecodeRangeToString(const pb::common::Range& range);
+  static std::string DebugKey(bool is_encode, const std::string& key);
+  static std::string DebugRange(bool is_encode, const pb::common::Range& range);
+  static void DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key, std::string& end_key);
 
-  static void DecodeRangeToVectorId(const pb::common::Range& range, int64_t& begin_vector_id, int64_t& end_vector_id);
+  static void DecodeRangeToVectorId(bool is_encode, const pb::common::Range& range, int64_t& begin_vector_id,
+                                    int64_t& end_vector_id);
 
+  // key is plain key
   static bool IsValidKey(const std::string& key);
 
   static bool IsLegalVectorId(int64_t vector_id);

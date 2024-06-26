@@ -64,7 +64,7 @@ butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region, pb::err
   auto* store_region_info = error->mutable_store_region_info();
   store_region_info->set_region_id(region->Id());
   *(store_region_info->mutable_current_region_epoch()) = region->Epoch();
-  *(store_region_info->mutable_current_range()) = region->Range();
+  *(store_region_info->mutable_current_range()) = region->Range(false);
   for (const auto& peer : region->Peers()) {
     *(store_region_info->add_peers()) = peer;
   }
@@ -176,7 +176,7 @@ butil::Status ServiceHelper::ValidateRegion(store::RegionPtr region, const std::
   }
 
   // for table region, Range is always equal to Range, so here we can use Range to validate
-  status = ValidateKeyInRange(region->Range(), keys);
+  status = ValidateKeyInRange(region->Range(false), keys);
   if (!status.ok()) {
     return status;
   }
@@ -190,9 +190,9 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
     return status;
   }
 
-  const auto& range = region->Range();
+  const auto& range = region->Range(false);
   int64_t min_vector_id = 0, max_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(range, min_vector_id, max_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, range, min_vector_id, max_vector_id);
   for (auto vector_id : vector_ids) {
     if (vector_id < min_vector_id || vector_id >= max_vector_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
@@ -211,9 +211,9 @@ butil::Status ServiceHelper::ValidateDocumentRegion(store::RegionPtr region, con
     return status;
   }
 
-  const auto& range = region->Range();
+  const auto& range = region->Range(false);
   int64_t min_document_id = 0, max_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(range, min_document_id, max_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, range, min_document_id, max_document_id);
   for (auto document_id : document_ids) {
     if (document_id < min_document_id || document_id >= max_document_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
