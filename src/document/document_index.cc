@@ -27,6 +27,7 @@
 #include "document/codec.h"
 #include "document/document_index_snapshot_manager.h"
 #include "fmt/core.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
@@ -90,7 +91,11 @@ int64_t DocumentIndex::SnapshotLogId() const { return snapshot_log_id.load(std::
 
 pb::common::RegionEpoch DocumentIndex::Epoch() const { return epoch; };
 
-pb::common::Range DocumentIndex::Range() const { return range; }
+pb::common::Range DocumentIndex::Range(bool is_encode) const {
+  return is_encode ? mvcc::Codec::EncodeRange(range) : range;
+}
+
+std::string DocumentIndex::RangeString() const { return DocumentCodec::DebugRange(false, range); }
 
 void DocumentIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range) {
   DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] set epoch({}->{}) and range({}->{})", id,
@@ -581,8 +586,7 @@ void DocumentIndexWrapper::SetIsSwitchingDocumentIndex(bool is_switching) {
 void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, const std::string& trace) {
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.wrapper][index_id({})][trace({})] update document index, epoch({}) range({})", Id(), trace,
-      Helper::RegionEpochToString(document_index->Epoch()),
-      DocumentCodec::DecodeRangeToString(document_index->Range()));
+      Helper::RegionEpochToString(document_index->Epoch()), document_index->RangeString());
   // Check document index is stop
   if (IsDestoryed()) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is stop.", Id());
@@ -604,7 +608,7 @@ void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, 
     share_document_index_ = nullptr;
 
     if (sibling_document_index_ != nullptr &&
-        Helper::IsContainRange(document_index->Range(), sibling_document_index_->Range())) {
+        Helper::IsContainRange(document_index->Range(false), sibling_document_index_->Range(false))) {
       sibling_document_index_ = nullptr;
     }
 
@@ -802,7 +806,7 @@ bool DocumentIndexWrapper::NeedToSave(std::string& reason) {
     return false;
   }
 
-  if (Helper::InvalidRange(document_index->Range())) {
+  if (Helper::InvalidRange(document_index->Range(false))) {
     reason = "range invalid";
     last_save_write_key_count_ = write_key_count_;
     return true;
@@ -841,7 +845,7 @@ bool DocumentIndexWrapper::NeedToSave(std::string& reason) {
 static std::vector<int64_t> FilterDocumentId(const std::vector<pb::common::DocumentWithId>& document_with_ids,
                                              const pb::common::Range& range) {
   int64_t begin_document_id = 0, end_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(range, begin_document_id, end_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, range, begin_document_id, end_document_id);
 
   std::vector<int64_t> result;
   for (const auto& document_with_id : document_with_ids) {
@@ -856,7 +860,7 @@ static std::vector<int64_t> FilterDocumentId(const std::vector<pb::common::Docum
 // Filter document id by range
 static std::vector<int64_t> FilterDocumentId(const std::vector<int64_t>& document_ids, const pb::common::Range& range) {
   int64_t begin_document_id = 0, end_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(range, begin_document_id, end_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, range, begin_document_id, end_document_id);
 
   std::vector<int64_t> result;
   for (const auto document_id : document_ids) {
@@ -874,7 +878,7 @@ static std::vector<pb::common::DocumentWithId> FilterDocumentWithId(
   auto mut_document_with_ids = const_cast<std::vector<pb::common::DocumentWithId>&>(document_with_ids);
 
   int64_t begin_document_id = 0, end_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(range, begin_document_id, end_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, range, begin_document_id, end_document_id);
 
   std::vector<pb::common::DocumentWithId> result;
   for (auto& document_with_id : mut_document_with_ids) {
@@ -914,15 +918,15 @@ butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::Documen
   // Exist sibling document index, so need to separate add document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status =
-        sibling_document_index->Upsert(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()), true);
+    auto status = sibling_document_index->Upsert(
+        FilterDocumentWithId(document_with_ids, sibling_document_index->Range(false)), true);
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->Upsert(FilterDocumentWithId(document_with_ids, document_index->Range()), true);
+    status = document_index->Upsert(FilterDocumentWithId(document_with_ids, document_index->Range(false)), true);
     if (!status.ok()) {
-      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range()));
+      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range(false)));
       return status;
     }
 
@@ -961,15 +965,15 @@ butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWi
   // Exist sibling document index, so need to separate add document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status =
-        sibling_document_index->Add(FilterDocumentWithId(document_with_ids, sibling_document_index->Range()), true);
+    auto status = sibling_document_index->Add(
+        FilterDocumentWithId(document_with_ids, sibling_document_index->Range(false)), true);
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->Add(FilterDocumentWithId(document_with_ids, document_index->Range()), true);
+    status = document_index->Add(FilterDocumentWithId(document_with_ids, document_index->Range(false)), true);
     if (!status.ok()) {
-      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range()));
+      sibling_document_index->Delete(FilterDocumentId(document_with_ids, sibling_document_index->Range(false)));
       return status;
     }
 
@@ -1008,12 +1012,12 @@ butil::Status DocumentIndexWrapper::Delete(const std::vector<int64_t>& delete_id
   // Exist sibling document index, so need to separate delete document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    auto status = sibling_document_index->Delete(FilterDocumentId(delete_ids, sibling_document_index->Range()));
+    auto status = sibling_document_index->Delete(FilterDocumentId(delete_ids, sibling_document_index->Range(false)));
     if (!status.ok()) {
       return status;
     }
 
-    status = document_index->Delete(FilterDocumentId(delete_ids, document_index->Range()));
+    status = document_index->Delete(FilterDocumentId(delete_ids, document_index->Range(false)));
     if (status.ok()) {
       write_key_count_ += delete_ids.size();
     }
@@ -1123,16 +1127,16 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
     return status;
   }
 
-  const auto& index_range = document_index->Range();
+  const auto& index_range = document_index->Range(false);
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_document_id = 0, max_document_id = 0;
-    DocumentCodec::DecodeRangeToDocumentId(region_range, min_document_id, max_document_id);
+    DocumentCodec::DecodeRangeToDocumentId(false, region_range, min_document_id, max_document_id);
 
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.wrapper][index_id({})] search document in document index with range_filter, range({}) "
         "query_string({}) "
         "top_n({}) min_document_id({}) max_document_id({})",
-        Id(), DocumentCodec::DecodeRangeToString(region_range), parameter.query_string(), parameter.top_n(),
+        Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n(),
         min_document_id, max_document_id);
 
     // use range filter
@@ -1152,7 +1156,7 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
 
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.wrapper][index_id({})] search document in document index, range({}) query_string({}) top_n({})",
-      Id(), DocumentCodec::DecodeRangeToString(region_range), parameter.query_string(), parameter.top_n());
+      Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n());
 
   return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
                                 alive_ids, column_names, results);

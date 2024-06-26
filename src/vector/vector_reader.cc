@@ -651,23 +651,23 @@ butil::Status VectorReader::GetBorderId(int64_t ts, const pb::common::Range& reg
 // ScanVectorId
 butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                          std::vector<int64_t>& vector_ids) {
+  auto& range = ctx->region_range;
   std::string seek_key;
-  VectorCodec::EncodeVectorKey(ctx->region_range.start_key()[0], ctx->partition_id, ctx->start_id, seek_key);
-  std::string range_start_key = ctx->region_range.start_key();
-  std::string range_end_key = ctx->region_range.end_key();
+  VectorCodec::EncodeVectorKey(Helper::GetKeyPrefix(range.start_key()), ctx->partition_id, ctx->start_id, seek_key);
+  auto encode_range = mvcc::Codec::EncodeRange(range);
 
   IteratorOptions options;
   if (!ctx->is_reverse) {
-    if (seek_key < range_start_key) {
-      seek_key = range_start_key;
+    if (seek_key < encode_range.start_key()) {
+      seek_key = encode_range.start_key();
     }
 
-    if (seek_key >= range_end_key) {
+    if (seek_key >= encode_range.end_key()) {
       return butil::Status::OK();
     }
 
-    options.lower_bound = range_start_key;
-    options.upper_bound = range_end_key;
+    options.lower_bound = encode_range.start_key();
+    options.upper_bound = encode_range.end_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
@@ -708,15 +708,15 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       }
     }
   } else {
-    if (seek_key > range_end_key) {
-      seek_key = range_end_key;
+    if (seek_key > encode_range.end_key()) {
+      seek_key = encode_range.end_key();
     }
 
-    if (seek_key < range_start_key) {
+    if (seek_key < encode_range.start_key()) {
       return butil::Status::OK();
     }
 
-    options.lower_bound = range_start_key;
+    options.lower_bound = encode_range.start_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
       DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
@@ -726,7 +726,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
     }
 
     for (iter->SeekForPrev(seek_key); iter->Valid(); iter->Prev()) {
-      if (iter->Key() == range_end_key) {
+      if (iter->Key() == encode_range.end_key()) {
         continue;
       }
 

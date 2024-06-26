@@ -97,8 +97,8 @@ class Region {
   void SetLeaderId(int64_t leader_id);
 
   // encode user key range
-  pb::common::Range Range(bool is_encode = true, bool lock = true);
-  std::string RangeToString(bool is_encode = true);
+  pb::common::Range Range(bool is_encode = false, bool lock = true);
+  std::string RangeToString(bool is_encode = false);
   bool CheckKeyInRange(const std::string& key);
 
   char GetKeyPrefix();

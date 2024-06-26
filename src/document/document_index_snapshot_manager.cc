@@ -283,7 +283,7 @@ butil::Status DocumentIndexSnapshotManager::SaveDocumentIndexSnapshot(DocumentIn
   pb::store_internal::DocumentIndexSnapshotMeta meta;
   meta.set_document_index_id(document_index_id);
   meta.set_snapshot_log_id(snapshot_log_index);
-  *(meta.mutable_range()) = document_index->Range();
+  *(meta.mutable_range()) = document_index->Range(false);
   *(meta.mutable_epoch()) = document_index->Epoch();
 
   std::string meta_filepath = fmt::format("{}/meta", document_index->IndexPath());

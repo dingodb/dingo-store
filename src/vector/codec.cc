@@ -15,70 +15,112 @@
 #include "vector/codec.h"
 
 #include <cstdint>
+#include <string>
 
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/serial_helper.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
+#include "mvcc/codec.h"
 
 namespace dingodb {
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& result) {
-  result.resize(Constant::kVectorKeyMinLenWithPrefix);
-  result.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, result);
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+
+  std::string buf;
+  buf.resize(Constant::kVectorKeyMinLenWithPrefix);
+
+  buf.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, buf);
+
+  mvcc::Codec::EncodeBytes(buf, result);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
-  result.resize(Constant::kVectorKeyMaxLenWithPrefix);
-  result.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, result);
-  SerialHelper::WriteLongComparable(vector_id, result);
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
+
+  std::string buf;
+  buf.resize(Constant::kVectorKeyMaxLenWithPrefix);
+
+  buf.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, buf);
+  SerialHelper::WriteLongComparable(vector_id, buf);
+
+  mvcc::Codec::EncodeBytes(buf, result);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts,
                                   std::string& result) {
-  result.resize(Constant::kVectorKeyMaxLenWithPrefix);
-  result.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, result);
-  SerialHelper::WriteLongComparable(vector_id, result);
-  SerialHelper::WriteLongWithNegation(ts, result);
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
+  CHECK(ts > 0) << fmt::format("Invalid ts {}.", ts);
+
+  std::string buf;
+  buf.resize(Constant::kVectorKeyMaxLenWithPrefix);
+
+  buf.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, buf);
+  SerialHelper::WriteLongComparable(vector_id, buf);
+
+  result = mvcc::Codec::EncodeKey(buf, ts);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
                                   std::string& result) {
-  if (BAIDU_UNLIKELY(scalar_key.empty())) {
-    DINGO_LOG(FATAL) << fmt::format("scalar key is empty, {}/{}/{}", prefix, partition_id, vector_id);
-  }
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
+  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
 
-  result.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-  result.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, result);
-  SerialHelper::WriteLongComparable(vector_id, result);
-  result.append(scalar_key);
+  std::string buf;
+  buf.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+
+  buf.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, buf);
+  SerialHelper::WriteLongComparable(vector_id, buf);
+  buf.append(scalar_key);
+
+  mvcc::Codec::EncodeBytes(buf, result);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
                                   int64_t ts, std::string& result) {
-  if (BAIDU_UNLIKELY(scalar_key.empty())) {
-    DINGO_LOG(FATAL) << fmt::format("scalar key is empty, {}/{}/{}", prefix, partition_id, vector_id);
-  }
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
+  CHECK(ts >= 0) << fmt::format("Invalid ts {}.", ts);
+  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
 
-  result.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-  result.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, result);
-  SerialHelper::WriteLongComparable(vector_id, result);
-  result.append(scalar_key);
-  SerialHelper::WriteLongWithNegation(ts, result);
+  std::string buf;
+  buf.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  buf.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, buf);
+  SerialHelper::WriteLongComparable(vector_id, buf);
+  buf.append(scalar_key);
+
+  result = mvcc::Codec::EncodeKey(buf, ts);
 }
 
 int64_t VectorCodec::DecodePartitionId(const std::string& key) {
-  if (key.size() < Constant::kVectorKeyMinLenWithPrefix) {
-    DINGO_LOG(FATAL) << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(key));
-  }
+  CHECK(key.size() >= Constant::kVectorKeyMinLenWithPrefix)
+      << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(key));
 
   return SerialHelper::ReadLong(key.substr(1, 9));
+}
+
+int64_t VectorCodec::DecodePartitionIdFromEncodeKey(const std::string& key) {
+  std::string decode_key;
+  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
+  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+
+  return DecodePartitionId(decode_key);
 }
 
 int64_t VectorCodec::DecodeVectorId(const std::string& key) {
@@ -95,63 +137,89 @@ int64_t VectorCodec::DecodeVectorId(const std::string& key) {
   }
 }
 
+int64_t VectorCodec::DecodeVectorIdFromEncodeKey(const std::string& key) {
+  std::string decode_key;
+  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
+  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+
+  return DecodeVectorId(decode_key);
+}
+
 std::string VectorCodec::DecodeScalarKey(const std::string& key) {
-  if (key.size() <= Constant::kVectorKeyMaxLenWithPrefix) {
-    DINGO_LOG(FATAL) << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(key));
-    return "";
-  }
+  CHECK(key.size() > Constant::kVectorKeyMaxLenWithPrefix)
+      << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(key));
 
   return key.substr(Constant::kVectorKeyMaxLenWithPrefix);
 }
 
-// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
+std::string VectorCodec::DecodeScalarKeyFromEncodeKey(const std::string& key) {
+  std::string decode_key;
+  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
+  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+
+  return DecodeScalarKey(decode_key);
+}
+
 std::string_view VectorCodec::TruncateTsForKey(const std::string& key) {
   CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
 
   return std::string_view(key).substr(0, key.size() - 8);
 }
 
-// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
 std::string_view VectorCodec::TruncateTsForKey(const std::string_view& key) {
   CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
 
   return std::string_view(key).substr(0, key.size() - 8);
 }
 
-// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
 int64_t VectorCodec::TruncateKeyForTs(const std::string& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+  CHECK(key.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
 
   auto ts_str = key.substr(key.size() - 8, key.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
-// key: prefix(1byes)|partition_id(8bytes)|vector_id(8bytes)|ts(8bytes)
 int64_t VectorCodec::TruncateKeyForTs(const std::string_view& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+  CHECK(key.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
 
   auto ts_str = key.substr(key.size() - 8, key.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
-std::string VectorCodec::DecodeKeyToString(const std::string& key) {
-  return fmt::format("{}_{}", DecodePartitionId(key), DecodeVectorId(key));
-}
-
-std::string VectorCodec::DecodeRangeToString(const pb::common::Range& range) {
-  return fmt::format("[{}, {})", DecodeKeyToString(range.start_key()), DecodeKeyToString(range.end_key()));
-}
-
-void VectorCodec::DecodeRangeToVectorId(const pb::common::Range& range, int64_t& begin_vector_id,
-                                        int64_t& end_vector_id) {
-  begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-  int64_t temp_end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
-  if (temp_end_vector_id > 0) {
-    end_vector_id = temp_end_vector_id;
+std::string VectorCodec::DebugKey(bool is_encode, const std::string& key) {
+  if (is_encode) {
+    return fmt::format("{}_{}", DecodePartitionIdFromEncodeKey(key), DecodeVectorIdFromEncodeKey(key));
   } else {
-    if (DecodePartitionId(range.end_key()) > DecodePartitionId(range.start_key())) {
+    return fmt::format("{}_{}", DecodePartitionId(key), DecodeVectorId(key));
+  }
+}
+
+std::string VectorCodec::DebugRange(bool is_encode, const pb::common::Range& range) {
+  return fmt::format("[{}, {})", DebugKey(is_encode, range.start_key()), DebugKey(is_encode, range.end_key()));
+}
+
+void VectorCodec::DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key,
+                             std::string& end_key) {
+  start_key = DebugKey(is_encode, range.start_key());
+  end_key = DebugKey(is_encode, range.start_key());
+}
+
+void VectorCodec::DecodeRangeToVectorId(bool is_encode, const pb::common::Range& range, int64_t& begin_vector_id,
+                                        int64_t& end_vector_id) {
+  if (is_encode) {
+    begin_vector_id = VectorCodec::DecodeVectorIdFromEncodeKey(range.start_key());
+    end_vector_id = VectorCodec::DecodeVectorIdFromEncodeKey(range.end_key());
+    if (end_vector_id == 0 &&
+        (DecodePartitionIdFromEncodeKey(range.end_key()) > DecodePartitionIdFromEncodeKey(range.start_key()))) {
+      end_vector_id = INT64_MAX;
+    }
+
+  } else {
+    begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
+    end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
+    if (end_vector_id == 0 && (DecodePartitionId(range.end_key()) > DecodePartitionId(range.start_key()))) {
       end_vector_id = INT64_MAX;
     }
   }
