@@ -168,9 +168,9 @@ class Helper {
   }
 
   static std::string CalculateVectorMiddleKey(const std::string& start_key, const std::string& end_key) {
-    int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
-    int64_t min_vector_id = dingodb::VectorCodec::DecodeVectorId(start_key);
-    int64_t max_vector_id = dingodb::VectorCodec::DecodeVectorId(end_key);
+    int64_t partition_id = dingodb::VectorCodec::UnPackagePartitionId(start_key);
+    int64_t min_vector_id = dingodb::VectorCodec::UnPackageVectorId(start_key);
+    int64_t max_vector_id = dingodb::VectorCodec::UnPackageVectorId(end_key);
     max_vector_id = max_vector_id > 0 ? max_vector_id : INT64_MAX;
     int64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
 
@@ -181,9 +181,9 @@ class Helper {
   }
 
   static std::string CalculateDocumentMiddleKey(const std::string& start_key, const std::string& end_key) {
-    int64_t partition_id = dingodb::DocumentCodec::DecodePartitionId(start_key);
-    int64_t min_document_id = dingodb::DocumentCodec::DecodeDocumentId(start_key);
-    int64_t max_document_id = dingodb::DocumentCodec::DecodeDocumentId(end_key);
+    int64_t partition_id = dingodb::DocumentCodec::UnPackagePartitionId(start_key);
+    int64_t min_document_id = dingodb::DocumentCodec::UnPackageDocumentId(start_key);
+    int64_t max_document_id = dingodb::DocumentCodec::UnPackageDocumentId(end_key);
     max_document_id = max_document_id > 0 ? max_document_id : INT64_MAX;
     int64_t mid_document_id = min_document_id + (max_document_id - min_document_id) / 2;
 

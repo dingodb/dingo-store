@@ -56,9 +56,6 @@ class Server {
   // Init log.
   bool InitLog();
 
-  // Valiate coordinator is connected and valid.
-  static bool ValiateCoordinator() { return true; }
-
   // Every server instance has id, the id is allocated by coordinator.
   bool InitServerID();
 
@@ -142,7 +139,6 @@ class Server {
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteraction();
   std::shared_ptr<CoordinatorInteraction> GetCoordinatorInteractionIncr();
 
-  std::shared_ptr<Engine> GetEngine();
   std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type);
   std::shared_ptr<Engine> GetEngine(pb::common::StorageEngine store_engine_type);
 

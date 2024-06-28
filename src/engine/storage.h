@@ -32,7 +32,7 @@ namespace dingodb {
 
 class Storage {
  public:
-  Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine);
+  Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine, mvcc::TsProviderPtr ts_provider);
   ~Storage() = default;
 
   // kv read

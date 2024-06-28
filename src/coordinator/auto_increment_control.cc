@@ -530,7 +530,8 @@ butil::Status AutoIncrementControl::SyncSendCreateAutoIncrementInternal(int64_t 
   table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id_ptr->set_entity_id(table_id);
   request.set_start_id(auto_increment);
-  return Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("CreateAutoIncrement", request, response);
+  return Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest(pb::common::ServiceTypeAutoIncrement,
+                                                                            "CreateAutoIncrement", request, response);
 }
 
 void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id, int64_t auto_increment) {
@@ -549,8 +550,8 @@ void AutoIncrementControl::AsyncSendUpdateAutoIncrementInternal(int64_t table_id
     request.set_start_id(auto_increment);
     request.set_force(true);
 
-    butil::Status status =
-        Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("UpdateAutoIncrement", request, response);
+    butil::Status status = Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest(
+        pb::common::ServiceTypeAutoIncrement, "UpdateAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }
@@ -589,8 +590,8 @@ void AutoIncrementControl::AsyncSendDeleteAutoIncrementInternal(int64_t table_id
     table_id_ptr->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
     table_id_ptr->set_entity_id(table_id);
 
-    butil::Status status =
-        Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest("DeleteAutoIncrement", request, response);
+    butil::Status status = Server::GetInstance().GetCoordinatorInteractionIncr()->SendRequest(
+        pb::common::ServiceTypeAutoIncrement, "DeleteAutoIncrement", request, response);
     if (status.error_code() != pb::error::Errno::OK) {
       LOG(ERROR) << "error, code: " << status.error_code() << ", message: " << status.error_str();
     }

@@ -1087,7 +1087,8 @@ void TransferLeaderTask::Run() {
 }
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
-  auto engine = Server::GetInstance().GetEngine();
+  auto regoin = Server::GetInstance().GetRegion(region_id);
+  auto engine = Server::GetInstance().GetEngine(regoin->GetStoreEngineType());
   return engine->SaveSnapshot(ctx, region_id, true);
 }
 

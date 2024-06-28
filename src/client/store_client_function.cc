@@ -52,6 +52,8 @@
 const int kBatchSize = 1000;
 
 DECLARE_string(key);
+DECLARE_string(value);
+DECLARE_string(expect_value);
 DECLARE_bool(without_vector);
 DECLARE_bool(without_scalar);
 DECLARE_bool(without_table);
@@ -88,6 +90,8 @@ DEFINE_string(document_text2, "", "document text 2");
 DEFINE_string(query_string, "", "document query string");
 DECLARE_int32(topn);
 DEFINE_bool(is_update, false, "is update document");
+
+DEFINE_bool(show_detail, false, "show detail");
 
 namespace client {
 
@@ -1627,6 +1631,8 @@ void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids) {
   dingodb::pb::index::VectorBatchQueryRequest request;
   dingodb::pb::index::VectorBatchQueryResponse response;
 
+  request.set_ts(FLAGS_ts);
+
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   for (auto vector_id : vector_ids) {
     request.add_vector_ids(vector_id);
@@ -1657,6 +1663,8 @@ void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids) {
 void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse) {
   dingodb::pb::index::VectorScanQueryRequest request;
   dingodb::pb::index::VectorScanQueryResponse response;
+
+  request.set_ts(FLAGS_ts);
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   request.set_vector_id_start(start_id);
@@ -1829,6 +1837,10 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
+
   uint32_t max_size = 0;
   if (vector_datas.empty()) {
     max_size = vector_ids.size();
@@ -1853,9 +1865,6 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-  std::mt19937 rng;
-  std::uniform_real_distribution<> distrib(0.0, 10.0);
-
   for (int i = 0; i < max_size; ++i) {
     const auto& vector_id = vector_ids[i];
 
@@ -1866,7 +1875,8 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
 
     if (vector_datas.empty()) {
       for (int j = 0; j < dimension; j++) {
-        vector_with_id->mutable_vector()->add_float_values(distrib(rng));
+        float vector_data = dingodb::Helper::GenerateRandomFloat(0.0, 10.0);
+        vector_with_id->mutable_vector()->add_float_values(vector_data);
       }
 
     } else {
@@ -2349,31 +2359,12 @@ void SendDocumentGetRegionMetrics(int64_t region_id) {
   DINGO_LOG(INFO) << "DocumentGetRegionMetrics response: " << response.DebugString();
 }
 
-int64_t DecodeVectorId(const std::string& value) {
-  dingodb::Buf buf(value);
-  if (value.size() == 17) {
-    buf.Skip(9);
-  } else if (value.size() == 16) {
-    buf.Skip(8);
-  } else if (value.size() == 9 || value.size() == 8) {
-    return 0;
-  } else {
-    DINGO_LOG(ERROR) << "Decode vector id failed, value size is not 16 or 17, value:["
-                     << dingodb::Helper::StringToHex(value) << "]"
-                     << " size: " << value.size();
-    return 0;
-  }
-
-  // return buf.ReadLong();
-  return dingodb::DingoSchema<std::optional<int64_t>>::InternalDecodeKey(&buf);
-}
-
 bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, int64_t vector_id,  // NOLINT
                              int64_t& region_id) {                                           // NOLINT
   for (const auto& item : index_range.range_distribution()) {
     const auto& range = item.range();
-    int64_t min_vector_id = DecodeVectorId(range.start_key());
-    int64_t max_vector_id = DecodeVectorId(range.end_key());
+    int64_t min_vector_id = dingodb::VectorCodec::UnPackageVectorId(range.start_key());
+    int64_t max_vector_id = dingodb::VectorCodec::UnPackageVectorId(range.end_key());
     max_vector_id = max_vector_id == 0 ? INT64_MAX : max_vector_id;
     if (vector_id >= min_vector_id && vector_id < max_vector_id) {
       region_id = item.id().entity_id();
@@ -2511,25 +2502,21 @@ void SendVectorAdd(std::shared_ptr<Context> ctx) {
 
   uint32_t total_count = 0;
 
-  int64_t end_id = 0;
-  if (vector_datas.empty()) {
-    end_id = ctx->start_id + ctx->count;
-  } else {
-    end_id = ctx->start_id + vector_datas.size();
-  }
-  DINGO_LOG(INFO) << "start_id: " << ctx->start_id << " end_id: " << end_id << ", step_count: " << ctx->step_count;
+  int64_t count = vector_datas.empty() ? ctx->count : vector_datas.size();
+  DINGO_LOG(INFO) << "start_id: " << ctx->start_id << " count: " << count << ", step_count: " << ctx->step_count;
 
-  for (int i = ctx->start_id; i < end_id; i += ctx->step_count) {
-    for (int j = i; j < i + ctx->step_count; ++j) {
-      vector_ids.push_back(j);
+  for (int i = 0; i < count; ++i) {
+    int64_t vector_id = ctx->start_id + i;
+    vector_ids.push_back(vector_id);
+
+    if ((i + 1) % ctx->step_count == 0 || (i + 1) == count) {
+      SendBatchVectorAdd(ctx->region_id, ctx->dimension, vector_ids, vector_datas, total_count, !FLAGS_without_scalar,
+                         !FLAGS_without_table);
+
+      total_count += vector_ids.size();
+
+      vector_ids.clear();
     }
-
-    SendBatchVectorAdd(ctx->region_id, ctx->dimension, vector_ids, vector_datas, total_count, !FLAGS_without_scalar,
-                       !FLAGS_without_table);
-
-    total_count += vector_ids.size();
-
-    vector_ids.clear();
   }
 }
 
@@ -3143,7 +3130,8 @@ void SendKvPutIfAbsent(int64_t region_id, const std::string& key) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
-  kv->set_value(Helper::GenRandomString(64));
+  std::string value = FLAGS_value.empty() ? Helper::GenRandomString(64) : FLAGS_value;
+  kv->set_value(value);
 
   if (FLAGS_ttl > 0) {
     request.set_ttl(FLAGS_ttl);
@@ -3186,7 +3174,6 @@ void SendKvDeleteRange(int64_t region_id, const std::string& prefix) {
   dingodb::pb::store::KvDeleteRangeResponse response;
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
-  auto start_key = dingodb::Helper::StringToHex(prefix);
   request.mutable_range()->mutable_range()->set_start_key(prefix);
   request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
@@ -3202,9 +3189,8 @@ void SendKvScan(int64_t region_id, const std::string& prefix) {
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
-  auto start_key = dingodb::Helper::HexToString(prefix);
-  request.mutable_range()->mutable_range()->set_start_key(start_key);
-  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(start_key));
+  request.mutable_range()->mutable_range()->set_start_key(prefix);
+  request.mutable_range()->mutable_range()->set_end_key(dingodb::Helper::PrefixNext(prefix));
   request.mutable_range()->set_with_start(true);
   request.mutable_range()->set_with_end(false);
 
@@ -3254,8 +3240,14 @@ void SendKvCompareAndSet(int64_t region_id, const std::string& key) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
   dingodb::pb::common::KeyValue* kv = request.mutable_kv();
   kv->set_key(key);
-  kv->set_value(Helper::GenRandomString(64));
-  request.set_expect_value("");
+
+  std::string value = FLAGS_value.empty() ? Helper::GenRandomString(64) : FLAGS_value;
+  kv->set_value(value);
+  request.set_expect_value(FLAGS_expect_value);
+
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvCompareAndSet", request, response);
 }
@@ -3277,6 +3269,10 @@ void SendKvBatchCompareAndSet(int64_t region_id, const std::string& prefix, int 
   }
 
   request.set_is_atomic(false);
+
+  if (FLAGS_ttl > 0) {
+    request.set_ttl(FLAGS_ttl);
+  }
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvBatchCompareAndSet", request, response);
 }
@@ -3805,11 +3801,11 @@ void TestDeleteRangeWhenTransferLeader(int64_t region_id,
 
   // delete range
   DINGO_LOG(INFO) << "delete range...";
-  SendKvDeleteRange(region_id, prefix);
+  SendKvDeleteRange(region_id, dingodb::Helper::StringToHex(prefix));
 
   // scan data
   DINGO_LOG(INFO) << "scan...";
-  SendKvScan(region_id, prefix);
+  SendKvScan(region_id, dingodb::Helper::HexToString(prefix));
 }
 
 // Create table / Put data / Get data / Destroy table
@@ -4059,8 +4055,8 @@ void AutoTest(std::shared_ptr<Context> ctx) {
 }
 
 bool IsSamePartition(dingodb::pb::common::Range source_range, dingodb::pb::common::Range target_range) {
-  return dingodb::VectorCodec::DecodePartitionId(source_range.end_key()) ==
-         dingodb::VectorCodec::DecodePartitionId(target_range.start_key());
+  return dingodb::VectorCodec::UnPackagePartitionId(source_range.end_key()) ==
+         dingodb::VectorCodec::UnPackagePartitionId(target_range.start_key());
 }
 
 void AutoMergeRegion(std::shared_ptr<Context> ctx) {
@@ -4222,5 +4218,94 @@ void CheckIndexDistribution(std::shared_ptr<Context> ctx) {
     key = region_range.range().end_key();
   }
 }
+
+std::string FormatVectorData(const dingodb::pb::common::Vector& vector) {
+  std::string value_type = dingodb::pb::common::ValueType_Name(vector.value_type());
+  if (vector.float_values_size() > 0) {
+    return fmt::format("{}/{}/[{} {}...]", vector.float_values_size(), value_type, vector.float_values().at(0),
+                       vector.float_values().at(1));
+  } else if (vector.binary_values_size() > 0) {
+    return fmt::format("{}/{}/[{} {}...]", vector.binary_values_size(), value_type, vector.binary_values().at(0),
+                       vector.binary_values().at(1));
+  } else {
+    return "no data";
+  }
+}
+
+std::string FormatVectorScalar(const dingodb::pb::common::VectorScalardata& scalar) {
+  std::string result;
+  for (const auto& [key, value] : scalar.scalar_data()) {
+    result += fmt::format("{}/{}", key, value.ShortDebugString());
+    result += ";";
+  }
+
+  return result;
+}
+
+std::string FormatVectorTable(const dingodb::pb::common::VectorTableData& table) {
+  return fmt::format("{}/{}", dingodb::Helper::StringToHex(table.table_key()),
+                     dingodb::Helper::StringToHex(table.table_value()));
+}
+
+std::string FormatDocument(const dingodb::pb::common::Document& document) {
+  std::string result;
+  for (const auto& [key, value] : document.document_data()) {
+    result += fmt::format("{}/{}", key, value.ShortDebugString());
+    result += ";";
+  }
+
+  return result;
+}
+
+void PrintRegionData(dingodb::pb::debug::DumpRegionResponse& response) {
+  std::cout << "==================== show data ====================" << std::endl;
+  for (const auto& kv : response.data().kvs()) {
+    auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(kv.flag());
+    std::cout << fmt::format("key({}) ts({}) flag({}) ttl({}) value({})", dingodb::Helper::StringToHex(kv.key()),
+                             kv.ts(), flag, kv.ttl(), kv.value().substr(0, 32))
+              << std::endl;
+  }
+
+  for (const auto& vector : response.data().vectors()) {
+    auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(vector.flag());
+    if (FLAGS_show_detail) {
+      std::cout << fmt::format("vector_id({}) ts({}) flag({}) ttl({}) vector({}) scalar({}) table({})",
+                               vector.vector_id(), vector.ts(), flag, vector.ttl(), FormatVectorData(vector.vector()),
+                               FormatVectorScalar(vector.scalar_data()), FormatVectorTable(vector.table_data()))
+                << std::endl;
+    } else {
+      std::cout << fmt::format("vector_id({}) ts({}) flag({}) ttl({}) vector({})", vector.vector_id(), vector.ts(),
+                               flag, vector.ttl(), FormatVectorData(vector.vector()))
+                << std::endl;
+    }
+  }
+
+  for (const auto& ducument : response.data().ducuments()) {
+    auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(ducument.flag());
+    std::cout << fmt::format("doc_id({}) ts({}) flag({}) ttl({}) data({})", ducument.document_id(), ducument.ts(), flag,
+                             ducument.ttl(), FormatDocument(ducument.document()))
+              << std::endl;
+  }
+
+  int size = std::max(response.data().kvs_size(), response.data().vectors_size());
+  size = std::max(size, response.data().ducuments_size());
+
+  std::cout << fmt::format("==================== size({}) ====================", size) << std::endl;
+}
+
+void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit) {
+  dingodb::pb::debug::DumpRegionRequest request;
+  dingodb::pb::debug::DumpRegionResponse response;
+
+  request.set_region_id(region_id);
+  request.set_offset(offset);
+  request.set_limit(limit);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DumpRegion", request, response);
+  // DINGO_LOG(INFO) << fmt::format("response: {}", response.ShortDebugString());
+  PrintRegionData(response);
+}
+
+void DumpRegion(std::shared_ptr<Context> ctx) { SendDumpRegion(ctx->region_id, ctx->offset, ctx->limit); }
 
 }  // namespace client

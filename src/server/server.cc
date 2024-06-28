@@ -102,7 +102,7 @@ DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index i
 
 DEFINE_bool(enable_balance_leader, true, "enable balance leader");
 
-DEFINE_bool(enable_timing_get_tso, true, "enable get tso");
+DEFINE_bool(enable_timing_get_tso, false, "enable get tso");
 DEFINE_int32(get_tso_interval_ms, 1000, "get tso interval");
 
 extern "C" {
@@ -296,7 +296,7 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, ts_provider_);
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, nullptr);
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
 
@@ -346,14 +346,14 @@ bool Server::InitEngine() {
 
   } else {
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-    mono_engine_ = MonoStoreEngine::New(rocks_raw_engine, bdb_raw_engine, listener_factory->Build(), ts_provider_);
+    mono_engine_ = MonoStoreEngine::New(rocks_raw_engine, bdb_raw_engine, listener_factory->Build(), GetTsProvider());
     if (!mono_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RocksEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
     DINGO_LOG(INFO) << "Init rocks_engine";
 
-    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, ts_provider_);
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, GetTsProvider());
     DINGO_LOG(INFO) << "Init raft_store_engine";
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
@@ -407,8 +407,7 @@ bool Server::InitCoordinatorInteraction() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   if (!FLAGS_coor_url.empty()) {
-    return coordinator_interaction_->InitByNameService(FLAGS_coor_url,
-                                                       pb::common::CoordinatorServiceType::ServiceTypeCoordinator);
+    return coordinator_interaction_->InitByNameService(FLAGS_coor_url);
   } else {
     DINGO_LOG(ERROR) << "FLAGS_coor_url is empty";
     return false;
@@ -421,12 +420,10 @@ bool Server::InitCoordinatorInteractionForAutoIncrement() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   if (!FLAGS_coor_url.empty()) {
-    return coordinator_interaction_incr_->InitByNameService(
-        FLAGS_coor_url, pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+    return coordinator_interaction_incr_->InitByNameService(FLAGS_coor_url);
 
   } else {
-    return coordinator_interaction_incr_->Init(config->GetString("coordinator.peers"),
-                                               pb::common::CoordinatorServiceType::ServiceTypeAutoIncrement);
+    return coordinator_interaction_incr_->Init(config->GetString("coordinator.peers"));
   }
 }
 
@@ -436,7 +433,7 @@ bool Server::InitLogStorageManager() {
 }
 
 bool Server::InitStorage() {
-  storage_ = std::make_shared<Storage>(raft_engine_, mono_engine_);
+  storage_ = std::make_shared<Storage>(raft_engine_, mono_engine_, GetTsProvider());
   return true;
 }
 
@@ -739,14 +736,13 @@ bool Server::InitCrontabManager() {
         coordinator_control->RecycleArchiveTaskList();
       },
   });
-  crontab_manager_->AddCrontab(crontab_configs_);
 
   if (FLAGS_enable_timing_get_tso) {
     // Add get tso crontab
     FLAGS_get_tso_interval_ms = GetInterval(config, "server.get_tso_interval_ms", FLAGS_get_tso_interval_ms);
     crontab_configs_.push_back({
         "GET_TSO",
-        {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
+        {pb::common::STORE, pb::common::INDEX},
         FLAGS_get_tso_interval_ms,
         true,
         [](void*) {
@@ -755,6 +751,8 @@ bool Server::InitCrontabManager() {
         },
     });
   }
+
+  crontab_manager_->AddCrontab(crontab_configs_);
 
   return true;
 }
@@ -775,7 +773,7 @@ bool Server::InitRegionCommandManager() {
 }
 
 bool Server::InitStoreMetricsManager() {
-  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(meta_reader_, meta_writer_, raft_engine_);
+  store_metrics_manager_ = std::make_shared<StoreMetricsManager>(meta_reader_, meta_writer_);
   return store_metrics_manager_->Init();
 }
 
@@ -939,11 +937,6 @@ std::shared_ptr<CoordinatorInteraction> Server::GetCoordinatorInteractionIncr() 
   return coordinator_interaction_incr_;
 }
 
-std::shared_ptr<Engine> Server::GetEngine() {
-  CHECK(raft_engine_ != nullptr) << "raft engine is nullptr.";
-  return raft_engine_;
-}
-
 std::shared_ptr<RawEngine> Server::GetRawEngine(pb::common::RawEngine type) {
   CHECK(raft_engine_ != nullptr) << "raw engine is nullptr.";
   return raft_engine_->GetRawEngine(type);
@@ -962,11 +955,8 @@ std::shared_ptr<Engine> Server::GetEngine(pb::common::StorageEngine store_engine
 }
 
 std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
-  auto engine = GetEngine();
-  if (engine->GetID() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
-    return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
-  }
-  return nullptr;
+  auto engine = GetEngine(pb::common::StorageEngine::STORE_ENG_RAFT_STORE);
+  return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
 }
 
 std::shared_ptr<MetaReader> Server::GetMetaReader() {
@@ -1131,7 +1121,7 @@ void Server::SetClusterForceReadOnly(bool is_read_only, const std::string& read_
   }
 }
 
-bool Server::IsLeader(int64_t region_id) { return storage_->IsLeader(region_id); }
+bool Server::IsLeader(int64_t region_id) { return GetStorage()->IsLeader(region_id); }
 
 std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
 
@@ -1235,9 +1225,17 @@ std::string Server::GetAllWorkSetPendingTaskCount() {
                      raft_apply_pending_task_count);
 }
 
-ThreadPoolPtr Server::GetVectorIndexThreadPool() { return vector_index_thread_pool_; }
+ThreadPoolPtr Server::GetVectorIndexThreadPool() {
+  CHECK(vector_index_thread_pool_ != nullptr) << "vector_index_thread_pool is nullptr.";
 
-mvcc::TsProviderPtr Server::GetTsProvider() { return ts_provider_; }
+  return vector_index_thread_pool_;
+}
+
+mvcc::TsProviderPtr Server::GetTsProvider() {
+  CHECK(ts_provider_ != nullptr) << "ts_provider is nullptr.";
+
+  return ts_provider_;
+}
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,
                                                                               const int64_t region_id,

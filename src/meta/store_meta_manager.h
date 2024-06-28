@@ -170,7 +170,6 @@ class Region {
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
-  pb::common::Range encode_range_;
 
   pb::raft::SplitStrategy split_strategy_{};
 

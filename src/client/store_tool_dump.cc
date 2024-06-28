@@ -452,7 +452,7 @@ void DumpVectorIndexRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
       data.ParseFromString(value);
       int dimension = data.float_values_size() > 0 ? data.float_values_size() : data.binary_values_size();
       std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
-                               dingodb::VectorCodec::DecodeVectorId(key), dimension, FormatVector(data, 10))
+                               dingodb::VectorCodec::UnPackageVectorId(key), dimension, FormatVector(data, 10))
                 << std::endl;
     }
   };
@@ -461,7 +461,7 @@ void DumpVectorIndexRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
     if (ctx->show_vector) {
       dingodb::pb::common::VectorScalardata data;
       data.ParseFromString(value);
-      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::DecodeVectorId(key),
+      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::UnPackageVectorId(key),
                                data.ShortDebugString())
                 << std::endl;
     }
@@ -472,7 +472,7 @@ void DumpVectorIndexRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
       dingodb::pb::common::VectorTableData data;
       data.ParseFromString(value);
       std::cout << fmt::format("[table data] vector_id({}) table_key: {} table_value: {}",
-                               dingodb::VectorCodec::DecodeVectorId(key),
+                               dingodb::VectorCodec::UnPackageVectorId(key),
                                dingodb::Helper::StringToHex(data.table_key()),
                                dingodb::Helper::StringToHex(data.table_value()))
                 << std::endl;
@@ -514,7 +514,7 @@ void DumpVectorIndexTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
       data.ParseFromString(value);
       int dimension = data.float_values_size() > 0 ? data.float_values_size() : data.binary_values_size();
       std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
-                               dingodb::VectorCodec::DecodeVectorId(key), dimension, FormatVector(data, 10))
+                               dingodb::VectorCodec::UnPackageVectorId(key), dimension, FormatVector(data, 10))
                 << std::endl;
     }
   };
@@ -523,7 +523,7 @@ void DumpVectorIndexTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
     if (ctx->show_vector) {
       dingodb::pb::common::VectorScalardata data;
       data.ParseFromString(value);
-      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::DecodeVectorId(key),
+      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::UnPackageVectorId(key),
                                data.ShortDebugString())
                 << std::endl;
     }
@@ -534,7 +534,7 @@ void DumpVectorIndexTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDe
       dingodb::pb::common::VectorTableData data;
       data.ParseFromString(value);
       std::cout << fmt::format("[table data] vector_id({}) table_key: {} table_value: {}",
-                               dingodb::VectorCodec::DecodeVectorId(key),
+                               dingodb::VectorCodec::UnPackageVectorId(key),
                                dingodb::Helper::StringToHex(data.table_key()),
                                dingodb::Helper::StringToHex(data.table_value()))
                 << std::endl;

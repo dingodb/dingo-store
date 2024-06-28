@@ -115,7 +115,7 @@ butil::Status KvReader::KvCount(const std::string& cf_name, int64_t ts, const st
 }
 
 butil::Status KvReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& result) {
+                                 const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -135,14 +135,15 @@ butil::Status KvReader::KvMinKey(const std::string& cf_name, int64_t ts, const s
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->Seek(encode_start_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();
 }
 
 butil::Status KvReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& result) {
+                                 const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -162,7 +163,8 @@ butil::Status KvReader::KvMaxKey(const std::string& cf_name, int64_t ts, const s
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->SeekForPrev(encode_end_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();
@@ -248,7 +250,7 @@ butil::Status VectorReader::KvCount(const std::string& cf_name, int64_t ts, cons
 }
 
 butil::Status VectorReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                     const std::string& end_key, std::string& result) {
+                                     const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -265,14 +267,15 @@ butil::Status VectorReader::KvMinKey(const std::string& cf_name, int64_t ts, con
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->Seek(start_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();
 }
 
 butil::Status VectorReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                     const std::string& end_key, std::string& result) {
+                                     const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -289,7 +292,8 @@ butil::Status VectorReader::KvMaxKey(const std::string& cf_name, int64_t ts, con
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->SeekForPrev(end_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();
@@ -376,7 +380,7 @@ butil::Status DocumentReader::KvCount(const std::string& cf_name, int64_t ts, co
 }
 
 butil::Status DocumentReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                       const std::string& end_key, std::string& result) {
+                                       const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -393,14 +397,15 @@ butil::Status DocumentReader::KvMinKey(const std::string& cf_name, int64_t ts, c
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->Seek(start_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();
 }
 
 butil::Status DocumentReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                       const std::string& end_key, std::string& result) {
+                                       const std::string& end_key, std::string& plain_key) {
   if (BAIDU_UNLIKELY(start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
@@ -417,7 +422,8 @@ butil::Status DocumentReader::KvMaxKey(const std::string& cf_name, int64_t ts, c
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   iter->SeekForPrev(end_key);
   if (iter->Valid()) {
-    result = iter->Key();
+    int64_t ts;
+    Codec::DecodeKey(iter->Key(), plain_key, ts);
   }
 
   return butil::Status().OK();

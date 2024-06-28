@@ -72,14 +72,6 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   }
 
   if (ctx) {
-    if (ctx->Response() && request.kvs().size() == 1) {
-      auto *response = dynamic_cast<pb::store::KvPutResponse *>(ctx->Response());
-      response->set_ts(req.ts());
-    } else if (ctx->Response() && request.kvs().size() > 1) {
-      auto *response = dynamic_cast<pb::store::KvBatchPutResponse *>(ctx->Response());
-      response->set_ts(req.ts());
-    }
-
     ctx->SetStatus(status);
   }
 
@@ -1009,7 +1001,7 @@ int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr r
                                     int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
-  auto engine = Server::GetInstance().GetEngine();
+  auto engine = Server::GetInstance().GetEngine(region->GetStoreEngineType());
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   auto status = engine->AyncSaveSnapshot(ctx, region->Id(), true);
   if (!status.ok()) {
@@ -1059,7 +1051,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       if (req.ttl() == 0) {
         mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
       } else {
-        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
       }
       kv.mutable_value()->swap(value);
       kvs_default.push_back(std::move(kv));
@@ -1073,7 +1065,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       if (req.ttl() == 0) {
         mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
       } else {
-        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
       }
       kv.mutable_value()->swap(value);
       kvs_scalar.push_back(std::move(kv));
@@ -1095,7 +1087,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
         if (req.ttl() == 0) {
           mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
         } else {
-          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
         }
 
         kv.mutable_value()->swap(value);
@@ -1111,7 +1103,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       if (req.ttl() == 0) {
         mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
       } else {
-        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
       }
       kv.mutable_value()->swap(value);
       kvs_table.push_back(std::move(kv));
@@ -1138,15 +1130,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      bool key_state = status.ok();
-      auto *response = dynamic_cast<pb::index::VectorAddResponse *>(ctx->Response());
-      for (int i = 0; i < request.vectors_size(); i++) {
-        response->add_key_states(key_state);
-      }
-      response->set_ts(ts);
-    }
-
     ctx->SetStatus(status);
   }
 
@@ -1268,11 +1251,6 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      auto *response = dynamic_cast<pb::index::VectorDeleteResponse *>(ctx->Response());
-      response->set_ts(ts);
-    }
-
     ctx->SetStatus(status);
   }
 
@@ -1374,14 +1352,6 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      bool key_state = status.ok();
-      auto *response = dynamic_cast<pb::document::DocumentAddResponse *>(ctx->Response());
-      for (int i = 0; i < request.documents_size(); i++) {
-        response->add_key_states(key_state);
-      }
-    }
-
     ctx->SetStatus(status);
   }
 

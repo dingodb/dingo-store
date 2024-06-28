@@ -35,18 +35,29 @@ class VectorCodec {
                               int64_t ts, std::string& result);
 
   // key is encode key or plain key
-  static int64_t DecodePartitionId(const std::string& key);
-  static int64_t DecodePartitionIdFromEncodeKey(const std::string& key);
-  static int64_t DecodeVectorId(const std::string& key);
-  static int64_t DecodeVectorIdFromEncodeKey(const std::string& key);
-  static std::string DecodeScalarKey(const std::string& key);
-  static std::string DecodeScalarKeyFromEncodeKey(const std::string& key);
+  static int64_t UnPackagePartitionId(const std::string& plain_key);
+  static int64_t DecodePartitionIdFromEncodeKey(const std::string& encode_key);
+  static int64_t DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
+  static int64_t UnPackageVectorId(const std::string& plain_key);
+  static int64_t DecodeVectorIdFromEncodeKey(const std::string& encode_key);
+  static int64_t DecodeVectorIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
+  static std::string UnPackageScalarKey(const std::string& plain_key);
+  static std::string DecodeScalarKeyFromEncodeKey(const std::string& encode_key);
+  static std::string DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
 
-  static std::string_view TruncateTsForKey(const std::string& key);
-  static std::string_view TruncateTsForKey(const std::string_view& key);
+  static void DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& vector_id);
+  static void DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& vector_id,
+                                  std::string& scalar_key);
+  static void DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                        int64_t& vector_id);
+  static void DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                        int64_t& vector_id, std::string& scalar_key);
 
-  static int64_t TruncateKeyForTs(const std::string& key);
-  static int64_t TruncateKeyForTs(const std::string_view& key);
+  static std::string_view TruncateTsForKey(const std::string& encode_key_with_ts);
+  static std::string_view TruncateTsForKey(const std::string_view& encode_key_with_ts);
+
+  static int64_t TruncateKeyForTs(const std::string& encode_key_with_ts);
+  static int64_t TruncateKeyForTs(const std::string_view& encode_key_with_ts);
 
   static std::string DebugKey(bool is_encode, const std::string& key);
   static std::string DebugRange(bool is_encode, const pb::common::Range& range);

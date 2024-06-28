@@ -393,9 +393,10 @@ butil::Status VectorReader::CompareVectorScalarDataWithCoprocessor(
     const std::shared_ptr<RawCoprocessor>& scalar_coprocessor, bool& compare_result) {
   compare_result = false;
 
-  std::string key, value;
+  std::string key;
   VectorCodec::EncodeVectorKey(region_range.start_key()[0], partition_id, vector_id, key);
 
+  std::string value;
   auto status = reader_->KvGet(Constant::kVectorScalarCF, ts, key, value);
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format("Get vector scalar data failed, vector_id: {} error: {} ", vector_id,
@@ -629,21 +630,21 @@ butil::Status VectorReader::GetBorderId(int64_t ts, const pb::common::Range& reg
   const std::string& start_key = region_range.start_key();
   const std::string& end_key = region_range.end_key();
 
-  std::string key;
+  std::string plain_key;
   if (get_min) {
-    auto status = reader_->KvMinKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    auto status = reader_->KvMinKey(Constant::kStoreDataCF, ts, start_key, end_key, plain_key);
     if (!status.ok()) {
       return status;
     }
 
   } else {
-    auto status = reader_->KvMaxKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    auto status = reader_->KvMaxKey(Constant::kStoreDataCF, ts, start_key, end_key, plain_key);
     if (!status.ok()) {
       return status;
     }
   }
 
-  vector_id = key.empty() ? 0 : VectorCodec::DecodeVectorId(key);
+  vector_id = plain_key.empty() ? 0 : VectorCodec::UnPackageVectorId(plain_key);
 
   return butil::Status::OK();
 }
@@ -656,7 +657,6 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
   VectorCodec::EncodeVectorKey(Helper::GetKeyPrefix(range.start_key()), ctx->partition_id, ctx->start_id, seek_key);
   auto encode_range = mvcc::Codec::EncodeRange(range);
 
-  IteratorOptions options;
   if (!ctx->is_reverse) {
     if (seek_key < encode_range.start_key()) {
       seek_key = encode_range.start_key();
@@ -666,7 +666,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       return butil::Status::OK();
     }
 
-    options.lower_bound = encode_range.start_key();
+    IteratorOptions options;
     options.upper_bound = encode_range.end_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
@@ -679,7 +679,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto vector_id = VectorCodec::DecodeVectorId(key);
+      auto vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
       if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
         continue;
       }
@@ -716,6 +716,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       return butil::Status::OK();
     }
 
+    IteratorOptions options;
     options.lower_bound = encode_range.start_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
@@ -733,7 +734,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       pb::common::VectorWithId vector;
 
       std::string key(iter->Key());
-      auto vector_id = VectorCodec::DecodeVectorId(key);
+      auto vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
       if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
         continue;
       }
@@ -934,7 +935,8 @@ butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarCF(
 
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
     pb::common::VectorScalardata internal_vector_scalar;
-    if (!internal_vector_scalar.ParseFromString(std::string(iter->Value()))) {
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    if (!internal_vector_scalar.ParseFromString(value)) {
       return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
     }
 
@@ -943,9 +945,9 @@ butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarCF(
 
     if (compare_result) {
       std::string key(iter->Key());
-      int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
+      int64_t internal_vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
       if (0 == internal_vector_id) {
-        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
+        std::string s = fmt::format("decode vector id failed key : {}", Helper::StringToHex(key));
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
       }
@@ -1002,11 +1004,9 @@ butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarKeyS
     return butil::Status::OK();
   };
 
-  std::string key;
-  key.reserve(2 * 1024);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
-    key = iter->Key();
-    int64_t vector_id = VectorCodec::DecodeVectorId(key);
+    std::string key(iter->Key());
+    int64_t vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
     if (last_vector_id != vector_id && last_vector_id != std::numeric_limits<int64_t>::min()) {
       auto status = scalar_compare_func();
       if (!status.ok()) {
@@ -1014,7 +1014,7 @@ butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarKeyS
       }
     }
 
-    std::string scalar_key = VectorCodec::DecodeScalarKey(key);
+    std::string scalar_key = VectorCodec::DecodeScalarKeyFromEncodeKeyWithTs(key);
     if (scalar_key.empty()) {
       return butil::Status(pb::error::Errno::EINTERNAL,
                            fmt::format("decode scalar key({}) failed", Helper::StringToHex(key)));
@@ -1022,7 +1022,8 @@ butil::Status VectorReader::InternalVectorSearchForScalarPreFilterWithScalarKeyS
 
     if (compare_keys.find(scalar_key) != compare_keys.end()) {
       pb::common::ScalarValue scalar_value;
-      if (!scalar_value.ParseFromArray(iter->Value().data(), iter->Value().size())) {
+      std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+      if (!scalar_value.ParseFromString(value)) {
         return butil::Status(pb::error::EINTERNAL, "pb decode scalar value failed");
       }
       internal_vector_scalar.mutable_scalar_data()->insert({scalar_key, scalar_value});
@@ -1101,16 +1102,17 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   vector_ids.reserve(1024);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
     pb::common::VectorTableData internal_vector_table;
-    if (!internal_vector_table.ParseFromString(std::string(iter->Value()))) {
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    if (!internal_vector_table.ParseFromString(value)) {
       return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorTable failed");
     }
 
     bool compare_result = lambda_table_compare_with_coprocessor_function(internal_vector_table);
     if (compare_result) {
       std::string key(iter->Key());
-      int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
+      int64_t internal_vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
       if (0 == internal_vector_id) {
-        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
+        std::string s = fmt::format("decode vector id failed key : {}", Helper::StringToHex(key));
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
       }
@@ -1459,7 +1461,8 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
   vector_ids.reserve(1024);
   for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
     pb::common::VectorScalardata internal_vector_scalar;
-    if (!internal_vector_scalar.ParseFromString(std::string(iter->Value()))) {
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    if (!internal_vector_scalar.ParseFromString(value)) {
       return butil::Status(pb::error::EINTERNAL, "Internal error, decode VectorScalar failed");
     }
 
@@ -1470,9 +1473,9 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterDebug(
 #endif
     if (compare_result) {
       std::string key(iter->Key());
-      int64_t internal_vector_id = VectorCodec::DecodeVectorId(key);
+      int64_t internal_vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
       if (0 == internal_vector_id) {
-        std::string s = fmt::format("VectorCodec::DecodeVectorId failed key : {}", Helper::StringToHex(key));
+        std::string s = fmt::format("decode vector id failed key : {}", Helper::StringToHex(key));
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
       }
@@ -1620,10 +1623,10 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   IteratorOptions options;
   options.lower_bound = region_range.start_key();
   options.upper_bound = region_range.end_key();
-  auto iterator = reader_->NewIterator(Constant::kVectorDataCF, 0, options);
+  auto iter = reader_->NewIterator(Constant::kVectorDataCF, 0, options);
 
-  iterator->Seek(region_range.start_key());
-  if (!iterator->Valid()) {
+  iter->Seek(region_range.start_key());
+  if (!iter->Valid()) {
     return butil::Status();
   }
 
@@ -1638,18 +1641,18 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   std::vector<pb::index::VectorWithDistanceResult> results_batch;
 
   // scan data from raw engine
-  while (iterator->Valid()) {
-    std::string key(iterator->Key());
-    auto vector_id = VectorCodec::DecodeVectorId(key);
+  while (iter->Valid()) {
+    std::string key(iter->Key());
+    auto vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
     if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
-      iterator->Next();
+      iter->Next();
       continue;
     }
 
-    auto value = iterator->Value();
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
 
     pb::common::Vector vector;
-    if (!vector.ParseFromArray(value.data(), value.size())) {
+    if (!vector.ParseFromString(value)) {
       return butil::Status(pb::error::EINTERNAL, "Parse proto from string error");
     }
     pb::common::VectorWithId vector_with_id;
@@ -1701,7 +1704,7 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
       vector_with_id_batch.clear();
     }
 
-    iterator->Next();
+    iter->Next();
   }
 
   if (!vector_with_id_batch.empty()) {
@@ -1811,16 +1814,16 @@ butil::Status VectorReader::BruteForceRangeSearch(VectorIndexWrapperPtr vector_i
   // scan data from raw engine
   while (iter->Valid()) {
     std::string key(iter->Key());
-    auto vector_id = VectorCodec::DecodeVectorId(key);
+    auto vector_id = VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key);
     if (vector_id == 0 || vector_id == INT64_MAX || vector_id < 0) {
       iter->Next();
       continue;
     }
 
-    auto value = iter->Value();
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
 
     pb::common::Vector vector;
-    if (!vector.ParseFromArray(value.data(), value.size())) {
+    if (!vector.ParseFromString(value)) {
       return butil::Status(pb::error::EINTERNAL, "Parse proto from string error");
     }
     pb::common::VectorWithId vector_with_id;

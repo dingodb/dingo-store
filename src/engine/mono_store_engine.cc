@@ -14,6 +14,7 @@
 #include "engine/mono_store_engine.h"
 
 #include <cstdint>
+#include <string>
 
 #include "butil/status.h"
 #include "common/role.h"
@@ -300,8 +301,22 @@ butil::Status MonoStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
   if (ts == 0) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
+
   auto encode_kvs = mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs);
-  return mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_kvs, ts));
+  auto status = mono_engine_->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), encode_kvs, ts));
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (ctx->Response() && kvs.size() == 1) {
+    auto* response = dynamic_cast<pb::store::KvPutResponse*>(ctx->Response());
+    response->set_ts(ts);
+  } else if (ctx->Response() && kvs.size() > 1) {
+    auto* response = dynamic_cast<pb::store::KvBatchPutResponse*>(ctx->Response());
+    response->set_ts(ts);
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status MonoStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
@@ -340,15 +355,14 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  key_states.resize(kvs.size(), false);
-
-  std::vector<bool> temp_key_states;
-  temp_key_states.resize(kvs.size(), false);
-
   int64_t ts = ts_provider_->GetTs();
   if (ts == 0) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
+
+  key_states.resize(kvs.size(), false);
+  std::vector<bool> temp_key_states(kvs.size(), false);
+
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {
@@ -357,13 +371,10 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
-    auto encode_key = mvcc::Codec::EncodeKey(kv.key(), ts);
-    auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
-
     std::string old_value;
-    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), kv.key(), old_value);
+    auto status = reader->KvGet(ctx->CfName(), 0, kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-      return butil::Status(pb::error::EINTERNAL, "Internal get error");
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
     }
 
     if (is_atomic) {
@@ -377,8 +388,12 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
     }
 
     pb::common::KeyValue encode_kv;
-    encode_kv.mutable_key()->swap(encode_key);
-    mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, kv.value(), *encode_kv.mutable_value());
+    encode_kv.set_key(mvcc::Codec::EncodeKey(kv.key(), ts));
+    if (ctx->Ttl() == 0) {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, kv.value(), *encode_kv.mutable_value());
+    } else {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ctx->Ttl(), kv.value(), *encode_kv.mutable_value());
+    }
 
     put_kvs.push_back(std::move(encode_kv));
 
@@ -396,6 +411,14 @@ butil::Status MonoStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
 
   key_states = temp_key_states;
 
+  if (ctx->Response() && kvs.size() == 1) {
+    auto* response = dynamic_cast<pb::store::KvPutIfAbsentResponse*>(ctx->Response());
+    response->set_ts(ts);
+  } else if (ctx->Response() && kvs.size() > 1) {
+    auto* response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(ctx->Response());
+    response->set_ts(ts);
+  }
+
   return butil::Status();
 }
 
@@ -410,15 +433,14 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
     return butil::Status(pb::error::EKEY_EMPTY, "Key is mismatch");
   }
 
-  key_states.resize(kvs.size(), false);
-
-  std::vector<bool> temp_key_states;
-  temp_key_states.resize(kvs.size(), false);
-
   int64_t ts = ts_provider_->GetTs();
   if (ts == 0) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
+
+  key_states.resize(kvs.size(), false);
+  std::vector<bool> temp_key_states(kvs.size(), false);
+
   auto reader = mono_engine_->NewMVCCReader(ctx->RawEngineType());
   std::vector<pb::common::KeyValue> put_kvs;
   for (int i = 0; i < kvs.size(); ++i) {
@@ -427,13 +449,10 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
       return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
     }
 
-    auto encode_key = mvcc::Codec::EncodeKey(kv.key(), ts);
-    auto encode_key_without_ts = mvcc::Codec::TruncateTsForKey(encode_key);
-
     std::string old_value;
-    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), kv.key(), old_value);
+    auto status = reader->KvGet(ctx->CfName(), 0, kv.key(), old_value);
     if (!status.ok() && status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
-      return butil::Status(pb::error::EINTERNAL, "Internal get error");
+      return butil::Status(pb::error::EINTERNAL, "Internal error");
     }
 
     if (is_atomic) {
@@ -459,13 +478,15 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
     }
 
     pb::common::KeyValue encode_kv;
-    encode_kv.mutable_key()->swap(encode_key);
+    encode_kv.set_key(mvcc::Codec::EncodeKey(kv.key(), ts));
 
     // value empty means delete
     if (kv.value().empty()) {
-      encode_kv.set_value(mvcc::Codec::ValueFlagDelete());
-    } else {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kDelete, *encode_kv.mutable_value());
+    } else if (ctx->Ttl() == 0) {
       mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, kv.value(), *encode_kv.mutable_value());
+    } else {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ctx->Ttl(), kv.value(), *encode_kv.mutable_value());
     }
 
     put_kvs.push_back(std::move(encode_kv));
@@ -483,6 +504,14 @@ butil::Status MonoStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   }
 
   key_states = temp_key_states;
+
+  if (ctx->Response() && kvs.size() == 1) {
+    auto* response = dynamic_cast<pb::store::KvCompareAndSetResponse*>(ctx->Response());
+    response->set_ts(ts);
+  } else if (ctx->Response() && kvs.size() > 1) {
+    auto* response = dynamic_cast<pb::store::KvBatchCompareAndSetResponse*>(ctx->Response());
+    response->set_ts(ts);
+  }
 
   return butil::Status();
 }

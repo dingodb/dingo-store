@@ -57,8 +57,6 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
                                        std::vector<int64_t> region_ids, bool is_update_epoch_version) {
   auto start_time = Helper::TimestampMs();
   auto first_start_time = start_time;
-  auto engine = Server::GetInstance().GetEngine();
-  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
 
   pb::coordinator::StoreHeartbeatRequest request;
 
@@ -144,6 +142,7 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
            inner_region.state() == pb::common::StoreRegionState::STANDBY ||
            inner_region.state() == pb::common::StoreRegionState::TOMBSTONE) &&
           inner_region.definition().store_engine() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
+        auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
         auto raft_node = raft_store_engine->GetNode(inner_region.id());
         if (raft_node != nullptr) {
           *(tmp_region_metrics.mutable_braft_status()) = (*raft_node->GetStatus());

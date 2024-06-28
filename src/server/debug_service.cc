@@ -893,14 +893,13 @@ std::vector<pb::debug::DumpRegionResponse::KV> DumpRawKvRegion(RawEnginePtr raw_
   options.upper_bound = range.end_key();
 
   std::vector<pb::debug::DumpRegionResponse::KV> kvs;
-  int64_t count = -1;
+  int64_t curr_offset = 0;
   auto iter = reader->NewIterator(Constant::kStoreDataCF, options);
-  for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
-    ++count;
-    if (count < offset) {
+  for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+    if (curr_offset < offset) {
       continue;
     }
-    if (count > offset + limit) {
+    if (curr_offset >= offset + limit) {
       break;
     }
 
@@ -918,6 +917,8 @@ std::vector<pb::debug::DumpRegionResponse::KV> DumpRawKvRegion(RawEnginePtr raw_
     kv.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
     kv.set_ttl(ttl);
     kv.set_value(std::string(value));
+
+    kvs.push_back(kv);
   }
 
   return std::move(kvs);
@@ -932,28 +933,25 @@ std::vector<pb::debug::DumpRegionResponse::Vector> DumpRawVectorRegion(RawEngine
 
   // vector data
   {
-    int64_t count = -1;
+    int64_t curr_offset = 0;
     dingodb::IteratorOptions options;
     options.upper_bound = range.end_key();
     auto iter = reader->NewIterator(Constant::kVectorDataCF, options);
-    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
-      ++count;
-      if (count < offset) {
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+      if (curr_offset < offset) {
         continue;
       }
-      if (count > offset + limit) {
+      if (curr_offset >= offset + limit) {
         break;
       }
 
-      const auto& key = iter->Key();
+      const auto& encode_key = std::string(iter->Key());
       pb::debug::DumpRegionResponse::Vector vector;
-      vector.set_key(std::string(key));
+      vector.set_key(encode_key);
 
-      std::string decode_key;
-      int64_t ts;
-      mvcc::Codec::DecodeKey(key, decode_key, ts);
-
-      vector.set_vector_id(VectorCodec::DecodeVectorId(decode_key));
+      int64_t ts = VectorCodec::TruncateKeyForTs(encode_key);
+      std::string encode_key_no_ts(VectorCodec::TruncateTsForKey(encode_key));
+      vector.set_vector_id(VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts));
       vector.set_ts(ts);
 
       mvcc::ValueFlag flag;
@@ -983,7 +981,7 @@ std::vector<pb::debug::DumpRegionResponse::Vector> DumpRawVectorRegion(RawEngine
     uint32_t count = 0;
     auto iter = reader->NewIterator(Constant::kVectorScalarCF, options);
     for (iter->Seek(first_vector.key()); iter->Valid(); iter->Next()) {
-      auto vector = vectors.at(count++);
+      auto& vector = vectors.at(count++);
       CHECK(iter->Key() == vector.key()) << "Not match key.";
 
       mvcc::ValueFlag flag;
@@ -1007,7 +1005,7 @@ std::vector<pb::debug::DumpRegionResponse::Vector> DumpRawVectorRegion(RawEngine
     uint32_t count = 0;
     auto iter = reader->NewIterator(Constant::kVectorTableCF, options);
     for (iter->Seek(first_vector.key()); iter->Valid(); iter->Next()) {
-      auto vector = vectors.at(count++);
+      auto& vector = vectors.at(count++);
       CHECK(iter->Key() == vector.key()) << "Not match key.";
 
       mvcc::ValueFlag flag;
@@ -1033,28 +1031,28 @@ std::vector<pb::debug::DumpRegionResponse::Ducument> DumpRawDucmentRegion(RawEng
 
   // vector data
   {
-    int64_t count = -1;
+    int64_t curr_offset = 0;
     dingodb::IteratorOptions options;
     options.upper_bound = range.end_key();
     auto iter = reader->NewIterator(Constant::kVectorDataCF, options);
-    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
-      ++count;
-      if (count < offset) {
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+      if (curr_offset < offset) {
         continue;
       }
-      if (count > offset + limit) {
+      if (curr_offset >= offset + limit) {
         break;
       }
 
-      const auto& key = iter->Key();
+      std::string key(iter->Key());
+
+      std::string plain_key;
+      int64_t partition_id;
+      int64_t document_id;
+      DocumentCodec::DecodeFromEncodeKeyWithTs(key, partition_id, document_id);
+
       pb::debug::DumpRegionResponse::Ducument ducument;
-
-      std::string decode_key;
-      int64_t ts;
-      mvcc::Codec::DecodeKey(key, decode_key, ts);
-
-      ducument.set_document_id(DocumentCodec::DecodeDocumentId(decode_key));
-      ducument.set_ts(ts);
+      ducument.set_document_id(document_id);
+      ducument.set_ts(DocumentCodec::TruncateKeyForTs(key));
 
       mvcc::ValueFlag flag;
       int64_t ttl;
@@ -1098,6 +1096,9 @@ void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
     ServiceHelper::SetError(response->mutable_error(), pb::error::ENOT_SUPPORT, "Not support dump txn");
     return;
   }
+
+  DINGO_LOG(INFO) << fmt::format("region({}) range{} offset({}) limit({})", request->region_id(),
+                                 region->RangeToString(), request->offset(), request->limit());
 
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
   if (region->Type() == pb::common::RegionType::STORE_REGION) {

@@ -217,6 +217,8 @@ void AutoDropTable(std::shared_ptr<Context> ctx);
 void CheckTableDistribution(std::shared_ptr<Context> ctx);
 void CheckIndexDistribution(std::shared_ptr<Context> ctx);
 
+void DumpRegion(std::shared_ptr<Context> ctx);
+
 }  // namespace client
 
 #endif  // DINGODB_CLIENT_STORE_CLIENT_FUNCTION_H_

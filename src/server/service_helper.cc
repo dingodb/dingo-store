@@ -32,6 +32,9 @@ namespace dingodb {
 
 DEFINE_int64(service_log_threshold_time_ns, 1000000000L, "service log threshold time");
 
+bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
+bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
+
 void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::string& errmsg) {
   error->set_errcode(static_cast<pb::error::Errno>(errcode));
   error->set_errmsg(errmsg);
@@ -251,6 +254,29 @@ butil::Status ServiceHelper::ValidateClusterReadOnly() {
   }
 
   return butil::Status();
+}
+
+LatchContextPtr ServiceHelper::LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys,
+                                              bool is_txn) {
+  auto start_time_us = butil::gettimeofday_us();
+
+  auto latch_ctx = LatchContext::New(keys);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(latch_ctx->GetLock(), latch_ctx->Cid());
+    if (!latch_got) {
+      latch_ctx->SyncCond().IncreaseWait();
+    }
+  }
+
+  if (is_txn) {
+    g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  } else {
+    g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  }
+
+  return latch_ctx;
 }
 
 }  // namespace dingodb

@@ -237,21 +237,21 @@ butil::Status DocumentReader::GetBorderId(int64_t ts, const pb::common::Range& r
   const std::string& start_key = region_range.start_key();
   const std::string& end_key = region_range.end_key();
 
-  std::string key;
+  std::string plain_key;
   if (get_min) {
-    auto status = reader_->KvMinKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    auto status = reader_->KvMinKey(Constant::kStoreDataCF, ts, start_key, end_key, plain_key);
     if (!status.ok()) {
       return status;
     }
 
   } else {
-    auto status = reader_->KvMaxKey(Constant::kStoreDataCF, ts, start_key, end_key, key);
+    auto status = reader_->KvMaxKey(Constant::kStoreDataCF, ts, start_key, end_key, plain_key);
     if (!status.ok()) {
       return status;
     }
   }
 
-  document_id = key.empty() ? 0 : DocumentCodec::DecodeDocumentId(key);
+  document_id = plain_key.empty() ? 0 : DocumentCodec::UnPackageDocumentId(plain_key);
 
   return butil::Status::OK();
 }
@@ -287,7 +287,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       pb::common::DocumentWithId document;
 
       std::string key(iter->Key());
-      auto document_id = DocumentCodec::DecodeDocumentId(key);
+      auto document_id = DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(key);
       if (document_id <= 0 || document_id == INT64_MAX) {
         continue;
       }
@@ -325,7 +325,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       }
 
       std::string key(iter->Key());
-      auto document_id = DocumentCodec::DecodeDocumentId(key);
+      auto document_id = DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(key);
       if (document_id <= 0 || document_id == INT64_MAX) {
         continue;
       }

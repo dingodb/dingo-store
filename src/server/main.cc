@@ -952,15 +952,6 @@ int main(int argc, char *argv[]) {
   dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
   dingo_server.SetRaftListenEndpoint(GetRaftListenEndPoint(config));
 
-  if (!dingo_server.InitEngine()) {
-    DINGO_LOG(ERROR) << "InitEngine failed!";
-    return -1;
-  }
-  if (!dingo_server.InitLogStorageManager()) {
-    DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
-    return -1;
-  }
-
   // for all role
   dingodb::NodeServiceImpl node_service;
 
@@ -1012,6 +1003,15 @@ int main(int argc, char *argv[]) {
     // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
     InitBthreadWorkerThreadNum(config);
 
+    if (!dingo_server.InitLogStorageManager()) {
+      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitEngine()) {
+      DINGO_LOG(ERROR) << "InitEngine failed!";
+      return -1;
+    }
+
     // init coordinator service worker parameters
     auto ret2 = InitCoordinatorServiceWorkerParameters(config);
     if (ret2 < 0) {
@@ -1050,7 +1050,7 @@ int main(int argc, char *argv[]) {
     version_service.SetControl(dingo_server.GetKvControl());
 
     // the Engine should be init success
-    auto engine = dingo_server.GetEngine();
+    auto engine = dingo_server.GetEngine(dingodb::pb::common::STORE_ENG_RAFT_STORE);
     coordinator_service.SetKvEngine(engine);
     meta_service.SetKvEngine(engine);
     version_service.SetKvEngine(engine);
@@ -1298,14 +1298,21 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
-    if (!dingo_server.ValiateCoordinator()) {
-      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
-      return -1;
-    }
+
     if (!dingo_server.InitTsProvider()) {
       DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
     }
+
+    if (!dingo_server.InitLogStorageManager()) {
+      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitEngine()) {
+      DINGO_LOG(ERROR) << "InitEngine failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
@@ -1433,14 +1440,20 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
-    if (!dingo_server.ValiateCoordinator()) {
-      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
-      return -1;
-    }
     if (!dingo_server.InitTsProvider()) {
       DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
     }
+
+    if (!dingo_server.InitLogStorageManager()) {
+      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitEngine()) {
+      DINGO_LOG(ERROR) << "InitEngine failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
@@ -1581,14 +1594,26 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
-    if (!dingo_server.ValiateCoordinator()) {
-      DINGO_LOG(ERROR) << "ValiateCoordinator failed!";
+
+    if (!dingo_server.InitTsProvider()) {
+      DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
     }
+
+    if (!dingo_server.InitLogStorageManager()) {
+      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+      return -1;
+    }
+    if (!dingo_server.InitEngine()) {
+      DINGO_LOG(ERROR) << "InitEngine failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitStorage()) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
+
     // region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
     // workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
     if (!dingo_server.InitDocumentIndexManager()) {

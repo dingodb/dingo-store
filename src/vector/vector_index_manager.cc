@@ -1203,7 +1203,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     pb::common::VectorWithId vector;
 
     std::string key(iter->Key());
-    vector.set_id(VectorCodec::DecodeVectorId(key));
+    vector.set_id(VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key));
 
     std::string value(iter->Value());
     if (!vector.mutable_vector()->ParseFromString(value)) {
