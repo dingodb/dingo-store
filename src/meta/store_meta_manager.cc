@@ -161,7 +161,7 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
 
   *(inner_region_.mutable_definition()->mutable_range()) = range;
-  encode_range_ = mvcc::Codec::EncodeRange(range);
+  *(inner_region_.mutable_encode_range()) = mvcc::Codec::EncodeRange(range);
 }
 
 void Region::GetEpochAndRange(pb::common::RegionEpoch& epoch, pb::common::Range& range) {
@@ -195,9 +195,9 @@ pb::common::Range Region::Range(bool is_encode, bool lock) {
   if (lock) {
     BAIDU_SCOPED_LOCK(mutex_);
 
-    return is_encode ? encode_range_ : inner_region_.definition().range();
+    return is_encode ? inner_region_.encode_range() : inner_region_.definition().range();
   } else {
-    return is_encode ? encode_range_ : inner_region_.definition().range();
+    return is_encode ? inner_region_.encode_range() : inner_region_.definition().range();
   }
 }
 

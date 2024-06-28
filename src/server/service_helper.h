@@ -34,6 +34,25 @@ namespace dingodb {
 
 DECLARE_int64(service_log_threshold_time_ns);
 
+struct LatchContext;
+using LatchContextPtr = std::shared_ptr<LatchContext>;
+
+class LatchContext {
+ public:
+  LatchContext(const std::vector<std::string>& keys) : lock_(keys) {}
+
+  static LatchContextPtr New(const std::vector<std::string>& keys) { return std::make_shared<LatchContext>(keys); }
+
+  uint64_t Cid() const { return (uint64_t)&sync_cond_; }
+  Lock* GetLock() { return &lock_; };
+
+  BthreadCond& SyncCond() { return sync_cond_; }
+
+ private:
+  Lock lock_;
+  BthreadCond sync_cond_;
+};
+
 class ServiceHelper {
  public:
   template <typename T>
@@ -55,6 +74,8 @@ class ServiceHelper {
   static butil::Status ValidateIndexRegion(store::RegionPtr region, const std::vector<int64_t>& vector_ids);
   static butil::Status ValidateDocumentRegion(store::RegionPtr region, const std::vector<int64_t>& document_ids);
   static butil::Status ValidateClusterReadOnly();
+
+  static LatchContextPtr LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys, bool is_txn);
 };
 
 template <typename T>

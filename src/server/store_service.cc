@@ -26,6 +26,7 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
+#include "common/latch.h"
 #include "common/synchronization.h"
 #include "common/tracker.h"
 #include "common/version.h"
@@ -37,6 +38,7 @@
 #include "proto/store.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
+#include "vector/vector_index.h"
 
 DEFINE_int32(raft_apply_worker_max_pending_num, 0, "raft apply worker num");
 
@@ -46,9 +48,6 @@ DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(max_prewrite_count);
-
-bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
-bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
 
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
@@ -304,25 +303,10 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -331,7 +315,9 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -426,27 +412,12 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -455,7 +426,9 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   auto kvs = Helper::PbRepeatedToVector(mut_request->mutable_kvs());
@@ -549,25 +522,10 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -576,7 +534,9 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
@@ -676,27 +636,13 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
 
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -705,7 +651,9 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -801,27 +749,12 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1019,22 +952,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
 
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1043,7 +963,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
@@ -1137,27 +1059,12 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2040,27 +1947,12 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2180,27 +2072,12 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2321,27 +2198,12 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2471,27 +2333,12 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2604,25 +2451,10 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2948,27 +2780,12 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -3199,25 +3016,10 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_lock());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);

@@ -42,10 +42,10 @@ class Reader {
                                 const std::string& end_key, int64_t& count) = 0;
 
   virtual butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& result) = 0;
+                                 const std::string& end_key, std::string& plain_key) = 0;
 
   virtual butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& result) = 0;
+                                 const std::string& end_key, std::string& plain_key) = 0;
 
   virtual dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) = 0;
 };
@@ -71,10 +71,10 @@ class KvReader : public Reader {
                         const std::string& end_key, int64_t& count) override;
 
   butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 
@@ -104,10 +104,10 @@ class VectorReader : public Reader {
                         const std::string& end_key, int64_t& count) override;
 
   butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 
@@ -137,10 +137,10 @@ class DocumentReader : public Reader {
                         const std::string& end_key, int64_t& count) override;
 
   butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& result) override;
+                         const std::string& end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 

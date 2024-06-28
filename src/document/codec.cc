@@ -35,7 +35,7 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, std::st
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
 
   std::string buf;
-  buf.resize(Constant::kDocumentKeyMinLenWithPrefix);
+  buf.reserve(Constant::kDocumentKeyMinLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -49,7 +49,7 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t
   CHECK(document_id >= 0) << fmt::format("Invalid document_id {}.", document_id);
 
   std::string buf;
-  buf.resize(Constant::kDocumentKeyMaxLenWithPrefix);
+  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -66,7 +66,7 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t
   CHECK(ts > 0) << fmt::format("Invalid ts {}.", ts);
 
   std::string buf;
-  buf.resize(Constant::kDocumentKeyMaxLenWithPrefix);
+  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -83,7 +83,7 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t
   CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, document_id);
 
   std::string buf;
-  buf.resize(Constant::kDocumentKeyMaxLenWithPrefix + scalar_key.size());
+  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix + scalar_key.size());
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -102,7 +102,7 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t
   CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, document_id);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -112,82 +112,147 @@ void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t
   result = mvcc::Codec::EncodeKey(buf, ts);
 }
 
-int64_t DocumentCodec::DecodePartitionId(const std::string& key) {
-  CHECK(key.size() >= Constant::kDocumentKeyMinLenWithPrefix)
-      << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(key));
+int64_t DocumentCodec::UnPackagePartitionId(const std::string& plain_key) {
+  CHECK(plain_key.size() >= Constant::kDocumentKeyMinLenWithPrefix)
+      << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(plain_key));
 
-  return SerialHelper::ReadLong(key.substr(1, 9));
+  return SerialHelper::ReadLong(plain_key.substr(1, 9));
 }
 
-int64_t DocumentCodec::DecodePartitionIdFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+int64_t DocumentCodec::DecodePartitionIdFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key));
 
-  return DecodePartitionId(decode_key);
+  return UnPackagePartitionId(plain_key);
 }
 
-int64_t DocumentCodec::DecodeDocumentId(const std::string& key) {
-  if (key.size() >= Constant::kDocumentKeyMaxLenWithPrefix) {
-    return SerialHelper::ReadLongComparable(
-        key.substr(Constant::kDocumentKeyMinLenWithPrefix, Constant::kDocumentKeyMinLenWithPrefix + 8));
+int64_t DocumentCodec::DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key_with_ts));
 
-  } else if (key.size() == Constant::kDocumentKeyMinLenWithPrefix) {
+  return UnPackagePartitionId(plain_key);
+}
+
+int64_t DocumentCodec::UnPackageDocumentId(const std::string& plain_key) {
+  if (plain_key.size() >= Constant::kDocumentKeyMaxLenWithPrefix) {
+    return SerialHelper::ReadLongComparable(plain_key.substr(9, 17));
+
+  } else if (plain_key.size() == Constant::kDocumentKeyMinLenWithPrefix) {
     return 0;
 
   } else {
-    DINGO_LOG(FATAL) << fmt::format("Decode vector id failed, value({}) size too small", Helper::StringToHex(key));
+    DINGO_LOG(FATAL) << fmt::format("Decode document id failed, value({}) size too small",
+                                    Helper::StringToHex(plain_key));
     return 0;
   }
 }
 
-int64_t DocumentCodec::DecodeDocumentIdFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+int64_t DocumentCodec::DecodeDocumentIdFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key));
 
-  return DecodeDocumentId(decode_key);
+  return UnPackageDocumentId(plain_key);
 }
 
-std::string DocumentCodec::DecodeScalarKey(const std::string& key) {
-  CHECK(key.size() > Constant::kDocumentKeyMaxLenWithPrefix)
-      << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(key));
+int64_t DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key_with_ts));
 
-  return key.substr(Constant::kVectorKeyMaxLenWithPrefix);
+  return UnPackageDocumentId(plain_key);
 }
 
-std::string DocumentCodec::DecodeScalarKeyFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+std::string DocumentCodec::UnPackageScalarKey(const std::string& plain_key) {
+  CHECK(plain_key.size() > Constant::kDocumentKeyMaxLenWithPrefix)
+      << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(plain_key));
 
-  return DecodeScalarKey(decode_key);
+  return plain_key.substr(Constant::kVectorKeyMaxLenWithPrefix);
 }
 
-std::string_view DocumentCodec::TruncateTsForKey(const std::string& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+std::string DocumentCodec::DecodeScalarKeyFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key));
 
-  return std::string_view(key).substr(0, key.size() - 8);
+  return UnPackageScalarKey(plain_key);
 }
 
-std::string_view DocumentCodec::TruncateTsForKey(const std::string_view& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+std::string DocumentCodec::DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode document key{} fail.", Helper::StringToHex(encode_key_with_ts));
 
-  return std::string_view(key).substr(0, key.size() - 8);
+  return UnPackageScalarKey(plain_key);
 }
 
-int64_t DocumentCodec::TruncateKeyForTs(const std::string& key) {
-  CHECK(key.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+void DocumentCodec::DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& document_id) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode document key({}) fail.", Helper::StringToHex(encode_key));
 
-  auto ts_str = key.substr(key.size() - 8, key.size());
+  partition_id = UnPackagePartitionId(plain_key);
+  document_id = UnPackageDocumentId(plain_key);
+}
+
+void DocumentCodec::DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& document_id,
+                                        std::string& scalar_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode document key({}) fail.", Helper::StringToHex(encode_key));
+
+  partition_id = UnPackagePartitionId(plain_key);
+  document_id = UnPackageDocumentId(plain_key);
+  scalar_key = UnPackageScalarKey(plain_key);
+}
+
+void DocumentCodec::DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                              int64_t& document_id) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode document key({}) fail.", Helper::StringToHex(encode_key_with_ts));
+
+  partition_id = UnPackagePartitionId(plain_key);
+  document_id = UnPackageDocumentId(plain_key);
+}
+
+void DocumentCodec::DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                              int64_t& document_id, std::string& scalar_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode document key({}) fail.", Helper::StringToHex(encode_key_with_ts));
+
+  partition_id = UnPackagePartitionId(plain_key);
+  document_id = UnPackageDocumentId(plain_key);
+  scalar_key = UnPackageScalarKey(plain_key);
+}
+
+std::string_view DocumentCodec::TruncateTsForKey(const std::string& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  return std::string_view(encode_key_with_ts).substr(0, encode_key_with_ts.size() - 8);
+}
+
+std::string_view DocumentCodec::TruncateTsForKey(const std::string_view& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  return std::string_view(encode_key_with_ts).substr(0, encode_key_with_ts.size() - 8);
+}
+
+int64_t DocumentCodec::TruncateKeyForTs(const std::string& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  auto ts_str = encode_key_with_ts.substr(encode_key_with_ts.size() - 8, encode_key_with_ts.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
-int64_t DocumentCodec::TruncateKeyForTs(const std::string_view& key) {
-  CHECK(key.size() >= 88) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+int64_t DocumentCodec::TruncateKeyForTs(const std::string_view& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 88) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
 
-  auto ts_str = key.substr(key.size() - 8, key.size());
+  auto ts_str = encode_key_with_ts.substr(encode_key_with_ts.size() - 8, encode_key_with_ts.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
@@ -196,7 +261,7 @@ std::string DocumentCodec::DebugKey(bool is_encode, const std::string& key) {
   if (is_encode) {
     return fmt::format("{}_{}", DecodePartitionIdFromEncodeKey(key), DecodeDocumentIdFromEncodeKey(key));
   } else {
-    return fmt::format("{}_{}", DecodePartitionId(key), DecodeDocumentId(key));
+    return fmt::format("{}_{}", UnPackagePartitionId(key), UnPackageDocumentId(key));
   }
 }
 
@@ -221,9 +286,9 @@ void DocumentCodec::DecodeRangeToDocumentId(bool is_encode, const pb::common::Ra
     }
 
   } else {
-    begin_document_id = DocumentCodec::DecodeDocumentId(range.start_key());
-    end_document_id = DocumentCodec::DecodeDocumentId(range.end_key());
-    if (end_document_id == 0 && (DecodePartitionId(range.end_key()) > DecodePartitionId(range.start_key()))) {
+    begin_document_id = DocumentCodec::UnPackageDocumentId(range.start_key());
+    end_document_id = DocumentCodec::UnPackageDocumentId(range.end_key());
+    if (end_document_id == 0 && (UnPackagePartitionId(range.end_key()) > UnPackagePartitionId(range.start_key()))) {
       end_document_id = INT64_MAX;
     }
   }

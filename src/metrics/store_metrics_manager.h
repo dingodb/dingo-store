@@ -319,12 +319,8 @@ class StoreMetrics {
 
 class StoreRegionMetrics : public TransformKvAble {
  public:
-  StoreRegionMetrics(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
-                     std::shared_ptr<Engine> engine)
-      : TransformKvAble(Constant::kStoreRegionMetricsPrefix),
-        meta_reader_(meta_reader),
-        meta_writer_(meta_writer),
-        engine_(engine) {
+  StoreRegionMetrics(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
+      : TransformKvAble(Constant::kStoreRegionMetricsPrefix), meta_reader_(meta_reader), meta_writer_(meta_writer) {
     bthread_mutex_init(&mutex_, nullptr);
   }
   ~StoreRegionMetrics() override { bthread_mutex_destroy(&mutex_); }
@@ -362,20 +358,18 @@ class StoreRegionMetrics : public TransformKvAble {
   // Write meta data to persistence storage.
   std::shared_ptr<MetaWriter> meta_writer_;
 
-  std::shared_ptr<Engine> engine_;
   bthread_mutex_t mutex_;
   std::map<int64_t, store::RegionMetricsPtr> metricses_;
 };
 
 class StoreMetricsManager {
  public:
-  explicit StoreMetricsManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
-                               std::shared_ptr<Engine> engine)
+  explicit StoreMetricsManager(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer)
       : is_collecting_(false),
         is_collecting_store_(false),
         is_collecting_approximate_size_(false),
         store_metrics_(std::make_shared<StoreMetrics>()),
-        region_metrics_(std::make_shared<StoreRegionMetrics>(meta_reader, meta_writer, engine)) {}
+        region_metrics_(std::make_shared<StoreRegionMetrics>(meta_reader, meta_writer)) {}
   ~StoreMetricsManager() = default;
 
   StoreMetricsManager(const StoreMetricsManager&) = delete;

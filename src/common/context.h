@@ -103,8 +103,8 @@ class Context {
 
   void SetTs(int64_t ts) { ts_ = ts; }
   int64_t Ts() const { return ts_; }
-  void SetTtl(int32_t ttl) { ttl_ = ttl; }
-  int32_t Ttl() const { return ttl_; }
+  void SetTtl(int64_t ttl) { ttl_ = ttl; }
+  int64_t Ttl() const { return ttl_; }
 
   bool DeleteFilesInRange() const { return delete_files_in_range_; }
   void SetDeleteFilesInRange(bool delete_files_in_range) { delete_files_in_range_ = delete_files_in_range; }
@@ -148,8 +148,8 @@ class Context {
   // Transaction isolation level
   pb::store::IsolationLevel isolation_level_{};
 
-  int64_t ts_;
-  int32_t ttl_;
+  int64_t ts_{0};
+  int64_t ttl_{0};
 
   // Rocksdb delete range in files
   bool delete_files_in_range_{false};

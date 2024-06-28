@@ -158,6 +158,8 @@ class TsProvider : public std::enable_shared_from_this<TsProvider> {
 
   int64_t GetTs();
 
+  uint64_t RenewEpoch() const { return renew_epoch_.load(std::memory_order_relaxed); };
+
   void TriggerRenewBatchTs();
 
   std::string DebugInfo();
@@ -182,14 +184,14 @@ class TsProvider : public std::enable_shared_from_this<TsProvider> {
   // statistics
   std::atomic<uint64_t> get_ts_count_{0};
   std::atomic<uint64_t> get_ts_fail_count_{0};
-  std::atomic<uint64_t> sync_renew_count_{0};
-  std::atomic<uint64_t> async_renew_count_{0};
+  std::atomic<uint64_t> renew_epoch_{0};
 };
 
 // take BatchTs task, run at worker
 class TakeBatchTsTask : public TaskRunnable {
  public:
-  TakeBatchTsTask(bool is_sync, TsProviderPtr ts_provider) : ts_provider_(ts_provider) {
+  TakeBatchTsTask(bool is_sync, uint64_t renew_num, TsProviderPtr ts_provider)
+      : renew_num_(renew_num), ts_provider_(ts_provider) {
     if (is_sync) {
       cond_ = std::make_shared<BthreadCond>();
     }
@@ -199,26 +201,27 @@ class TakeBatchTsTask : public TaskRunnable {
   std::string Type() override { return "BatchTsTask"; }
 
   void Run() override {
-    ts_provider_->RenewBatchTs();
+    if (renew_num_ == ts_provider_->RenewEpoch()) {
+      ts_provider_->RenewBatchTs();
+    }
+
     Notify();
   }
 
   void Wait() {
     if (cond_ != nullptr) {
-      // std::cout << "renew batchts waiting" << std::endl;
       cond_->IncreaseWait();
-      // std::cout << "renew batchts wakeup" << std::endl;
     }
   }
 
   void Notify() {
     if (cond_ != nullptr) {
-      // std::cout << "renew batchts nofify" << std::endl;
       cond_->DecreaseSignal();
     }
   }
 
  private:
+  uint64_t renew_num_{0};
   BthreadCondPtr cond_{nullptr};
   TsProviderPtr ts_provider_{nullptr};
 };

@@ -1165,7 +1165,7 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
     return nullptr;
   }
 
-  auto range = region->Range();
+  auto range = region->Range(false);
   butil::Status status;
 
   auto document_index_path =
@@ -1218,8 +1218,8 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.build][index_id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: "
       "({})",
-      document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::DecodeDocumentId(start_key),
-      Helper::StringToHex(end_key), DocumentCodec::DecodeDocumentId(end_key), document_index->WriteOpParallelNum(),
+      document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::UnPackageDocumentId(start_key),
+      Helper::StringToHex(end_key), DocumentCodec::UnPackageDocumentId(end_key), document_index->WriteOpParallelNum(),
       document_index_path);
 
   int64_t start_time = Helper::TimestampMs();
@@ -1262,7 +1262,7 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
     pb::common::DocumentWithId document;
 
     std::string key(iter->Key());
-    document.set_id(DocumentCodec::DecodeDocumentId(key));
+    document.set_id(DocumentCodec::UnPackageDocumentId(key));
 
     std::string value(iter->Value());
     if (!document.mutable_document()->ParseFromString(value)) {

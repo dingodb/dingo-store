@@ -23,8 +23,7 @@
 
 namespace dingodb {
 
-bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type) {
-  service_type_ = service_type;
+bool CoordinatorInteraction::Init(const std::string& addr) {
   endpoints_ = Helper::StringToEndpoints(addr);
   if (endpoints_.empty()) {
     DINGO_LOG(ERROR) << "Parse addr failed " << addr;
@@ -46,11 +45,10 @@ bool CoordinatorInteraction::Init(const std::string& addr, uint32_t service_type
   return true;
 }
 
-bool CoordinatorInteraction::InitByNameService(const std::string& service_name, uint32_t service_type) {
+bool CoordinatorInteraction::InitByNameService(const std::string& service_name,
+                                               pb::common::CoordinatorServiceType service_type) {
   service_type_ = service_type;
-
   brpc::ChannelOptions channel_opt;
-  // ChannelOptions should set "timeout_ms > connect_timeout_ms" for circuit breaker
   channel_opt.timeout_ms = 1000;
   channel_opt.connect_timeout_ms = 500;
 
@@ -61,7 +59,7 @@ bool CoordinatorInteraction::InitByNameService(const std::string& service_name, 
 
   use_service_name_ = true;
 
-  DINGO_LOG(INFO) << "Init channel by service_name " << service_name << " service_type=" << service_type;
+  DINGO_LOG(INFO) << "Init channel by service_name " << service_name;
 
   return true;
 }
@@ -73,8 +71,10 @@ void CoordinatorInteraction::NextLeader(int leader_index) {
   leader_index_.compare_exchange_weak(leader_index, next_leader_index);
 }
 
-const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceDescriptor() const {
-  switch (service_type_) {
+const ::google::protobuf::ServiceDescriptor* CoordinatorInteraction::GetServiceDescriptor(
+    pb::common::CoordinatorServiceType service_type) {
+  auto temp_service_type = service_type != pb::common::ServiceTypeCoordinator ? service_type : service_type_;
+  switch (temp_service_type) {
     case pb::common::CoordinatorServiceType::ServiceTypeCoordinator: {
       return pb::coordinator::CoordinatorService::descriptor();
     }

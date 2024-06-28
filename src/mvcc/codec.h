@@ -37,32 +37,32 @@ class Codec {
   // e.g.
   // user key: helloworld
   // encode key: hellowor0xFFld0000000xF8
-  static std::string EncodeBytes(const std::string& user_key);
-  static void EncodeBytes(const std::string& user_key, std::string& output);
-  static void EncodeBytes(const std::string_view& user_key, std::string& output);
+  static std::string EncodeBytes(const std::string& plain_key);
+  static void EncodeBytes(const std::string& plain_key, std::string& output);
+  static void EncodeBytes(const std::string_view& plain_key, std::string& output);
   // decode encode key to user key
   static bool DecodeBytes(const std::string& encode_key, std::string& output);
   static bool DecodeBytes(const std::string_view& encode_key, std::string& output);
 
   // encode user key and ts
-  static std::string EncodeKey(const std::string& key, int64_t ts);
-  static std::string EncodeKey(const std::string_view& key, int64_t ts);
+  static std::string EncodeKey(const std::string& plain_key, int64_t ts);
+  static std::string EncodeKey(const std::string_view& plain_key, int64_t ts);
   // decode encode key to user key and ts
-  static bool DecodeKey(const std::string& key, std::string& decode_key, int64_t& ts);
-  static bool DecodeKey(const std::string_view& key, std::string& decode_key, int64_t& ts);
+  static bool DecodeKey(const std::string& encode_key_with_ts, std::string& plain_key, int64_t& ts);
+  static bool DecodeKey(const std::string_view& encode_key_with_ts, std::string& plain_key, int64_t& ts);
   // decode encode key to user key
-  static bool DecodeKey(const std::string& key, std::string& decode_key);
-  static bool DecodeKey(const std::string_view& key, std::string& decode_key);
+  static bool DecodeKey(const std::string& encode_key_with_ts, std::string& plain_key);
+  static bool DecodeKey(const std::string_view& encode_key_with_ts, std::string& plain_key);
 
   // truncate ts from encode key
-  // encode key: user_key|ts: 8bytes
-  static std::string_view TruncateTsForKey(const std::string& key);
-  static std::string_view TruncateTsForKey(const std::string_view& key);
+  // encode key: plain_key|ts: 8bytes
+  static std::string_view TruncateTsForKey(const std::string& encode_key_with_ts);
+  static std::string_view TruncateTsForKey(const std::string_view& encode_key_with_ts);
 
   // truncate key from ts
-  // encode key: user_key|ts: 8bytes
-  static int64_t TruncateKeyForTs(const std::string& key);
-  static int64_t TruncateKeyForTs(const std::string_view& key);
+  // encode key: plain_key|ts: 8bytes
+  static int64_t TruncateKeyForTs(const std::string& encode_key_with_ts);
+  static int64_t TruncateKeyForTs(const std::string_view& encode_key_with_ts);
 
   // package value, append ttl and flag
   // value is input and outpt
@@ -71,41 +71,41 @@ class Codec {
   static void PackageValue(ValueFlag flag, int64_t ttl, std::string& value);
   static void PackageValue(ValueFlag flag, int64_t ttl, const std::string& value, std::string& output);
 
-  static void UnPackageValueInPlace(std::string& value);
-  static std::string_view UnPackageValue(const std::string& value);
-  static std::string_view UnPackageValue(const std::string_view& value);
-  static std::string_view UnPackageValue(const std::string_view& value, ValueFlag& flag, int64_t& ttl);
+  static void UnPackageValueInPlace(std::string& pkg_value);
+  static std::string_view UnPackageValue(const std::string& pkg_value);
+  static std::string_view UnPackageValue(const std::string_view& pkg_value);
+  static std::string_view UnPackageValue(const std::string_view& pkg_value, ValueFlag& flag, int64_t& ttl);
 
   // Get value flag
   // value: user value|flag
-  static ValueFlag GetValueFlag(const std::string& value);
-  static ValueFlag GetValueFlag(const std::string_view& value);
+  static ValueFlag GetValueFlag(const std::string& pkg_value);
+  static ValueFlag GetValueFlag(const std::string_view& pkg_value);
 
   // Get ttl from value
   // value: user value|ttl|flag=kPutTTL
-  static int64_t GetValueTTL(const std::string& value);
-  static int64_t GetValueTTL(const std::string_view& value);
+  static int64_t GetValueTTL(const std::string& pkg_value);
+  static int64_t GetValueTTL(const std::string_view& pkg_value);
 
   // Helper function
-  static std::vector<std::string> EncodeKeys(int64_t ts, const std::vector<std::string>& keys);
+  static std::vector<std::string> EncodeKeys(int64_t ts, const std::vector<std::string>& plain_keys);
 
-  static pb::common::KeyValue EncodeKeyValueWithPut(int64_t ts, const pb::common::KeyValue& kv);
-  static pb::common::KeyValue EncodeKeyValueWithPutTTL(int64_t ts, int64_t ttl, const pb::common::KeyValue& kv);
-  static pb::common::KeyValue EncodeKeyValueWithDelete(int64_t ts, const pb::common::KeyValue& kv);
+  static pb::common::KeyValue EncodeKeyValueWithPut(int64_t ts, const pb::common::KeyValue& plain_kv);
+  static pb::common::KeyValue EncodeKeyValueWithPutTTL(int64_t ts, int64_t ttl, const pb::common::KeyValue& plain_kv);
+  static pb::common::KeyValue EncodeKeyValueWithDelete(int64_t ts, const pb::common::KeyValue& plain_kv);
 
   static std::vector<pb::common::KeyValue> EncodeKeyValuesWithPut(int64_t ts,
-                                                                  const std::vector<pb::common::KeyValue>& kvs);
+                                                                  const std::vector<pb::common::KeyValue>& plain_kvs);
   static void EncodeKeyValuesWithPut(int64_t ts, std::vector<pb::common::KeyValue>& kvs);
 
   static std::vector<pb::common::KeyValue> EncodeKeyValuesWithTTL(int64_t ts, int64_t ttl,
-                                                                  const std::vector<pb::common::KeyValue>& kvs);
+                                                                  const std::vector<pb::common::KeyValue>& plain_kvs);
   static void EncodeKeyValuesWithTTL(int64_t ts, int64_t ttl, std::vector<pb::common::KeyValue>& kvs);
 
-  static std::vector<pb::common::KeyValue> EncodeKeyValuesWithDelete(int64_t ts,
-                                                                     const std::vector<pb::common::KeyValue>& kvs);
+  static std::vector<pb::common::KeyValue> EncodeKeyValuesWithDelete(
+      int64_t ts, const std::vector<pb::common::KeyValue>& plain_kvs);
   static void EncodeKeyValuesWithDelete(int64_t ts, std::vector<pb::common::KeyValue>& kvs);
 
-  static pb::common::Range EncodeRange(const pb::common::Range& range);
+  static pb::common::Range EncodeRange(const pb::common::Range& plain_range);
 };
 
 }  // namespace mvcc
