@@ -1251,11 +1251,13 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     return status;
   }
 
+  std::string encode_start_key = mvcc::Codec::EncodeKey(start_key, end_ts);
+  std::string encode_end_key = mvcc::Codec::EncodeKey(end_key, start_ts);
+
   DINGO_LOG(INFO) << "TxnDump start_key : " << Helper::StringToHex(start_key)
                   << " end_key : " << Helper::StringToHex(end_key) << ", start_ts: " << start_ts
-                  << ", end_ts: " << end_ts
-                  << ", TxnDump data start_key: " << Helper::StringToHex(Helper::EncodeTxnKey(start_key, end_ts))
-                  << " end_key: " << Helper::StringToHex(Helper::EncodeTxnKey(end_key, start_ts));
+                  << ", end_ts: " << end_ts << ", TxnDump data start_key: " << Helper::StringToHex(encode_start_key)
+                  << " end_key: " << Helper::StringToHex(encode_end_key);
 
   auto reader = GetEngineReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
@@ -1263,8 +1265,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   std::vector<pb::common::KeyValue> data_kvs;
 
   ctx->SetCfName(Constant::kTxnDataCF);
-  auto ret =
-      reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, end_ts), Helper::EncodeTxnKey(end_key, start_ts), data_kvs);
+  auto ret = reader->KvScan(ctx, encode_start_key, encode_end_key, data_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
@@ -1278,7 +1279,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
     std::string user_key;
     int64_t ts = 0;
-    Helper::DecodeTxnKey(kv.key(), user_key, ts);
+    mvcc::Codec::DecodeKey(kv.key(), user_key, ts);
 
     pb::store::TxnDataKey txn_data_key;
     txn_data_key.set_key(user_key);
@@ -1297,8 +1298,8 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   // scan [start_key, end_key) for lock
   std::vector<pb::common::KeyValue> lock_kvs;
   ctx->SetCfName(Constant::kTxnLockCF);
-  ret = reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, Constant::kLockVer),
-                       Helper::EncodeTxnKey(end_key, Constant::kLockVer), lock_kvs);
+  ret = reader->KvScan(ctx, mvcc::Codec::EncodeKey(start_key, Constant::kLockVer),
+                       mvcc::Codec::EncodeKey(end_key, Constant::kLockVer), lock_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
@@ -1312,7 +1313,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
     }
     std::string user_key;
     int64_t ts = 0;
-    Helper::DecodeTxnKey(kv.key(), user_key, ts);
+    mvcc::Codec::DecodeKey(kv.key(), user_key, ts);
 
     pb::store::TxnLockKey txn_lock_key;
     txn_lock_key.set_key(user_key);
@@ -1329,8 +1330,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   // scan [start_key, end_key) for write
   std::vector<pb::common::KeyValue> write_kvs;
   ctx->SetCfName(Constant::kTxnWriteCF);
-  ret =
-      reader->KvScan(ctx, Helper::EncodeTxnKey(start_key, end_ts), Helper::EncodeTxnKey(end_key, start_ts), write_kvs);
+  ret = reader->KvScan(ctx, encode_start_key, encode_end_key, write_kvs);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
@@ -1345,7 +1345,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
     std::string user_key;
     int64_t ts = 0;
-    Helper::DecodeTxnKey(kv.key(), user_key, ts);
+    mvcc::Codec::DecodeKey(kv.key(), user_key, ts);
 
     pb::store::TxnWriteKey txn_write_key;
     txn_write_key.set_key(user_key);

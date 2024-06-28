@@ -35,6 +35,7 @@
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "gflags/gflags.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 #include "rocksdb/db.h"
@@ -278,20 +279,20 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
   std::string begin_key, end_key;
   record_encoder->EncodeMinKeyPrefix(dingodb::Constant::kExecutorTxn, begin_key);
   record_encoder->EncodeMaxKeyPrefix(dingodb::Constant::kExecutorTxn, end_key);
-  begin_key = dingodb::Helper::EncodeTxnKey(begin_key, 0);
-  end_key = dingodb::Helper::EncodeTxnKey(end_key, 0);
+  begin_key = dingodb::mvcc::Codec::EncodeKey(begin_key, 0);
+  end_key = dingodb::mvcc::Codec::EncodeKey(end_key, 0);
 
   auto lock_handler = [&](const std::string& key, const std::string& value) {
     std::string origin_key;
     int64_t ts;
-    auto status = dingodb::Helper::DecodeTxnKey(key, origin_key, ts);
-    if (!status.ok()) {
-      LOG(INFO) << "decoce txn key failed, error: " << status.error_str();
+    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
+    if (!ret) {
+      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
       return;
     }
 
     std::vector<std::any> record;
-    int ret = record_decoder->DecodeKey(origin_key, record);
+    ret = record_decoder->DecodeKey(origin_key, record);
     if (ret != 0) {
       LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
     }
@@ -310,14 +311,14 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
   auto write_handler = [&](const std::string& key, const std::string& value) {
     std::string origin_key;
     int64_t ts;
-    auto status = dingodb::Helper::DecodeTxnKey(key, origin_key, ts);
-    if (!status.ok()) {
-      LOG(INFO) << "decoce txn key failed, error: " << status.error_str();
+    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
+    if (!ret) {
+      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
       return;
     }
 
     std::vector<std::any> record;
-    int ret = record_decoder->DecodeKey(origin_key, record);
+    ret = record_decoder->DecodeKey(origin_key, record);
     if (ret != 0) {
       LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
     }
@@ -349,9 +350,9 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
   auto data_handler = [&](const std::string& key, const std::string& value) {
     std::string origin_key;
     int64_t ts;
-    auto status = dingodb::Helper::DecodeTxnKey(key, origin_key, ts);
-    if (!status.ok()) {
-      LOG(INFO) << "decoce txn key failed, error: " << status.error_str();
+    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
+    if (!ret) {
+      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
       return;
     }
 
@@ -367,7 +368,7 @@ void DumpExcutorTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefini
     }
 
     std::vector<std::any> record;
-    int ret = record_decoder->Decode(origin_key, value, record);
+    ret = record_decoder->Decode(origin_key, value, record);
     if (ret != 0) {
       LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
     }
@@ -434,15 +435,15 @@ void DumpClientTxn(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefinit
     return;
   }
 
-  std::string begin_key = dingodb::Helper::EncodeTxnKey(partition.range().start_key(), 0);
-  std::string end_key = dingodb::Helper::EncodeTxnKey(partition.range().end_key(), 0);
+  auto encode_range = dingodb::mvcc::Codec::EncodeRange(partition.range());
 
   auto row_handler = [&](const std::string& key, const std::string& value) {
     LOG(INFO) << fmt::format("key: {} value: {}", dingodb::Helper::StringToHex(key),
                              dingodb::Helper::StringToHex(value));
   };
 
-  db->Scan(dingodb::Constant::kTxnDataCF, begin_key, end_key, ctx->offset, ctx->limit, row_handler);
+  db->Scan(dingodb::Constant::kTxnDataCF, encode_range.start_key(), encode_range.end_key(), ctx->offset, ctx->limit,
+           row_handler);
 }
 
 void DumpVectorIndexRaw(std::shared_ptr<Context> ctx, dingodb::pb::meta::TableDefinition& table_definition) {

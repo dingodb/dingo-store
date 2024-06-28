@@ -491,6 +491,13 @@ pb::common::Range Codec::EncodeRange(const pb::common::Range& plain_range) {
   return std::move(encode_range);
 }
 
+pb::common::Range Codec::EncodeRange(const std::string& plain_start_key, const std::string& plain_end_key) {
+  pb::common::Range encode_range;
+  encode_range.set_start_key(EncodeBytes(plain_start_key));
+  encode_range.set_end_key(EncodeBytes(plain_end_key));
+  return std::move(encode_range);
+}
+
 pb::common::Range Codec::DecodeRange(const pb::common::Range& encode_range) {
   pb::common::Range plain_range;
 

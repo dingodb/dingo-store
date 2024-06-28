@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <utility>
 
 #include "common/constant.h"
 #include "common/helper.h"
@@ -30,6 +31,13 @@
 
 namespace dingodb {
 
+std::string DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, plain_key);
+
+  return std::move(plain_key);
+}
+
 void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
@@ -38,6 +46,13 @@ void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, std::s
 
   plain_key.push_back(prefix);
   SerialHelper::WriteLong(partition_id, plain_key);
+}
+
+std::string DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, plain_key);
+
+  return std::move(plain_key);
 }
 
 void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& plain_key) {
@@ -50,6 +65,14 @@ void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_
   plain_key.push_back(prefix);
   SerialHelper::WriteLong(partition_id, plain_key);
   SerialHelper::WriteLongComparable(document_id, plain_key);
+}
+
+std::string DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                              const std::string& scalar_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, scalar_key, plain_key);
+
+  return std::move(plain_key);
 }
 
 void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,

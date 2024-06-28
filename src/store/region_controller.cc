@@ -300,21 +300,21 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  if (!Helper::InvalidRange(region->Range())) {
+  auto range = region->Range(true);
+  if (!Helper::InvalidRange(range)) {
     std::vector<std::string> raw_cf_names;
     std::vector<std::string> txn_cf_names;
 
-    Helper::GetColumnFamilyNames(region->Range().start_key(), raw_cf_names, txn_cf_names);
+    Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
     if (region_raw_engine->GetRawEngineType() != pb::common::RAW_ENG_BDB) {
       if (!raw_cf_names.empty()) {
-        status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, region->Range());
+        status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, range);
         CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
                                           region->Id(), status.error_str());
       }
 
       if (!txn_cf_names.empty()) {
-        pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
-        status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+        status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, range);
         CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
                                           region->Id(), status.error_str());
       }
@@ -325,7 +325,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
       command->set_create_timestamp(Helper::TimestampMs());
       command->set_region_cmd_type(pb::coordinator::CMD_DELETE_DATA);
       auto* mut_request = command->mutable_delete_data_request();
-      *mut_request->mutable_range() = region->Range();
+      *mut_request->mutable_range() = range;
       Helper::VectorToPbRepeated(raw_cf_names, mut_request->mutable_raw_cf_names());
       Helper::VectorToPbRepeated(txn_cf_names, mut_request->mutable_txn_cf_names());
 
@@ -1574,7 +1574,7 @@ void SnapshotVectorIndexTask::Run() {
 }
 
 butil::Status DeleteDataTask::DeleteData(std::shared_ptr<Context>, RegionCmdPtr region_cmd) {
-  const auto& range = region_cmd->delete_data_request().range();
+  const auto& encode_range = region_cmd->delete_data_request().range();
   std::vector<std::string> raw_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().raw_cf_names());
   std::vector<std::string> txn_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().txn_cf_names());
 
@@ -1582,16 +1582,15 @@ butil::Status DeleteDataTask::DeleteData(std::shared_ptr<Context>, RegionCmdPtr 
   CHECK(region_raw_engine != nullptr) << fmt::format(
       "[control.region][region({})] delete region, delete data, raw engine is null", region_cmd->region_id());
 
-  Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
+  Helper::GetColumnFamilyNames(encode_range.start_key(), raw_cf_names, txn_cf_names);
   if (!raw_cf_names.empty()) {
-    auto status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, range);
+    auto status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, encode_range);
     CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
                                       region_cmd->region_id(), status.error_str());
   }
 
   if (!txn_cf_names.empty()) {
-    pb::common::Range txn_range = Helper::GetMemComparableRange(range);
-    auto status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+    auto status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, encode_range);
     CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
                                       region_cmd->region_id(), status.error_str());
   }
