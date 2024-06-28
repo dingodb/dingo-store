@@ -24,15 +24,22 @@ namespace dingodb {
 
 class VectorCodec {
  public:
+  // package vecotr plain key
+  static void PackageVectorKey(char prefix, int64_t partition_id, std::string& plain_key);
+  static void PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& plain_key);
+  static void PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
+                               std::string& plain_key);
+
   // result is encode key(padding key)
-  static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& result);
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result);
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts, std::string& result);
+  static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& encode_key);
+  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& encode_key);
+  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts,
+                              std::string& encode_key);
 
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                              std::string& result);
+                              std::string& encode_key);
   static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                              int64_t ts, std::string& result);
+                              int64_t ts, std::string& encode_key);
 
   // key is encode key or plain key
   static int64_t UnPackagePartitionId(const std::string& plain_key);

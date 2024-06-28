@@ -30,86 +30,79 @@
 
 namespace dingodb {
 
-void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, std::string& result) {
+void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
 
-  std::string buf;
-  buf.reserve(Constant::kDocumentKeyMinLenWithPrefix);
+  plain_key.reserve(Constant::kDocumentKeyMinLenWithPrefix);
 
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-
-  mvcc::Codec::EncodeBytes(buf, result);
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
 }
 
-void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& result) {
+void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
   CHECK(document_id >= 0) << fmt::format("Invalid document_id {}.", document_id);
 
-  std::string buf;
-  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix);
+  plain_key.reserve(Constant::kDocumentKeyMaxLenWithPrefix);
 
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(document_id, buf);
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
+  SerialHelper::WriteLongComparable(document_id, plain_key);
+}
 
-  mvcc::Codec::EncodeBytes(buf, result);
+void DocumentCodec::PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                       const std::string& scalar_key, std::string& plain_key) {
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(document_id >= 0) << fmt::format("Invalid document_id {}.", document_id);
+  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, document_id);
+
+  plain_key.reserve(Constant::kDocumentKeyMaxLenWithPrefix + scalar_key.size());
+
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
+  SerialHelper::WriteLongComparable(document_id, plain_key);
+  plain_key.append(scalar_key);
+}
+
+void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, std::string& encode_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, plain_key);
+
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
+}
+
+void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& encode_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, plain_key);
+
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
 }
 
 void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts,
-                                      std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(document_id >= 0) << fmt::format("Invalid document_id {}.", document_id);
-  CHECK(ts > 0) << fmt::format("Invalid ts {}.", ts);
+                                      std::string& encode_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix);
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(document_id, buf);
-
-  result = mvcc::Codec::EncodeKey(buf, ts);
+  encode_key = mvcc::Codec::EncodeKey(plain_key, ts);
 }
 
 void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
-                                      const std::string& scalar_key, std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(document_id >= 0) << fmt::format("Invalid document_id {}.", document_id);
-  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, document_id);
+                                      const std::string& scalar_key, std::string& encode_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, scalar_key, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kDocumentKeyMaxLenWithPrefix + scalar_key.size());
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(document_id, buf);
-  buf.append(scalar_key);
-
-  mvcc::Codec::EncodeBytes(buf, result);
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
 }
 
 void DocumentCodec::EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
-                                      const std::string& scalar_key, int64_t ts, std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(document_id >= 0) << fmt::format("Invalid vector_id {}.", document_id);
-  CHECK(ts >= 0) << fmt::format("Invalid ts {}.", ts);
-  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, document_id);
+                                      const std::string& scalar_key, int64_t ts, std::string& encode_key) {
+  std::string plain_key;
+  PackageDocumentKey(prefix, partition_id, document_id, scalar_key, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(document_id, buf);
-  buf.append(scalar_key);
-
-  result = mvcc::Codec::EncodeKey(buf, ts);
+  encode_key = mvcc::Codec::EncodeKey(plain_key, ts);
 }
 
 int64_t DocumentCodec::UnPackagePartitionId(const std::string& plain_key) {

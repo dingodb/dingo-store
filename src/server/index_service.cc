@@ -665,6 +665,7 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
+
   int64_t vector_id = 0;
   status = storage->VectorGetBorderId(region, request->get_min(), request->ts(), vector_id);
   if (!status.ok()) {
@@ -941,14 +942,14 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
                                        int64_t end_vector_id) {                           // NOLINT
   pb::common::Range result;
 
-  auto range = region->Range(true);
+  auto range = region->Range(false);
   auto prefix = region->GetKeyPrefix();
   auto partition_id = region->PartitionId();
   if (start_vector_id == 0) {
     result.set_start_key(range.start_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(prefix, partition_id, start_vector_id, key);
+    VectorCodec::PackageVectorKey(prefix, partition_id, start_vector_id, key);
     result.set_start_key(key);
   }
 
@@ -956,7 +957,7 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_ve
     result.set_end_key(range.end_key());
   } else {
     std::string key;
-    VectorCodec::EncodeVectorKey(prefix, partition_id, end_vector_id, key);
+    VectorCodec::PackageVectorKey(prefix, partition_id, end_vector_id, key);
     result.set_end_key(key);
   }
 
