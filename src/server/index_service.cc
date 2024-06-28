@@ -54,8 +54,6 @@ DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
 
-extern bvar::LatencyRecorder g_txn_latches_recorder;
-
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
@@ -472,7 +470,9 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<pb::common::VectorWithId> vectors;
   for (const auto& vector : request->vectors()) {
@@ -1568,7 +1568,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
 
   for (const auto& mutation : request->mutations()) {
     // check vector_id is correctly encoded in key of mutation
-    int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
+    int64_t vector_id = VectorCodec::UnPackageVectorId(mutation.key());
 
     if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
@@ -1667,27 +1667,12 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(std::to_string(mutation.vector().id()));
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
@@ -1823,7 +1808,7 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
 
   std::vector<int64_t> vector_ids;
   for (const auto& key : request->keys()) {
-    int64_t vector_id = VectorCodec::DecodeVectorId(key);
+    int64_t vector_id = VectorCodec::UnPackageVectorId(key);
     if (vector_id == 0) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
     }

@@ -32,7 +32,7 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMinLenWithPrefix);
+  buf.reserve(Constant::kVectorKeyMinLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -46,7 +46,7 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMaxLenWithPrefix);
+  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -63,7 +63,7 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   CHECK(ts > 0) << fmt::format("Invalid ts {}.", ts);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMaxLenWithPrefix);
+  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix);
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -80,7 +80,7 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
 
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
@@ -99,7 +99,8 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
 
   std::string buf;
-  buf.resize(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+
   buf.push_back(prefix);
   SerialHelper::WriteLong(partition_id, buf);
   SerialHelper::WriteLongComparable(vector_id, buf);
@@ -108,82 +109,146 @@ void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vec
   result = mvcc::Codec::EncodeKey(buf, ts);
 }
 
-int64_t VectorCodec::DecodePartitionId(const std::string& key) {
-  CHECK(key.size() >= Constant::kVectorKeyMinLenWithPrefix)
-      << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(key));
+int64_t VectorCodec::UnPackagePartitionId(const std::string& plain_key) {
+  CHECK(plain_key.size() >= Constant::kVectorKeyMinLenWithPrefix)
+      << fmt::format("Decode partition id failed, value({}) size too small", Helper::StringToHex(plain_key));
 
-  return SerialHelper::ReadLong(key.substr(1, 9));
+  return SerialHelper::ReadLong(plain_key.substr(1, 9));
 }
 
-int64_t VectorCodec::DecodePartitionIdFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+int64_t VectorCodec::DecodePartitionIdFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key));
 
-  return DecodePartitionId(decode_key);
+  return UnPackagePartitionId(plain_key);
 }
 
-int64_t VectorCodec::DecodeVectorId(const std::string& key) {
-  if (key.size() >= Constant::kVectorKeyMaxLenWithPrefix) {
-    return SerialHelper::ReadLongComparable(
-        key.substr(Constant::kVectorKeyMinLenWithPrefix, Constant::kVectorKeyMinLenWithPrefix + 8));
+int64_t VectorCodec::DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key_with_ts));
 
-  } else if (key.size() == Constant::kVectorKeyMinLenWithPrefix) {
+  return UnPackagePartitionId(plain_key);
+}
+
+int64_t VectorCodec::UnPackageVectorId(const std::string& plain_key) {
+  if (plain_key.size() >= Constant::kVectorKeyMaxLenWithPrefix) {
+    return SerialHelper::ReadLongComparable(plain_key.substr(9, 17));
+
+  } else if (plain_key.size() == Constant::kVectorKeyMinLenWithPrefix) {
     return 0;
 
   } else {
-    DINGO_LOG(FATAL) << fmt::format("Decode vector id failed, value({}) size too small", Helper::StringToHex(key));
+    DINGO_LOG(FATAL) << fmt::format("Decode vector id failed, value({}) size too small",
+                                    Helper::StringToHex(plain_key));
     return 0;
   }
 }
 
-int64_t VectorCodec::DecodeVectorIdFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+int64_t VectorCodec::DecodeVectorIdFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key));
 
-  return DecodeVectorId(decode_key);
+  return UnPackageVectorId(plain_key);
 }
 
-std::string VectorCodec::DecodeScalarKey(const std::string& key) {
-  CHECK(key.size() > Constant::kVectorKeyMaxLenWithPrefix)
-      << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(key));
+int64_t VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key_with_ts));
 
-  return key.substr(Constant::kVectorKeyMaxLenWithPrefix);
+  return UnPackageVectorId(plain_key);
 }
 
-std::string VectorCodec::DecodeScalarKeyFromEncodeKey(const std::string& key) {
-  std::string decode_key;
-  bool ret = mvcc::Codec::DecodeBytes(key, decode_key);
-  CHECK(ret) << fmt::format("Decode vector key{} fail.", Helper::StringToHex(key));
+std::string VectorCodec::UnPackageScalarKey(const std::string& plain_key) {
+  CHECK(plain_key.size() > Constant::kVectorKeyMaxLenWithPrefix)
+      << fmt::format("Decode scalar key failed, value({}) size too small.", Helper::StringToHex(plain_key));
 
-  return DecodeScalarKey(decode_key);
+  return plain_key.substr(Constant::kVectorKeyMaxLenWithPrefix);
 }
 
-std::string_view VectorCodec::TruncateTsForKey(const std::string& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+std::string VectorCodec::DecodeScalarKeyFromEncodeKey(const std::string& encode_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key));
 
-  return std::string_view(key).substr(0, key.size() - 8);
+  return UnPackageScalarKey(plain_key);
+}
+std::string VectorCodec::DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key_with_ts));
+
+  return UnPackageScalarKey(plain_key);
 }
 
-std::string_view VectorCodec::TruncateTsForKey(const std::string_view& key) {
-  CHECK(key.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+void VectorCodec::DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& vector_id) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key));
 
-  return std::string_view(key).substr(0, key.size() - 8);
+  partition_id = UnPackagePartitionId(plain_key);
+  vector_id = UnPackageVectorId(plain_key);
 }
 
-int64_t VectorCodec::TruncateKeyForTs(const std::string& key) {
-  CHECK(key.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+void VectorCodec::DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& vector_id,
+                                      std::string& scalar_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(encode_key, plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key));
 
-  auto ts_str = key.substr(key.size() - 8, key.size());
+  partition_id = UnPackagePartitionId(plain_key);
+  vector_id = UnPackageVectorId(plain_key);
+  scalar_key = UnPackageScalarKey(plain_key);
+}
+
+void VectorCodec::DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                            int64_t& vector_id) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key_with_ts));
+
+  partition_id = UnPackagePartitionId(plain_key);
+  vector_id = UnPackageVectorId(plain_key);
+}
+
+void VectorCodec::DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                            int64_t& vector_id, std::string& scalar_key) {
+  std::string plain_key;
+  bool ret = mvcc::Codec::DecodeBytes(TruncateTsForKey(encode_key_with_ts), plain_key);
+  CHECK(ret) << fmt::format("Decode vector key({}) fail.", Helper::StringToHex(encode_key_with_ts));
+
+  partition_id = UnPackagePartitionId(plain_key);
+  vector_id = UnPackageVectorId(plain_key);
+  scalar_key = UnPackageScalarKey(plain_key);
+}
+
+std::string_view VectorCodec::TruncateTsForKey(const std::string& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  return std::string_view(encode_key_with_ts).substr(0, encode_key_with_ts.size() - 8);
+}
+
+std::string_view VectorCodec::TruncateTsForKey(const std::string_view& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 25) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  return std::string_view(encode_key_with_ts).substr(0, encode_key_with_ts.size() - 8);
+}
+
+int64_t VectorCodec::TruncateKeyForTs(const std::string& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
+
+  auto ts_str = encode_key_with_ts.substr(encode_key_with_ts.size() - 8, encode_key_with_ts.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
 
-int64_t VectorCodec::TruncateKeyForTs(const std::string_view& key) {
-  CHECK(key.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(key));
+int64_t VectorCodec::TruncateKeyForTs(const std::string_view& encode_key_with_ts) {
+  CHECK(encode_key_with_ts.size() >= 8) << fmt::format("Key({}) is invalid.", Helper::StringToHex(encode_key_with_ts));
 
-  auto ts_str = key.substr(key.size() - 8, key.size());
+  auto ts_str = encode_key_with_ts.substr(encode_key_with_ts.size() - 8, encode_key_with_ts.size());
 
   return SerialHelper::ReadLongWithNegation(ts_str);
 }
@@ -192,7 +257,7 @@ std::string VectorCodec::DebugKey(bool is_encode, const std::string& key) {
   if (is_encode) {
     return fmt::format("{}_{}", DecodePartitionIdFromEncodeKey(key), DecodeVectorIdFromEncodeKey(key));
   } else {
-    return fmt::format("{}_{}", DecodePartitionId(key), DecodeVectorId(key));
+    return fmt::format("{}_{}", UnPackagePartitionId(key), UnPackageVectorId(key));
   }
 }
 
@@ -217,9 +282,9 @@ void VectorCodec::DecodeRangeToVectorId(bool is_encode, const pb::common::Range&
     }
 
   } else {
-    begin_vector_id = VectorCodec::DecodeVectorId(range.start_key());
-    end_vector_id = VectorCodec::DecodeVectorId(range.end_key());
-    if (end_vector_id == 0 && (DecodePartitionId(range.end_key()) > DecodePartitionId(range.start_key()))) {
+    begin_vector_id = VectorCodec::UnPackageVectorId(range.start_key());
+    end_vector_id = VectorCodec::UnPackageVectorId(range.end_key());
+    if (end_vector_id == 0 && (UnPackagePartitionId(range.end_key()) > UnPackagePartitionId(range.start_key()))) {
       end_vector_id = INT64_MAX;
     }
   }

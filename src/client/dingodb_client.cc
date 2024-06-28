@@ -95,6 +95,7 @@ DEFINE_string(key, "", "Request key");
 DEFINE_bool(key_is_hex, false, "Request key is hex");
 DEFINE_bool(value_is_hex, false, "Request value is hex");
 DEFINE_string(value, "", "Request values");
+DEFINE_string(expect_value, "", "Request expect value");
 DEFINE_string(prefix, "", "key prefix");
 DEFINE_string(region_prefix, "", "region_prefix");
 DEFINE_int64(region_count, 1, "region count");
@@ -367,13 +368,13 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "KvBatchDelete") {
       client::SendKvBatchDelete(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
     } else if (method == "KvDeleteRange") {
-      client::SendKvDeleteRange(FLAGS_region_id, FLAGS_prefix);
+      client::SendKvDeleteRange(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix));
     } else if (method == "KvScan") {
-      client::SendKvScan(FLAGS_region_id, FLAGS_prefix);
+      client::SendKvScan(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix));
     } else if (method == "KvCompareAndSet") {
-      client::SendKvCompareAndSet(FLAGS_region_id, FLAGS_key);
+      client::SendKvCompareAndSet(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_key));
     } else if (method == "KvBatchCompareAndSet") {
-      client::SendKvBatchCompareAndSet(FLAGS_region_id, FLAGS_prefix, 100);
+      client::SendKvBatchCompareAndSet(FLAGS_region_id, dingodb::Helper::HexToString(FLAGS_prefix), 100);
     } else if (method == "KvScanBeginV2") {
       client::SendKvScanBeginV2(FLAGS_region_id, FLAGS_scan_id);
     } else if (method == "KvScanContinueV2") {
@@ -453,7 +454,7 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorBatchSearch") {
       client::SendVectorBatchSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn, FLAGS_batch_count);
     } else if (method == "VectorBatchQuery") {
-      client::SendVectorBatchQuery(FLAGS_region_id, {static_cast<int64_t>(FLAGS_vector_id)});
+      client::SendVectorBatchQuery(FLAGS_region_id, {FLAGS_vector_id});
     } else if (method == "VectorScanQuery") {
       client::SendVectorScanQuery(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id, FLAGS_limit, FLAGS_is_reverse);
     } else if (method == "VectorScanDump") {
@@ -557,6 +558,25 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "CheckIndexDistribution") {
       ctx->table_id = FLAGS_table_id;
       client::CheckIndexDistribution(ctx);
+    } else if (method == "DumpRegion") {
+      ctx->region_id = FLAGS_region_id;
+      ctx->offset = FLAGS_offset;
+      ctx->limit = FLAGS_limit;
+      if (ctx->region_id <= 0) {
+        DINGO_LOG(ERROR) << "Param region_id is error.";
+        return;
+      }
+      if (ctx->offset < 0) {
+        DINGO_LOG(ERROR) << "Param offset is error.";
+        return;
+      }
+      if (ctx->limit <= 0) {
+        DINGO_LOG(ERROR) << "Param limit is error.";
+        return;
+      }
+
+      DumpRegion(ctx);
+
     } else if (method == "DumpDb") {
       ctx->table_id = FLAGS_table_id;
       ctx->index_id = FLAGS_index_id;

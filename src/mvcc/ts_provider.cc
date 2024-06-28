@@ -301,35 +301,25 @@ int64_t TsProvider::GetTs() {
 }
 
 void TsProvider::RenewBatchTs() {
-  // std::cout << "renew batchts run" << std::endl;
-
-  uint32_t retry_count = 0;
-  for (; retry_count < FLAGS_ts_provider_renew_max_retry_num; ++retry_count) {
+  for (uint32_t retry_count = 0; retry_count < FLAGS_ts_provider_renew_max_retry_num; ++retry_count) {
     BatchTs* batch_ts = SendTsoRequest();
     if (batch_ts == nullptr) {
+      bthread_usleep(2000);
       continue;
     }
 
     batch_ts_list_->Push(batch_ts);
-    break;
-  }
-
-  if (retry_count == FLAGS_ts_provider_renew_max_retry_num) {
-    DINGO_LOG(ERROR) << fmt::format("renew retry({}) too much.", retry_count);
-  } else {
+    renew_epoch_.fetch_add(1, std::memory_order_relaxed);
     // clean dead BatchTs
     batch_ts_list_->CleanDead();
+    return;
   }
+
+  DINGO_LOG(ERROR) << fmt::format("renew retry({}) too much.", FLAGS_ts_provider_renew_max_retry_num);
 }
 
 void TsProvider::LaunchRenewBatchTs(bool is_sync) {
-  if (is_sync) {
-    sync_renew_count_.fetch_add(1, std::memory_order_relaxed);
-  } else {
-    async_renew_count_.fetch_add(1, std::memory_order_relaxed);
-  }
-
-  auto task = std::make_shared<TakeBatchTsTask>(is_sync, GetSelfPtr());
+  auto task = std::make_shared<TakeBatchTsTask>(is_sync, RenewEpoch(), GetSelfPtr());
   bool ret = worker_->Execute(task);
   if (!ret) {
     DINGO_LOG(ERROR) << "Launch renew batch ts failed.";
@@ -344,8 +334,9 @@ void TsProvider::LaunchRenewBatchTs(bool is_sync) {
 void TsProvider::TriggerRenewBatchTs() { LaunchRenewBatchTs(false); }
 
 std::string TsProvider::DebugInfo() {
-  return fmt::format("{} ts_count({}/{}) renew({}/{})", batch_ts_list_->DebugInfo(), get_ts_count_.load(),
-                     get_ts_fail_count_.load(), sync_renew_count_.load(), async_renew_count_.load());
+  return fmt::format("{} ts_count({}/{}) renew({})", batch_ts_list_->DebugInfo(),
+                     get_ts_count_.load(std::memory_order_relaxed), get_ts_fail_count_.load(std::memory_order_relaxed),
+                     RenewEpoch());
 }
 
 // for test
@@ -370,24 +361,21 @@ BatchTs* TsProvider::SendTsoRequest() {
   // return GenBatchTsForTest();
 
   pb::meta::TsoRequest tso_request;
-
   tso_request.set_op_type(pb::meta::TsoOpType::OP_GEN_TSO);
   tso_request.set_count(FLAGS_ts_provider_batch_size);
 
   pb::meta::TsoResponse tso_response;
-  auto status = interaction_->SendRequest("TsoRequest", tso_request, tso_response);
+  auto status = interaction_->SendRequest(pb::common::ServiceTypeMeta, "TsoService", tso_request, tso_response);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("Get remote ts failed, error: {} {}", status.error_code(), status.error_str());
     return nullptr;
   }
 
-  DINGO_LOG(INFO) << fmt::format("tso response: {} {} {}", tso_response.start_timestamp().physical(),
-                                 tso_response.start_timestamp().logical(), tso_response.count());
+  const auto& timestamp = tso_response.start_timestamp();
+  DINGO_LOG(DEBUG) << fmt::format("tso response: {} {} {}", timestamp.physical(), timestamp.logical(),
+                                  tso_response.count());
 
-  BatchTs* batch_ts = BatchTs::New(tso_response.start_timestamp().physical(), tso_response.start_timestamp().logical(),
-                                   tso_response.count());
-
-  return batch_ts;
+  return BatchTs::New(timestamp.physical(), timestamp.logical(), tso_response.count());
 }
 
 }  // namespace mvcc

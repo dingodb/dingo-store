@@ -46,8 +46,9 @@
 
 namespace dingodb {
 
-Storage::Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine)
-    : raft_engine_(raft_engine), mono_engine_(mono_engine) {}
+Storage::Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine,
+                 mvcc::TsProviderPtr ts_provider)
+    : raft_engine_(raft_engine), mono_engine_(mono_engine), ts_provider_(ts_provider) {}
 
 RaftStoreEnginePtr Storage::GetRaftStoreEngine() {
   auto engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
@@ -443,14 +444,30 @@ butil::Status Storage::VectorAdd(std::shared_ptr<Context> ctx, bool is_sync,
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   if (is_sync) {
-    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, is_update));
+    auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, is_update));
+    auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
+    if (status.ok()) {
+      response->mutable_key_states()->Resize(vectors.size(), true);
+    } else {
+      response->mutable_key_states()->Resize(vectors.size(), false);
+    }
+
+    response->set_ts(ts);
+
+    return status;
   }
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, is_update),
-                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                            [ts, &vectors](std::shared_ptr<Context> ctx, butil::Status status) {
+                              auto* response = dynamic_cast<pb::index::VectorAddResponse*>(ctx->Response());
                               if (!status.ok()) {
+                                response->mutable_key_states()->Resize(vectors.size(), false);
                                 Helper::SetPbMessageError(status, ctx->Response());
+                              } else {
+                                response->mutable_key_states()->Resize(vectors.size(), true);
                               }
+
+                              response->set_ts(ts);
                             });
 }
 
@@ -490,11 +507,13 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
       response->mutable_key_states()->Resize(ids.size(), false);
     }
 
+    response->set_ts(ts);
+
     return status;
   }
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids),
-                            [&ids, &key_states](std::shared_ptr<Context> ctx, butil::Status status) {
+                            [&ids, &key_states, &ts](std::shared_ptr<Context> ctx, butil::Status status) {
                               auto* response = dynamic_cast<pb::index::VectorDeleteResponse*>(ctx->Response());
                               if (!status.ok()) {
                                 response->mutable_key_states()->Resize(ids.size(), false);
@@ -504,6 +523,8 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
                                   response->add_key_states(state);
                                 }
                               }
+
+                              response->set_ts(ts);
                             });
 }
 
@@ -729,14 +750,30 @@ butil::Status Storage::DocumentAdd(std::shared_ptr<Context> ctx, bool is_sync,
   auto engine = GetStoreEngine(ctx->StoreEngineType());
 
   if (is_sync) {
-    return engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, document_with_ids, is_update));
+    auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, document_with_ids, is_update));
+    auto* response = dynamic_cast<pb::document::DocumentAddResponse*>(ctx->Response());
+    if (status.ok()) {
+      response->mutable_key_states()->Resize(document_with_ids.size(), true);
+    } else {
+      response->mutable_key_states()->Resize(document_with_ids.size(), false);
+    }
+
+    response->set_ts(ts);
+
+    return status;
   }
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, document_with_ids, is_update),
-                            [](std::shared_ptr<Context> ctx, butil::Status status) {
+                            [ts, &document_with_ids](std::shared_ptr<Context> ctx, butil::Status status) {
+                              auto* response = dynamic_cast<pb::document::DocumentAddResponse*>(ctx->Response());
                               if (!status.ok()) {
+                                response->mutable_key_states()->Resize(document_with_ids.size(), false);
                                 Helper::SetPbMessageError(status, ctx->Response());
+                              } else {
+                                response->mutable_key_states()->Resize(document_with_ids.size(), true);
                               }
+
+                              response->set_ts(ts);
                             });
 }
 
@@ -776,19 +813,24 @@ butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync
       response->mutable_key_states()->Resize(ids.size(), false);
     }
 
+    response->set_ts(ts);
+
     return status;
   }
 
   return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ids, true),
-                            [&ids, &key_states](std::shared_ptr<Context> ctx, butil::Status status) {
+                            [&ids, &key_states, &ts](std::shared_ptr<Context> ctx, butil::Status status) {
                               auto* response = dynamic_cast<pb::document::DocumentDeleteResponse*>(ctx->Response());
                               if (!status.ok()) {
+                                response->mutable_key_states()->Resize(ids.size(), false);
                                 Helper::SetPbMessageError(status, ctx->Response());
                               } else {
                                 for (auto state : key_states) {
                                   response->add_key_states(state);
                                 }
                               }
+
+                              response->set_ts(ts);
                             });
 }
 
