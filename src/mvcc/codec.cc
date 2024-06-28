@@ -491,6 +491,22 @@ pb::common::Range Codec::EncodeRange(const pb::common::Range& plain_range) {
   return std::move(encode_range);
 }
 
+pb::common::Range Codec::DecodeRange(const pb::common::Range& encode_range) {
+  pb::common::Range plain_range;
+
+  std::string start_key;
+  bool ret = DecodeBytes(encode_range.start_key(), start_key);
+  CHECK(ret) << fmt::format("decode range error, range {}", Helper::RangeToString(encode_range));
+  plain_range.set_start_key(start_key);
+
+  std::string end_key;
+  ret = DecodeBytes(encode_range.end_key(), end_key);
+  CHECK(ret) << fmt::format("decode range error, range {}", Helper::RangeToString(encode_range));
+  plain_range.set_end_key(end_key);
+
+  return plain_range;
+}
+
 }  // namespace mvcc
 
 }  // namespace dingodb

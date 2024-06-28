@@ -28,6 +28,8 @@
 #include "config/config_manager.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "mvcc/codec.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
@@ -64,17 +66,32 @@ void RegionMetrics::DeSerialize(const std::string& data) {
 
 void RegionMetrics::UpdateMaxAndMinKey(const PbKeyValues& kvs) {
   BAIDU_SCOPED_LOCK(mutex_);
+
   for (const auto& kv : kvs) {
-    if (inner_region_metrics_.min_key().empty() || kv.key() < inner_region_metrics_.min_key()) {
-      inner_region_metrics_.set_min_key(kv.key());
-    } else if (kv.key() > inner_region_metrics_.max_key()) {
-      inner_region_metrics_.set_max_key(kv.key());
+    std::string plain_key;
+    mvcc::Codec::DecodeKey(kv.key(), plain_key);
+    auto value_flag = mvcc::Codec::GetValueFlag(kv.value());
+
+    if (value_flag == mvcc::ValueFlag::kPut) {
+      if (inner_region_metrics_.min_key().empty() || plain_key < inner_region_metrics_.min_key()) {
+        inner_region_metrics_.set_min_key(plain_key);
+      } else if (plain_key > inner_region_metrics_.max_key()) {
+        inner_region_metrics_.set_max_key(plain_key);
+      }
+    } else {
+      // key with ttl
+      if (plain_key <= inner_region_metrics_.min_key()) {
+        need_update_min_key_ = true;
+      } else if (plain_key >= inner_region_metrics_.max_key()) {
+        need_update_max_key_ = true;
+      }
     }
   }
 }
 
 void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
   BAIDU_SCOPED_LOCK(mutex_);
+
   for (const auto& key : keys) {
     if (key == inner_region_metrics_.min_key()) {
       need_update_min_key_ = true;
@@ -86,11 +103,15 @@ void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbKeys& keys) {
 
 void RegionMetrics::UpdateMaxAndMinKeyPolicy(const PbRanges& ranges) {
   BAIDU_SCOPED_LOCK(mutex_);
+
   for (const auto& range : ranges) {
-    if (range.start_key() <= inner_region_metrics_.min_key() && inner_region_metrics_.min_key() < range.end_key()) {
+    auto plain_range = mvcc::Codec::DecodeRange(range);
+    if (plain_range.start_key() <= inner_region_metrics_.min_key() &&
+        inner_region_metrics_.min_key() < plain_range.end_key()) {
       need_update_min_key_ = true;
     }
-    if (range.start_key() <= inner_region_metrics_.max_key() && inner_region_metrics_.max_key() < range.end_key()) {
+    if (plain_range.start_key() <= inner_region_metrics_.max_key() &&
+        inner_region_metrics_.max_key() < plain_range.end_key()) {
       need_update_max_key_ = true;
     }
   }
@@ -205,45 +226,91 @@ bool StoreRegionMetrics::Init() {
 }
 
 std::string StoreRegionMetrics::GetRegionMinKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region min key, range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
-  IteratorOptions options;
-  options.upper_bound = region->Range().end_key();
-  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
-  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
-  iter->Seek(region->Range().start_key());
-
-  if (!iter->Valid()) {
+  // todo: support txn
+  if (region->IsTxn()) {
+    DINGO_LOG(WARNING) << fmt::format("[metrics.region][region({})] Not support txn region.", region->Id());
     return "";
   }
 
-  auto min_key = iter->Key();
-  return std::string(min_key.data(), min_key.size());
+  auto range = region->Range(false);
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region min key, range {}", region->Id(),
+                                 Helper::RangeToString(range));
+
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+
+  mvcc::ReaderPtr reader;
+  if (region->Type() == pb::common::STORE_REGION) {
+    reader = mvcc::KvReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::INDEX_REGION) {
+    reader = mvcc::VectorReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::DOCUMENT_REGION) {
+    reader = mvcc::DocumentReader::New(raw_engine->Reader());
+  }
+
+  std::string plain_key;
+  if (reader != nullptr) {
+    reader->KvMinKey(Constant::kStoreDataCF, 0, range.start_key(), range.end_key(), plain_key);
+  }
+
+  return plain_key;
 }
 
 std::string StoreRegionMetrics::GetRegionMaxKey(store::RegionPtr region) {
-  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region max key, range[{}-{}]", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
-  IteratorOptions options;
-  options.lower_bound = region->Range().start_key();
-  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
-  auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
-  iter->SeekForPrev(region->Range().end_key());
-
-  if (!iter->Valid()) {
+  // todo: support txn
+  if (region->IsTxn()) {
+    DINGO_LOG(WARNING) << fmt::format("[metrics.region][region({})] Not support txn region.", region->Id());
     return "";
   }
 
-  auto max_key = iter->Key();
-  return std::string(max_key.data(), max_key.size());
+  auto range = region->Range(false);
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region min key, range {}", region->Id(),
+                                 Helper::RangeToString(range));
+
+  auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+
+  mvcc::ReaderPtr reader;
+  if (region->Type() == pb::common::STORE_REGION) {
+    reader = mvcc::KvReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::INDEX_REGION) {
+    reader = mvcc::VectorReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::DOCUMENT_REGION) {
+    reader = mvcc::DocumentReader::New(raw_engine->Reader());
+  }
+
+  std::string plain_key;
+  if (reader != nullptr) {
+    reader->KvMaxKey(Constant::kStoreDataCF, 0, range.start_key(), range.end_key(), plain_key);
+  }
+
+  return plain_key;
 }
 
 int64_t StoreRegionMetrics::GetRegionKeyCount(store::RegionPtr region) {
-  int64_t count = 0;
+  // todo: support txn
+  if (region->IsTxn()) {
+    DINGO_LOG(WARNING) << fmt::format("[metrics.region][region({})] Not support txn region.", region->Id());
+    return 0;
+  }
+
+  auto range = region->Range(false);
+  DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] get region min key, range {}", region->Id(),
+                                 Helper::RangeToString(range));
+
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
-  raw_engine->Reader()->KvCount(Constant::kStoreDataCF, region->Range().start_key(), region->Range().end_key(), count);
+
+  mvcc::ReaderPtr reader;
+  if (region->Type() == pb::common::STORE_REGION) {
+    reader = mvcc::KvReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::INDEX_REGION) {
+    reader = mvcc::VectorReader::New(raw_engine->Reader());
+  } else if (region->Type() == pb::common::DOCUMENT_REGION) {
+    reader = mvcc::DocumentReader::New(raw_engine->Reader());
+  }
+
+  int64_t count = 0;
+  if (reader != nullptr) {
+    reader->KvCount(Constant::kStoreDataCF, 0, range.start_key(), range.end_key(), count);
+  }
 
   return count;
 }
@@ -257,11 +324,11 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
   valid_regions.reserve(regions.size());
   region_sizes.reserve(regions.size());
   for (const auto& region : regions) {
-    auto range = region->Range();
+    auto range = region->Range(true);
     if (range.start_key() >= range.end_key()) {
       DINGO_LOG(ERROR) << fmt::format(
-          "[metrics.region][region({})] get region approximate size failed, invalid range [{}-{})", region->Id(),
-          Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
+          "[metrics.region][region({})] get region approximate size failed, invalid range {}", region->Id(),
+          Helper::RangeToString(range));
       continue;
     }
 
@@ -273,35 +340,14 @@ std::vector<std::pair<int64_t, int64_t>> StoreRegionMetrics::GetRegionApproximat
   auto raw_engine = Server::GetInstance().GetRawEngine(regions[0]->GetRawEngineType());
   auto column_family_names = Helper::GetColumnFamilyNamesExecptMetaByRole();
 
-  // generate txn range
-  std::vector<pb::common::Range> txn_ranges;
-  txn_ranges.reserve(ranges.size());
-  for (const auto& range : ranges) {
-    pb::common::Range txn_range = Helper::GetMemComparableRange(range);
-    txn_ranges.push_back(txn_range);
-    DINGO_LOG(INFO) << "[metrics.region] txn range: " << Helper::StringToHex(txn_range.start_key()) << " "
-                    << Helper::StringToHex(txn_range.end_key());
-    DINGO_LOG(INFO) << "[metrics.region] raw range: " << Helper::StringToHex(range.start_key()) << " "
-                    << Helper::StringToHex(range.end_key());
-  }
-
   // for raw cf, use region's range to get approximate size
   // for txn cf, use txn range to get approximate size
   for (const auto& cf_name : column_family_names) {
-    if (Helper::IsTxnColumnFamilyName(cf_name)) {
-      auto sizes = raw_engine->GetApproximateSizes(cf_name, txn_ranges);
-      for (int i = 0; i < sizes.size(); ++i) {
-        region_sizes[i].second += sizes[i];
-        DINGO_LOG(INFO) << "[metrics.region] txn region_size: " << sizes[i] << " region_id: " << valid_regions[i]->Id()
-                        << " cf_name: " << cf_name;
-      }
-    } else {
-      auto sizes = raw_engine->GetApproximateSizes(cf_name, ranges);
-      for (int i = 0; i < sizes.size(); ++i) {
-        region_sizes[i].second += sizes[i];
-        DINGO_LOG(INFO) << "[metrics.region] raw region_size: " << sizes[i] << " region_id: " << valid_regions[i]->Id()
-                        << " cf_name: " << cf_name;
-      }
+    auto sizes = raw_engine->GetApproximateSizes(cf_name, ranges);
+    for (int i = 0; i < sizes.size(); ++i) {
+      region_sizes[i].second += sizes[i];
+      DINGO_LOG(INFO) << fmt::format("[metrics.region][region({})] raw region_size: {} cf_name: {}",
+                                     valid_regions[i]->Id(), sizes[i], cf_name);
     }
   }
 
@@ -532,12 +578,13 @@ bool StoreRegionMetrics::CollectMetrics() {
         vector_index_wrapper->GetDeletedCount(deleted_count);
         region_metrics->SetVectorDeletedCount(deleted_count);
 
+        auto range = region->Range(false);
         int64_t max_id = 0;
-        vector_reader->VectorGetBorderId(0, region->Range(), false, max_id);
+        vector_reader->VectorGetBorderId(0, range, false, max_id);
         region_metrics->SetVectorMaxId(max_id);
 
         int64_t min_id = 0;
-        vector_reader->VectorGetBorderId(0, region->Range(), true, min_id);
+        vector_reader->VectorGetBorderId(0, range, true, min_id);
         region_metrics->SetVectorMinId(min_id);
 
         int64_t total_memory_usage = 0;
