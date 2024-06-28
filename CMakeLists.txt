@@ -676,8 +676,10 @@ add_executable(dingodb_client
                 src/coordinator/coordinator_interaction.cc
                 src/common/role.cc
                 src/common/helper.cc
+                src/common/serial_helper.cc
                 src/common/service_access.cc
                 src/coprocessor/utils.cc
+                src/mvcc/codec.cc
                 src/vector/codec.cc
                 src/document/codec.cc
                 ${SERIAL_SRCS}

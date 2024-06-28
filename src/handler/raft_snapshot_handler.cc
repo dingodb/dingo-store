@@ -222,8 +222,8 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
   }
 
   if (!txn_cf_names.empty()) {
-    pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
-    status = engine_->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+    pb::common::Range encode_range = region->Range(true);
+    status = engine_->Writer()->KvDeleteRange(txn_cf_names, encode_range);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] delete old region data txn failed, error: {}",
                                       region->Id(), status.error_str());

@@ -239,7 +239,6 @@ class Helper {
   static void GetColumnFamilyNames(const std::string& key, std::vector<std::string>& raw_cf_names,
                                    std::vector<std::string>& txn_cf_names);
   static bool IsTxnColumnFamilyName(const std::string& cf_name);
-  static pb::common::Range GetMemComparableRange(const pb::common::Range& range);
 
   // Create hard link
   static bool Link(const std::string& old_path, const std::string& new_path);
@@ -314,32 +313,6 @@ class Helper {
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
-  // for vector index region, encode range
-  static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id);
-  static std::string EncodeVectorIndexRegionHeader(char prefix, int64_t partition_id, int64_t vector_id);
-  // for document index region, encode range
-  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id);
-  static std::string EncodeDocumentIndexRegionHeader(char prefix, int64_t partition_id, int64_t document_id);
-  // for table region, encode range
-  static std::string EncodeTableRegionHeader(char prefix, const std::string& user_key);
-  static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id);
-  static std::string EncodeTableRegionHeader(char prefix, int64_t partition_id, const std::string& user_key);
-
-  // for txn, encode start_ts/commit_ts to std::string
-  static std::string EncodeTso(int64_t ts);
-  // for txn, padding user key
-  static std::string PaddingUserKey(const std::string& key);
-  static std::string UnpaddingUserKey(const std::string& padding_key);
-  // for txn, encode data/write key
-  static std::string EncodeTxnKey(const std::string& key, int64_t ts);
-  static std::string EncodeTxnKey(const std::string_view& key, int64_t ts);
-  // for txn, encode data/write key
-  static butil::Status DecodeTxnKey(const std::string& txn_key, std::string& key, int64_t& ts);
-  // for txn, encode data/write key
-  static butil::Status DecodeTxnKey(const std::string_view& txn_key, std::string& key, int64_t& ts);
-  // for txn, truncate ts
-  static std::string TruncateTxnKeyTs(const std::string& txn_key);
-  static std::string GetUserKeyFromTxnKey(const std::string& txn_key);
 
   // Upper string
   static std::string ToUpper(const std::string& str);

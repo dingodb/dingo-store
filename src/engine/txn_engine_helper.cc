@@ -34,6 +34,7 @@
 #include "document/codec.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/raft.pb.h"
@@ -99,7 +100,7 @@ butil::Status TxnReader::GetLockInfo(const std::string &key, pb::store::LockInfo
 
   std::string lock_value;
   auto status =
-      reader_->KvGet(Constant::kTxnLockCF, snapshot_, Helper::EncodeTxnKey(key, Constant::kLockVer), lock_value);
+      reader_->KvGet(Constant::kTxnLockCF, snapshot_, mvcc::Codec::EncodeKey(key, Constant::kLockVer), lock_value);
   // if lock_value is not found or it is empty, then the key is not locked
   // else the key is locked, return WriteConflict
   if (status.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
@@ -173,8 +174,8 @@ butil::Status TxnReader::GetWriteInfo(int64_t min_commit_ts, int64_t max_commit_
   }
 
   IteratorOptions iter_options;
-  iter_options.lower_bound = Helper::EncodeTxnKey(key, max_commit_ts);
-  iter_options.upper_bound = Helper::EncodeTxnKey(key, min_commit_ts);
+  iter_options.lower_bound = mvcc::Codec::EncodeKey(key, max_commit_ts);
+  iter_options.upper_bound = mvcc::Codec::EncodeKey(key, min_commit_ts);
 
   // if the key is committed after start_ts, return WriteConflict
   pb::store::WriteInfo tmp_write_info;
@@ -188,7 +189,7 @@ butil::Status TxnReader::GetWriteInfo(int64_t min_commit_ts, int64_t max_commit_
 
     std::string write_key;
     int64_t write_ts;
-    Helper::DecodeTxnKey(write_iter_->Key(), write_key, write_ts);
+    mvcc::Codec::DecodeKey(write_iter_->Key(), write_key, write_ts);
 
     if (write_ts < min_commit_ts) {
       break;
@@ -246,7 +247,7 @@ butil::Status TxnReader::GetRollbackInfo(int64_t start_ts, const std::string &ke
   }
 
   std::string write_value;
-  auto ret = reader_->KvGet(Constant::kTxnWriteCF, snapshot_, Helper::EncodeTxnKey(key, start_ts), write_value);
+  auto ret = reader_->KvGet(Constant::kTxnWriteCF, snapshot_, mvcc::Codec::EncodeKey(key, start_ts), write_value);
   if (ret.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
     // no rollback
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -307,8 +308,8 @@ butil::Status TxnIterator::Init() {
 
   // construct write iter
   IteratorOptions write_iter_options;
-  write_iter_options.lower_bound = Helper::EncodeTxnKey(range_.start_key(), Constant::kMaxVer);
-  write_iter_options.upper_bound = Helper::EncodeTxnKey(range_.end_key(), Constant::kMaxVer);
+  write_iter_options.lower_bound = mvcc::Codec::EncodeKey(range_.start_key(), Constant::kMaxVer);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(range_.end_key(), Constant::kMaxVer);
 
   write_iter_ = reader_->NewIterator(Constant::kTxnWriteCF, snapshot_, write_iter_options);
   if (write_iter_ == nullptr) {
@@ -318,8 +319,8 @@ butil::Status TxnIterator::Init() {
 
   // construct lock iter
   IteratorOptions lock_iter_options;
-  lock_iter_options.lower_bound = Helper::EncodeTxnKey(range_.start_key(), Constant::kLockVer);
-  lock_iter_options.upper_bound = Helper::EncodeTxnKey(range_.end_key(), Constant::kLockVer);
+  lock_iter_options.lower_bound = mvcc::Codec::EncodeKey(range_.start_key(), Constant::kLockVer);
+  lock_iter_options.upper_bound = mvcc::Codec::EncodeKey(range_.end_key(), Constant::kLockVer);
 
   lock_iter_ = reader_->NewIterator(Constant::kTxnLockCF, snapshot_, lock_iter_options);
   if (lock_iter_ == nullptr) {
@@ -382,12 +383,12 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
   last_lock_key_.clear();
   last_write_key_.clear();
 
-  lock_iter_->Seek(Helper::EncodeTxnKey(key, Constant::kLockVer));
+  lock_iter_->Seek(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
   int64_t lock_ts = 0;
   if (lock_iter_->Valid()) {
-    auto ret = Helper::DecodeTxnKey(lock_iter_->Key(), last_lock_key_, lock_ts);
-    if (!ret.ok()) {
-      DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, lock_iter->key: " << Helper::StringToHex(lock_iter_->Key())
+    auto ret = mvcc::Codec::DecodeKey(lock_iter_->Key(), last_lock_key_, lock_ts);
+    if (!ret) {
+      DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, lock_iter->key: " << Helper::StringToHex(lock_iter_->Key())
                        << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
     }
   } else {
@@ -396,13 +397,14 @@ butil::Status TxnIterator::InnerSeek(const std::string &key) {
         << ", last_lock_key: " << Helper::StringToHex(last_lock_key_);
   }
 
-  write_iter_->Seek(Helper::EncodeTxnKey(key, seek_ts_));
+  write_iter_->Seek(mvcc::Codec::EncodeKey(key, seek_ts_));
   int64_t write_ts = 0;
   if (write_iter_->Valid()) {
-    auto ret = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, write_ts);
-    if (!ret.ok()) {
-      DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: " << Helper::StringToHex(write_iter_->Key())
-                       << ", start_ts: " << start_ts_ << ", seek_ts: " << seek_ts_;
+    auto ret = mvcc::Codec::DecodeKey(write_iter_->Key(), last_write_key_, write_ts);
+    if (!ret) {
+      DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, write_iter->key: "
+                       << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_
+                       << ", seek_ts: " << seek_ts_;
     }
   } else {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -480,9 +482,9 @@ butil::Status TxnIterator::InnerNext() {
       lock_iter_->Next();
       int64_t lock_ts = 0;
       if (lock_iter_->Valid()) {
-        auto ret = Helper::DecodeTxnKey(lock_iter_->Key(), last_lock_key_, lock_ts);
-        if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, lock_iter->key: "
+        auto ret = mvcc::Codec::DecodeKey(lock_iter_->Key(), last_lock_key_, lock_ts);
+        if (!ret) {
+          DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, lock_iter->key: "
                            << Helper::StringToHex(lock_iter_->Key()) << ", start_ts: " << start_ts_
                            << ", seek_ts: " << seek_ts_;
         }
@@ -508,9 +510,9 @@ butil::Status TxnIterator::InnerNext() {
   // // CAUTION: we do writer_iter_->Next() in GetCurrentValue(), so we don't need to do writer_iter_->Next() here
   // int64_t write_ts = 0;
   // if (write_iter_->Valid()) {
-  //   auto ret = Helper::DecodeTxnKey(write_iter_->Key(), last_write_key_, write_ts);
-  //   if (!ret.ok()) {
-  //     DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
+  //   auto ret = mvcc::Codec::DecodeKey(write_iter_->Key(), last_write_key_, write_ts);
+  //   if (!ret) {
+  //     DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, write_iter->key: "
   //                      << Helper::StringToHex(write_iter_->Key()) << ", start_ts: " << start_ts_
   //                      << ", seek_ts: " << seek_ts_;
   //   }
@@ -567,9 +569,9 @@ butil::Status TxnIterator::GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> 
     write_iter->Next();
     if (write_iter->Valid()) {
       int64_t commit_ts;
-      auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), last_write_key, commit_ts);
-      if (!ret1.ok()) {
-        DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: "
+      auto ret = mvcc::Codec::DecodeKey(write_iter->Key(), last_write_key, commit_ts);
+      if (!ret) {
+        DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, write_iter->key: "
                          << Helper::StringToHex(write_iter->Key());
       }
 
@@ -586,8 +588,8 @@ std::string TxnIterator::GetUserKey(std::shared_ptr<Iterator> write_iter) {
   std::string user_key;
   if (write_iter->Valid()) {
     int64_t commit_ts;
-    auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), user_key, commit_ts);
-    if (!ret1.ok()) {
+    auto ret = mvcc::Codec::DecodeKey(write_iter->Key(), user_key, commit_ts);
+    if (!ret) {
       DINGO_LOG(FATAL) << "[txn]GetUserKey failed, write_iter->key: " << Helper::StringToHex(write_iter->Key());
     }
   }
@@ -603,9 +605,9 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
   is_value_found = false;
   while (write_iter->Valid()) {
     int64_t commit_ts;
-    auto ret1 = Helper::DecodeTxnKey(write_iter->Key(), last_write_key, commit_ts);
-    if (!ret1.ok()) {
-      DINGO_LOG(FATAL) << "[txn]Scan DecodeTxnKey failed, write_iter->key: " << Helper::StringToHex(write_iter->Key())
+    auto ret1 = mvcc::Codec::DecodeKey(write_iter->Key(), last_write_key, commit_ts);
+    if (!ret1) {
+      DINGO_LOG(FATAL) << "[txn]Scan decode txn key failed, write_iter->key: " << Helper::StringToHex(write_iter->Key())
                        << ", start_ts: " << start_ts << ", seek_ts: " << seek_ts;
     }
 
@@ -676,15 +678,15 @@ butil::Status TxnIterator::GetUserValueInWriteIter(std::shared_ptr<Iterator> wri
         return butil::Status::OK();
       } else {
         auto ret3 =
-            reader->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(user_key, write_info.start_ts()), user_value);
+            reader->KvGet(Constant::kTxnDataCF, mvcc::Codec::EncodeKey(user_key, write_info.start_ts()), user_value);
         if (!ret3.ok() && ret3.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
           DINGO_LOG(FATAL) << "[txn]Scan read data failed, key: " << Helper::StringToHex(user_key)
                            << ", status: " << ret3.error_str();
           return butil::Status(pb::error::Errno::EINTERNAL, "read data failed");
         } else if (ret3.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
-          DINGO_LOG(ERROR) << "[txn]Scan read data failed, data is illegally not found, key: " << user_key
-                           << ", status: " << ret3.error_str()
-                           << ", raw_key: " << Helper::EncodeTxnKey(user_key, write_info.start_ts());
+          DINGO_LOG(ERROR) << "[txn]Scan read data failed, data is illegally not found, key: "
+                           << Helper::StringToHex(user_key) << ", status: " << ret3.error_str()
+                           << ", ts: " << write_info.start_ts();
           return butil::Status(pb::error::Errno::EINTERNAL, "data is illegally not found");
         } else {
           // before return, go to next user_key
@@ -906,8 +908,8 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
   }
 
   IteratorOptions iter_options;
-  iter_options.lower_bound = Helper::EncodeTxnKey(range.start_key(), Constant::kLockVer);
-  iter_options.upper_bound = Helper::EncodeTxnKey(range.end_key(), Constant::kLockVer);
+  iter_options.lower_bound = mvcc::Codec::EncodeKey(range.start_key(), Constant::kLockVer);
+  iter_options.upper_bound = mvcc::Codec::EncodeKey(range.end_key(), Constant::kLockVer);
 
   auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
   if (iter == nullptr) {
@@ -1075,8 +1077,8 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
         << "key: " << Helper::StringToHex(key) << ", iter_start_ts: " << iter_start_ts;
 
     IteratorOptions iter_options;
-    iter_options.lower_bound = Helper::EncodeTxnKey(key, iter_start_ts);
-    iter_options.upper_bound = Helper::EncodeTxnKey(key, 0);
+    iter_options.lower_bound = mvcc::Codec::EncodeKey(key, iter_start_ts);
+    iter_options.upper_bound = mvcc::Codec::EncodeKey(key, 0);
 
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
         << "iter_options.lower_bound: " << Helper::StringToHex(iter_options.lower_bound)
@@ -1093,7 +1095,7 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
       }
       std::string write_key;
       int64_t write_ts;
-      Helper::DecodeTxnKey(write_iter->Key(), write_key, write_ts);
+      mvcc::Codec::DecodeKey(write_iter->Key(), write_key, write_ts);
 
       bool is_valid = false;
       if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
@@ -1146,14 +1148,14 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
           break;
         }
 
-        auto ret1 = txn_reader.GetDataValue(Helper::EncodeTxnKey(key, write_info.start_ts()), *kv.mutable_value());
+        auto ret1 = txn_reader.GetDataValue(mvcc::Codec::EncodeKey(key, write_info.start_ts()), *kv.mutable_value());
         if (!ret1.ok() && ret1.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
           DINGO_LOG(FATAL) << "[txn]BatchGet read data failed, key: " << Helper::StringToHex(key)
                            << ", status: " << ret1.error_str();
         } else if (ret1.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
           DINGO_LOG(ERROR) << "[txn]BatchGet read data failed, data is illegally not found, key: "
                            << Helper::StringToHex(key) << ", status: " << ret1.error_str()
-                           << ", raw_key: " << Helper::EncodeTxnKey(key, write_info.start_ts());
+                           << ", ts: " << write_info.start_ts();
         }
         break;
       } else {
@@ -1396,7 +1398,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         } else if (lock_info.for_update_ts() < for_update_ts) {
           // this is a same pessimistic lock with a new for_update_ts, we need to update the lock
           pb::common::KeyValue kv;
-          kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
           lock_info.set_primary_lock(primary_lock);
           lock_info.set_lock_ts(start_ts);
@@ -1479,7 +1481,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       } else {
         // there is no lock and no write_confict, we can do lock
         pb::common::KeyValue kv;
-        kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
         pb::store::LockInfo lock_info;
         lock_info.set_primary_lock(primary_lock);
@@ -1560,7 +1562,7 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
 
   // update lock_info
   pb::common::KeyValue kv;
-  kv.set_key(Helper::EncodeTxnKey(lock_info.key(), Constant::kLockVer));
+  kv.set_key(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer));
   kv.set_value(lock_info.SerializeAsString());
 
   kv_puts_lock.push_back(kv);
@@ -1685,7 +1687,7 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
               << fmt::format("[txn][region({})] PessimisticRollback,", region->Id())
               << ", key: " << Helper::StringToHex(key)
               << " is locked by self, can do rollback, lock_info: " << lock_info.ShortDebugString();
-          kv_dels_lock.push_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
+          kv_dels_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
           continue;
         } else {
           // this is a same pessimistic lock with a not equal for_update_ts, there may be some error
@@ -2064,7 +2066,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       // put data
       if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
         pb::common::KeyValue kv;
-        std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
+        std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
         kv.set_key(data_key);
         kv.set_value(mutation.value());
 
@@ -2074,7 +2076,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       // put lock
       {
         pb::common::KeyValue kv;
-        kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
         pb::store::LockInfo lock_info = prev_lock_info;
         lock_info.set_primary_lock(primary_lock);
@@ -2123,7 +2125,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         // with nothing to do
         {
           pb::common::KeyValue kv;
-          kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
           pb::store::LockInfo lock_info = prev_lock_info;
           lock_info.set_primary_lock(primary_lock);
@@ -2155,7 +2157,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         // put data
         if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
           pb::common::KeyValue kv;
-          std::string data_key = Helper::EncodeTxnKey(mutation.key(), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
           kv.set_key(data_key);
           kv.set_value(mutation.value());
 
@@ -2165,7 +2167,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         // put lock
         {
           pb::common::KeyValue kv;
-          kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
           pb::store::LockInfo lock_info = prev_lock_info;
           lock_info.set_primary_lock(primary_lock);
@@ -2238,7 +2240,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       // put lock
       {
         pb::common::KeyValue kv;
-        kv.set_key(Helper::EncodeTxnKey(mutation.key(), Constant::kLockVer));
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
 
         pb::store::LockInfo lock_info = prev_lock_info;
         lock_info.set_primary_lock(primary_lock);
@@ -2567,7 +2569,7 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
   // for every key, check and do commit, if primary key is failed, the whole commit is failed
   for (const auto &lock_info : lock_infos) {
     // 1.delete lock from lock_cf
-    { kv_deletes_lock.push_back(Helper::EncodeTxnKey(lock_info.key(), Constant::kLockVer)); }
+    { kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(lock_info.key(), Constant::kLockVer)); }
 
     if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -2581,7 +2583,7 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
     if (!lock_info.short_value().empty()) {
       data_value = lock_info.short_value();
     } else if (lock_info.lock_type() == pb::store::Put) {
-      auto ret = reader->KvGet(Constant::kTxnDataCF, Helper::EncodeTxnKey(lock_info.key(), start_ts), data_value);
+      auto ret = reader->KvGet(Constant::kTxnDataCF, mvcc::Codec::EncodeKey(lock_info.key(), start_ts), data_value);
       if (!ret.ok() && ret.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
         DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, start_ts: {} commit_ts: {}", region->Id(),
                                         start_ts, commit_ts)
@@ -2592,7 +2594,7 @@ butil::Status TxnEngineHelper::DoTxnCommit(RawEnginePtr raw_engine, std::shared_
 
     {
       pb::common::KeyValue kv;
-      std::string write_key = Helper::EncodeTxnKey(lock_info.key(), commit_ts);
+      std::string write_key = mvcc::Codec::EncodeKey(lock_info.key(), commit_ts);
       kv.set_key(write_key);
 
       pb::store::WriteInfo write_info;
@@ -3080,7 +3082,7 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
 
   for (const auto &key : keys_to_rollback_without_data) {
     // delete lock
-    kv_deletes_lock.emplace_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
+    kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
 
     // add write
     pb::store::WriteInfo write_info;
@@ -3088,17 +3090,17 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
     write_info.set_op(::dingodb::pb::store::Op::Rollback);
 
     pb::common::KeyValue kv;
-    kv.set_key(Helper::EncodeTxnKey(key, start_ts));
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
     kv.set_value(write_info.SerializeAsString());
     kv_puts_write.emplace_back(kv);
   }
 
   for (const auto &key : keys_to_rollback_with_data) {
     // delete lock
-    kv_deletes_lock.emplace_back(Helper::EncodeTxnKey(key, Constant::kLockVer));
+    kv_deletes_lock.emplace_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
 
     // delete data
-    kv_deletes_data.emplace_back(Helper::EncodeTxnKey(key, start_ts));
+    kv_deletes_data.emplace_back(mvcc::Codec::EncodeKey(key, start_ts));
 
     // add write
     pb::store::WriteInfo write_info;
@@ -3106,7 +3108,7 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
     write_info.set_op(::dingodb::pb::store::Op::Rollback);
 
     pb::common::KeyValue kv;
-    kv.set_key(Helper::EncodeTxnKey(key, start_ts));
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
     kv.set_value(write_info.SerializeAsString());
     kv_puts_write.emplace_back(kv);
   }
@@ -3429,7 +3431,7 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   auto *lock_puts = cf_put_delete->add_puts_with_cf();
   lock_puts->set_cf_name(Constant::kTxnLockCF);
   auto *kv_lock = lock_puts->add_kvs();
-  kv_lock->set_key(Helper::EncodeTxnKey(primary_lock, Constant::kLockVer));
+  kv_lock->set_key(mvcc::Codec::EncodeKey(primary_lock, Constant::kLockVer));
   kv_lock->set_value(lock_info.SerializeAsString());
 
   if (txn_raft_request.ByteSizeLong() == 0) {
@@ -3552,8 +3554,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
   std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
 
   IteratorOptions write_iter_options;
-  write_iter_options.lower_bound = Helper::EncodeTxnKey(region_start_key, Constant::kMaxVer);
-  write_iter_options.upper_bound = Helper::EncodeTxnKey(region_end_key, -1);
+  write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, -1);
 
   auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
   if (nullptr == write_iter) {
@@ -3579,9 +3581,9 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
     int64_t write_ts = 0;
 
-    butil::Status status = Helper::DecodeTxnKey(write_iter_key, write_key, write_ts);
-    if (!status.ok()) {
-      std::string s = fmt::format("[txn_gc][write][region({})] DecodeTxnKey failed, write_iter->key : {} ", region_id,
+    auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
+    if (!ret) {
+      std::string s = fmt::format("[txn_gc][write][region({})] decode txn key failed, write_iter->key : {} ", region_id,
                                   Helper::StringToHex(write_iter_key));
       DINGO_LOG(FATAL) << s;
     }
@@ -3641,9 +3643,9 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
         kv_deletes_write.emplace_back(write_iter_key);
         if (write_info.short_value().empty()) {
           // try get key from data column family. if not exist , do not delete.
-          std::string data_key = Helper::EncodeTxnKey(write_key, write_info.start_ts());
+          std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
           std::string data_value;
-          status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
+          auto status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
           if (status.ok()) {
             kv_deletes_data.emplace_back(data_key);
           } else {
@@ -3774,7 +3776,7 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
   auto lambda_get_raw_key_function = [](std::string_view lock_iter_key) {
     std::string lock_key;
     int64_t ts = 0;
-    Helper::DecodeTxnKey(lock_iter_key, lock_key, ts);
+    mvcc::Codec::DecodeKey(lock_iter_key, lock_key, ts);
     return lock_key;
   };
 
@@ -3787,8 +3789,8 @@ butil::Status TxnEngineHelper::CheckLockForGc(RawEngine::ReaderPtr reader, std::
   };
 
   IteratorOptions lock_iter_options;
-  lock_iter_options.lower_bound = Helper::EncodeTxnKey(start_key, Constant::kLockVer);
-  lock_iter_options.upper_bound = Helper::EncodeTxnKey(end_key, 0);
+  lock_iter_options.lower_bound = mvcc::Codec::EncodeKey(start_key, Constant::kLockVer);
+  lock_iter_options.upper_bound = mvcc::Codec::EncodeKey(end_key, 0);
 
   std::shared_ptr<dingodb::Iterator> lock_iter = reader->NewIterator(Constant::kTxnLockCF, snapshot, lock_iter_options);
   if (nullptr == lock_iter) {
