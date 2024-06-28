@@ -354,4 +354,46 @@ TEST_F(MvccCodecTest, TruncateTsForKey) {
   EXPECT_EQ(100001, ts);
 }
 
+TEST_F(MvccCodecTest, PackageValue) {
+  {
+    std::string value = "hello";
+    std::string output;
+    mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value, output);
+
+    mvcc::ValueFlag actual_flag;
+    int64_t actual_ttl;
+    auto actual_value = mvcc::Codec::UnPackageValue(output, actual_flag, actual_ttl);
+    ASSERT_EQ(mvcc::ValueFlag::kPut, actual_flag);
+    ASSERT_EQ(0, actual_ttl);
+    ASSERT_EQ(value, actual_value);
+  }
+
+  {
+    std::string value = "hello";
+    std::string output;
+    mvcc::Codec::PackageValue(mvcc::ValueFlag::kDelete, value, output);
+
+    mvcc::ValueFlag actual_flag;
+    int64_t actual_ttl;
+    auto actual_value = mvcc::Codec::UnPackageValue(output, actual_flag, actual_ttl);
+    ASSERT_EQ(mvcc::ValueFlag::kDelete, actual_flag);
+    ASSERT_EQ(0, actual_ttl);
+    ASSERT_EQ("", actual_value);
+  }
+
+  {
+    std::string value = "hello";
+    std::string output;
+    int64_t ttl = dingodb::Helper::TimestampMs();
+    mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value, output);
+
+    mvcc::ValueFlag actual_flag;
+    int64_t actual_ttl;
+    auto actual_value = mvcc::Codec::UnPackageValue(output, actual_flag, actual_ttl);
+    ASSERT_EQ(mvcc::ValueFlag::kPutTTL, actual_flag);
+    ASSERT_EQ(ttl, actual_ttl);
+    ASSERT_EQ(value, actual_value);
+  }
+}
+
 }  // namespace dingodb

@@ -71,11 +71,11 @@ TEST_F(CodecTest, DecodeVectorId) {
   VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, scalar_key, result3);
   LOG(INFO) << "result : " << Helper::StringToHex(result3);
 
-  int64_t vector_id_1 = VectorCodec::DecodeVectorId(result1);
+  int64_t vector_id_1 = VectorCodec::DecodeVectorIdFromEncodeKey(result1);
   EXPECT_EQ(0, vector_id_1);
-  int64_t vector_id_2 = VectorCodec::DecodeVectorId(result2);
+  int64_t vector_id_2 = VectorCodec::DecodeVectorIdFromEncodeKey(result2);
   EXPECT_EQ(vector_id, vector_id_2);
-  int64_t vector_id_3 = VectorCodec::DecodeVectorId(result3);
+  int64_t vector_id_3 = VectorCodec::DecodeVectorIdFromEncodeKey(result3);
   EXPECT_EQ(vector_id, vector_id_3);
 }
 
@@ -99,11 +99,11 @@ TEST_F(CodecTest, DecodePartitionId) {
   VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, scalar_key, result3);
   LOG(INFO) << "result : " << Helper::StringToHex(result3);
 
-  int64_t partition_id_1 = VectorCodec::DecodePartitionId(result1);
+  int64_t partition_id_1 = VectorCodec::DecodePartitionIdFromEncodeKey(result1);
   EXPECT_EQ(partition_id, partition_id_1);
-  int64_t partition_id_2 = VectorCodec::DecodePartitionId(result2);
+  int64_t partition_id_2 = VectorCodec::DecodePartitionIdFromEncodeKey(result2);
   EXPECT_EQ(partition_id, partition_id_2);
-  int64_t partition_id_3 = VectorCodec::DecodePartitionId(result3);
+  int64_t partition_id_3 = VectorCodec::DecodePartitionIdFromEncodeKey(result3);
   EXPECT_EQ(partition_id, partition_id_3);
 }
 

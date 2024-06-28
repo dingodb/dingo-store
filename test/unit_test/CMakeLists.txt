@@ -5,7 +5,7 @@ add_subdirectory(common)
 # add_subdirectory(coprocessor)
 # add_subdirectory(engine)
 add_subdirectory(mvcc)
-# add_subdirectory(vector)
+add_subdirectory(vector)
 # add_subdirectory(misc)
 # add_subdirectory(document)
 
@@ -24,7 +24,7 @@ set(UNIT_TEST_LIBS
   # $<TARGET_OBJECTS:UNIT_TEST_COPROCESSOR_OBJS>
   # $<TARGET_OBJECTS:UNIT_TEST_ENGINE_OBJS>
   $<TARGET_OBJECTS:UNIT_TEST_MVCC_OBJS>
-  # $<TARGET_OBJECTS:UNIT_TEST_VECTOR_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_VECTOR_OBJS>
   # $<TARGET_OBJECTS:UNIT_TEST_MISC_OBJS>
   # $<TARGET_OBJECTS:UNIT_TEST_DOCUMENT_OBJS>
 )
