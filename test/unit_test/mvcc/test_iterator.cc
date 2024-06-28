@@ -98,7 +98,7 @@ class MvccIteratorTest : public testing::Test {
 std::shared_ptr<RocksRawEngine> MvccIteratorTest::engine = nullptr;
 std::shared_ptr<Config> MvccIteratorTest::config = nullptr;
 
-TEST_F(MvccIteratorTest, Iterator) {
+TEST_F(MvccIteratorTest, BackwardIterator) {
   // arrange data
   auto writer = engine->Writer();
 
@@ -110,7 +110,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     kv.set_value(GenRandomString(256));
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100000, kv));  // offset 0
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));  // offset 1
-    std::cout << "key: " << Helper::StringToHex(kv.key()) << std::endl;
   }
 
   {
@@ -119,7 +118,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     kv.set_value(GenRandomString(256));
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));  // offset 2
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));  // offset 3
-    std::cout << "key: " << Helper::StringToHex(kv.key()) << std::endl;
   }
 
   {
@@ -128,13 +126,11 @@ TEST_F(MvccIteratorTest, Iterator) {
     kv.set_value(GenRandomString(256));
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));  // offset 4
     kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100003, kv));  // offset 5
-    std::cout << "key: " << Helper::StringToHex(kv.key()) << std::endl;
   }
 
   writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
 
   // use iterator read data
-  std::cout << "======================================================" << std::endl;
 
   {
     int64_t ts = 99999;
@@ -149,7 +145,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100000;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -166,7 +161,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100001;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -187,7 +181,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100002;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -211,7 +204,6 @@ TEST_F(MvccIteratorTest, Iterator) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100003;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -242,7 +234,7 @@ TEST_F(MvccIteratorTest, Iterator) {
   writer->KvDeleteRange(kDefaultCf, range);
 }
 
-TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
+TEST_F(MvccIteratorTest, BackwardIteratorForDeleteKey) {
   // arrange data
   auto writer = engine->Writer();
 
@@ -277,7 +269,6 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
   writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
 
   // use iterator read data
-  std::cout << "======================================================" << std::endl;
 
   {
     int64_t ts = 99999;
@@ -292,7 +283,6 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100000;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -309,7 +299,6 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100001;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -330,7 +319,6 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100002;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -351,7 +339,6 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100003;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -376,7 +363,7 @@ TEST_F(MvccIteratorTest, IteratorForDeleteKey) {
   writer->KvDeleteRange(kDefaultCf, range);
 }
 
-TEST_F(MvccIteratorTest, IteratorForTTL) {
+TEST_F(MvccIteratorTest, BackwardIteratorForTTL) {
   // arrange data
   auto writer = engine->Writer();
 
@@ -514,7 +501,7 @@ TEST_F(MvccIteratorTest, IteratorForTTL) {
   writer->KvDeleteRange(kDefaultCf, range);
 }
 
-TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
+TEST_F(MvccIteratorTest, BackwardIteratorForTTLExpire) {
   // arrange data
   auto writer = engine->Writer();
 
@@ -550,7 +537,6 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
 
   // use iterator read data
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 99999;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -564,7 +550,6 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100000;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -578,7 +563,6 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100001;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -593,7 +577,6 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100002;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -608,7 +591,6 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
     ASSERT_FALSE(iter->Valid());
   }
 
-  std::cout << "======================================================" << std::endl;
   {
     int64_t ts = 100003;
     std::string start_key = mvcc::Codec::EncodeBytes("hello1");
@@ -620,6 +602,520 @@ TEST_F(MvccIteratorTest, IteratorForTTLExpire) {
     auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
 
     iter->Seek(start_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  // clear data
+  pb::common::Range range;
+  range.set_start_key("hello");
+  range.set_end_key("hellz");
+  writer->KvDeleteRange(kDefaultCf, range);
+}
+
+TEST_F(MvccIteratorTest, ForwardIterator) {
+  // arrange data
+  auto writer = engine->Writer();
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello1");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100000, kv));  // offset 0
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));  // offset 1
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello2");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));  // offset 2
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));  // offset 3
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello3");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));  // offset 4
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100003, kv));  // offset 5
+  }
+
+  writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
+
+  // use iterator read data
+
+  {
+    int64_t ts = 99999;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100000;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[0].key(), iter->Key());  // hello1+100000
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100001;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[2].key(), iter->Key());  // hello2+100001
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100002;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[4].key(), iter->Key());  // hello3+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[3].key(), iter->Key());  // hello2+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100003;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[5].key(), iter->Key());  // hello3+100003
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[3].key(), iter->Key());  // hello2+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  // clear data
+  pb::common::Range range;
+  range.set_start_key("hello");
+  range.set_end_key("hellz");
+  writer->KvDeleteRange(kDefaultCf, range);
+}
+
+TEST_F(MvccIteratorTest, ForwardIteratorForDeleteKey) {
+  // arrange data
+  auto writer = engine->Writer();
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello1");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100000, kv));     // offset 0
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));     // offset 1
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithDelete(100002, kv));  // offset 2
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello2");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100001, kv));     // offset 3
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));     // offset 4
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithDelete(100003, kv));  // offset 5
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello3");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100002, kv));  // offset 6
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPut(100003, kv));  // offset 7
+  }
+
+  writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
+
+  // use iterator read data
+
+  {
+    int64_t ts = 99999;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100000;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[0].key(), iter->Key());  // hello1+100000
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100001;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[3].key(), iter->Key());  // hello2+100001
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100002;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[6].key(), iter->Key());  // hello3+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[4].key(), iter->Key());  // hello2+100002
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100003;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[7].key(), iter->Key());  // hello3+100003
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  // clear data
+  pb::common::Range range;
+  range.set_start_key("hello");
+  range.set_end_key("hellz");
+  writer->KvDeleteRange(kDefaultCf, range);
+}
+
+TEST_F(MvccIteratorTest, ForwardIteratorForTTL) {
+  // arrange data
+  auto writer = engine->Writer();
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  int64_t ttl = Helper::TimestampMs() + 100000;
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello1");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100000, ttl, kv));  // offset 0
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100001, ttl, kv));  // offset 1
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello2");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100001, ttl, kv));  // offset 2
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100002, ttl, kv));  // offset 3
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello3");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100002, ttl, kv));  // offset 4
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100003, ttl, kv));  // offset 5
+  }
+
+  writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
+
+  // use iterator read data
+
+  {
+    int64_t ts = 99999;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100000;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[0].key(), iter->Key());  // hello1+100000
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100001;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[2].key(), iter->Key());  // hello2+100001
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100002;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[4].key(), iter->Key());  // hello3+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[3].key(), iter->Key());  // hello2+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100003;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[5].key(), iter->Key());  // hello3+100003
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[3].key(), iter->Key());  // hello2+100002
+    iter->Prev();
+    ASSERT_TRUE(iter->Valid());
+    EXPECT_EQ(kvs[1].key(), iter->Key());  // hello1+100001
+    iter->Prev();
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  // clear data
+  pb::common::Range range;
+  range.set_start_key("hello");
+  range.set_end_key("hellz");
+  writer->KvDeleteRange(kDefaultCf, range);
+}
+
+TEST_F(MvccIteratorTest, ForwardIteratorForTTLExpire) {
+  // arrange data
+  auto writer = engine->Writer();
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  int64_t ttl = Helper::TimestampMs() - 100000;
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello1");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100000, ttl, kv));  // offset 0
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100001, ttl, kv));  // offset 1
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello2");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100001, ttl, kv));  // offset 2
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100002, ttl, kv));  // offset 3
+  }
+
+  {
+    pb::common::KeyValue kv;
+    kv.set_key("hello3");
+    kv.set_value(GenRandomString(256));
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100002, ttl, kv));  // offset 4
+    kvs.push_back(mvcc::Codec::EncodeKeyValueWithPutTTL(100003, ttl, kv));  // offset 5
+  }
+
+  writer->KvBatchPutAndDelete(kDefaultCf, kvs, {});
+
+  // use iterator read data
+
+  {
+    int64_t ts = 99999;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100000;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100001;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100002;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
+    ASSERT_FALSE(iter->Valid());
+  }
+
+  {
+    int64_t ts = 100003;
+    std::string start_key = mvcc::Codec::EncodeBytes("hello1");
+    std::string end_key = mvcc::Codec::EncodeBytes("hello4");
+    dingodb::IteratorOptions options;
+    options.lower_bound = start_key;
+
+    auto reader = engine->Reader();
+    auto iter = std::make_shared<mvcc::Iterator>(ts, reader->NewIterator(kDefaultCf, options));
+
+    iter->SeekForPrev(end_key);
     ASSERT_FALSE(iter->Valid());
   }
 
