@@ -32,14 +32,21 @@ enum TokenizerType {
 
 class DocumentCodec {
  public:
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, std::string& result);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& result);
+  // package document plain key
+  static void PackageDocumentKey(char prefix, int64_t partition_id, std::string& plain_key);
+  static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& plain_key);
+  static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
+                                 std::string& plain_key);
+
+  // encode document key
+  static void EncodeDocumentKey(char prefix, int64_t partition_id, std::string& encode_key);
+  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& encode_key);
   static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts,
-                                std::string& result);
+                                std::string& encode_key);
   static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                std::string& result);
+                                std::string& encode_key);
   static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                int64_t ts, std::string& result);
+                                int64_t ts, std::string& encode_key);
 
   static int64_t UnPackagePartitionId(const std::string& plain_key);
   static int64_t DecodePartitionIdFromEncodeKey(const std::string& encode_key);

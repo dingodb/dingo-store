@@ -27,7 +27,7 @@ namespace mvcc {
 
 class Iterator : public dingodb::Iterator {
  public:
-  Iterator(int64_t ts, IteratorPtr iter) : ts_(ts), iter_(iter) {}
+  Iterator(int64_t ts, IteratorPtr iter) : ts_(ts > 0 ? ts : INT64_MAX), iter_(iter) {}
   ~Iterator() override = default;
 
   std::string GetName() override { return "MVCC"; }

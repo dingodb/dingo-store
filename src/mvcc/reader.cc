@@ -30,12 +30,13 @@ namespace dingodb {
 
 namespace mvcc {
 
-butil::Status KvReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) {
-  if (key.empty()) {
+butil::Status KvReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                              std::string& plain_value) {
+  if (plain_key.empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
-  std::string encode_key = Codec::EncodeBytes(key);
+  std::string encode_key = Codec::EncodeBytes(plain_key);
 
   dingodb::IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(encode_key);
@@ -47,23 +48,23 @@ butil::Status KvReader::KvGet(const std::string& cf_name, int64_t ts, const std:
     return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
   }
 
-  value = Codec::UnPackageValue(iter->Value());
+  plain_value = Codec::UnPackageValue(iter->Value());
 
   return butil::Status().OK();
 }
 
-butil::Status KvReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                               const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status KvReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                               const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  std::string encode_start_key = Codec::EncodeBytes(start_key);
-  std::string encode_end_key = Codec::EncodeBytes(end_key);
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
   dingodb::IteratorOptions options;
   options.upper_bound = encode_end_key;
@@ -83,28 +84,29 @@ butil::Status KvReader::KvScan(const std::string& cf_name, int64_t ts, const std
     kv.set_key(decode_key);
     kv.set_value(std::string(Codec::UnPackageValue(iter->Value())));
 
-    kvs.push_back(std::move(kv));
+    plain_kvs.push_back(std::move(kv));
   }
 
   return butil::Status().OK();
 }
 
-butil::Status KvReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                const std::string& end_key, int64_t& count) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status KvReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                const std::string& plain_end_key, int64_t& count) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  std::string encode_start_key = Codec::EncodeBytes(start_key);
-  std::string encode_end_key = Codec::EncodeBytes(end_key);
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
   dingodb::IteratorOptions options;
   options.upper_bound = encode_end_key;
 
+  count = 0;
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
   for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
@@ -114,18 +116,18 @@ butil::Status KvReader::KvCount(const std::string& cf_name, int64_t ts, const st
   return butil::Status().OK();
 }
 
-butil::Status KvReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status KvReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                 const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  std::string encode_start_key = Codec::EncodeBytes(start_key);
-  std::string encode_end_key = Codec::EncodeBytes(end_key);
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
   dingodb::IteratorOptions options;
   options.upper_bound = encode_end_key;
@@ -142,18 +144,18 @@ butil::Status KvReader::KvMinKey(const std::string& cf_name, int64_t ts, const s
   return butil::Status().OK();
 }
 
-butil::Status KvReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status KvReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                 const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  std::string encode_start_key = Codec::EncodeBytes(start_key);
-  std::string encode_end_key = Codec::EncodeBytes(end_key);
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
   dingodb::IteratorOptions options;
   options.lower_bound = encode_start_key;
@@ -171,47 +173,53 @@ butil::Status KvReader::KvMaxKey(const std::string& cf_name, int64_t ts, const s
 }
 
 dingodb::IteratorPtr KvReader::NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) {
-  return std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
+  return std::make_shared<Iterator>(ts > 0 ? ts : INT64_MAX, reader_->NewIterator(cf_name, options));
 }
 
-butil::Status VectorReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) {
-  if (key.empty()) {
+butil::Status VectorReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                                  std::string& plain_value) {
+  if (plain_key.empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
+  std::string encode_key = Codec::EncodeBytes(plain_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(key);
+  options.upper_bound = Helper::PrefixNext(encode_key);
 
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<mvcc::Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->Seek(key);
+  iter->Seek(encode_key);
   if (!iter->Valid()) {
     return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
   }
 
-  value = Codec::UnPackageValue(iter->Value());
+  plain_value = Codec::UnPackageValue(iter->Value());
 
   return butil::Status().OK();
 }
 
-// start_key and end_key is user key
-// output kvs is user key
-butil::Status VectorReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                   const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+// plain_start_key and plain_end_key is user key
+// output plain_kvs is user key
+butil::Status VectorReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                   const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  options.upper_bound = encode_end_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
     pb::common::KeyValue kv;
 
     auto key = iter->Key();
@@ -220,52 +228,59 @@ butil::Status VectorReader::KvScan(const std::string& cf_name, int64_t ts, const
     kv.set_key(std::string(VectorCodec::TruncateTsForKey(key)));
     kv.set_value(std::string(Codec::UnPackageValue(iter->Value())));
 
-    kvs.push_back(std::move(kv));
+    plain_kvs.push_back(std::move(kv));
   }
 
   return butil::Status().OK();
 }
 
-// start_key and end_key is user key
-butil::Status VectorReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                    const std::string& end_key, int64_t& count) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+// plain_start_key and plain_end_key is user key
+butil::Status VectorReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                    const std::string& plain_end_key, int64_t& count) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
+  dingodb::IteratorOptions options;
+  options.upper_bound = encode_end_key;
+
+  count = 0;
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
     ++count;
   }
 
   return butil::Status().OK();
 }
 
-butil::Status VectorReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                     const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status VectorReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                     const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  options.upper_bound = encode_end_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   std::string min_key;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->Seek(start_key);
+  iter->Seek(encode_start_key);
   if (iter->Valid()) {
     int64_t ts;
     Codec::DecodeKey(iter->Key(), plain_key, ts);
@@ -274,23 +289,26 @@ butil::Status VectorReader::KvMinKey(const std::string& cf_name, int64_t ts, con
   return butil::Status().OK();
 }
 
-butil::Status VectorReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                     const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status VectorReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                     const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.lower_bound = start_key;
+  options.lower_bound = encode_start_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   std::string min_key;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->SeekForPrev(end_key);
+  iter->SeekForPrev(encode_end_key);
   if (iter->Valid()) {
     int64_t ts;
     Codec::DecodeKey(iter->Key(), plain_key, ts);
@@ -300,48 +318,53 @@ butil::Status VectorReader::KvMaxKey(const std::string& cf_name, int64_t ts, con
 }
 
 dingodb::IteratorPtr VectorReader::NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) {
-  return std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
+  return std::make_shared<Iterator>(ts > 0 ? ts : INT64_MAX, reader_->NewIterator(cf_name, options));
 }
 
-butil::Status DocumentReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& key,
-                                    std::string& value) {
-  if (key.empty()) {
+butil::Status DocumentReader::KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                                    std::string& plain_value) {
+  if (plain_key.empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
 
+  std::string encode_key = Codec::EncodeBytes(plain_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = Helper::PrefixNext(key);
+  options.upper_bound = Helper::PrefixNext(encode_key);
 
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<mvcc::Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->Seek(key);
+  iter->Seek(encode_key);
   if (!iter->Valid()) {
     return butil::Status(pb::error::EKEY_NOT_FOUND, "Not found key");
   }
 
-  value = Codec::UnPackageValue(iter->Value());
+  plain_value = Codec::UnPackageValue(iter->Value());
 
   return butil::Status().OK();
 }
 
-// start_key and end_key is user key
-// output kvs is user key
-butil::Status DocumentReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                     const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+// plain_start_key and plain_end_key is user key
+// output plain_kvs is user key
+butil::Status DocumentReader::KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                     const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  options.upper_bound = encode_end_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
     pb::common::KeyValue kv;
 
     auto key = iter->Key();
@@ -350,52 +373,59 @@ butil::Status DocumentReader::KvScan(const std::string& cf_name, int64_t ts, con
     kv.set_key(std::string(DocumentCodec::TruncateTsForKey(key)));
     kv.set_value(std::string(Codec::UnPackageValue(iter->Value())));
 
-    kvs.push_back(std::move(kv));
+    plain_kvs.push_back(std::move(kv));
   }
 
   return butil::Status().OK();
 }
 
-// start_key and end_key is user key
-butil::Status DocumentReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                      const std::string& end_key, int64_t& count) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+// plain_start_key and plain_end_key is user key
+butil::Status DocumentReader::KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                      const std::string& plain_end_key, int64_t& count) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
-  dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
 
+  dingodb::IteratorOptions options;
+  options.upper_bound = encode_end_key;
+
+  count = 0;
   ts = ts > 0 ? ts : INT64_MAX;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  for (iter->Seek(start_key); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
     ++count;
   }
 
   return butil::Status().OK();
 }
 
-butil::Status DocumentReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                       const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status DocumentReader::KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                       const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.upper_bound = end_key;
+  options.upper_bound = encode_end_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   std::string min_key;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->Seek(start_key);
+  iter->Seek(encode_start_key);
   if (iter->Valid()) {
     int64_t ts;
     Codec::DecodeKey(iter->Key(), plain_key, ts);
@@ -404,23 +434,26 @@ butil::Status DocumentReader::KvMinKey(const std::string& cf_name, int64_t ts, c
   return butil::Status().OK();
 }
 
-butil::Status DocumentReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                       const std::string& end_key, std::string& plain_key) {
-  if (BAIDU_UNLIKELY(start_key.empty())) {
+butil::Status DocumentReader::KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                       const std::string& plain_end_key, std::string& plain_key) {
+  if (BAIDU_UNLIKELY(plain_start_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "Start key is empty");
   }
 
-  if (BAIDU_UNLIKELY(end_key.empty())) {
+  if (BAIDU_UNLIKELY(plain_end_key.empty())) {
     return butil::Status(pb::error::EKEY_EMPTY, "End key is empty");
   }
 
+  std::string encode_start_key = Codec::EncodeBytes(plain_start_key);
+  std::string encode_end_key = Codec::EncodeBytes(plain_end_key);
+
   dingodb::IteratorOptions options;
-  options.lower_bound = start_key;
+  options.lower_bound = encode_start_key;
 
   ts = ts > 0 ? ts : INT64_MAX;
   std::string min_key;
   auto iter = std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
-  iter->SeekForPrev(end_key);
+  iter->SeekForPrev(encode_end_key);
   if (iter->Valid()) {
     int64_t ts;
     Codec::DecodeKey(iter->Key(), plain_key, ts);
@@ -430,7 +463,7 @@ butil::Status DocumentReader::KvMaxKey(const std::string& cf_name, int64_t ts, c
 }
 
 dingodb::IteratorPtr DocumentReader::NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) {
-  return std::make_shared<Iterator>(ts, reader_->NewIterator(cf_name, options));
+  return std::make_shared<Iterator>(ts > 0 ? ts : INT64_MAX, reader_->NewIterator(cf_name, options));
 }
 
 }  // namespace mvcc

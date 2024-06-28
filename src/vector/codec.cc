@@ -27,86 +27,79 @@
 
 namespace dingodb {
 
-void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& result) {
+void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMinLenWithPrefix);
+  plain_key.reserve(Constant::kVectorKeyMinLenWithPrefix);
 
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-
-  mvcc::Codec::EncodeBytes(buf, result);
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
 }
 
-void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& result) {
+void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
   CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix);
+  plain_key.reserve(Constant::kVectorKeyMaxLenWithPrefix);
 
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(vector_id, buf);
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
+  SerialHelper::WriteLongComparable(vector_id, plain_key);
+}
 
-  mvcc::Codec::EncodeBytes(buf, result);
+void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
+                                   std::string& plain_key) {
+  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
+  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
+  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
+  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
+
+  plain_key.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
+
+  plain_key.push_back(prefix);
+  SerialHelper::WriteLong(partition_id, plain_key);
+  SerialHelper::WriteLongComparable(vector_id, plain_key);
+  plain_key.append(scalar_key);
+}
+
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, std::string& encode_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, plain_key);
+
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
+}
+
+void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& encode_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, plain_key);
+
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts,
-                                  std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
-  CHECK(ts > 0) << fmt::format("Invalid ts {}.", ts);
+                                  std::string& encode_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix);
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(vector_id, buf);
-
-  result = mvcc::Codec::EncodeKey(buf, ts);
+  encode_key = mvcc::Codec::EncodeKey(plain_key, ts);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                                  std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
-  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
+                                  std::string& encode_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, scalar_key, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(vector_id, buf);
-  buf.append(scalar_key);
-
-  mvcc::Codec::EncodeBytes(buf, result);
+  mvcc::Codec::EncodeBytes(plain_key, encode_key);
 }
 
 void VectorCodec::EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                                  int64_t ts, std::string& result) {
-  CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
-  CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
-  CHECK(vector_id >= 0) << fmt::format("Invalid vector_id {}.", vector_id);
-  CHECK(ts >= 0) << fmt::format("Invalid ts {}.", ts);
-  CHECK(!scalar_key.empty()) << fmt::format("Scalar key is empty, {}/{}/{}.", prefix, partition_id, vector_id);
+                                  int64_t ts, std::string& encode_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, scalar_key, plain_key);
 
-  std::string buf;
-  buf.reserve(Constant::kVectorKeyMaxLenWithPrefix + scalar_key.size());
-
-  buf.push_back(prefix);
-  SerialHelper::WriteLong(partition_id, buf);
-  SerialHelper::WriteLongComparable(vector_id, buf);
-  buf.append(scalar_key);
-
-  result = mvcc::Codec::EncodeKey(buf, ts);
+  encode_key = mvcc::Codec::EncodeKey(plain_key, ts);
 }
 
 int64_t VectorCodec::UnPackagePartitionId(const std::string& plain_key) {
