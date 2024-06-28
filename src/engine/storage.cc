@@ -486,11 +486,11 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
 
   std::vector<bool> key_states(ids.size(), false);
   for (int i = 0; i < ids.size(); ++i) {
-    std::string key;
-    VectorCodec::EncodeVectorKey(prefix, region->PartitionId(), ids[i], ts, key);
+    std::string plain_key;
+    VectorCodec::PackageVectorKey(prefix, region->PartitionId(), ids[i], plain_key);
 
     std::string value;
-    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), plain_key, value);
     if (status.ok()) {
       key_states[i] = true;
     }
@@ -580,7 +580,7 @@ butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, 
 
   auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
-  status = vector_reader->VectorGetBorderId(ts, region->Range(), get_min, vector_id);
+  status = vector_reader->VectorGetBorderId(ts, region->Range(false), get_min, vector_id);
   if (!status.ok()) {
     return status;
   }
@@ -792,11 +792,11 @@ butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync
 
   std::vector<bool> key_states(ids.size(), false);
   for (int i = 0; i < ids.size(); ++i) {
-    std::string key;
-    DocumentCodec::EncodeDocumentKey(prefix, region->PartitionId(), ids[i], ts, key);
+    std::string plain_key;
+    DocumentCodec::PackageDocumentKey(prefix, region->PartitionId(), ids[i], plain_key);
 
     std::string value;
-    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
+    auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), plain_key, value);
     if (status.ok()) {
       key_states[i] = true;
     }

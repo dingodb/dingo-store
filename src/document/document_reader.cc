@@ -27,6 +27,7 @@
 #include "document/document_index.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 
@@ -36,11 +37,11 @@ butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::
                                                   int64_t partition_id, int64_t document_id, bool with_scalar_data,
                                                   std::vector<std::string>& selected_scalar_keys,
                                                   pb::common::DocumentWithId& document_with_id) {
-  std::string key;
-  DocumentCodec::EncodeDocumentKey(region_range.start_key()[0], partition_id, document_id, key);
+  std::string plain_key;
+  DocumentCodec::PackageDocumentKey(Helper::GetKeyPrefix(region_range), partition_id, document_id, plain_key);
 
   std::string value;
-  auto status = reader_->KvGet(Constant::kStoreDataCF, ts, key, value);
+  auto status = reader_->KvGet(Constant::kStoreDataCF, ts, plain_key, value);
   if (!status.ok()) {
     return status;
   }
@@ -259,38 +260,33 @@ butil::Status DocumentReader::GetBorderId(int64_t ts, const pb::common::Range& r
 // ScanDocumentId
 butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                              std::vector<int64_t>& document_ids) {
-  std::string seek_key;
-  DocumentCodec::EncodeDocumentKey(ctx->region_range.start_key()[0], ctx->partition_id, ctx->start_id, seek_key);
-  std::string range_start_key = ctx->region_range.start_key();
-  std::string range_end_key = ctx->region_range.end_key();
+  const auto& range = ctx->region_range;
+  std::string encode_seek_key;
+  DocumentCodec::EncodeDocumentKey(Helper::GetKeyPrefix(range), ctx->partition_id, ctx->start_id, encode_seek_key);
+  auto encode_range = mvcc::Codec::EncodeRange(range);
 
   IteratorOptions options;
   if (!ctx->is_reverse) {
-    if (seek_key < range_start_key) {
-      seek_key = range_start_key;
+    if (encode_seek_key < encode_range.start_key()) {
+      encode_seek_key = encode_range.start_key();
     }
 
-    if (seek_key >= range_end_key) {
+    if (encode_seek_key >= encode_range.end_key()) {
       return butil::Status::OK();
     }
 
-    options.lower_bound = range_start_key;
-    options.upper_bound = range_end_key;
+    options.upper_bound = encode_range.end_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                      Helper::StringToHex(ctx->region_range.start_key()),
-                                      Helper::StringToHex(ctx->region_range.end_key()));
+      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range {}", Helper::RangeToString(range));
       return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
     }
-    for (iter->Seek(seek_key); iter->Valid(); iter->Next()) {
+    for (iter->Seek(encode_seek_key); iter->Valid(); iter->Next()) {
       pb::common::DocumentWithId document;
 
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(key);
-      if (document_id <= 0 || document_id == INT64_MAX) {
-        continue;
-      }
+      CHECK(document_id > 0) << fmt::format("document_id({}) is invaild", document_id);
 
       if (ctx->end_id != 0 && document_id > ctx->end_id) {
         break;
@@ -302,33 +298,25 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       }
     }
   } else {
-    if (seek_key > range_end_key) {
-      seek_key = range_end_key;
+    if (encode_seek_key > encode_range.end_key()) {
+      encode_seek_key = encode_range.end_key();
     }
 
-    if (seek_key < range_start_key) {
+    if (encode_seek_key < encode_range.start_key()) {
       return butil::Status::OK();
     }
 
-    options.lower_bound = range_start_key;
+    options.lower_bound = encode_range.start_key();
     auto iter = reader_->NewIterator(Constant::kStoreDataCF, ctx->ts, options);
     if (iter == nullptr) {
-      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range [{}-{})",
-                                      Helper::StringToHex(ctx->region_range.start_key()),
-                                      Helper::StringToHex(ctx->region_range.end_key()));
+      DINGO_LOG(ERROR) << fmt::format("New iterator failed, region range {}", Helper::RangeToString(range));
       return butil::Status(pb::error::Errno::EINTERNAL, "New iterator failed");
     }
 
-    for (iter->SeekForPrev(seek_key); iter->Valid(); iter->Prev()) {
-      if (iter->Key() == range_end_key) {
-        continue;
-      }
-
+    for (iter->SeekForPrev(encode_seek_key); iter->Valid(); iter->Prev()) {
       std::string key(iter->Key());
       auto document_id = DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(key);
-      if (document_id <= 0 || document_id == INT64_MAX) {
-        continue;
-      }
+      CHECK(document_id > 0) << fmt::format("document_id({}) is invaild", document_id);
 
       if (ctx->end_id != 0 && document_id < ctx->end_id) {
         break;

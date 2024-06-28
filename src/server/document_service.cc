@@ -862,14 +862,14 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
 static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_document_id, int64_t end_document_id) {
   pb::common::Range result;
 
-  auto range = region->Range(true);
+  auto range = region->Range(false);
   auto prefix = region->GetKeyPrefix();
   auto partition_id = region->PartitionId();
   if (start_document_id == 0) {
     result.set_start_key(range.start_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(prefix, partition_id, start_document_id, key);
+    DocumentCodec::PackageDocumentKey(prefix, partition_id, start_document_id, key);
     result.set_start_key(key);
   }
 
@@ -877,7 +877,7 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_do
     result.set_end_key(range.end_key());
   } else {
     std::string key;
-    DocumentCodec::EncodeDocumentKey(prefix, partition_id, end_document_id, key);
+    DocumentCodec::PackageDocumentKey(prefix, partition_id, end_document_id, key);
     result.set_end_key(key);
   }
 

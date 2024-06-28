@@ -502,7 +502,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "CalcDistance") {
       client::SendCalcDistance();
     } else if (method == "VectorCount") {
-      client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+      int64_t count = client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+      std::cout << "count: " << count << std::endl;
     } else if (method == "CountVectorTable") {
       ctx->table_id = FLAGS_table_id;
       client::CountVectorTable(ctx);

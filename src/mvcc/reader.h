@@ -28,24 +28,25 @@ class Reader {
  public:
   virtual ~Reader() = default;
 
-  // key is user key, not encode key
-  // output value is user value, not include ext field
-  virtual butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) = 0;
+  // key is plain key, not encode key
+  // output value is plain value, not include ext field
+  virtual butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                              std::string& plain_value) = 0;
+
+  // start_key and end_key is plain key
+  // output plain_kvs is plain key
+  virtual butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                               const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) = 0;
 
   // start_key and end_key is user key
-  // output kvs is user key
-  virtual butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                               const std::string& end_key, std::vector<pb::common::KeyValue>& kvs) = 0;
+  virtual butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                const std::string& plain_end_key, int64_t& count) = 0;
 
-  // start_key and end_key is user key
-  virtual butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                const std::string& end_key, int64_t& count) = 0;
+  virtual butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                 const std::string& plain_end_key, std::string& plain_key) = 0;
 
-  virtual butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& plain_key) = 0;
-
-  virtual butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                                 const std::string& end_key, std::string& plain_key) = 0;
+  virtual butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                                 const std::string& plain_end_key, std::string& plain_key) = 0;
 
   virtual dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) = 0;
 };
@@ -57,24 +58,25 @@ class KvReader : public Reader {
 
   static std::shared_ptr<KvReader> New(RawEngine::ReaderPtr reader) { return std::make_shared<KvReader>(reader); }
 
-  // key is user key, not encode key
-  // output value is user value, not include ext field
-  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) override;
+  // key is plain key, not encode key
+  // output value is plain value, not include ext field
+  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                      std::string& plain_value) override;
 
-  // start_key and end_key is user key
-  // output kvs is user key
-  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key, const std::string& end_key,
-                       std::vector<pb::common::KeyValue>& kvs) override;
+  // start_key and end_key is plain key
+  // output plain_kvs is plain key
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
 
-  // start_key and end_key is user key
-  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                        const std::string& end_key, int64_t& count) override;
+  // start_key and end_key is plain key
+  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                        const std::string& plain_end_key, int64_t& count) override;
 
-  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
-  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 
@@ -90,24 +92,25 @@ class VectorReader : public Reader {
     return std::make_shared<VectorReader>(reader);
   }
 
-  // key is user key, not encode key
-  // output value is user value, not include ext field
-  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) override;
+  // key is plain key, not encode key
+  // output value is plain value, not include ext field
+  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                      std::string& plain_value) override;
 
-  // start_key and end_key is user key
-  // output kvs is user key
-  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key, const std::string& end_key,
-                       std::vector<pb::common::KeyValue>& kvs) override;
+  // start_key and end_key is plain key
+  // output plain_kvs is plain key
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
 
-  // start_key and end_key is user key
-  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                        const std::string& end_key, int64_t& count) override;
+  // start_key and end_key is plain key
+  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                        const std::string& plain_end_key, int64_t& count) override;
 
-  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
-  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 
@@ -123,24 +126,25 @@ class DocumentReader : public Reader {
     return std::make_shared<DocumentReader>(reader);
   }
 
-  // key is user key, not encode key
-  // output value is user value, not include ext field
-  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& key, std::string& value) override;
+  // key is plain key, not encode key
+  // output value is plain value, not include ext field
+  butil::Status KvGet(const std::string& cf_name, int64_t ts, const std::string& plain_key,
+                      std::string& plain_value) override;
 
-  // start_key and end_key is user key
-  // output kvs is user key
-  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& start_key, const std::string& end_key,
-                       std::vector<pb::common::KeyValue>& kvs) override;
+  // start_key and end_key is plain key
+  // output plain_kvs is plain key
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
 
-  // start_key and end_key is user key
-  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                        const std::string& end_key, int64_t& count) override;
+  // start_key and end_key is plain key
+  butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                        const std::string& plain_end_key, int64_t& count) override;
 
-  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMinKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
-  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& start_key,
-                         const std::string& end_key, std::string& plain_key) override;
+  butil::Status KvMaxKey(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                         const std::string& plain_end_key, std::string& plain_key) override;
 
   dingodb::IteratorPtr NewIterator(const std::string& cf_name, int64_t ts, IteratorOptions options) override;
 

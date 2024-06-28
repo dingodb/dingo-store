@@ -703,8 +703,8 @@ void WhichRegion(std::shared_ptr<Context> ctx) {
     } else if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
       int64_t vector_id = dingodb::Helper::StringToInt64(ctx->key);
 
-      dingodb::DocumentCodec::EncodeDocumentKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id,
-                                                vector_id, encoded_key);
+      dingodb::DocumentCodec::PackageDocumentKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id,
+                                                 vector_id, encoded_key);
     }
 
     if (encoded_key >= range.start_key()) {

@@ -1507,7 +1507,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
         dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
         int64_t partition_id = dingodb::VectorCodec::UnPackagePartitionId(start_key);
-        dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
+        dingodb::VectorCodec::PackageVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
       }
@@ -1515,7 +1515,7 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
                dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
       if (FLAGS_document_id > 0) {
         int64_t partition_id = dingodb::DocumentCodec::UnPackagePartitionId(start_key);
-        dingodb::DocumentCodec::EncodeDocumentKey(start_key[0], partition_id, FLAGS_document_id, real_mid);
+        dingodb::DocumentCodec::PackageDocumentKey(start_key[0], partition_id, FLAGS_document_id, real_mid);
       } else {
         real_mid = client::Helper::CalculateDocumentMiddleKey(start_key, end_key);
       }
