@@ -106,6 +106,7 @@ class Codec {
   static void EncodeKeyValuesWithDelete(int64_t ts, std::vector<pb::common::KeyValue>& kvs);
 
   static pb::common::Range EncodeRange(const pb::common::Range& plain_range);
+  static pb::common::Range DecodeRange(const pb::common::Range& encode_range);
 };
 
 }  // namespace mvcc
