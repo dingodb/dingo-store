@@ -281,7 +281,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -297,7 +297,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (0 != j % 2) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -346,7 +346,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -362,7 +362,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (0 != j % 2) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -412,7 +412,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -440,7 +440,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (write_info.op() == ::dingodb::pb::store::Op::Put) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -451,7 +451,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j % 6) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -509,7 +509,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -521,7 +521,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           writer->KvPut(Constant::kTxnWriteCF, kv_write);
 
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -531,7 +531,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -587,7 +587,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -603,7 +603,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (0 != j % 2) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -679,7 +679,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           tso.set_logical(++logical);
           int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -707,7 +707,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (write_info.op() == ::dingodb::pb::store::Op::Put) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -718,7 +718,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j % 6) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -779,7 +779,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -804,7 +804,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (write_info.op() == ::dingodb::pb::store::Op::Put) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -815,7 +815,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j % 6) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -882,7 +882,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -907,7 +907,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (write_info.op() == ::dingodb::pb::store::Op::Put) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -918,7 +918,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -974,7 +974,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -1027,7 +1027,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -1043,7 +1043,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           if (0 != j % 2) {
             pb::common::KeyValue kv_data;
-            std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+            std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
             std::string data_value = prefix_key + "_value";
             kv_data.set_key(data_key);
             kv_data.set_value(data_value);
@@ -1093,7 +1093,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
           // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-          std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+          std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
           pb::store::WriteInfo write_info;
           write_info.set_start_ts(start_ts);
@@ -1105,7 +1105,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           writer->KvPut(Constant::kTxnWriteCF, kv_write);
 
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1115,7 +1115,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
           // lock prefix_key once
           if (0 == j) {
             pb::common::KeyValue kv_lock;
-            std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+            std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
             std::string lock_value = prefix_key + "_value";
 
             pb::store::LockInfo lock_info;
@@ -1159,7 +1159,7 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1175,7 +1175,7 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
 
         if (0 != j % 2) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1208,7 +1208,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1224,7 +1224,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
 
         if (0 != j % 2) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1254,7 +1254,7 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1283,7 +1283,7 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
 
         if (write_info.op() == ::dingodb::pb::store::Op::Put) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1294,7 +1294,7 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
         // lock prefix_key once
         if (0 == j % 6) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;
@@ -1331,7 +1331,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1343,7 +1343,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
         writer->KvPut(Constant::kTxnWriteCF, kv_write);
 
         pb::common::KeyValue kv_data;
-        std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+        std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
         std::string data_value = prefix_key + "_value";
         kv_data.set_key(data_key);
         kv_data.set_value(data_value);
@@ -1353,7 +1353,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
         // lock prefix_key once
         if (0 == j) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;
@@ -1392,7 +1392,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1408,7 +1408,7 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
 
         if (0 != j % 2) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1454,7 +1454,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1483,7 +1483,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
 
         if (write_info.op() == ::dingodb::pb::store::Op::Put) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1494,7 +1494,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
         // lock prefix_key once
         if (0 == j % 6) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;
@@ -1532,7 +1532,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1557,7 +1557,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
 
         if (write_info.op() == ::dingodb::pb::store::Op::Put) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1568,7 +1568,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
         // lock prefix_key once
         if (0 == j % 6) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;
@@ -1616,7 +1616,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1641,7 +1641,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
 
         if (write_info.op() == ::dingodb::pb::store::Op::Put) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1652,7 +1652,7 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
         // lock prefix_key once
         if (0 == j) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;
@@ -1693,7 +1693,7 @@ TEST_F(TxnGcTest, DoGcDataEmpty) {
                 // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts)
                 //          ;
 
-                std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+                std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
                 pb::store::WriteInfo write_info;
                 write_info.set_start_ts(start_ts);
@@ -1729,7 +1729,7 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1745,7 +1745,7 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
 
         if (0 != j % 2) {
           pb::common::KeyValue kv_data;
-          std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+          std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
           std::string data_value = prefix_key + "_value";
           kv_data.set_key(data_key);
           kv_data.set_value(data_value);
@@ -1776,7 +1776,7 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
 
         // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
-        std::string write_key = Helper::EncodeTxnKey(std::string(prefix_key), commit_ts);
+        std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
         pb::store::WriteInfo write_info;
         write_info.set_start_ts(start_ts);
@@ -1788,7 +1788,7 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
         writer->KvPut(Constant::kTxnWriteCF, kv_write);
 
         pb::common::KeyValue kv_data;
-        std::string data_key = Helper::EncodeTxnKey(std::string(prefix_key), start_ts);
+        std::string data_key = mvcc::Codec::EncodeKey(std::string(prefix_key), start_ts);
         std::string data_value = prefix_key + "_value";
         kv_data.set_key(data_key);
         kv_data.set_value(data_value);
@@ -1798,7 +1798,7 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
         // lock prefix_key once
         if (0 == j) {
           pb::common::KeyValue kv_lock;
-          std::string lock_key = Helper::EncodeTxnKey(std::string(prefix_key), Constant::kLockVer);
+          std::string lock_key = mvcc::Codec::EncodeKey(std::string(prefix_key), Constant::kLockVer);
           std::string lock_value = prefix_key + "_value";
 
           pb::store::LockInfo lock_info;

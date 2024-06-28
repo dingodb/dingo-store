@@ -283,7 +283,7 @@ std::shared_ptr<SnapshotContext> StoreStateMachine::MakeSnapshotContext() {
   snapshot_ctx->applied_term = applied_term_;
   snapshot_ctx->applied_index = applied_index_;
   snapshot_ctx->region_epoch = region_->Epoch();
-  snapshot_ctx->range = region_->Range();
+  snapshot_ctx->range = region_->Range(false);
 
   return snapshot_ctx;
 }

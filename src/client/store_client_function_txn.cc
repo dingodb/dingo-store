@@ -23,11 +23,14 @@
 #include "client/store_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/serial_helper.h"
+#include "document/codec.h"
 #include "gflags/gflags.h"
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 #include "serial/buf.h"
+#include "vector/codec.h"
 
 const int kBatchSize = 1000;
 
@@ -95,28 +98,35 @@ std::string StringToHex(const std::string& key) { return dingodb::Helper::String
 std::string HexToString(const std::string& hex) { return dingodb::Helper::HexToString(hex); }
 
 std::string VectorPrefixToHex(char prefix, int64_t part_id) {
-  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id);
-  return dingodb::Helper::StringToHex(key);
+  return dingodb::Helper::StringToHex(dingodb::VectorCodec::PackageVectorKey(prefix, part_id));
 }
 
 std::string VectorPrefixToHex(char prefix, int64_t part_id, int64_t vector_id) {
-  std::string key = dingodb::Helper::EncodeVectorIndexRegionHeader(prefix, part_id, vector_id);
-  return dingodb::Helper::StringToHex(key);
+  return dingodb::Helper::StringToHex(dingodb::VectorCodec::PackageVectorKey(prefix, part_id, vector_id));
 }
 
 std::string TablePrefixToHex(char prefix, const std::string& user_key) {
-  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, user_key);
-  return dingodb::Helper::StringToHex(key);
+  std::string buf;
+  buf.push_back(prefix);
+  buf.append(user_key);
+  return dingodb::Helper::StringToHex(buf);
 }
 
 std::string TablePrefixToHex(char prefix, int64_t part_id) {
-  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id);
-  return dingodb::Helper::StringToHex(key);
+  std::string buf;
+  buf.push_back(prefix);
+  dingodb::SerialHelper::WriteLong(part_id, buf);
+
+  return dingodb::Helper::StringToHex(buf);
 }
 
 std::string TablePrefixToHex(char prefix, int64_t part_id, const std::string& user_key) {
-  std::string key = dingodb::Helper::EncodeTableRegionHeader(prefix, part_id, user_key);
-  return dingodb::Helper::StringToHex(key);
+  std::string buf;
+  buf.push_back(prefix);
+  dingodb::SerialHelper::WriteLong(part_id, buf);
+  buf.append(user_key);
+
+  return dingodb::Helper::StringToHex(buf);
 }
 
 std::string HexToTablePrefix(const std::string& hex, bool has_part_id) {
@@ -429,12 +439,12 @@ void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
     return;
   }
 
+  char perfix = dingodb::Helper::GetKeyPrefix(region.definition().range());
   if (FLAGS_mutation_op == "put") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Put);
 
-    mutation->set_key(
-        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+    mutation->set_key(dingodb::VectorCodec::PackageVectorKey(perfix, part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
@@ -451,18 +461,15 @@ void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& 
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
-    mutation->set_key(
-        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+    mutation->set_key(dingodb::VectorCodec::PackageVectorKey(perfix, part_id, vector_id));
   } else if (FLAGS_mutation_op == "check_not_exists") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
-    mutation->set_key(
-        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+    mutation->set_key(dingodb::VectorCodec::PackageVectorKey(perfix, part_id, vector_id));
   } else if (FLAGS_mutation_op == "insert") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
-    mutation->set_key(
-        dingodb::Helper::EncodeVectorIndexRegionHeader(region.definition().range().start_key()[0], part_id, vector_id));
+    mutation->set_key(dingodb::VectorCodec::PackageVectorKey(perfix, part_id, vector_id));
 
     dingodb::pb::common::VectorWithId vector_with_id;
 
@@ -568,12 +575,12 @@ void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Regio
     return;
   }
 
+  char prefix = dingodb::Helper::GetKeyPrefix(region.definition().range());
   if (FLAGS_mutation_op == "put") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Put);
 
-    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
-                                                                       part_id, document_id));
+    mutation->set_key(dingodb::DocumentCodec::PackageDocumentKey(prefix, part_id, document_id));
 
     dingodb::pb::common::DocumentWithId document_with_id;
 
@@ -629,18 +636,15 @@ void DocumentSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Regio
   } else if (FLAGS_mutation_op == "delete") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::Delete);
-    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
-                                                                       part_id, document_id));
+    mutation->set_key(dingodb::DocumentCodec::PackageDocumentKey(prefix, part_id, document_id));
   } else if (FLAGS_mutation_op == "check_not_exists") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::CheckNotExists);
-    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
-                                                                       part_id, document_id));
+    mutation->set_key(dingodb::DocumentCodec::PackageDocumentKey(prefix, part_id, document_id));
   } else if (FLAGS_mutation_op == "insert") {
     auto* mutation = request.add_mutations();
     mutation->set_op(::dingodb::pb::store::Op::PutIfAbsent);
-    mutation->set_key(dingodb::Helper::EncodeDocumentIndexRegionHeader(region.definition().range().start_key()[0],
-                                                                       part_id, document_id));
+    mutation->set_key(dingodb::DocumentCodec::PackageDocumentKey(prefix, part_id, document_id));
 
     dingodb::pb::common::DocumentWithId document_with_id;
 

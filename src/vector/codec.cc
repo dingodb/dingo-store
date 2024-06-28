@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <string>
+#include <utility>
 
 #include "common/constant.h"
 #include "common/helper.h"
@@ -27,6 +28,13 @@
 
 namespace dingodb {
 
+std::string VectorCodec::PackageVectorKey(char prefix, int64_t partition_id) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, plain_key);
+
+  return std::move(plain_key);
+}
+
 void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, std::string& plain_key) {
   CHECK(prefix != 0) << fmt::format("Invalid prefix {}.", prefix);
   CHECK(partition_id > 0) << fmt::format("Invalid partition_id {}.", partition_id);
@@ -35,6 +43,13 @@ void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, std::strin
 
   plain_key.push_back(prefix);
   SerialHelper::WriteLong(partition_id, plain_key);
+}
+
+std::string VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, plain_key);
+
+  return std::move(plain_key);
 }
 
 void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& plain_key) {
@@ -47,6 +62,14 @@ void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t ve
   plain_key.push_back(prefix);
   SerialHelper::WriteLong(partition_id, plain_key);
   SerialHelper::WriteLongComparable(vector_id, plain_key);
+}
+
+std::string VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id,
+                                          const std::string& scalar_key) {
+  std::string plain_key;
+  PackageVectorKey(prefix, partition_id, vector_id, scalar_key, plain_key);
+
+  return std::move(plain_key);
 }
 
 void VectorCodec::PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,

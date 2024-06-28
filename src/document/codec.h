@@ -33,8 +33,12 @@ enum TokenizerType {
 class DocumentCodec {
  public:
   // package document plain key
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id);
   static void PackageDocumentKey(char prefix, int64_t partition_id, std::string& plain_key);
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id);
   static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& plain_key);
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                        const std::string& scalar_key);
   static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
                                  std::string& plain_key);
 
