@@ -103,16 +103,15 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region, i
     return false;
   }
 
+  auto range = region->Range(false);
   pb::store_internal::RaftSnapshotRegionMeta meta;
   *(meta.mutable_epoch()) = region->Epoch();
-  *(meta.mutable_range()) = region->Range();
+  *(meta.mutable_range()) = range;
   meta.set_term(term);
   meta.set_log_index(log_index);
 
-  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] region meta epoch({}_{}) range[{}-{})", region->Id(),
-                                 meta.epoch().conf_version(), meta.epoch().version(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] region meta epoch({}_{}) range{}", region->Id(),
+                                 meta.epoch().conf_version(), meta.epoch().version(), Helper::RangeToString(range));
 
   file << meta.SerializeAsString();
   file.close();
@@ -123,14 +122,14 @@ bool AddRegionMetaFile(braft::SnapshotWriter* writer, store::RegionPtr region, i
 
 bool RaftSnapshot::SaveSnapshot(braft::SnapshotWriter* writer, store::RegionPtr region,  // NOLINT
                                 GenSnapshotFileFunc func, int64_t region_version, int64_t term, int64_t log_index) {
-  if (region->Range().start_key().empty() || region->Range().end_key().empty()) {
+  auto range = region->Range(false);
+  if (range.start_key().empty() || range.end_key().empty()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] Save snapshot failed, range is invalid", region->Id());
     return false;
   }
 
-  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] Save snapshot range[{}-{})", region->Id(),
-                                 Helper::StringToHex(region->Range().start_key()),
-                                 Helper::StringToHex(region->Range().end_key()));
+  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] Save snapshot range{}", region->Id(),
+                                 Helper::RangeToString(range));
 
   // Add region meta to snapshot
   if (!AddRegionMetaFile(writer, region, term, log_index)) {

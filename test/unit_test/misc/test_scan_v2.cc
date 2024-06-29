@@ -36,6 +36,7 @@
 #include "config/yaml_config.h"
 #include "crontab/crontab.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
@@ -147,6 +148,7 @@ TEST_F(ScanV2Test, Time) {
 
 TEST_F(ScanV2Test, Open) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
   auto scan = this->GetScan(&scan_id);
   LOG(INFO) << "scan_id : " << scan_id;
@@ -156,30 +158,18 @@ TEST_F(ScanV2Test, Open) {
   butil::Status ok;
 
   // scan id empty failed
-  ok = scan->Open("", raw_rocks_engine, kDefaultCf);
+  ok = scan->Open("", mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  // // timeout == 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
-  // // max bytes rpc = 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
-  // // max_fetch_cnt_by_server == 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
   // engin empty {} failed
-  ok = scan->Open(std::to_string(scan_id), {}, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), nullptr, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // kDefaultCf empty  failed
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, "");
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, "", 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 }
 
@@ -371,6 +361,7 @@ TEST_F(ScanV2Test, InsertData) {
 
 TEST_F(ScanV2Test, ScanBeginEqual) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
   auto scan = this->GetScan(&scan_id);
   LOG(INFO) << "scan_id : " << scan_id;
@@ -379,7 +370,7 @@ TEST_F(ScanV2Test, ScanBeginEqual) {
 
   butil::Status ok;
 
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -408,6 +399,7 @@ TEST_F(ScanV2Test, ScanBeginEqual) {
 
 TEST_F(ScanV2Test, ScanBeginOthers) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -419,7 +411,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -459,7 +451,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -501,7 +493,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -539,7 +531,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -579,7 +571,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -617,6 +609,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
 
 TEST_F(ScanV2Test, ScanBeginNormal) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -627,7 +620,7 @@ TEST_F(ScanV2Test, ScanBeginNormal) {
   LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -732,6 +725,7 @@ TEST_F(ScanV2Test, IsRecyclable) {
 
 TEST_F(ScanV2Test, scan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -742,7 +736,7 @@ TEST_F(ScanV2Test, scan) {
   LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
