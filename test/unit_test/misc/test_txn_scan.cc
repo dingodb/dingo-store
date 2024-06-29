@@ -38,6 +38,7 @@
 #include "coordinator/tso_control.h"
 #include "engine/rocks_raw_engine.h"
 #include "engine/txn_engine_helper.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"

@@ -2,12 +2,12 @@ enable_testing()
 
 
 add_subdirectory(common)
-# add_subdirectory(coprocessor)
-# add_subdirectory(engine)
+add_subdirectory(coprocessor)
+add_subdirectory(engine)
 add_subdirectory(mvcc)
 add_subdirectory(vector)
-# add_subdirectory(misc)
-# add_subdirectory(document)
+add_subdirectory(misc)
+add_subdirectory(document)
 
 SET(UNIT_TEST_BIN "dingodb_unit_test")
 
@@ -21,12 +21,12 @@ set(UNIT_TEST_LIBS
   ${DYNAMIC_LIB}
   ${VECTOR_LIB}
   $<TARGET_OBJECTS:UNIT_TEST_COMMON_OBJS>
-  # $<TARGET_OBJECTS:UNIT_TEST_COPROCESSOR_OBJS>
-  # $<TARGET_OBJECTS:UNIT_TEST_ENGINE_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_COPROCESSOR_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_ENGINE_OBJS>
   $<TARGET_OBJECTS:UNIT_TEST_MVCC_OBJS>
   $<TARGET_OBJECTS:UNIT_TEST_VECTOR_OBJS>
-  # $<TARGET_OBJECTS:UNIT_TEST_MISC_OBJS>
-  # $<TARGET_OBJECTS:UNIT_TEST_DOCUMENT_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_MISC_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_DOCUMENT_OBJS>
 )
 
 set(UNIT_TEST_LIBS

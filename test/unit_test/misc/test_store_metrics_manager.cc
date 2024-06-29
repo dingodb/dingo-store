@@ -139,7 +139,7 @@ TEST_F(StoreRegionMetricsTest, GetRegionMinKey) {
 
   auto store_region_metrics = std::make_shared<dingodb::StoreRegionMetrics>(
       std::make_shared<dingodb::MetaReader>(StoreRegionMetricsTest::engine),
-      std::make_shared<dingodb::MetaWriter>(StoreRegionMetricsTest::engine), engine);
+      std::make_shared<dingodb::MetaWriter>(StoreRegionMetricsTest::engine));
 
   std::vector<std::string> raft_addrs;
   dingodb::store::RegionPtr region = BuildRegion(11111, "unit-test-01", raft_addrs);

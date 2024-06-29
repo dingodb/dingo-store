@@ -30,6 +30,7 @@
 #include "config/yaml_config.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
@@ -508,6 +509,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
 #endif
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -518,7 +520,7 @@ TEST_F(ScanWithCoprocessorV2, scan) {
   LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
