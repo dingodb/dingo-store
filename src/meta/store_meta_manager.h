@@ -49,6 +49,9 @@ using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;
 
 namespace store {
 
+class Region;
+using RegionPtr = std::shared_ptr<Region>;
+
 // Warp pb region for atomic/metux
 class Region {
  public:
@@ -63,8 +66,8 @@ class Region {
   Region(const Region&) = delete;
   void operator=(const Region&) = delete;
 
-  static std::shared_ptr<Region> New(int64_t region_id);
-  static std::shared_ptr<Region> New(const pb::common::RegionDefinition& definition);
+  static RegionPtr New(int64_t region_id);
+  static RegionPtr New(const pb::common::RegionDefinition& definition);
 
   bool Recover();
 
@@ -166,10 +169,19 @@ class Region {
     statistics_.last_serving_time_s.store(Helper::Timestamp(), std::memory_order_relaxed);
   }
 
+  void SetAppliedMaxTs(int64_t ts) {
+    if (ts > applied_max_ts_.load(std::memory_order_acquire)) {
+      applied_max_ts_.store(ts, std::memory_order_release);
+    }
+  }
+  int64_t AppliedMaxTs() { return applied_max_ts_.load(std::memory_order_acquire); }
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
+
+  std::atomic<int64_t> applied_max_ts_{0};
 
   pb::raft::SplitStrategy split_strategy_{};
 
@@ -181,8 +193,6 @@ class Region {
 
   Statistics statistics_;
 };
-
-using RegionPtr = std::shared_ptr<Region>;
 
 class RaftMeta {
  public:

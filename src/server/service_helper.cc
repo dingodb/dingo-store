@@ -109,8 +109,8 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
   }
 
   if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("pb::error::ERANGE_INVALID, Range is invalid start_key : {} end_key : {}",
-                                    Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
+    DINGO_LOG(ERROR) << fmt::format("pb::error::ERANGE_INVALID, Range is invalid range: {}",
+                                    Helper::RangeToString(range));
     return butil::Status(pb::error::ERANGE_INVALID, "Range is invalid");
   }
 
@@ -122,10 +122,9 @@ butil::Status ServiceHelper::ValidateKeyInRange(const pb::common::Range& range,
                                                 const std::vector<std::string_view>& keys) {
   for (const auto& key : keys) {
     if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
-      return butil::Status(
-          pb::error::EKEY_OUT_OF_RANGE,
-          fmt::format("Key out of range, region range[{}-{}] key[{}]", Helper::StringToHex(range.start_key()),
-                      Helper::StringToHex(range.end_key()), Helper::StringToHex(key)));
+      return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                           fmt::format("Key out of range, region range{} key[{}]", Helper::RangeToString(range),
+                                       Helper::StringToHex(key)));
     }
   }
 
@@ -140,11 +139,9 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   std::string_view req_truncate_start_key(req_range.start_key().data(), min_length);
   std::string_view region_truncate_start_key(region_range.start_key().data(), min_length);
   if (req_truncate_start_key < region_truncate_start_key) {
-    return butil::Status(
-        pb::error::EKEY_OUT_OF_RANGE,
-        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
-                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
-                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
+    return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                         fmt::format("Key out of range, region range{} req range{}",
+                                     Helper::RangeToString(region_range), Helper::RangeToString(req_range)));
   }
 
   // Validate end_key
@@ -162,11 +159,9 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   }
 
   if (req_truncate_end_key > region_truncate_end_key) {
-    return butil::Status(
-        pb::error::EKEY_OUT_OF_RANGE,
-        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
-                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
-                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
+    return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                         fmt::format("Key out of range, region range{} req range{}",
+                                     Helper::RangeToString(region_range), Helper::RangeToString(req_range)));
   }
 
   return butil::Status();
@@ -199,9 +194,8 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
   for (auto vector_id : vector_ids) {
     if (vector_id < min_vector_id || vector_id >= max_vector_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
-                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
-                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-                                       min_vector_id, max_vector_id, vector_id));
+                           fmt::format("EKEY_OUT_OF_RANGE, region range{} / [{}-{}) req vector id {}",
+                                       Helper::RangeToString(range), min_vector_id, max_vector_id, vector_id));
     }
   }
 
@@ -220,9 +214,8 @@ butil::Status ServiceHelper::ValidateDocumentRegion(store::RegionPtr region, con
   for (auto document_id : document_ids) {
     if (document_id < min_document_id || document_id >= max_document_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
-                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
-                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-                                       min_document_id, max_document_id, document_id));
+                           fmt::format("EKEY_OUT_OF_RANGE, region range{} / [{}-{}) req vector id {}",
+                                       Helper::RangeToString(range), min_document_id, max_document_id, document_id));
     }
   }
 

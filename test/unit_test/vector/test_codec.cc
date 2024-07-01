@@ -36,29 +36,54 @@ class VectorCodecTest : public testing::Test {
  private:
 };
 
+TEST_F(VectorCodecTest, packageAndUnPackage) {
+  int64_t partition_id = 12345;
+
+  {
+    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id);
+    ASSERT_EQ(9, plain_key.size());
+    ASSERT_EQ(partition_id, VectorCodec::UnPackagePartitionId(plain_key));
+  }
+
+  {
+    int64_t vecotr_id = 789654;
+    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, vecotr_id);
+    ASSERT_EQ(17, plain_key.size());
+    ASSERT_EQ(partition_id, VectorCodec::UnPackagePartitionId(plain_key));
+    ASSERT_EQ(vecotr_id, VectorCodec::UnPackageVectorId(plain_key));
+  }
+
+  {
+    int64_t vecotr_id = 789654;
+    const std::string scalar_key = "hello world";
+    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, vecotr_id, scalar_key);
+    ASSERT_EQ(28, plain_key.size());
+    ASSERT_EQ(partition_id, VectorCodec::UnPackagePartitionId(plain_key));
+    ASSERT_EQ(vecotr_id, VectorCodec::UnPackageVectorId(plain_key));
+    ASSERT_EQ(scalar_key, VectorCodec::UnPackageScalarKey(plain_key));
+  }
+}
+
 TEST_F(VectorCodecTest, encodeAndDecode) {
   int64_t partition_id = 12345;
 
   {
-    std::string encode_key;
-    VectorCodec::EncodeVectorKey(kPrefix, partition_id, encode_key);
+    std::string encode_key = VectorCodec::EncodeVectorKey(kPrefix, partition_id);
 
     ASSERT_EQ(partition_id, VectorCodec::DecodePartitionIdFromEncodeKey(encode_key));
   }
 
   {
-    std::string encode_key;
     int64_t vector_id = 9876543;
-    VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, encode_key);
+    std::string encode_key = VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id);
 
     ASSERT_EQ(partition_id, VectorCodec::DecodePartitionIdFromEncodeKey(encode_key));
     ASSERT_EQ(vector_id, VectorCodec::DecodeVectorIdFromEncodeKey(encode_key));
   }
 
   {
-    std::string encode_key;
     int64_t vector_id = 9876543;
-    VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, encode_key);
+    std::string encode_key = VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id);
 
     int64_t actual_partition_id;
     int64_t actual_vector_id;
@@ -68,10 +93,9 @@ TEST_F(VectorCodecTest, encodeAndDecode) {
   }
 
   {
-    std::string encode_key;
     int64_t vector_id = 9876543;
     std::string scalar_key = "hello";
-    VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, scalar_key, encode_key);
+    std::string encode_key = VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, scalar_key);
 
     int64_t actual_partition_id;
     int64_t actual_vector_id;
@@ -83,10 +107,9 @@ TEST_F(VectorCodecTest, encodeAndDecode) {
   }
 
   {
-    std::string encode_key;
     int64_t vector_id = 9876543;
     std::string scalar_key = "hello";
-    VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, scalar_key, encode_key);
+    std::string encode_key = VectorCodec::EncodeVectorKey(kPrefix, partition_id, vector_id, scalar_key);
 
     ASSERT_EQ(partition_id, VectorCodec::DecodePartitionIdFromEncodeKey(encode_key));
     ASSERT_EQ(vector_id, VectorCodec::DecodeVectorIdFromEncodeKey(encode_key));

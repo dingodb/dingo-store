@@ -15,8 +15,10 @@
 #ifndef DINGODB_MVCC_READER_H_
 #define DINGODB_MVCC_READER_H_
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "engine/raw_engine.h"
 
@@ -38,6 +40,9 @@ class Reader {
   virtual butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                                const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) = 0;
 
+  virtual butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                               const std::string& plain_end_key,
+                               std::function<bool(const std::string& plain_key, const std::string& value)> func) = 0;
   // start_key and end_key is user key
   virtual butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                                 const std::string& plain_end_key, int64_t& count) = 0;
@@ -67,6 +72,10 @@ class KvReader : public Reader {
   // output plain_kvs is plain key
   butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                        const std::string& end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
+
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& plain_end_key,
+                       std::function<bool(const std::string& plain_key, const std::string& value)> func) override;
 
   // start_key and end_key is plain key
   butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
@@ -102,6 +111,10 @@ class VectorReader : public Reader {
   butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                        const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
 
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& plain_end_key,
+                       std::function<bool(const std::string& plain_key, const std::string& value)> func) override;
+
   // start_key and end_key is plain key
   butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                         const std::string& plain_end_key, int64_t& count) override;
@@ -135,6 +148,10 @@ class DocumentReader : public Reader {
   // output plain_kvs is plain key
   butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
                        const std::string& plain_end_key, std::vector<pb::common::KeyValue>& plain_kvs) override;
+
+  butil::Status KvScan(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,
+                       const std::string& plain_end_key,
+                       std::function<bool(const std::string& plain_key, const std::string& value)> func) override;
 
   // start_key and end_key is plain key
   butil::Status KvCount(const std::string& cf_name, int64_t ts, const std::string& plain_start_key,

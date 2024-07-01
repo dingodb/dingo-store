@@ -247,11 +247,12 @@ void SplitCheckTask::SplitCheck() {
 
   int64_t start_time = Helper::TimestampMs();
   auto epoch = region_->Epoch();
-  auto range = region_->Range(true);
+  auto plain_range = region_->Range(false);
+  auto encode_range = mvcc::Codec::EncodeRange(plain_range);
 
   std::vector<std::string> raw_cf_names;
   std::vector<std::string> txn_cf_names;
-  Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
+  Helper::GetColumnFamilyNames(encode_range.start_key(), raw_cf_names, txn_cf_names);
 
   std::vector<std::string> cf_names = txn_cf_names.empty() ? raw_cf_names : txn_cf_names;
 
@@ -260,14 +261,14 @@ void SplitCheckTask::SplitCheck() {
   // for raw region, we use the user key directly.
   // todo: transform range?
   DINGO_LOG(INFO) << fmt::format("[split.check][region({})] Will check SplitKey for raw_range{} cf_names({})",
-                                 region_->Id(), Helper::RangeToString(range), Helper::VectorToString(cf_names));
+                                 region_->Id(), Helper::RangeToString(plain_range), Helper::VectorToString(cf_names));
   uint32_t key_count = 0;
-  std::string split_key = split_checker_->SplitKey(region_, range, cf_names, key_count);
+  std::string encode_split_key = split_checker_->SplitKey(region_, encode_range, cf_names, key_count);
 
   int64_t ts = 0;
-  std::string decode_key;
-  if (!mvcc::Codec::DecodeKey(split_key, decode_key, ts)) {
-    DINGO_LOG(FATAL) << fmt::format("Decode key fail, key: {}", Helper::StringToHex(split_key));
+  std::string plain_split_key;
+  if (!mvcc::Codec::DecodeKey(encode_split_key, plain_split_key, ts)) {
+    DINGO_LOG(FATAL) << fmt::format("Decode key fail, key: {}", Helper::StringToHex(encode_split_key));
   }
 
   // Update region key count metrics.
@@ -279,7 +280,7 @@ void SplitCheckTask::SplitCheck() {
   bool need_split = true;
   std::string reason;
   do {
-    if (split_key.empty()) {
+    if (plain_split_key.empty()) {
       reason = "split key is empty";
       need_split = false;
       break;
@@ -289,8 +290,8 @@ void SplitCheckTask::SplitCheck() {
       need_split = false;
       break;
     }
-    if (!region_->CheckKeyInRange(split_key)) {
-      reason = fmt::format("invalid split key, not in region range {}", Helper::RangeToString(range));
+    if (!region_->CheckKeyInRange(plain_split_key)) {
+      reason = fmt::format("invalid split key, not in region range {}", Helper::RangeToString(plain_range));
       need_split = false;
       break;
     }
@@ -332,8 +333,8 @@ void SplitCheckTask::SplitCheck() {
   DINGO_LOG(INFO) << fmt::format(
       "[split.check][region({})] split check result({}) reason({}) split_policy({}) split_key({}) epoch({}-{}) "
       "range({}) elapsed time({}ms)",
-      region_->Id(), need_split, reason, split_checker_->GetPolicyName(), Helper::StringToHex(split_key),
-      region_->Epoch().conf_version(), region_->Epoch().version(), Helper::RangeToString(range),
+      region_->Id(), need_split, reason, split_checker_->GetPolicyName(), Helper::StringToHex(plain_split_key),
+      region_->Epoch().conf_version(), region_->Epoch().version(), Helper::RangeToString(plain_range),
       Helper::TimestampMs() - start_time);
   if (!need_split) {
     return;
@@ -343,7 +344,7 @@ void SplitCheckTask::SplitCheck() {
   auto coordinator_interaction = Server::GetInstance().GetCoordinatorInteraction();
   pb::coordinator::SplitRegionRequest request;
   request.mutable_split_request()->set_split_from_region_id(region_->Id());
-  request.mutable_split_request()->set_split_watershed_key(split_key);
+  request.mutable_split_request()->set_split_watershed_key(plain_split_key);
   request.mutable_split_request()->set_store_create_region(ConfigHelper::GetSplitStrategy() ==
                                                            pb::raft::POST_CREATE_REGION);
   pb::coordinator::SplitRegionResponse response;

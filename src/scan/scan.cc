@@ -32,6 +32,7 @@
 #include "coprocessor/coprocessor_v2.h"
 #include "coprocessor/utils.h"
 #include "engine/write_data.h"  // IWYU pragma: keep
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "scan/scan_filter.h"
@@ -144,9 +145,13 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs, b
   has_more = false;
   while (iter_->Valid()) {
     pb::common::KeyValue kv;
-    *kv.mutable_key() = iter_->Key();
+
+    std::string plain_key;
+    mvcc::Codec::DecodeKey(iter_->Key(), plain_key);
+    kv.mutable_key()->swap(plain_key);
     if (!key_only_) {
-      *kv.mutable_value() = iter_->Value();
+      std::string value(mvcc::Codec::UnPackageValue(iter_->Value()));
+      kv.mutable_value()->swap(value);
     }
 
     kvs.emplace_back(kv);
@@ -155,7 +160,6 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs, b
       iter_->Next();
       break;
     }
-    kv.Clear();
 
     iter_->Next();
   }
@@ -417,15 +421,17 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
     }
   }
 
+  auto encode_range = mvcc::Codec::EncodeRange(range);
+
   IteratorOptions options;
-  options.upper_bound = context->range_.end_key();
+  options.upper_bound = encode_range.end_key();
 
   context->iter_ = context->reader_->NewIterator(context->cf_name_, context->ts_, options);
   if (!context->iter_) {
     context->state_ = ScanState::kError;
     return butil::Status(pb::error::EINTERNAL, "Internal error : create iter failed");
   }
-  context->iter_->Seek(context->range_.start_key());
+  context->iter_->Seek(encode_range.start_key());
 
   if (context->max_fetch_cnt_ > 0) {
     bool has_more = false;

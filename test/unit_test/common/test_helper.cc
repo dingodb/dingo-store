@@ -1497,12 +1497,12 @@ TEST_F(HelperTest, VectorToString) {
 
   {
     std::vector<float> vec = {0.1, 0.2};
-    EXPECT_EQ("0.1, 0.2", dingodb::Helper::VectorToString(vec));
+    EXPECT_EQ("0.1,0.2", dingodb::Helper::VectorToString(vec));
   }
 
   {
     std::vector<float> vec = {0.1, 0.2, 0.3, 0.4};
-    EXPECT_EQ("0.1, 0.2, 0.3, 0.4", dingodb::Helper::VectorToString(vec));
+    EXPECT_EQ("0.1,0.2,0.3,0.4", dingodb::Helper::VectorToString(vec));
   }
 }
 

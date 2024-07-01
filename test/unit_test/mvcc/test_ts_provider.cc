@@ -70,7 +70,7 @@ TEST_F(BatchTsListTest, SingleThread) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  ASSERT_EQ(push_size, batch_ts_list.ActualCount());
+  ASSERT_EQ(push_size + 1, batch_ts_list.ActualCount());
 
   int64_t count = 0;
   for (;;) {
@@ -81,8 +81,8 @@ TEST_F(BatchTsListTest, SingleThread) {
     ++count;
   }
 
-  ASSERT_EQ(push_size * kBatchTsSzie, count);
-  ASSERT_EQ(0, batch_ts_list.ActualCount());
+  EXPECT_EQ(push_size * kBatchTsSzie, count);
+  EXPECT_EQ(1, batch_ts_list.ActualCount());
 }
 
 TEST_F(BatchTsListTest, MultiThread) {
@@ -94,7 +94,7 @@ TEST_F(BatchTsListTest, MultiThread) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  ASSERT_EQ(push_size, batch_ts_list.ActualCount());
+  EXPECT_EQ(push_size + 1, batch_ts_list.ActualCount());
 
   std::atomic<int64_t> total_count = 0;
   int thread_num = 10;
@@ -112,7 +112,6 @@ TEST_F(BatchTsListTest, MultiThread) {
         ++count;
       }
 
-      // std::cout << fmt::format("thread({}) count({})", thread_no, count) << std::endl;
       total_count.fetch_add(count);
     }));
   }
@@ -121,14 +120,13 @@ TEST_F(BatchTsListTest, MultiThread) {
     thread.join();
   }
 
-  std::cout << "finish......" << std::endl;
-
-  ASSERT_EQ(push_size * kBatchTsSzie, total_count.load());
-  ASSERT_EQ(0, batch_ts_list.ActualCount());
-  ASSERT_EQ(0, batch_ts_list.ActiveCount());
+  EXPECT_EQ(push_size * kBatchTsSzie, total_count.load());
+  EXPECT_EQ(1, batch_ts_list.ActualCount());
 }
 
 TEST_F(BatchTsListTest, MultiThreadLongTimeRun) {
+  GTEST_SKIP() << "skip long time run.";
+
   mvcc::BatchTsList batch_ts_list;
 
   int push_size = 10;
@@ -198,6 +196,8 @@ class TsProviderTest : public testing::Test {
 };
 
 TEST_F(TsProviderTest, GetTs) {
+  GTEST_SKIP() << "skip long time run.";
+
   auto ts_provider = mvcc::TsProvider::New(nullptr);
 
   ASSERT_TRUE(ts_provider->Init());

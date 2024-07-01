@@ -894,8 +894,7 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
-      << ", start_key: " << Helper::StringToHex(range.start_key())
-      << ", end_key: " << Helper::StringToHex(range.end_key()) << ", limit: " << limit;
+      << ", range: " << Helper::RangeToString(range) << ", limit: " << limit;
 
   if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_lock_limit)) {
     DINGO_LOG(ERROR) << "[txn]ScanLockInfo limit: " << limit
@@ -913,8 +912,7 @@ butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_loc
 
   auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
   if (iter == nullptr) {
-    DINGO_LOG(FATAL) << "[txn]GetLockInfo NewIterator failed, start_key: " << Helper::StringToHex(range.start_key())
-                     << ", end_key: " << Helper::StringToHex(range.end_key());
+    DINGO_LOG(FATAL) << "[txn]GetLockInfo NewIterator failed, range: " << Helper::RangeToString(range);
   }
 
   int64_t response_memory_size = 0;
@@ -1193,9 +1191,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-      << "[txn]Scan start_ts: " << start_ts << ", range: " << range.ShortDebugString()
-      << ", start_key: " << Helper::StringToHex(range.start_key())
-      << ", end_key: " << Helper::StringToHex(range.end_key())
+      << "[txn]Scan start_ts: " << start_ts << ", range: " << Helper::RangeToString(range)
       << ", isolation_level: " << pb::store::IsolationLevel_Name(isolation_level) << ", start_ts: " << start_ts
       << ", limit: " << limit << ", key_only: " << key_only << ", is_reverse: " << is_reverse
       << ", resolved_locks size: " << resolved_locks.size() << ", disable_coprocessor: " << disable_coprocessor
@@ -1234,7 +1230,7 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
   auto ret = txn_iter->Init();
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
-                     << ", range: " << range.ShortDebugString() << ", status: " << ret.error_str();
+                     << ", range: " << Helper::RangeToString(range) << ", status: " << ret.error_str();
     return ret;
   }
 
@@ -3292,7 +3288,8 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
     std::vector<pb::store::LockInfo> tmp_lock_infos;
     bool has_more = false;
     std::string end_key{};
-    auto ret = ScanLockInfo(raw_engine, start_ts, start_ts + 1, region->Range(), 0, tmp_lock_infos, has_more, end_key);
+    auto ret =
+        ScanLockInfo(raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos, has_more, end_key);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
                        << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
@@ -3521,10 +3518,9 @@ butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engin
   std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
   std::shared_ptr<GCSafePoint> gc_safe_point = store_meta_manager->GetGCSafePoint();
 
-  std::string region_start_key = region->Range().start_key();
-  std::string region_end_key = region->Range().end_key();
+  auto range = region->Range(false);
 
-  return DoGc(raw_engine, raft_engine, ctx, safe_point_ts, gc_safe_point, region_start_key, region_end_key);
+  return DoGc(raw_engine, raft_engine, ctx, safe_point_ts, gc_safe_point, range.start_key(), range.end_key());
 }
 
 butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
@@ -3555,7 +3551,7 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
   IteratorOptions write_iter_options;
   write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
-  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, -1);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, 0);
 
   auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
   if (nullptr == write_iter) {
