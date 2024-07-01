@@ -112,7 +112,7 @@ bool BatchTsList::IsStale(BatchTs* batch_ts) {
          last_physical_.load(std::memory_order_relaxed);
 }
 
-int64_t BatchTsList::GetTs() {
+int64_t BatchTsList::GetTs(int64_t after_ts) {
   BatchTs* head = nullptr;
   BatchTs* tail = nullptr;
   BatchTs* head_next = nullptr;
@@ -126,7 +126,7 @@ int64_t BatchTsList::GetTs() {
 
     if (!IsStale(head)) {
       int64_t ts = head->GetTs();
-      if (ts > 0) {
+      if (ts > after_ts && ts > 0 && IsValid(ts)) {
         return ts;
       }
     }
@@ -279,10 +279,10 @@ bool TsProvider::Init() {
   return ret;
 }
 
-int64_t TsProvider::GetTs() {
+int64_t TsProvider::GetTs(int64_t after_ts) {
   uint32_t retry_count = 0;
   for (; retry_count < FLAGS_ts_provider_max_retry_num; ++retry_count) {
-    int64_t ts = batch_ts_list_->GetTs();
+    int64_t ts = batch_ts_list_->GetTs(after_ts);
     if (ts > 0) {
       get_ts_count_.fetch_add(1, std::memory_order_relaxed);
       return ts;

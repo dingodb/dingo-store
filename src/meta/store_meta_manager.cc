@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "bthread/mutex.h"
+#include "butil/compiler_specific.h"
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -51,9 +52,9 @@ Region::~Region() {
   bthread_mutex_destroy(&mutex_);
 }
 
-std::shared_ptr<Region> Region::New(int64_t region_id) { return std::make_shared<Region>(region_id); }
+RegionPtr Region::New(int64_t region_id) { return std::make_shared<Region>(region_id); }
 
-std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
+RegionPtr Region::New(const pb::common::RegionDefinition& definition) {
   auto region = std::make_shared<Region>(definition.id());
   if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
     region->inner_region_.set_region_type(pb::common::INDEX_REGION);
@@ -125,17 +126,17 @@ pb::common::StorageEngine Region::GetStoreEngineType() {
 }
 
 bool Region::IsTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsExecutorTxn(range.start_key()) || Helper::IsClientTxn(range.start_key());
 }
 
 bool Region::IsExecutorTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsExecutorTxn(range.start_key());
 }
 
 bool Region::IsClientTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsClientTxn(range.start_key());
 }
 
@@ -161,7 +162,6 @@ void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& r
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
 
   *(inner_region_.mutable_definition()->mutable_range()) = range;
-  *(inner_region_.mutable_encode_range()) = mvcc::Codec::EncodeRange(range);
 }
 
 void Region::GetEpochAndRange(pb::common::RegionEpoch& epoch, pb::common::Range& range) {
@@ -195,9 +195,11 @@ pb::common::Range Region::Range(bool is_encode, bool lock) {
   if (lock) {
     BAIDU_SCOPED_LOCK(mutex_);
 
-    return is_encode ? inner_region_.encode_range() : inner_region_.definition().range();
+    return is_encode ? mvcc::Codec::EncodeRange(inner_region_.definition().range())
+                     : inner_region_.definition().range();
   } else {
-    return is_encode ? inner_region_.encode_range() : inner_region_.definition().range();
+    return is_encode ? mvcc::Codec::EncodeRange(inner_region_.definition().range())
+                     : inner_region_.definition().range();
   }
 }
 

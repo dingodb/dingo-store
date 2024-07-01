@@ -25,6 +25,7 @@
 #include "bvar/latency_recorder.h"
 #include "common/helper.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
 
@@ -299,8 +300,8 @@ class VectorIndexManager {
   static butil::Status ReplayWalToVectorIndex(std::shared_ptr<VectorIndex> vector_index, int64_t start_log_id,
                                               int64_t end_log_id);
 
-  static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, std::shared_ptr<Iterator> iter,
-                                     const pb::common::Range& range);
+  static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, mvcc::ReaderPtr reader,
+                                     const pb::common::Range& encode_range);
 
   // Execute all vector index load/build/rebuild/save task.
   ExecqWorkerSetPtr background_workers_;

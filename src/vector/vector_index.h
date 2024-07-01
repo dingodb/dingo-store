@@ -215,7 +215,7 @@ class VectorIndex {
   void SetSnapshotLogId(int64_t snapshot_log_id);
 
   pb::common::RegionEpoch Epoch() const;
-  pb::common::Range Range(bool is_encode) const;
+  pb::common::Range Range() const;
   std::string RangeString() const;
   void SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 

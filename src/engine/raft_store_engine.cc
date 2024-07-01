@@ -37,6 +37,7 @@
 #include "engine/write_data.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
 #include "mvcc/codec.h"
 #include "mvcc/reader.h"
@@ -650,7 +651,7 @@ butil::Status RaftStoreEngine::TxnWriter::TxnGc(std::shared_ptr<Context> ctx, in
 butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
                                              const std::vector<pb::common::KeyValue>& kvs) {
   int64_t ts = ts_provider_->GetTs();
-  if (ts == 0) {
+  if (BAIDU_UNLIKELY(ts == 0)) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
   auto encode_kvs = ctx->Ttl() == 0 ? mvcc::Codec::EncodeKeyValuesWithPut(ts, kvs)
@@ -663,9 +664,17 @@ butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
 
   if (ctx->Response() && kvs.size() == 1) {
     auto* response = dynamic_cast<pb::store::KvPutResponse*>(ctx->Response());
-    response->set_ts(ts);
+    if (BAIDU_LIKELY(response != nullptr)) {
+      response->set_ts(ts);
+    } else {
+      auto* response = dynamic_cast<pb::store::KvBatchPutResponse*>(ctx->Response());
+      CHECK(response != nullptr) << "KvBatchPutResponse is nullptr.";
+      response->set_ts(ts);
+    }
+
   } else if (ctx->Response() && kvs.size() > 1) {
     auto* response = dynamic_cast<pb::store::KvBatchPutResponse*>(ctx->Response());
+    CHECK(response != nullptr) << "KvBatchPutResponse is nullptr.";
     response->set_ts(ts);
   }
 
@@ -675,7 +684,7 @@ butil::Status RaftStoreEngine::Writer::KvPut(std::shared_ptr<Context> ctx,
 butil::Status RaftStoreEngine::Writer::KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                                                 std::vector<bool>& key_states) {
   int64_t ts = ts_provider_->GetTs();
-  if (ts == 0) {
+  if (BAIDU_UNLIKELY(ts == 0)) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
   auto reader = raft_engine_->NewMVCCReader(ctx->RawEngineType());
@@ -709,7 +718,7 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
   }
 
   int64_t ts = ts_provider_->GetTs();
-  if (ts == 0) {
+  if (BAIDU_UNLIKELY(ts == 0)) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
 
@@ -765,9 +774,16 @@ butil::Status RaftStoreEngine::Writer::KvPutIfAbsent(std::shared_ptr<Context> ct
 
   if (ctx->Response() && kvs.size() == 1) {
     auto* response = dynamic_cast<pb::store::KvPutIfAbsentResponse*>(ctx->Response());
-    response->set_ts(ts);
+    if (BAIDU_LIKELY(response != nullptr)) {
+      response->set_ts(ts);
+    } else {
+      auto* response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(ctx->Response());
+      CHECK(response != nullptr) << "KvBatchPutIfAbsentResponse is nullptr.";
+      response->set_ts(ts);
+    }
   } else if (ctx->Response() && kvs.size() > 1) {
     auto* response = dynamic_cast<pb::store::KvBatchPutIfAbsentResponse*>(ctx->Response());
+    CHECK(response != nullptr) << "KvBatchPutIfAbsentResponse is nullptr.";
     response->set_ts(ts);
   }
 
@@ -786,7 +802,7 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
   }
 
   int64_t ts = ts_provider_->GetTs();
-  if (ts == 0) {
+  if (BAIDU_UNLIKELY(ts == 0)) {
     return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
   }
 
@@ -859,9 +875,16 @@ butil::Status RaftStoreEngine::Writer::KvCompareAndSet(std::shared_ptr<Context> 
 
   if (ctx->Response() && kvs.size() == 1) {
     auto* response = dynamic_cast<pb::store::KvCompareAndSetResponse*>(ctx->Response());
-    response->set_ts(ts);
+    if (BAIDU_LIKELY(response != nullptr)) {
+      response->set_ts(ts);
+    } else {
+      auto* response = dynamic_cast<pb::store::KvBatchCompareAndSetResponse*>(ctx->Response());
+      CHECK(response != nullptr) << "KvBatchCompareAndSetResponse is nullptr.";
+      response->set_ts(ts);
+    }
   } else if (ctx->Response() && kvs.size() > 1) {
     auto* response = dynamic_cast<pb::store::KvBatchCompareAndSetResponse*>(ctx->Response());
+    CHECK(response != nullptr) << "KvBatchCompareAndSetResponse is nullptr.";
     response->set_ts(ts);
   }
 

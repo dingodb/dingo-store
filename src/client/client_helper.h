@@ -178,8 +178,7 @@ class Helper {
     int64_t mid_vector_id = min_vector_id + (max_vector_id - min_vector_id) / 2;
 
     DINGO_LOG(INFO) << "mid_vector_id: " << mid_vector_id;
-    std::string result;
-    dingodb::VectorCodec::PackageVectorKey(start_key[0], partition_id, mid_vector_id, result);
+    std::string result = dingodb::VectorCodec::PackageVectorKey(start_key[0], partition_id, mid_vector_id);
     return result;
   }
 
@@ -191,8 +190,7 @@ class Helper {
     int64_t mid_document_id = min_document_id + (max_document_id - min_document_id) / 2;
 
     DINGO_LOG(INFO) << "mid_document_id: " << mid_document_id;
-    std::string result;
-    dingodb::DocumentCodec::PackageDocumentKey(start_key[0], partition_id, mid_document_id, result);
+    std::string result = dingodb::DocumentCodec::PackageDocumentKey(start_key[0], partition_id, mid_document_id);
     return result;
   }
 

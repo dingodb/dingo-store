@@ -94,6 +94,12 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
     }
   }
 
+  // Set apply max ts
+  auto ts_provider = Server::GetInstance().GetTsProvider();
+  if (ts_provider != nullptr) {
+    ts_provider->SetMinValidTs(region->AppliedMaxTs());
+  }
+
   auto store_region_meta = GET_STORE_REGION_META;
   // Update region meta
   if (store_region_meta != nullptr) {
