@@ -337,7 +337,7 @@ TEST_F(HelperTest, PeerIdToLocation) {
 
   {
     butil::EndPoint endpoint = dingodb::Helper::StringToEndPoint("127.0.0.1");
-    std::cout << "endpoint: " << butil::ip2str(endpoint.ip) << std::endl;
+    std::cout << "endpoint: " << butil::ip2str(endpoint.ip) << '\n';
     dingodb::pb::common::Location location = dingodb::Helper::PeerIdToLocation(braft::PeerId(endpoint));
     EXPECT_EQ("127.0.0.1", location.host());
     EXPECT_EQ(0, location.port());
@@ -1611,4 +1611,30 @@ TEST_F(HelperTest, NowHour) {
   int hour = dingodb::Helper::NowHour();
   ASSERT_LE(hour, 23);
   ASSERT_GE(hour, 0);
+}
+
+TEST_F(HelperTest, PrefixNext) {
+  using namespace std::string_literals;
+  std::string start_key = std::string("\x72\x00\x00\x00\x00\x00\x00\xea\x61"s);
+  std::string next_start_key1 = std::string("\x72\x00\x00\x00\x00\x00\x00\xea\x62"s);
+  std::string next_start_key2 = std::string("\x72\x00\x00\x00\x00\x00\x00\xea\x61\x00"s);
+  std::string next_start_key3 = std::string("\x72\x00\x00\x00\x00\x00\x00\xea\x61\x00\x00"s);
+
+  std::string new_start_key = dingodb::Helper::PrefixNext(start_key);
+
+  EXPECT_EQ(next_start_key1, new_start_key);
+
+  EXPECT_TRUE(next_start_key2 < next_start_key3);
+
+  EXPECT_TRUE(next_start_key2 < next_start_key1);
+
+  dingodb::pb::common::RangeWithOptions range_with_options;
+  range_with_options.mutable_range()->set_start_key(start_key);
+  range_with_options.mutable_range()->set_end_key(start_key);
+  range_with_options.set_with_start(true);
+  range_with_options.set_with_end(true);
+
+  dingodb::pb::common::Range range = dingodb::Helper::TransformRangeWithOptions(range_with_options);
+
+  EXPECT_EQ(next_start_key1, range.end_key());
 }
