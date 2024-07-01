@@ -432,7 +432,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "DocumentGetMinId") {
       client::SendDocumentGetMinId(FLAGS_region_id);
     } else if (method == "DocumentCount") {
-      client::SendDocumentCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+      int64_t count = client::SendDocumentCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
+      std::cout << fmt::format("count: {}", count) << std::endl;
     } else if (method == "DocumentGetRegionMetrics") {
       client::SendDocumentGetRegionMetrics(FLAGS_region_id);
     }

@@ -37,8 +37,8 @@ butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::
                                                   int64_t partition_id, int64_t document_id, bool with_scalar_data,
                                                   std::vector<std::string>& selected_scalar_keys,
                                                   pb::common::DocumentWithId& document_with_id) {
-  std::string plain_key;
-  DocumentCodec::PackageDocumentKey(Helper::GetKeyPrefix(region_range), partition_id, document_id, plain_key);
+  std::string plain_key =
+      DocumentCodec::PackageDocumentKey(Helper::GetKeyPrefix(region_range), partition_id, document_id);
 
   std::string value;
   auto status = reader_->KvGet(Constant::kStoreDataCF, ts, plain_key, value);
@@ -261,8 +261,8 @@ butil::Status DocumentReader::GetBorderId(int64_t ts, const pb::common::Range& r
 butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                              std::vector<int64_t>& document_ids) {
   const auto& range = ctx->region_range;
-  std::string encode_seek_key;
-  DocumentCodec::EncodeDocumentKey(Helper::GetKeyPrefix(range), ctx->partition_id, ctx->start_id, encode_seek_key);
+  std::string encode_seek_key =
+      DocumentCodec::EncodeDocumentKey(Helper::GetKeyPrefix(range), ctx->partition_id, ctx->start_id);
   auto encode_range = mvcc::Codec::EncodeRange(range);
 
   IteratorOptions options;

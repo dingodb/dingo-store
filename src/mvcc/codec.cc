@@ -83,6 +83,7 @@ bool Codec::DecodeBytes(const std::string_view& encode_key, std::string& output)
   }
 
   uint32_t new_size = (encode_key.length() / kPadGroupSize) * kGroupSize;
+  output.clear();
   output.reserve(new_size);
 
   const auto* data = encode_key.data();
@@ -148,7 +149,7 @@ bool Codec::DecodeKey(const std::string_view& encode_key_with_ts, std::string& p
   // decode ts
   {
     auto sub_str = encode_key_with_ts.substr(encode_key_with_ts.length() - 8);
-    ts = ~SerialHelper::ReadLong(sub_str);
+    ts = SerialHelper::ReadLongWithNegation(sub_str);
   }
 
   return true;

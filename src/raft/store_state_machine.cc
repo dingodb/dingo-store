@@ -38,9 +38,8 @@ const int kSaveAppliedIndexStep = 10;
 
 namespace dingodb {
 
-StoreStateMachine::StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region,
-                                     store::RaftMetaPtr raft_meta, store::RegionMetricsPtr region_metrics,
-                                     std::shared_ptr<EventListenerCollection> listeners,
+StoreStateMachine::StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
+                                     store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
                                      SimpleWorkerSetPtr raft_apply_worker_set)
     : raw_engine_(engine),
       region_(region),
@@ -63,8 +62,8 @@ StoreStateMachine::~StoreStateMachine() {
 
 bool StoreStateMachine::Init() { return true; }
 
-void DoDispatchEvent(int64_t region_id, std::shared_ptr<EventListenerCollection> listeners,
-                     dingodb::EventType event_type, std::shared_ptr<dingodb::Event> event, BthreadCondPtr cond) {
+void DoDispatchEvent(int64_t region_id, EventListenerCollectionPtr listeners, dingodb::EventType event_type,
+                     std::shared_ptr<dingodb::Event> event, BthreadCondPtr cond) {
   DEFER(if (BAIDU_LIKELY(cond != nullptr)) { cond->DecreaseSignal(); });
 
   if (listeners == nullptr) return;
@@ -124,6 +123,13 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     } else {
       butil::IOBufAsZeroCopyInputStream wrapper(iter.data());
       CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
+    }
+
+    // update apply max ts
+    for (const auto& request : raft_cmd->requests()) {
+      if (request.ts() > 0) {
+        region_->SetAppliedMaxTs(request.ts());
+      }
     }
 
     bool need_apply = true;

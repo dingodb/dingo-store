@@ -27,6 +27,7 @@
 #include "coprocessor/utils.h"
 #include "expr/runner.h"
 #include "fmt/core.h"
+#include "mvcc/codec.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "rel_expr_helper.h"
@@ -232,8 +233,13 @@ butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_f
   butil::Status status;
   while (iter->Valid()) {
     pb::common::KeyValue kv;
-    *kv.mutable_key() = iter->Key();
-    *kv.mutable_value() = iter->Value();
+
+    std::string plain_key;
+    mvcc::Codec::DecodeKey(iter->Key(), plain_key);
+    kv.mutable_key()->swap(plain_key);
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    kv.mutable_value()->swap(value);
+
     bool has_result_kv = false;
     pb::common::KeyValue result_key_value;
     DINGO_LOG(DEBUG) << fmt::format("Coprocessor::DoExecute Call");

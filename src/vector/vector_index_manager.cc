@@ -29,7 +29,10 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
@@ -1039,7 +1042,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   }
 
   int64_t min_vector_id = 0, max_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(false, vector_index->Range(false), min_vector_id, max_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, vector_index->Range(), min_vector_id, max_vector_id);
 
   std::vector<pb::common::VectorWithId> vectors;
   vectors.reserve(Constant::kBuildVectorIndexBatchSize);
@@ -1157,7 +1160,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     }
   }
 
-  auto encode_range = vector_index->Range(true);
+  auto encode_range = mvcc::Codec::EncodeRange(vector_index->Range());
 
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.build][index_id({})][trace({})] Build vector index, range: {} parallel: {}", vector_index_id,
@@ -1165,14 +1168,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   int64_t start_time = Helper::TimestampMs();
   // load vector data to vector index
-  IteratorOptions options;
-  options.upper_bound = encode_range.end_key();
-
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
-  auto iter = raw_engine->Reader()->NewIterator(Constant::kVectorDataCF, options);
-  if (iter == nullptr) {
-    DINGO_LOG(FATAL) << fmt::format("[vector_index.build][index_id({})] NewIterator failed.", vector_index_id);
-  }
+  auto reader = mvcc::VectorReader::New(raw_engine->Reader());
 
   // Note: This is iterated 2 times for the following reasons:
   // ivf_flat must train first before adding data
@@ -1181,7 +1178,7 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
   // build if need
   if (vector_index->NeedTrain() && !vector_index->IsTrained()) {
-    auto status = TrainForBuild(vector_index, iter, encode_range);
+    auto status = TrainForBuild(vector_index, reader, encode_range);
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.build][index_id({})][trace({})] Train finish, elapsed_time: {}ms error: {} {}", vector_index_id,
         trace, Helper::TimestampMs() - start_time, status.error_code(), status.error_cstr());
@@ -1195,6 +1192,11 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
         vector_index_id, trace, vector_index->NeedTrain(), vector_index->IsTrained());
   }
 
+  IteratorOptions options;
+  options.upper_bound = encode_range.end_key();
+  auto iter = reader->NewIterator(Constant::kVectorDataCF, 0, options);
+  CHECK(iter != nullptr) << fmt::format("[vector_index.build][index_id({})] NewIterator failed.", vector_index_id);
+
   int64_t count = 0;
   int64_t upsert_use_time = 0;
   std::vector<pb::common::VectorWithId> vectors;
@@ -1205,13 +1207,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     std::string key(iter->Key());
     vector.set_id(VectorCodec::DecodeVectorIdFromEncodeKeyWithTs(key));
 
-    std::string value(iter->Value());
-    if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format(
-          "[vector_index.build][index_id({})][trace({})] vector with id ParseFromString failed.", vector_index_id,
-          trace);
-      continue;
-    }
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    CHECK(vector.mutable_vector()->ParseFromString(value)) << "parse vector pb failed.";
 
     if (vector.vector().float_values_size() <= 0) {
       DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})][trace({})] vector values_size error.",
@@ -1565,19 +1562,20 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
 }
 
 // range is encode range
-butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index,
-                                                std::shared_ptr<Iterator> iter, const pb::common::Range& range) {
+butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index, mvcc::ReaderPtr reader,
+                                                const pb::common::Range& encode_range) {
+  IteratorOptions options;
+  options.upper_bound = encode_range.end_key();
+  auto iter = reader->NewIterator(Constant::kVectorDataCF, 0, options);
+  CHECK(iter != nullptr) << fmt::format("[vector_index.build][index_id({})] NewIterator failed.", vector_index->Id());
+
   std::vector<float> train_vectors;
   train_vectors.reserve(100000 * vector_index->GetDimension());  // todo opt
-  for (iter->Seek(range.start_key()); iter->Valid(); iter->Next()) {
+  for (iter->Seek(encode_range.start_key()); iter->Valid(); iter->Next()) {
     pb::common::VectorWithId vector;
 
-    std::string value(iter->Value());
-    if (!vector.mutable_vector()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector with id ParseFromString failed.",
-                                        vector_index->Id());
-      continue;
-    }
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    CHECK(vector.mutable_vector()->ParseFromString(value)) << "parse vector pb failed.";
 
     if (vector.vector().float_values_size() <= 0) {
       DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector values_size error.",

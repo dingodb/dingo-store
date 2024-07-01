@@ -94,19 +94,17 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
   // check if there is a range conflict in the store
   auto all_regions = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
 
-  for (const auto& r : all_regions) {
-    if (r->Id() == region_id) {
+  for (const auto& region : all_regions) {
+    if (region->Id() == region_id) {
       DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] create region, region already exist", region_id);
       return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
     }
 
-    if (Helper::IsConflictRange(r->Range(), region_definiton.range())) {
-      return butil::Status(
-          pb::error::EREGION_RANGE_CONFLICT,
-          fmt::format("CreateRegion {} range ({}-{}) conflict with local region {} range ({}-{})", region_id,
-                      Helper::StringToHex(region_definiton.range().start_key()),
-                      Helper::StringToHex(region_definiton.range().end_key()), r->Id(),
-                      Helper::StringToHex(r->Range().start_key()), Helper::StringToHex(r->Range().end_key())));
+    if (Helper::IsConflictRange(region->Range(false), region_definiton.range())) {
+      return butil::Status(pb::error::EREGION_RANGE_CONFLICT,
+                           fmt::format("CreateRegion {} range {} conflict with local region {} range {}", region_id,
+                                       Helper::RangeToString(region_definiton.range()), region->Id(),
+                                       Helper::RangeToString(region->Range(false))));
     }
   }
 
@@ -420,12 +418,11 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   const auto& split_key = split_request.split_watershed_key();
-  auto range = parent_region->Range();
+  auto range = parent_region->Range(false);
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
-    return butil::Status(
-        pb::error::EKEY_INVALID,
-        fmt::format("Split key is invalid, range: [{}-{}) split_key: {}", Helper::StringToHex(range.start_key()),
-                    Helper::StringToHex(range.end_key()), Helper::StringToHex(split_key)));
+    return butil::Status(pb::error::EKEY_INVALID,
+                         fmt::format("Split key is invalid, range: {} split_key: {}", Helper::RangeToString(range),
+                                     Helper::StringToHex(split_key)));
   }
 
   if (parent_region->State() == pb::common::SPLITTING) {
@@ -649,8 +646,8 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   // Check region adjoin
-  if (source_region->Range().end_key() != target_region->Range().start_key() &&
-      source_region->Range().start_key() != target_region->Range().end_key()) {
+  if (source_region->Range(false).end_key() != target_region->Range(false).start_key() &&
+      source_region->Range(false).start_key() != target_region->Range(false).end_key()) {
     return butil::Status(pb::error::EREGION_NOT_NEIGHBOR, "Not neighbor region");
   }
 

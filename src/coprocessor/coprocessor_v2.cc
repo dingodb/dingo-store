@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
+#include "mvcc/codec.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
 #include "scan/scan_filter.h"
@@ -248,8 +249,11 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
         get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
       });
 #endif
-      *kv.mutable_key() = iter->Key();
-      *kv.mutable_value() = iter->Value();
+      std::string plain_key;
+      mvcc::Codec::DecodeKey(iter->Key(), plain_key);
+      kv.mutable_key()->swap(plain_key);
+      std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+      kv.mutable_value()->swap(value);
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
 #endif
@@ -701,7 +705,8 @@ butil::Status CoprocessorV2::GetKvFromExpr(const std::vector<std::any>& record, 
   pb::common::KeyValue result_key_value;
   int ret = 0;
   try {
-    ret = result_record_encoder_->Encode(prefix_, record, *result_key_value.mutable_key(), *result_key_value.mutable_value());
+    ret = result_record_encoder_->Encode(prefix_, record, *result_key_value.mutable_key(),
+                                         *result_key_value.mutable_value());
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Encode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
