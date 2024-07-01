@@ -126,6 +126,7 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
 
   virtual CheckpointPtr NewCheckpoint() = 0;
 
+  // range is encode range
   virtual butil::Status MergeCheckpointFiles(const std::string& path, const pb::common::Range& range,
                                              const std::vector<std::string>& cf_names,
                                              std::vector<std::string>& merge_sst_paths) = 0;

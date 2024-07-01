@@ -34,31 +34,29 @@ class DocumentCodec {
  public:
   // package document plain key
   static std::string PackageDocumentKey(char prefix, int64_t partition_id);
-  static void PackageDocumentKey(char prefix, int64_t partition_id, std::string& plain_key);
   static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id);
-  static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& plain_key);
   static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
                                         const std::string& scalar_key);
-  static void PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                 std::string& plain_key);
+
+  // unpackage document plain key
+  static int64_t UnPackagePartitionId(const std::string& plain_key);
+  static int64_t UnPackageDocumentId(const std::string& plain_key);
+  static std::string UnPackageScalarKey(const std::string& plain_key);
 
   // encode document key
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, std::string& encode_key);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& encode_key);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts,
-                                std::string& encode_key);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                std::string& encode_key);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                int64_t ts, std::string& encode_key);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                       const std::string& scalar_key);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                       const std::string& scalar_key, int64_t ts);
 
-  static int64_t UnPackagePartitionId(const std::string& plain_key);
   static int64_t DecodePartitionIdFromEncodeKey(const std::string& encode_key);
   static int64_t DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
-  static int64_t UnPackageDocumentId(const std::string& plain_key);
   static int64_t DecodeDocumentIdFromEncodeKey(const std::string& encode_key);
   static int64_t DecodeDocumentIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
-  static std::string UnPackageScalarKey(const std::string& plain_key);
+
   static std::string DecodeScalarKeyFromEncodeKey(const std::string& encode_key);
   static std::string DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
 

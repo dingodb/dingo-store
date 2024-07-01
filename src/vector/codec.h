@@ -26,34 +26,30 @@ class VectorCodec {
  public:
   // package vecotr plain key
   static std::string PackageVectorKey(char prefix, int64_t partition_id);
-  static void PackageVectorKey(char prefix, int64_t partition_id, std::string& plain_key);
   static std::string PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id);
-  static void PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& plain_key);
-
   static std::string PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id,
                                       const std::string& scalar_key);
-  static void PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                               std::string& plain_key);
+
+  // unpackage vector plain key
+  static int64_t UnPackagePartitionId(const std::string& plain_key);
+  static int64_t UnPackageVectorId(const std::string& plain_key);
+  static std::string UnPackageScalarKey(const std::string& plain_key);
 
   // result is encode key(padding key)
-  static void EncodeVectorKey(char prefix, int64_t partition_id, std::string& encode_key);
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, std::string& encode_key);
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts,
-                              std::string& encode_key);
+  static std::string EncodeVectorKey(char prefix, int64_t partition_id);
+  static std::string EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id);
+  static std::string EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, int64_t ts);
 
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                              std::string& encode_key);
-  static void EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id, const std::string& scalar_key,
-                              int64_t ts, std::string& encode_key);
+  static std::string EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id,
+                                     const std::string& scalar_key);
+  static std::string EncodeVectorKey(char prefix, int64_t partition_id, int64_t vector_id,
+                                     const std::string& scalar_key, int64_t ts);
 
   // key is encode key or plain key
-  static int64_t UnPackagePartitionId(const std::string& plain_key);
   static int64_t DecodePartitionIdFromEncodeKey(const std::string& encode_key);
   static int64_t DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
-  static int64_t UnPackageVectorId(const std::string& plain_key);
   static int64_t DecodeVectorIdFromEncodeKey(const std::string& encode_key);
   static int64_t DecodeVectorIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
-  static std::string UnPackageScalarKey(const std::string& plain_key);
   static std::string DecodeScalarKeyFromEncodeKey(const std::string& encode_key);
   static std::string DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
 

@@ -619,7 +619,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
 
           std::string start_key, end_key;
-          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          VectorCodec::DebugRange(false, vector_index->Range(), start_key, end_key);
           vector_index_state->set_start_key(start_key);
           vector_index_state->set_end_key(end_key);
 
@@ -648,7 +648,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
 
           std::string start_key, end_key;
-          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          VectorCodec::DebugRange(false, vector_index->Range(), start_key, end_key);
           vector_index_state->set_start_key(start_key);
           vector_index_state->set_end_key(end_key);
 
@@ -677,7 +677,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
           *vector_index_state->mutable_epoch() = vector_index->Epoch();
 
           std::string start_key, end_key;
-          VectorCodec::DebugRange(false, vector_index->Range(false), start_key, end_key);
+          VectorCodec::DebugRange(false, vector_index->Range(), start_key, end_key);
           vector_index_state->set_start_key(start_key);
           vector_index_state->set_end_key(end_key);
 

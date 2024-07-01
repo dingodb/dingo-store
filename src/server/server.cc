@@ -980,7 +980,7 @@ std::shared_ptr<Storage> Server::GetStorage() {
 }
 
 std::shared_ptr<StoreMetaManager> Server::GetStoreMetaManager() {
-  CHECK(store_meta_manager_ != nullptr) << "store meta manager is nullptr.";
+  // CHECK(store_meta_manager_ != nullptr) << "store meta manager is nullptr.";
   return store_meta_manager_;
 }
 

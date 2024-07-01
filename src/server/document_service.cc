@@ -868,16 +868,14 @@ static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_do
   if (start_document_id == 0) {
     result.set_start_key(range.start_key());
   } else {
-    std::string key;
-    DocumentCodec::PackageDocumentKey(prefix, partition_id, start_document_id, key);
+    std::string key = DocumentCodec::PackageDocumentKey(prefix, partition_id, start_document_id);
     result.set_start_key(key);
   }
 
   if (end_document_id == 0) {
     result.set_end_key(range.end_key());
   } else {
-    std::string key;
-    DocumentCodec::PackageDocumentKey(prefix, partition_id, end_document_id, key);
+    std::string key = DocumentCodec::PackageDocumentKey(prefix, partition_id, end_document_id);
     result.set_end_key(key);
   }
 

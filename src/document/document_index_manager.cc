@@ -93,7 +93,7 @@ void RebuildDocumentIndexTask::Run() {
     return;
   }
 
-  if (Helper::InvalidRange(region->Range())) {
+  if (Helper::InvalidRange(region->Range(false))) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.rebuild][index_id({})][trace({})] region range invalid.",
                                       document_index_wrapper_->Id(), trace_);
     return;
@@ -1177,9 +1177,8 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.build][index_id({})][trace({})] Build document index, range: [{}-{}), path:({})",
-      document_index_id, trace, Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-      document_index_path);
+      "[document_index.build][index_id({})][trace({})] Build document index, range: {}, path:({})", document_index_id,
+      trace, Helper::RangeToString(range), document_index_path);
 
   auto document_index = DocumentIndexFactory::LoadOrCreateIndex(
       document_index_id, document_index_path, document_index_wrapper->IndexParameter(), region->Epoch(), range, status);

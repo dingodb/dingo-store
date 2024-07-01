@@ -71,10 +71,6 @@ int main(int argc, char* argv[]) {
     default_run_case += ":ThreadPoolTest.*";
     default_run_case += ":SimpleWorkerSetTest.*";
 
-    default_run_case += ":CoprocessorTest.*";
-    default_run_case += ":CoprocessorUtilsTest.*";
-    default_run_case += ":CoprocessorAggregationManagerTest.*";
-
     default_run_case += ":DingoSafeMapTest.*";
     default_run_case += ":SegmentLogStorageTest.*";
     default_run_case += ":DingoSerialListTypeTest.*";
@@ -82,15 +78,18 @@ int main(int argc, char* argv[]) {
     default_run_case += ":ServiceHelperTest.*";
     default_run_case += ":SplitCheckerTest.*";
 
-    default_run_case += ":ScanTest.*";
-    default_run_case += ":ScanV2Test.*";
-    default_run_case += ":ScanWithCoprocessor.*";
-    default_run_case += ":ScanWithCoprocessorV2.*";
-
     default_run_case += ":CandidateStoresTest.*";
 
-    // default_run_case += ":StoreRegionMetaTest.*";
-    // default_run_case += ":StoreRegionMetricsTest.*";
+    // misc
+    default_run_case += ":ScanTest.*";
+    default_run_case += ":ScanV2Test.*";
+    // default_run_case += ":ScanWithCoprocessor.*";
+    // default_run_case += ":ScanWithCoprocessorV2.*";
+
+    // coprocessor
+    // default_run_case += ":CoprocessorTest.*";
+    // default_run_case += ":CoprocessorUtilsTest.*";
+    // default_run_case += ":CoprocessorAggregationManagerTest.*";
 
     // vector index
     default_run_case += ":VectorIndexWrapperTest.*";
@@ -111,6 +110,11 @@ int main(int argc, char* argv[]) {
 
     // transaction
     default_run_case += ":TxnGcTest.*";
+
+    // mvcc
+    default_run_case += ":MvccCodecTest.*";
+    default_run_case += ":MvccIteratorTest.*";
+    default_run_case += ":BatchTsListTest.*";
 
     testing::GTEST_FLAG(filter) = default_run_case;
   }

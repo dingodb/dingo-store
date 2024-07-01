@@ -345,7 +345,6 @@ TEST_F(MvccCodecTest, EncodeDecodeKey) {
 
 TEST_F(MvccCodecTest, TruncateTsForKey) {
   std::string key = mvcc::Codec::EncodeKey(std::string("hello"), 100001);
-  std::cout << "key: " << Helper::StringToHex(key) << std::endl;
 
   auto truc_key = mvcc::Codec::TruncateTsForKey(key);
   EXPECT_EQ(9, truc_key.size());

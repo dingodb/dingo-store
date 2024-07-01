@@ -520,7 +520,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
                                    vector_index_wrapper->Id());
     return butil::Status::OK();
   }
-  if (Helper::InvalidRange(vector_index->Range(false))) {
+  if (Helper::InvalidRange(vector_index->Range())) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.save_snapshot][index_id({})] vector index range({}) invalid, skip save.",
         vector_index_wrapper->Id(), vector_index->RangeString());
@@ -676,7 +676,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     pb::store_internal::VectorIndexSnapshotMeta meta;
     meta.set_vector_index_id(vector_index_id);
     meta.set_snapshot_log_id(apply_log_index);
-    *(meta.mutable_range()) = vector_index->Range(false);
+    *(meta.mutable_range()) = vector_index->Range();
     *(meta.mutable_epoch()) = vector_index->Epoch();
 
     braft::ProtoBufFile pb_file_meta(meta_filepath);

@@ -35,6 +35,8 @@
 #include "config/yaml_config.h"
 #include "crontab/crontab.h"
 #include "engine/rocks_raw_engine.h"
+#include "gtest/gtest.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
@@ -216,6 +218,7 @@ TEST_F(ScanTest, ScanBegin) {
 
   range.set_start_key("keyAAA");
   range.set_end_key("keyAAC");
+
   // ok
   ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, false, {}, &kvs);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -224,6 +227,7 @@ TEST_F(ScanTest, ScanBegin) {
 }
 
 TEST_F(ScanTest, InsertData) {
+  int64_t ts = 1000000000;
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
   auto writer = raw_rocks_engine->Writer();
@@ -232,6 +236,8 @@ TEST_F(ScanTest, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAA");
     kv.set_value("valueAA");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -243,6 +249,8 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyAA" + std::to_string(i));
       kv.set_value("valueAA" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -252,6 +260,8 @@ TEST_F(ScanTest, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAAA");
     kv.set_value("valueAAA");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -263,6 +273,8 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyAAA" + std::to_string(i));
       kv.set_value("valueAAA" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -272,6 +284,8 @@ TEST_F(ScanTest, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABB");
     kv.set_value("valueABB");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -283,6 +297,8 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABB" + std::to_string(i));
       kv.set_value("valueABB" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -292,6 +308,8 @@ TEST_F(ScanTest, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABC");
     kv.set_value("valueABC");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -303,6 +321,8 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABC" + std::to_string(i));
       kv.set_value("valueABC" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -312,6 +332,8 @@ TEST_F(ScanTest, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABD");
     kv.set_value("valueABD");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -323,6 +345,8 @@ TEST_F(ScanTest, InsertData) {
       kv.set_key("keyABD" + std::to_string(i));
       kv.set_value("valueABD" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -333,6 +357,8 @@ TEST_F(ScanTest, InsertData) {
     kv.set_key("keyAB");
     kv.set_value("valueAB");
 
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
   }
@@ -342,6 +368,8 @@ TEST_F(ScanTest, InsertData) {
       dingodb::pb::common::KeyValue kv;
       kv.set_key("keyAB" + std::to_string(i));
       kv.set_value("valueAB" + std::to_string(i));
+
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -419,17 +447,17 @@ TEST_F(ScanTest, ScanBeginOthers) {
 
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
-    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    ASSERT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     for (const auto &kv : kvs) {
       LOG(INFO) << kv.key() << ":" << kv.value();
     }
 
-    EXPECT_EQ(kvs.size(), 4);
-    EXPECT_EQ(kvs[0].key(), "keyAA");
-    EXPECT_EQ(kvs[1].key(), "keyAA0");
-    EXPECT_EQ(kvs[2].key(), "keyAAA");
-    EXPECT_EQ(kvs[3].key(), "keyAAA0");
+    ASSERT_EQ(kvs.size(), 4);
+    ASSERT_EQ(kvs[0].key(), "keyAA");
+    ASSERT_EQ(kvs[1].key(), "keyAA0");
+    ASSERT_EQ(kvs[2].key(), "keyAAA");
+    ASSERT_EQ(kvs[3].key(), "keyAAA0");
 
     this->DeleteScan();
   }
@@ -685,7 +713,6 @@ TEST_F(ScanTest, ScanRelease) {
   std::string scan_id;
 
   auto scan = this->GetScan(&scan_id);
-  LOG(INFO) << "scan_id : " << scan_id;
 
   butil::Status ok;
 
@@ -702,7 +729,6 @@ TEST_F(ScanTest, IsRecyclable) {
   std::string scan_id;
 
   auto scan = this->GetScan(&scan_id);
-  LOG(INFO) << "scan_id : " << scan_id;
 
   bool ret = scan->IsRecyclable();
 
@@ -725,7 +751,6 @@ TEST_F(ScanTest, scan) {
   // [keyAA, keyAA0, keyAAA, keyAAA0, keyABB, keyABB0, keyABC, keyABC0, keyABD, keyABD0, keyAB, keyAB0 ]
 
   auto scan = this->GetScan(&scan_id);
-  LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
   ok = scan->Open(scan_id, mvcc_reader, kDefaultCf, 0);
@@ -899,14 +924,6 @@ TEST_F(ScanTest, max_times) {
     interval = 60000;
   }
 
-  if (interval <= 0) {
-    LOG(INFO) << "GetInt " << Constant::kStoreScan + "." + Constant::kStoreScanScanIntervalS << " failed. use default";
-    interval = 60000;
-  }
-
-  LOG(INFO) << "name : " << name;
-  LOG(INFO) << "interval : " << interval;
-
   crontab_manager.AddAndRunCrontab(crontab);
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -924,24 +941,18 @@ TEST_F(ScanTest, KvDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("keyZZZ");
 
+    range = mvcc::Codec::EncodeRange(range);
+
     butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::string start_key = "key";
-    std::string end_key = "keyZZZ";
     std::vector<dingodb::pb::common::KeyValue> kvs;
-
     auto reader = raw_rocks_engine->Reader();
 
-    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, range.start_key(), range.end_key(), kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    LOG(INFO) << "start_key : " << start_key << " "
-              << "end_key : " << end_key;
-    for (const auto &kv : kvs) {
-      LOG(INFO) << kv.key() << ":" << kv.value();
-    }
+    EXPECT_EQ(0, kvs.size());
   }
 
   DeleteScan();

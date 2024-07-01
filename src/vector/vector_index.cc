@@ -132,9 +132,7 @@ int64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::me
 
 pb::common::RegionEpoch VectorIndex::Epoch() const { return epoch; };
 
-pb::common::Range VectorIndex::Range(bool is_encode) const {
-  return is_encode ? mvcc::Codec::EncodeRange(range) : range;
-}
+pb::common::Range VectorIndex::Range() const { return range; }
 
 std::string VectorIndex::RangeString() const { return VectorCodec::DebugRange(false, range); }
 
@@ -587,7 +585,7 @@ void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const st
     share_vector_index_ = nullptr;
 
     if (sibling_vector_index_ != nullptr &&
-        Helper::IsContainRange(vector_index->Range(false), sibling_vector_index_->Range(false))) {
+        Helper::IsContainRange(vector_index->Range(), sibling_vector_index_->Range())) {
       sibling_vector_index_ = nullptr;
     }
 
@@ -812,7 +810,7 @@ bool VectorIndexWrapper::NeedToSave(std::string& reason) {
     return false;
   }
 
-  if (Helper::InvalidRange(vector_index->Range(false))) {
+  if (Helper::InvalidRange(vector_index->Range())) {
     reason = "range invalid";
     last_save_write_key_count_ = write_key_count_;
     return true;
@@ -925,14 +923,14 @@ butil::Status VectorIndexWrapper::Add(const std::vector<pb::common::VectorWithId
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
     auto status =
-        sibling_vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range(false)));
+        sibling_vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range(false)));
+    status = vector_index->AddByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range(false)), true);
+      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range()), true);
       return status;
     }
 
@@ -972,14 +970,14 @@ butil::Status VectorIndexWrapper::Upsert(const std::vector<pb::common::VectorWit
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
     auto status =
-        sibling_vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range(false)));
+        sibling_vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, sibling_vector_index->Range()));
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range(false)));
+    status = vector_index->UpsertByParallel(FilterVectorWithId(vector_with_ids, vector_index->Range()));
     if (!status.ok()) {
-      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range(false)), true);
+      sibling_vector_index->DeleteByParallel(FilterVectorId(vector_with_ids, sibling_vector_index->Range()), true);
       return status;
     }
 
@@ -1019,12 +1017,12 @@ butil::Status VectorIndexWrapper::Delete(const std::vector<int64_t>& delete_ids)
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
     auto status =
-        sibling_vector_index->DeleteByParallel(FilterVectorId(delete_ids, sibling_vector_index->Range(false)), true);
+        sibling_vector_index->DeleteByParallel(FilterVectorId(delete_ids, sibling_vector_index->Range()), true);
     if (!status.ok()) {
       return status;
     }
 
-    status = vector_index->DeleteByParallel(FilterVectorId(delete_ids, vector_index->Range(false)), true);
+    status = vector_index->DeleteByParallel(FilterVectorId(delete_ids, vector_index->Range()), true);
     if (status.ok()) {
       write_key_count_ += delete_ids.size();
     }
@@ -1127,7 +1125,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
     return status;
   }
 
-  const auto& index_range = vector_index->Range(false);
+  const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
     VectorCodec::DecodeRangeToVectorId(false, region_range, min_vector_id, max_vector_id);
@@ -1188,7 +1186,7 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
     return status;
   }
 
-  const auto& index_range = vector_index->Range(false);
+  const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
     VectorCodec::DecodeRangeToVectorId(false, region_range, min_vector_id, max_vector_id);

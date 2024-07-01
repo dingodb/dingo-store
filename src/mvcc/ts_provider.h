@@ -101,9 +101,15 @@ class BatchTsList {
   static BatchTsListPtr New() { return std::make_shared<BatchTsList>(); }
 
   void Push(BatchTs* batch_ts);
-  int64_t GetTs();
+  int64_t GetTs(int64_t after_ts = 0);
 
   void Flush();
+
+  void SetMinValidTs(int64_t min_valid_ts) {
+    if (min_valid_ts > min_valid_ts_.load(std::memory_order_acquire)) {
+      min_valid_ts_.store(min_valid_ts, std::memory_order_release);
+    }
+  }
 
   uint32_t ActualCount();
   uint32_t ActualDeadCount();
@@ -119,6 +125,7 @@ class BatchTsList {
   void PushDead(BatchTs* batch_ts);
 
   bool IsStale(BatchTs* batch_ts);
+  bool IsValid(int64_t ts) { return ts > 0 && ts > min_valid_ts_.load(std::memory_order_acquire); }
 
   // available BatchTs
   std::atomic<BatchTs*> head_{nullptr};
@@ -129,6 +136,8 @@ class BatchTsList {
   std::atomic<BatchTs*> dead_tail_{nullptr};
 
   std::atomic<int64_t> last_physical_{0};
+
+  std::atomic<int64_t> min_valid_ts_{0};
 
   // statistics
   std::atomic<int64_t> active_count_{1};
@@ -156,9 +165,15 @@ class TsProvider : public std::enable_shared_from_this<TsProvider> {
 
   bool Init();
 
-  int64_t GetTs();
+  int64_t GetTs(int64_t after_ts = 0);
 
   uint64_t RenewEpoch() const { return renew_epoch_.load(std::memory_order_relaxed); };
+
+  void SetMinValidTs(int64_t min_valid_ts) {
+    if (batch_ts_list_ != nullptr) {
+      batch_ts_list_->SetMinValidTs(min_valid_ts);
+    }
+  }
 
   void TriggerRenewBatchTs();
 

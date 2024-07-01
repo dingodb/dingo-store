@@ -29,6 +29,8 @@
 #include "proto/store.pb.h"
 #include "serial/schema/base_schema.h"
 
+DEFINE_bool(dingo_log_switch_coprocessor_scalar_detail, false, "coprocessor_scalar detail log");
+
 namespace dingodb {
 
 bvar::Adder<uint64_t> CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_running_num(
@@ -37,8 +39,6 @@ bvar::Adder<uint64_t> CoprocessorScalar::bvar_coprocessor_v2_filter_scalar_total
     "dingo_coprocessor_v2_filter_scalar_total_num");
 bvar::LatencyRecorder CoprocessorScalar::coprocessor_v2_filter_scalar_latency(
     "dingo_coprocessor_v2_filter_scalar_latency");
-
-DEFINE_bool(dingo_log_switch_coprocessor_scalar_detail, false, "coprocessor_scalar detail log");
 
 CoprocessorScalar::CoprocessorScalar(char prefix) : CoprocessorV2(prefix){};
 CoprocessorScalar::~CoprocessorScalar() { Close(); }
@@ -130,9 +130,8 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
 
     auto iter = scalar_data.scalar_data().find(name);
     if (iter == scalar_data.scalar_data().end()) {
-      std::string error_message = fmt::format("in scalar_data not find name : {}", name);
-      DINGO_LOG(ERROR) << error_message;
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+      std::string s = fmt::format("in scalar_data not find name : {}", name);
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
     }
 
     const auto& scalar_value = iter->second;
@@ -140,22 +139,22 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
 
     auto lambda_check_misc_function = [&name, &type, &field_type, &scalar_value](BaseSchema::Type base_schema_type) {
       if (base_schema_type != type) {
-        std::string error_message =
-            fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
-                        BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
+        std::string s = fmt::format("field name : {} type not match. schema type : {} field_type : {}", name,
+                                    BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
         if (FLAGS_dingo_log_switch_coprocessor_scalar_detail) {
-          LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << error_message;
+          LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << s;
         }
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
 
       if (scalar_value.fields().empty()) {
-        std::string error_message = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
-                                                pb::common::ScalarFieldType_Name(field_type));
+        std::string s = fmt::format("name : {} field_type : {} scalar_value.fields() empty", name,
+                                    pb::common::ScalarFieldType_Name(field_type));
         if (FLAGS_dingo_log_switch_coprocessor_scalar_detail) {
-          LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << error_message;
+          LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << s;
         }
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
 
       return butil::Status();
@@ -165,7 +164,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::BOOL: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kBool);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
         original_record.emplace_back(std::optional<bool>{scalar_value.fields(0).bool_data()});
@@ -175,7 +173,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::INT32: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kInteger);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
 
@@ -185,7 +182,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::INT64: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kLong);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
 
@@ -195,7 +191,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::FLOAT32: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kFloat);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
 
@@ -205,7 +200,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::DOUBLE: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kDouble);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
 
@@ -215,7 +209,6 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::STRING: {
         auto status = lambda_check_misc_function(BaseSchema::Type::kString);
         if (!status.ok()) {
-          DINGO_LOG(ERROR) << status.error_cstr();
           return status;
         }
 
@@ -237,13 +230,12 @@ butil::Status CoprocessorScalar::TransToAnyRecord(const pb::common::VectorScalar
       case pb::common::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_:
         [[fallthrough]];
       default: {
-        std::string error_message =
-            fmt::format("field name : {}  not support . schema type : {} field_type : {}", name,
-                        BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
+        std::string s = fmt::format("field name : {}  not support . schema type : {} field_type : {}", name,
+                                    BaseSchema::GetTypeString(type), pb::common::ScalarFieldType_Name(field_type));
         if (FLAGS_dingo_log_switch_coprocessor_scalar_detail) {
-          DINGO_LOG(ERROR) << error_message;
+          DINGO_LOG(ERROR) << s;
         }
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
     }
   }
