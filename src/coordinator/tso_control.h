@@ -32,7 +32,7 @@ namespace dingodb {
 constexpr int64_t kUpdateTimestampIntervalMs = 50LL;   // 50ms
 constexpr int64_t kUpdateTimestampGuardMs = 1LL;       // 1ms
 constexpr int64_t kSaveIntervalMs = 3000LL;            // 3000ms
-constexpr int64_t kBaseTimestampMs = 1577808000000LL;  // 2020-01-01 12:00:00
+constexpr int64_t kBaseTimestampMs = 1577808000000LL;  // 2020-01-01 00:00:00
 constexpr int kLogicalBits = 18;
 constexpr int64_t kMaxLogical = 1 << kLogicalBits;
 
