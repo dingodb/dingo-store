@@ -1183,14 +1183,12 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
     if (FLAGS_start_id > 0 && FLAGS_end_id > 0 && FLAGS_start_id < FLAGS_end_id) {
       DINGO_LOG(INFO) << "use start_id " << FLAGS_start_id << ", end_id " << FLAGS_end_id << " to create region range";
-      start_key =
-          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
-      end_key =
-          dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
+      start_key = dingodb::DocumentCodec::PackageDocumentKey(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
+      end_key = dingodb::DocumentCodec::PackageDocumentKey(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
     } else {
       DINGO_LOG(INFO) << "use part_id " << FLAGS_part_id << " to create region range";
-      start_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id);
-      end_key = dingodb::Helper::EncodeDocumentIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
+      start_key = dingodb::DocumentCodec::PackageDocumentKey(FLAGS_region_prefix.at(0), FLAGS_part_id);
+      end_key = dingodb::DocumentCodec::PackageDocumentKey(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
     }
     DINGO_LOG(INFO) << "region range is : " << dingodb::Helper::StringToHex(start_key) << " to "
                     << dingodb::Helper::StringToHex(end_key);
@@ -1277,13 +1275,12 @@ void SendCreateRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
 
     if (FLAGS_start_id > 0 && FLAGS_end_id > 0 && FLAGS_start_id < FLAGS_end_id) {
       DINGO_LOG(INFO) << "use start_id " << FLAGS_start_id << ", end_id " << FLAGS_end_id << " to create region range";
-      start_key =
-          dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
-      end_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
+      start_key = dingodb::VectorCodec::PackageVectorKey(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_start_id);
+      end_key = dingodb::VectorCodec::PackageVectorKey(FLAGS_region_prefix.at(0), FLAGS_part_id, FLAGS_end_id);
     } else {
       DINGO_LOG(INFO) << "use part_id " << FLAGS_part_id << " to create region range";
-      start_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id);
-      end_key = dingodb::Helper::EncodeVectorIndexRegionHeader(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
+      start_key = dingodb::VectorCodec::PackageVectorKey(FLAGS_region_prefix.at(0), FLAGS_part_id);
+      end_key = dingodb::VectorCodec::PackageVectorKey(FLAGS_region_prefix.at(0), FLAGS_part_id + 1);
     }
     DINGO_LOG(INFO) << "region range is : " << dingodb::Helper::StringToHex(start_key) << " to "
                     << dingodb::Helper::StringToHex(end_key);
@@ -1506,16 +1503,16 @@ void SendSplitRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     if (query_response.region().definition().index_parameter().index_type() ==
         dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR) {
       if (FLAGS_vector_id > 0) {
-        int64_t partition_id = dingodb::VectorCodec::DecodePartitionId(start_key);
-        dingodb::VectorCodec::EncodeVectorKey(start_key[0], partition_id, FLAGS_vector_id, real_mid);
+        int64_t partition_id = dingodb::VectorCodec::UnPackagePartitionId(start_key);
+        real_mid = dingodb::VectorCodec::PackageVectorKey(start_key[0], partition_id, FLAGS_vector_id);
       } else {
         real_mid = client::Helper::CalculateVectorMiddleKey(start_key, end_key);
       }
     } else if (query_response.region().definition().index_parameter().index_type() ==
                dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT) {
       if (FLAGS_document_id > 0) {
-        int64_t partition_id = dingodb::DocumentCodec::DecodePartitionId(start_key);
-        dingodb::DocumentCodec::EncodeDocumentKey(start_key[0], partition_id, FLAGS_document_id, real_mid);
+        int64_t partition_id = dingodb::DocumentCodec::UnPackagePartitionId(start_key);
+        real_mid = dingodb::DocumentCodec::PackageDocumentKey(start_key[0], partition_id, FLAGS_document_id);
       } else {
         real_mid = client::Helper::CalculateDocumentMiddleKey(start_key, end_key);
       }

@@ -35,7 +35,9 @@
 #include "engine/raw_engine.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -57,12 +59,12 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
 
   auto writer = engine->Writer();
   if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
+    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] get writer failed.", region->Id());
   }
   if (request.kvs().size() == 1) {
     status = writer->KvPut(request.cf_name(), request.kvs().Get(0));
   } else {
-    status = writer->KvBatchPutAndDelete(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()), {});
+    status = writer->KvBatchPut(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()));
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -87,42 +89,20 @@ int DeleteRangeHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr /*
   butil::Status status;
   const auto &request = req.delete_range();
 
-  auto reader = engine->Reader();
   auto writer = engine->Writer();
-  int64_t delete_count = 0;
-  if (1 == request.ranges().size()) {
-    int64_t internal_delete_count = 0;
-    const auto &range = request.ranges()[0];
-    status = reader->KvCount(request.cf_name(), range.start_key(), range.end_key(), internal_delete_count);
-    if (status.ok() && 0 != internal_delete_count) {
-      status = writer->KvDeleteRange(request.cf_name(), range);
-    }
-    delete_count = internal_delete_count;
-  } else {
-    auto snapshot = engine->GetSnapshot();
-    for (const auto &range : request.ranges()) {
-      int64_t internal_delete_count = 0;
-      status = reader->KvCount(request.cf_name(), snapshot, range.start_key(), range.end_key(), internal_delete_count);
-      if (!status.ok()) {
-        delete_count = 0;
-        break;
-      }
-      delete_count += internal_delete_count;
-    }
 
-    if (status.ok() && 0 != delete_count) {
-      std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
-      range_with_cfs[request.cf_name()] = Helper::PbRepeatedToVector(request.ranges());
-      status = writer->KvBatchDeleteRange(range_with_cfs);
-    }
+  if (1 == request.ranges().size()) {
+    const auto &range = request.ranges()[0];
+    status = writer->KvDeleteRange(request.cf_name(), range);
+
+  } else {
+    std::map<std::string, std::vector<pb::common::Range>> range_with_cfs;
+    range_with_cfs[request.cf_name()] = Helper::PbRepeatedToVector(request.ranges());
+    status = writer->KvBatchDeleteRange(range_with_cfs);
   }
 
   if (ctx && ctx->Response()) {
-    auto *response = dynamic_cast<pb::store::KvDeleteRangeResponse *>(ctx->Response());
-    if (response) {
-      ctx->SetStatus(status);
-      response->set_delete_count(delete_count);
-    }
+    ctx->SetStatus(status);
   }
 
   // Update region metrics min/max key policy
@@ -139,27 +119,24 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   butil::Status status;
   const auto &request = req.delete_batch();
 
-  auto reader = engine->Reader();
-  std::vector<bool> key_states(request.keys().size(), false);
-  auto snapshot = engine->GetSnapshot();
-  size_t i = 0;
-  for (const auto &key : request.keys()) {
-    std::string value;
-    status = reader->KvGet(request.cf_name(), snapshot, key, value);
-    if (status.ok()) {
-      key_states[i] = true;
-    }
-    i++;
-  }
-
   auto writer = engine->Writer();
-  if (!writer) {
-    DINGO_LOG(FATAL) << "[raft.apply][region(" << region->Id() << ")] NewWriter failed";
-  }
+
   if (request.keys().size() == 1) {
-    status = writer->KvDelete(request.cf_name(), request.keys().Get(0));
+    pb::common::KeyValue kv;
+    kv.set_key(request.keys().Get(0));
+    kv.set_value(mvcc::Codec::ValueFlagDelete());
+    status = writer->KvPut(request.cf_name(), kv);
   } else {
-    status = writer->KvBatchPutAndDelete(request.cf_name(), {}, Helper::PbRepeatedToVector(request.keys()));
+    std::vector<pb::common::KeyValue> kvs;
+    kvs.reserve(request.keys().size());
+    for (const auto &key : request.keys()) {
+      pb::common::KeyValue kv;
+      kv.set_key(key);
+      kv.set_value(mvcc::Codec::ValueFlagDelete());
+      kvs.push_back(std::move(kv));
+    }
+
+    status = writer->KvBatchPutAndDelete(request.cf_name(), kvs, {});
   }
 
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
@@ -168,11 +145,7 @@ int DeleteBatchHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   if (ctx && ctx->Response()) {
-    auto *response = dynamic_cast<pb::store::KvBatchDeleteResponse *>(ctx->Response());
     ctx->SetStatus(status);
-    for (const auto &state : key_states) {
-      response->add_key_states(state);
-    }
   }
 
   // Update region metrics min/max key policy
@@ -276,18 +249,20 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                     request.job_id(), from_region->Id(), to_region->Id());
     return false;
   }
-  if (from_region->Range().start_key() >= from_region->Range().end_key()) {
+
+  auto old_from_range = from_region->Range(false);
+  if (old_from_range.start_key() >= old_from_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] from region invalid range [{}-{})",
                                     request.job_id(), from_region->Id(), to_region->Id(),
-                                    Helper::StringToHex(from_region->Range().start_key()),
-                                    Helper::StringToHex(from_region->Range().end_key()));
+                                    Helper::StringToHex(old_from_range.start_key()),
+                                    Helper::StringToHex(old_from_range.end_key()));
     return false;
   }
-  if (request.split_key() < from_region->Range().start_key() || request.split_key() > from_region->Range().end_key()) {
+  if (request.split_key() < old_from_range.start_key() || request.split_key() > old_from_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format(
         "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
         request.job_id(), from_region->Id(), to_region->Id(), Helper::StringToHex(request.split_key()),
-        Helper::StringToHex(from_region->Range().start_key()), Helper::StringToHex(from_region->Range().end_key()));
+        Helper::StringToHex(old_from_range.start_key()), Helper::StringToHex(old_from_range.end_key()));
     return false;
   }
 
@@ -303,15 +278,17 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   pb::common::Range to_range;
   // child range
-  to_range.set_start_key(from_region->Range().start_key());
+  to_range.set_start_key(old_from_range.start_key());
   to_range.set_end_key(request.split_key());
 
   // parent range
   pb::common::Range from_range;
   from_range.set_start_key(request.split_key());
-  from_range.set_end_key(from_region->Range().end_key());
+  from_range.set_end_key(old_from_range.end_key());
 
   to_region->SetParentId(from_region->Id());
+  // Set apply max ts
+  to_region->SetAppliedMaxTs(from_region->AppliedMaxTs());
 
   // Note: full heartbeat do not report region metrics when the region is in SPLITTING or MERGING
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
@@ -498,21 +475,21 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     return false;
   }
 
-  auto old_range = parent_region->Range();
+  auto old_parent_range = parent_region->Range(false);
 
-  if (old_range.start_key() >= old_range.end_key()) {
+  if (old_parent_range.start_key() >= old_parent_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format("[split.spliting][job_id({}).region({}->{})] from region invalid range [{}-{})",
                                     request.job_id(), parent_region_id, child_region_id,
-                                    Helper::StringToHex(old_range.start_key()),
-                                    Helper::StringToHex(old_range.end_key()));
+                                    Helper::StringToHex(old_parent_range.start_key()),
+                                    Helper::StringToHex(old_parent_range.end_key()));
     return false;
   }
 
-  if (request.split_key() < old_range.start_key() || request.split_key() > old_range.end_key()) {
+  if (request.split_key() < old_parent_range.start_key() || request.split_key() > old_parent_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format(
         "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
         request.job_id(), parent_region_id, child_region_id, Helper::StringToHex(request.split_key()),
-        Helper::StringToHex(old_range.start_key()), Helper::StringToHex(old_range.end_key()));
+        Helper::StringToHex(old_parent_range.start_key()), Helper::StringToHex(old_parent_range.end_key()));
     return false;
   }
 
@@ -535,7 +512,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   definition.mutable_epoch()->set_conf_version(1);
   definition.mutable_epoch()->set_version(2);
   pb::common::Range child_range;
-  child_range.set_start_key(old_range.start_key());
+  child_range.set_start_key(old_parent_range.start_key());
   child_range.set_end_key(request.split_key());
   *(definition.mutable_range()) = child_range;
 
@@ -547,11 +524,13 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   }
 
   child_region->SetParentId(parent_region->Id());
+  // Set apply max ts
+  child_region->SetAppliedMaxTs(parent_region->AppliedMaxTs());
 
   // Set parent/child range/epoch
   pb::common::Range parent_range;
   parent_range.set_start_key(request.split_key());
-  parent_range.set_end_key(old_range.end_key());
+  parent_range.set_end_key(old_parent_range.end_key());
   store_region_meta->UpdateEpochVersionAndRange(parent_region, parent_region->Epoch().version() + 1, parent_range,
                                                 "split parent");
   // store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range,
@@ -888,7 +867,7 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
                                       request.job_id(), request.source_region_id(), target_region->Id());
       return 0;
     }
-    
+
     if (!request.entries().empty()) {
       actual_apply_log_count = state_machine->CatchUpApplyLog(Helper::PbRepeatedToVector(request.entries()));
     }
@@ -900,17 +879,18 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::MERGING);
 
   {
+    auto old_target_range = target_region->Range(false);
     // Set target region range and epoch
     // range: source range + target range
     // epoch: max(source_epoch, target_epoch) + 1
     pb::common::Range new_range;
     // left(source region) right(target_region)
-    if (request.source_region_range().end_key() == target_region->Range().start_key()) {
+    if (request.source_region_range().end_key() == old_target_range.start_key()) {
       new_range.set_start_key(request.source_region_range().start_key());
-      new_range.set_end_key(target_region->Range().end_key());
+      new_range.set_end_key(old_target_range.end_key());
     } else {
       // left(target region) right(source region)
-      new_range.set_start_key(target_region->Range().start_key());
+      new_range.set_start_key(old_target_range.start_key());
       new_range.set_end_key(request.source_region_range().end_key());
     }
     int64_t new_version = std::max(request.source_region_epoch().version(), target_region->Epoch().version()) + 1;
@@ -923,10 +903,14 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     // range: [0xFFFFFFF, source_region.end_key)
     // epoch: source_epoch + 1
     int64_t new_version = source_region->Epoch().version() + 1;
-    pb::common::Range new_range = source_region->Range();
+    pb::common::Range new_range = source_region->Range(false);
     new_range.set_start_key(Helper::GenMaxStartKey());
     store_region_meta->UpdateEpochVersionAndRange(source_region, new_version, new_range, "merge source");
   }
+
+  // Set apply max ts
+  int64_t max_ts = std::max(target_region->AppliedMaxTs(), source_region->AppliedMaxTs());
+  target_region->SetAppliedMaxTs(max_ts);
 
   // Set source region TOMBSTONE state
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
@@ -1025,7 +1009,7 @@ int SaveRaftSnapshotHandler::Handle(std::shared_ptr<Context>, store::RegionPtr r
                                     int64_t log_id) {
   DINGO_LOG(INFO) << fmt::format("[split.spliting][region({}->{})] save snapshot, term({}) log_id({})",
                                  region->ParentId(), region->Id(), term_id, log_id);
-  auto engine = Server::GetInstance().GetEngine();
+  auto engine = Server::GetInstance().GetEngine(region->GetStoreEngineType());
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   auto status = engine->AyncSaveSnapshot(ctx, region->Id(), true);
   if (!status.ok()) {
@@ -1046,6 +1030,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
+  int64_t ttl = req.ttl();
   const auto &request = req.vector_add();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
@@ -1058,27 +1044,38 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
   std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
 
-  auto region_start_key = region->Range().start_key();
+  auto prefix = region->GetKeyPrefix();
   auto region_part_id = region->PartitionId();
   for (const auto &vector : request.vectors()) {
+    std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, region_part_id, vector.id(), ts);
+
     // vector data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
 
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.vector().SerializeAsString());
-      kvs_default.push_back(kv);
+      kv.set_key(encode_key_with_ts);
+      std::string value = vector.vector().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_default.push_back(std::move(kv));
     }
     // vector scalar data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.scalar_data().SerializeAsString());
-      kvs_scalar.push_back(kv);
+
+      kv.set_key(encode_key_with_ts);
+      std::string value = vector.scalar_data().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_scalar.push_back(std::move(kv));
     }
 
     // vector scalar data key speed up
@@ -1089,10 +1086,17 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
 
       for (const auto &[key, scalar_value] : scalar_key_value_pairs) {
         pb::common::KeyValue kv;
-        std::string result;
-        VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key, result);
-        kv.mutable_key()->swap(result);
-        kv.set_value(scalar_value.SerializeAsString());
+        std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, region_part_id, vector.id(), key, ts);
+        kv.mutable_key()->swap(encode_key_with_ts);
+
+        std::string value = scalar_value.SerializeAsString();
+        if (req.ttl() == 0) {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+        } else {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
+        }
+
+        kv.mutable_value()->swap(value);
         kvs_scalar_speed_up.push_back(std::move(kv));
       }
     }
@@ -1100,11 +1104,15 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     // vector table data
     {
       pb::common::KeyValue kv;
-      std::string key;
-      VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, vector.id(), key);
-      kv.mutable_key()->swap(key);
-      kv.set_value(vector.table_data().SerializeAsString());
-      kvs_table.push_back(kv);
+      kv.set_key(encode_key_with_ts);
+      std::string value = vector.table_data().SerializeAsString();
+      if (req.ttl() == 0) {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+      } else {
+        mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
+      }
+      kv.mutable_value()->swap(value);
+      kvs_table.push_back(std::move(kv));
     }
   }
   kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
@@ -1128,14 +1136,6 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      bool key_state = status.ok();
-      auto *response = dynamic_cast<pb::index::VectorAddResponse *>(ctx->Response());
-      for (int i = 0; i < request.vectors_size(); i++) {
-        response->add_key_states(key_state);
-      }
-    }
-
     ctx->SetStatus(status);
   }
 
@@ -1194,15 +1194,9 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
   const auto &request = req.vector_delete();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
-
-  auto reader = engine->Reader();
-  auto snapshot = engine->GetSnapshot();
-  if (!snapshot) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})][cf_name({})] GetSnapshot failed.", region->Id(),
-                                    request.cf_name());
-  }
 
   if (request.ids_size() == 0) {
     DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector id is empty.", region->Id());
@@ -1212,90 +1206,68 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   }
 
   // Transform vector to kv
-  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
-
-  std::vector<std::string> kv_deletes_default;
-  std::vector<std::string> kv_deletes_for_scalar_data_key_speed_up;
-
-  std::vector<bool> key_states(request.ids_size(), false);
-  // std::vector<std::string> keys;
-  std::vector<int64_t> delete_ids;
-
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
   pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-  for (int i = 0; i < request.ids_size(); i++) {
-    // set key_states
-    std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), key);
 
-    std::string value;
-    auto ret = reader->KvGet(request.cf_name(), snapshot, key, value);
-    if (ret.ok()) {
-      kv_deletes_default.push_back(key);
+  std::vector<pb::common::KeyValue> vector_kvs;
+  std::vector<pb::common::KeyValue> vector_scalar_speedup_kvs;
+  for (int i = 0; i < request.ids_size(); ++i) {
+    pb::common::KeyValue kv;
+    std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, partition_id, request.ids(i), ts);
+    kv.set_key(encode_key_with_ts);
+    kv.set_value(mvcc::Codec::ValueFlagDelete());
+    vector_kvs.push_back(kv);
 
-      key_states[i] = true;
-      delete_ids.push_back(request.ids(i));
+    for (const auto &field : scalar_schema.fields()) {
+      if (field.enable_speed_up()) {
+        pb::common::KeyValue kv;
+        std::string encode_scalar_key_with_ts =
+            VectorCodec::EncodeVectorKey(prefix, partition_id, request.ids(i), field.key(), ts);
+        kv.set_key(encode_scalar_key_with_ts);
+        kv.set_value(mvcc::Codec::ValueFlagDelete());
 
-      for (const auto &field : scalar_schema.fields()) {
-        if (field.enable_speed_up()) {
-          std::string result;
-          VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, request.ids(i), field.key(), result);
-          kv_deletes_for_scalar_data_key_speed_up.push_back(std::move(result));
-        }
+        vector_scalar_speedup_kvs.push_back(kv);
       }
-
-      DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
     }
+
+    DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
   }
 
-  if (!kv_deletes_default.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarCF, kv_deletes_default);
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorTableCF, kv_deletes_default);
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  if (!vector_kvs.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, vector_kvs);
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, vector_kvs);
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, vector_kvs);
   }
 
-  if (!kv_deletes_for_scalar_data_key_speed_up.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kv_deletes_for_scalar_data_key_speed_up);
+  if (!vector_scalar_speedup_kvs.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, vector_scalar_speedup_kvs);
   }
 
   // Delete vector and write wal
-  if (!kv_deletes_with_cf.empty()) {
+  if (!kv_puts_with_cf.empty()) {
     auto start_time = Helper::TimestampNs();
     auto writer = engine->Writer();
-    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, {});
+    CHECK(status.error_code() != pb::error::Errno::EINTERNAL) << fmt::format(
+        "[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(), status.error_str());
     if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
-    if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
-                                      status.error_str());
-    }
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      auto *response = dynamic_cast<pb::index::VectorDeleteResponse *>(ctx->Response());
-      if (status.ok()) {
-        for (const auto &state : key_states) {
-          response->add_key_states(state);
-        }
-      } else {
-        response->mutable_key_states()->Resize(key_states.size(), false);
-      }
-    }
-
     ctx->SetStatus(status);
   }
 
   auto vector_index_wrapper = region->VectorIndexWrapper();
   int64_t vector_index_id = vector_index_wrapper->Id();
   bool is_ready = vector_index_wrapper->IsReady();
-  if (is_ready && !delete_ids.empty()) {
+  if (is_ready && !request.ids().empty()) {
     if (log_id > vector_index_wrapper->ApplyLogId() ||
         region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
       try {
         auto start_time = Helper::TimestampNs();
-        auto status = vector_index_wrapper->Delete(delete_ids);
+        auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
@@ -1303,7 +1275,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           }
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                            vector_index_id, delete_ids.size(), Helper::PrintStatus(status));
+                                            vector_index_id, request.ids().size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
@@ -1342,40 +1314,40 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
+  int64_t ttl = req.ttl();
   const auto &request = req.document_add();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
   // Transform vector to kv
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
+  std::vector<pb::common::KeyValue> kvs_default;
 
-  std::vector<pb::common::KeyValue> kvs_default;          // for vector data
-  std::vector<pb::common::KeyValue> kvs_scalar;           // for vector scalar data
-  std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
-  std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
-
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto partition_id = region->PartitionId();
   for (const auto &document : request.documents()) {
-    // vector data
-    {
-      pb::common::KeyValue kv;
-      std::string key;
-      // DocumentCodec::EncodeDocumentData(region->PartitionId(), vector.id(), key);
-      DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, document.id(), key);
+    pb::common::KeyValue kv;
+    std::string encode_key_with_ts =
+        DocumentCodec::EncodeDocumentKey(region->GetKeyPrefix(), partition_id, document.id(), ts);
 
-      kv.mutable_key()->swap(key);
-      kv.set_value(document.document().SerializeAsString());
-      kvs_default.push_back(kv);
+    kv.mutable_key()->swap(encode_key_with_ts);
+
+    std::string value = document.document().SerializeAsString();
+    if (req.ttl() == 0) {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+    } else {
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
     }
+    kv.mutable_value()->swap(value);
+
+    kvs_default.push_back(kv);
   }
   kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
 
-  // Put vector data to rocksdb
+  // Put data to rocksdb
   if (!kv_puts_with_cf.empty()) {
     auto start_time = Helper::TimestampNs();
     auto writer = engine->Writer();
-    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, {});
     if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
     if (status.error_code() == pb::error::Errno::EINTERNAL) {
       DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
@@ -1385,14 +1357,6 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      bool key_state = status.ok();
-      auto *response = dynamic_cast<pb::document::DocumentAddResponse *>(ctx->Response());
-      for (int i = 0; i < request.documents_size(); i++) {
-        response->add_key_states(key_state);
-      }
-    }
-
     ctx->SetStatus(status);
   }
 
@@ -1452,6 +1416,7 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   };
 
   butil::Status status;
+  int64_t ts = req.ts();
   const auto &request = req.document_delete();
   TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
 
@@ -1469,85 +1434,47 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
     return 0;
   }
 
-  // Transform vector to kv
+  // Transform document to kv
+  std::vector<pb::common::KeyValue> kvs;
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
+
+  for (int i = 0; i < request.ids_size(); ++i) {
+    pb::common::KeyValue kv;
+    std::string encode_key_with_ts = DocumentCodec::EncodeDocumentKey(prefix, partition_id, request.ids(i), ts);
+    kv.set_key(encode_key_with_ts);
+    kv.set_value(mvcc::Codec::ValueFlagDelete());
+    kvs.push_back(kv);
+  }
+
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
-  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
-
-  std::vector<std::string> kv_deletes_default;
-  std::vector<std::string> kv_deletes_for_scalar_data_key_speed_up;
-
-  std::vector<bool> key_states(request.ids_size(), false);
-  // std::vector<std::string> keys;
-  std::vector<int64_t> delete_ids;
-
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
-  pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-  for (int i = 0; i < request.ids_size(); i++) {
-    // set key_states
-    std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, request.ids(i), key);
-
-    std::string value;
-    auto ret = reader->KvGet(request.cf_name(), snapshot, key, value);
-    if (ret.ok()) {
-      kv_deletes_default.push_back(key);
-
-      key_states[i] = true;
-      delete_ids.push_back(request.ids(i));
-
-      for (const auto &field : scalar_schema.fields()) {
-        if (field.enable_speed_up()) {
-          std::string result;
-          DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, request.ids(i), field.key(), result);
-          kv_deletes_for_scalar_data_key_speed_up.push_back(std::move(result));
-        }
-      }
-
-      DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
-    }
+  if (!kvs.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs);
   }
 
-  if (!kv_deletes_default.empty()) {
-    kv_deletes_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_deletes_default);
-  }
-
-  // Delete vector and write wal
-  if (!kv_deletes_with_cf.empty()) {
+  // Delete and write wal
+  if (!kv_puts_with_cf.empty()) {
     auto start_time = Helper::TimestampNs();
     auto writer = engine->Writer();
-    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, {});
+    CHECK(status.error_code() != pb::error::Errno::EINTERNAL) << fmt::format(
+        "[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(), status.error_str());
     if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
-    if (status.error_code() == pb::error::Errno::EINTERNAL) {
-      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
-                                      status.error_str());
-    }
   }
 
   if (ctx) {
-    if (ctx->Response()) {
-      auto *response = dynamic_cast<pb::document::DocumentDeleteResponse *>(ctx->Response());
-      if (status.ok()) {
-        for (const auto &state : key_states) {
-          response->add_key_states(state);
-        }
-      } else {
-        response->mutable_key_states()->Resize(key_states.size(), false);
-      }
-    }
-
     ctx->SetStatus(status);
   }
 
   auto document_index_wrapper = region->DocumentIndexWrapper();
   int64_t vector_index_id = document_index_wrapper->Id();
   bool is_ready = document_index_wrapper->IsReady();
-  if (is_ready && !delete_ids.empty()) {
+  if (is_ready && !request.ids().empty()) {
     if (log_id > document_index_wrapper->ApplyLogId() ||
         region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
       try {
         auto start_time = Helper::TimestampNs();
-        auto status = document_index_wrapper->Delete(delete_ids);
+        auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
@@ -1555,7 +1482,7 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
           }
         } else {
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                            vector_index_id, delete_ids.size(), Helper::PrintStatus(status));
+                                            vector_index_id, request.ids().size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,

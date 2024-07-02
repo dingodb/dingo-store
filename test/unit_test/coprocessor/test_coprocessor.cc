@@ -34,7 +34,9 @@
 #include "config/config.h"
 #include "config/yaml_config.h"
 #include "coprocessor/coprocessor.h"
+#include "engine/engine.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
@@ -1231,7 +1233,9 @@ TEST_F(CoprocessorTest, Execute) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
+
   bool key_only = false;
   size_t max_fetch_cnt = 2;
   int64_t max_bytes_rpc = 1000000000000000;
@@ -1450,7 +1454,9 @@ TEST_F(CoprocessorTest, ExecuteSelection) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -1658,7 +1664,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKey) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -1837,7 +1844,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValue) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -2000,7 +2008,8 @@ TEST_F(CoprocessorTest, ExecuteSelectionOne) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -2142,7 +2151,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationKeyOne) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -2275,7 +2285,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOne) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -2408,7 +2419,8 @@ TEST_F(CoprocessorTest, ExecuteNoAggregationValueOneEmpty) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -2566,7 +2578,8 @@ TEST_F(CoprocessorTest, ExecuteBadSelection) {
 
   IteratorOptions options;
   options.upper_bound = Helper::PrefixNext(my_max_key);
-  auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+  auto reader = mvcc::KvReader::New(engine->Reader());
+  auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
   bool key_only = false;
   size_t max_fetch_cnt = 2;
@@ -3288,7 +3301,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderExpr) {
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+    auto reader = mvcc::KvReader::New(engine->Reader());
+    auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
     bool key_only = false;
     size_t max_fetch_cnt = 2;
@@ -3415,7 +3429,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderGroupByKey) {
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+    auto reader = mvcc::KvReader::New(engine->Reader());
+    auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
     bool key_only = false;
     size_t max_fetch_cnt = 2;
@@ -3614,7 +3629,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregation) {
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+    auto reader = mvcc::KvReader::New(engine->Reader());
+    auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
     bool key_only = false;
     size_t max_fetch_cnt = 2;
@@ -3830,7 +3846,8 @@ TEST_F(CoprocessorTest, OpenAndExecuteDisorderAggregationAndGroupByKey) {
 
     IteratorOptions options;
     options.upper_bound = Helper::PrefixNext(my_max_key);
-    auto iter = engine->Reader()->NewIterator(kDefaultCf, options);
+    auto reader = mvcc::KvReader::New(engine->Reader());
+    auto iter = reader->NewIterator(kDefaultCf, 0, options);
 
     bool key_only = false;
     size_t max_fetch_cnt = 2;

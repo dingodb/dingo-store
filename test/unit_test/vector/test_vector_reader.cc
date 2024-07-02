@@ -24,6 +24,7 @@
 #include "common/helper.h"
 #include "config/yaml_config.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "vector/codec.h"
@@ -117,10 +118,9 @@ std::shared_ptr<Config> VectorIndexReaderTest::config = nullptr;
 
 TEST_F(VectorIndexReaderTest, PrepareVectorData) {
   static pb::common::Range k_range;
-  std::string start_key;
   std::string end_key;
 
-  VectorCodec::EncodeVectorKey(prefix, partition_id, start_key);
+  std::string start_key = VectorCodec::EncodeVectorKey(prefix, partition_id);
   k_range.set_start_key(start_key);
   end_key = Helper::PrefixNext(start_key);
   k_range.set_end_key(end_key);
@@ -152,8 +152,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
         kv_put_with_cfs[Constant::kVectorScalarKeySpeedUpCF];
 
     pb::common::VectorScalardata all_vector_scalar_data;
-    std::string key_prefix;
-    VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key_prefix);
+    std::string key_prefix = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id);
 
     // bool speedup key
     {
@@ -166,8 +165,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_bool_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -186,8 +184,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_int_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -206,8 +203,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_long_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -226,8 +222,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_float_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -246,8 +241,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_double_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -267,8 +261,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_string_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -288,8 +281,7 @@ TEST_F(VectorIndexReaderTest, PrepareRocksdbData) {
       field->set_bytes_data(value);
 
       vector_scalar_data.mutable_scalar_data()->insert({key, scalar_value});
-      std::string result;
-      VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key, result);
+      std::string result = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, key);
       pb::common::KeyValue kv;
       kv.set_key(result);
       kv.set_value(scalar_value.SerializeAsString());
@@ -406,18 +398,15 @@ TEST_F(VectorIndexReaderTest, Coprocessor) {
   GTEST_SKIP() << "TEST_COPROCESSOR_V2_MOCK not defined";
 #endif
   butil::Status ok;
-  VectorReader vector_reader(engine->Reader());
+  VectorReader vector_reader(mvcc::VectorReader::New(engine->Reader()));
   pb::common::Range region_range;
 
   std::vector<pb::index::VectorWithDistanceResult> vector_with_distance_results;
 
-  std::string start_key;
-  std::string end_key;
-
-  VectorCodec::EncodeVectorKey(prefix, partition_id, start_key);
+  std::string start_key = VectorCodec::EncodeVectorKey(prefix, partition_id);
 
   region_range.set_start_key(start_key);
-  end_key = Helper::PrefixNext(start_key);
+  std::string end_key = Helper::PrefixNext(start_key);
   region_range.set_end_key(end_key);
 
   // scalar_schema empty only bool. not speed up key
@@ -1347,20 +1336,17 @@ TEST_F(VectorIndexReaderTest, Coprocessor) {
 
 TEST_F(VectorIndexReaderTest, IdPreFilter) {
   butil::Status ok;
-  VectorReader vector_reader(engine->Reader());
+  VectorReader vector_reader(mvcc::VectorReader::New(engine->Reader()));
   pb::common::Range region_range;
 
   pb::common::VectorSearchParameter parameter;
 
   std::vector<pb::index::VectorWithDistanceResult> vector_with_distance_results;
 
-  std::string start_key;
-  std::string end_key;
-
-  VectorCodec::EncodeVectorKey(prefix, partition_id, start_key);
+  std::string start_key = VectorCodec::EncodeVectorKey(prefix, partition_id);
 
   region_range.set_start_key(start_key);
-  end_key = Helper::PrefixNext(start_key);
+  std::string end_key = Helper::PrefixNext(start_key);
   region_range.set_end_key(end_key);
 
   // scalar_schema empty only bool
@@ -1818,15 +1804,12 @@ TEST_F(VectorIndexReaderTest, IdPreFilter) {
     vector_with_id.mutable_scalar_data()->Swap(&scalar_data);
     vector_with_ids.push_back(vector_with_id);
 
-    std::string internal_start_key;
-    std::string internal_end_key;
-
     pb::common::Range internal_region_range;
 
-    VectorCodec::EncodeVectorKey(prefix, partition_id, 1, internal_start_key);
+    std::string internal_start_key = VectorCodec::EncodeVectorKey(prefix, partition_id, 1);
 
     internal_region_range.set_start_key(internal_start_key);
-    internal_end_key = Helper::PrefixNext(internal_start_key);
+    std::string internal_end_key = Helper::PrefixNext(internal_start_key);
     internal_region_range.set_end_key(internal_end_key);
 
     ok = vector_reader.DoVectorSearchForScalarPreFilter(vector_index, internal_region_range, vector_with_ids, parameter,
@@ -1853,15 +1836,12 @@ TEST_F(VectorIndexReaderTest, IdPreFilter) {
     vector_with_id.mutable_scalar_data()->Swap(&scalar_data);
     vector_with_ids.push_back(vector_with_id);
 
-    std::string internal_start_key;
-    std::string internal_end_key;
-
     pb::common::Range internal_region_range;
 
-    VectorCodec::EncodeVectorKey(prefix, partition_id, 1, internal_start_key);
+    std::string internal_start_key = VectorCodec::EncodeVectorKey(prefix, partition_id, 1);
 
     internal_region_range.set_start_key(internal_start_key);
-    internal_end_key = Helper::PrefixNext(internal_start_key);
+    std::string internal_end_key = Helper::PrefixNext(internal_start_key);
     internal_region_range.set_end_key(internal_end_key);
 
     ok = vector_reader.DoVectorSearchForScalarPreFilter(vector_index, internal_region_range, vector_with_ids, parameter,
@@ -1884,15 +1864,12 @@ TEST_F(VectorIndexReaderTest, IdPreFilter) {
     vector_with_id.mutable_scalar_data()->Swap(&scalar_data);
     vector_with_ids.push_back(vector_with_id);
 
-    std::string internal_start_key;
-    std::string internal_end_key;
-
     pb::common::Range internal_region_range;
 
-    VectorCodec::EncodeVectorKey(prefix, partition_id, 100, internal_start_key);
+    std::string internal_start_key = VectorCodec::EncodeVectorKey(prefix, partition_id, 100);
 
     internal_region_range.set_start_key(internal_start_key);
-    internal_end_key = Helper::PrefixNext(internal_start_key);
+    std::string internal_end_key = Helper::PrefixNext(internal_start_key);
     internal_region_range.set_end_key(internal_end_key);
 
     ok = vector_reader.DoVectorSearchForScalarPreFilter(vector_index, internal_region_range, vector_with_ids, parameter,
@@ -1919,15 +1896,12 @@ TEST_F(VectorIndexReaderTest, IdPreFilter) {
     vector_with_id.mutable_scalar_data()->Swap(&scalar_data);
     vector_with_ids.push_back(vector_with_id);
 
-    std::string internal_start_key;
-    std::string internal_end_key;
-
     pb::common::Range internal_region_range;
 
-    VectorCodec::EncodeVectorKey(prefix, partition_id, 100, internal_start_key);
+    std::string internal_start_key = VectorCodec::EncodeVectorKey(prefix, partition_id, 100);
 
     internal_region_range.set_start_key(internal_start_key);
-    internal_end_key = Helper::PrefixNext(internal_start_key);
+    std::string internal_end_key = Helper::PrefixNext(internal_start_key);
     internal_region_range.set_end_key(internal_end_key);
 
     ok = vector_reader.DoVectorSearchForScalarPreFilter(vector_index, internal_region_range, vector_with_ids, parameter,

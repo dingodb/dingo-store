@@ -178,25 +178,27 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
   if (region.region_type() == pb::common::INDEX_REGION &&
       region.definition().index_parameter().has_vector_index_parameter()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
-    VectorCodec::DecodeRangeToVectorId(origin_range, min_vector_id, max_vector_id);
+    VectorCodec::DecodeRangeToVectorId(false, origin_range, min_vector_id, max_vector_id);
 
     plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
-                                              VectorCodec::DecodePartitionId(origin_range.start_key()), min_vector_id));
+                                              VectorCodec::UnPackagePartitionId(origin_range.start_key()),
+                                              min_vector_id));
 
     plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-                                            VectorCodec::DecodePartitionId(origin_range.end_key()), max_vector_id));
+                                            VectorCodec::UnPackagePartitionId(origin_range.end_key()), max_vector_id));
 
   } else if (region.region_type() == pb::common::DOCUMENT_REGION &&
              region.definition().index_parameter().has_document_index_parameter()) {
     int64_t min_document_id = 0, max_document_id = 0;
-    DocumentCodec::DecodeRangeToDocumentId(origin_range, min_document_id, max_document_id);
+    DocumentCodec::DecodeRangeToDocumentId(false, origin_range, min_document_id, max_document_id);
 
     plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
-                                              DocumentCodec::DecodePartitionId(origin_range.start_key()),
+                                              DocumentCodec::UnPackagePartitionId(origin_range.start_key()),
                                               min_document_id));
 
     plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-                                            DocumentCodec::DecodePartitionId(origin_range.end_key()), max_document_id));
+                                            DocumentCodec::UnPackagePartitionId(origin_range.end_key()),
+                                            max_document_id));
 
   } else if (dingodb::Helper::IsExecutorRaw(origin_range.start_key()) ||
              dingodb::Helper::IsExecutorTxn(origin_range.start_key())) {
@@ -227,7 +229,8 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
 
     //   plaintext_range.set_start_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.start_key()),
     //                                             region_definition.part_id(),
-    //                                             GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    //                                             GetPrimaryString(table_definition_with_id.table_definition(),
+    //                                             record)));
     // } else {
     //   plaintext_range.set_start_key(
     //       fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.start_key()), region_definition.part_id()));
@@ -242,11 +245,12 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
     //     DINGO_LOG(ERROR) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
     //   }
     //   plaintext_range.set_end_key(fmt::format("{}/{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-    //                                           VectorCodec::DecodePartitionId(origin_range.end_key()),
-    //                                           GetPrimaryString(table_definition_with_id.table_definition(), record)));
+    //                                           VectorCodec::UnPackagePartitionId(origin_range.end_key()),
+    //                                           GetPrimaryString(table_definition_with_id.table_definition(),
+    //                                           record)));
     // } else {
     //   plaintext_range.set_end_key(fmt::format("{}/{}", Helper::GetKeyPrefix(origin_range.end_key()),
-    //                                           VectorCodec::DecodePartitionId(origin_range.end_key())));
+    //                                           VectorCodec::UnPackagePartitionId(origin_range.end_key())));
     // }
 
   } else {

@@ -32,6 +32,7 @@
 #include "coprocessor/coprocessor_v2.h"
 #include "coprocessor/utils.h"
 #include "engine/write_data.h"  // IWYU pragma: keep
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "scan/scan_filter.h"
@@ -47,7 +48,6 @@ ScanContext::ScanContext(bvar::LatencyRecorder* scan_latency)
       key_only_(false),
       disable_auto_release_(false),
       state_(ScanState::kUninit),
-      engine_(nullptr),
       iter_(nullptr),
       last_time_ms_(GetCurrentTime())
 #if defined(ENABLE_SCAN_OPTIMIZATION)
@@ -71,16 +71,16 @@ void ScanContext::Init(int64_t timeout_ms, int64_t max_bytes_rpc, int64_t max_fe
   max_fetch_cnt_by_server_ = max_fetch_cnt_by_server;
 }
 
-butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawEngine> engine,
-                                const std::string& cf_name) {
+butil::Status ScanContext::Open(const std::string& scan_id, mvcc::ReaderPtr reader, const std::string& cf_name,
+                                int64_t ts) {
   if (BAIDU_UNLIKELY(scan_id.empty())) {
     DINGO_LOG(ERROR) << fmt::format("scan_id empty not support");
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "scan_id is empty");
   }
 
-  if (BAIDU_UNLIKELY(!engine)) {
-    DINGO_LOG(ERROR) << fmt::format("engine empty not support");
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "engine is empty");
+  if (BAIDU_UNLIKELY(!reader)) {
+    DINGO_LOG(ERROR) << fmt::format("reader empty not support");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "reader is empty");
   }
 
   if (BAIDU_UNLIKELY(cf_name.empty())) {
@@ -97,21 +97,23 @@ butil::Status ScanContext::Open(const std::string& scan_id, std::shared_ptr<RawE
   }
   state_ = ScanState::kOpening;
   scan_id_ = scan_id;
-  engine_ = engine;
+  reader_ = reader;
   cf_name_ = cf_name;
   state_ = ScanState::kOpened;
+  ts_ = ts;
   return butil::Status();
 }
 
 void ScanContext::Close() {
   scan_id_.clear();
   region_id_ = 0;
+  ts_ = 0;
   range_.Clear();
   max_fetch_cnt_ = 0;
   key_only_ = false;
   disable_auto_release_ = false;
   state_ = ScanState::kUninit;
-  engine_ = nullptr;
+  reader_ = nullptr;
   cf_name_.clear();
   iter_ = nullptr;
   last_time_ms_.zero();
@@ -143,9 +145,13 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs, b
   has_more = false;
   while (iter_->Valid()) {
     pb::common::KeyValue kv;
-    *kv.mutable_key() = iter_->Key();
+
+    std::string plain_key;
+    mvcc::Codec::DecodeKey(iter_->Key(), plain_key);
+    kv.mutable_key()->swap(plain_key);
     if (!key_only_) {
-      *kv.mutable_value() = iter_->Value();
+      std::string value(mvcc::Codec::UnPackageValue(iter_->Value()));
+      kv.mutable_value()->swap(value);
     }
 
     kvs.emplace_back(kv);
@@ -154,7 +160,6 @@ butil::Status ScanContext::GetKeyValue(std::vector<pb::common::KeyValue>& kvs, b
       iter_->Next();
       break;
     }
-    kv.Clear();
 
     iter_->Next();
   }
@@ -416,18 +421,17 @@ butil::Status ScanHandler::ScanBegin(std::shared_ptr<ScanContext> context, int64
     }
   }
 
-  auto reader = context->engine_->Reader();
+  auto encode_range = mvcc::Codec::EncodeRange(range);
 
   IteratorOptions options;
-  options.upper_bound = context->range_.end_key();
+  options.upper_bound = encode_range.end_key();
 
-  context->iter_ = reader->NewIterator(context->cf_name_, options);
+  context->iter_ = context->reader_->NewIterator(context->cf_name_, context->ts_, options);
   if (!context->iter_) {
     context->state_ = ScanState::kError;
-    DINGO_LOG(ERROR) << fmt::format("RawEngine::Reader::NewIterator failed");
     return butil::Status(pb::error::EINTERNAL, "Internal error : create iter failed");
   }
-  context->iter_->Seek(context->range_.start_key());
+  context->iter_->Seek(encode_range.start_key());
 
   if (context->max_fetch_cnt_ > 0) {
     bool has_more = false;

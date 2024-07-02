@@ -523,7 +523,7 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   if (Helper::InvalidRange(vector_index->Range())) {
     DINGO_LOG(INFO) << fmt::format(
         "[vector_index.save_snapshot][index_id({})] vector index range({}) invalid, skip save.",
-        vector_index_wrapper->Id(), Helper::RangeToString(vector_index->Range()));
+        vector_index_wrapper->Id(), vector_index->RangeString());
     return butil::Status::OK();
   }
 

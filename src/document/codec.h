@@ -32,19 +32,53 @@ enum TokenizerType {
 
 class DocumentCodec {
  public:
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, std::string& result);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, std::string& result);
-  static void EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, const std::string& scalar_key,
-                                std::string& result);
+  // package document plain key
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id);
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id);
+  static std::string PackageDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                        const std::string& scalar_key);
 
-  static int64_t DecodeDocumentId(const std::string& value);
-  static int64_t DecodePartitionId(const std::string& value);
-  static std::string DecodeScalarKey(const std::string& value);
+  // unpackage document plain key
+  static int64_t UnPackagePartitionId(const std::string& plain_key);
+  static int64_t UnPackageDocumentId(const std::string& plain_key);
+  static std::string UnPackageScalarKey(const std::string& plain_key);
 
-  static std::string DecodeKeyToString(const std::string& key);
-  static std::string DecodeRangeToString(const pb::common::Range& range);
+  // encode document key
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id, int64_t ts);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                       const std::string& scalar_key);
+  static std::string EncodeDocumentKey(char prefix, int64_t partition_id, int64_t document_id,
+                                       const std::string& scalar_key, int64_t ts);
 
-  static void DecodeRangeToDocumentId(const pb::common::Range& range, int64_t& begin_document_id,
+  static int64_t DecodePartitionIdFromEncodeKey(const std::string& encode_key);
+  static int64_t DecodePartitionIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
+  static int64_t DecodeDocumentIdFromEncodeKey(const std::string& encode_key);
+  static int64_t DecodeDocumentIdFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
+
+  static std::string DecodeScalarKeyFromEncodeKey(const std::string& encode_key);
+  static std::string DecodeScalarKeyFromEncodeKeyWithTs(const std::string& encode_key_with_ts);
+
+  static void DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& document_id);
+  static void DecodeFromEncodeKey(const std::string& encode_key, int64_t& partition_id, int64_t& document_id,
+                                  std::string& scalar_key);
+  static void DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                        int64_t& document_id);
+  static void DecodeFromEncodeKeyWithTs(const std::string& encode_key_with_ts, int64_t& partition_id,
+                                        int64_t& document_id, std::string& scalar_key);
+
+  static std::string_view TruncateTsForKey(const std::string& encode_key_with_ts);
+  static std::string_view TruncateTsForKey(const std::string_view& encode_key_with_ts);
+
+  static int64_t TruncateKeyForTs(const std::string& encode_key_with_ts);
+  static int64_t TruncateKeyForTs(const std::string_view& encode_key_with_ts);
+
+  static std::string DebugKey(bool is_encode, const std::string& key);
+  static std::string DebugRange(bool is_encode, const pb::common::Range& range);
+  static void DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key, std::string& end_key);
+
+  static void DecodeRangeToDocumentId(bool is_encode, const pb::common::Range& range, int64_t& begin_document_id,
                                       int64_t& end_document_id);
 
   static bool IsValidKey(const std::string& key);

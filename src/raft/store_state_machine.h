@@ -52,8 +52,8 @@ class DispatchEventTask : public TaskRunnable {
 //                           on_apply
 class StoreStateMachine : public BaseStateMachine {
  public:
-  explicit StoreStateMachine(std::shared_ptr<RawEngine> engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
-                             store::RegionMetricsPtr region_metrics, std::shared_ptr<EventListenerCollection> listeners,
+  explicit StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
+                             store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
                              SimpleWorkerSetPtr raft_apply_worker_set);
   ~StoreStateMachine() override;
 
@@ -82,10 +82,11 @@ class StoreStateMachine : public BaseStateMachine {
  private:
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
-  store::RegionPtr region_;
   std::string str_node_id_;
-  std::shared_ptr<RawEngine> raw_engine_;
-  std::shared_ptr<EventListenerCollection> listeners_;
+  store::RegionPtr region_;
+
+  RawEnginePtr raw_engine_;
+  EventListenerCollectionPtr listeners_;
 
   int64_t applied_term_;
   int64_t applied_index_;

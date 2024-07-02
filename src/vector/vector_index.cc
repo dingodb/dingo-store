@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
@@ -132,6 +133,8 @@ int64_t VectorIndex::SnapshotLogId() const { return snapshot_log_id.load(std::me
 pb::common::RegionEpoch VectorIndex::Epoch() const { return epoch; };
 
 pb::common::Range VectorIndex::Range() const { return range; }
+
+std::string VectorIndex::RangeString() const { return VectorCodec::DebugRange(false, range); }
 
 void VectorIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range) {
   DINGO_LOG(INFO) << fmt::format("[vector_index.raw][id({})] set epoch({}->{}) and range({}->{})", id,
@@ -560,7 +563,7 @@ void VectorIndexWrapper::SetIsTempHoldVectorIndex(bool need) {
 void VectorIndexWrapper::UpdateVectorIndex(VectorIndexPtr vector_index, const std::string& trace) {
   DINGO_LOG(INFO) << fmt::format(
       "[vector_index.wrapper][index_id({})][trace({})] update vector index, epoch({}) range({})", Id(), trace,
-      Helper::RegionEpochToString(vector_index->Epoch()), VectorCodec::DecodeRangeToString(vector_index->Range()));
+      Helper::RegionEpochToString(vector_index->Epoch()), vector_index->RangeString());
   // Check vector index is stop
   if (IsStop()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is stop.", Id());
@@ -846,7 +849,7 @@ bool VectorIndexWrapper::NeedToSave(std::string& reason) {
 static std::vector<int64_t> FilterVectorId(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                            const pb::common::Range& range) {
   int64_t begin_vector_id = 0, end_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, range, begin_vector_id, end_vector_id);
 
   std::vector<int64_t> result;
   for (const auto& vector_with_id : vector_with_ids) {
@@ -861,7 +864,7 @@ static std::vector<int64_t> FilterVectorId(const std::vector<pb::common::VectorW
 // Filter vector id by range
 static std::vector<int64_t> FilterVectorId(const std::vector<int64_t>& vector_ids, const pb::common::Range& range) {
   int64_t begin_vector_id = 0, end_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, range, begin_vector_id, end_vector_id);
 
   std::vector<int64_t> result;
   for (const auto vector_id : vector_ids) {
@@ -879,7 +882,7 @@ static std::vector<pb::common::VectorWithId> FilterVectorWithId(
   auto mut_vector_with_ids = const_cast<std::vector<pb::common::VectorWithId>&>(vector_with_ids);
 
   int64_t begin_vector_id = 0, end_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(range, begin_vector_id, end_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, range, begin_vector_id, end_vector_id);
 
   std::vector<pb::common::VectorWithId> result;
   for (auto& vector_with_id : mut_vector_with_ids) {
@@ -1125,7 +1128,7 @@ butil::Status VectorIndexWrapper::Search(std::vector<pb::common::VectorWithId> v
   const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
-    VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
+    VectorCodec::DecodeRangeToVectorId(false, region_range, min_vector_id, max_vector_id);
     auto ret = VectorIndexWrapper::SetVectorIndexRangeFilter(vector_index, filters, min_vector_id, max_vector_id);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] set vector index filter failed, error: {}",
@@ -1186,7 +1189,7 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   const auto& index_range = vector_index->Range();
   if (region_range.start_key() != index_range.start_key() || region_range.end_key() != index_range.end_key()) {
     int64_t min_vector_id = 0, max_vector_id = 0;
-    VectorCodec::DecodeRangeToVectorId(region_range, min_vector_id, max_vector_id);
+    VectorCodec::DecodeRangeToVectorId(false, region_range, min_vector_id, max_vector_id);
     auto ret = VectorIndexWrapper::SetVectorIndexRangeFilter(vector_index, filters, min_vector_id, max_vector_id);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[vector_index.wrapper][index_id({})] set vector index filter failed, error: {}",

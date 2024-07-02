@@ -505,6 +505,7 @@ file(GLOB CRONTAB_SRCS ${PROJECT_SOURCE_DIR}/src/crontab/*.cc)
 file(GLOB HANDLER_SRCS ${PROJECT_SOURCE_DIR}/src/handler/*.cc)
 file(GLOB EVENT_SRCS ${PROJECT_SOURCE_DIR}/src/event/*.cc)
 file(GLOB META_SRCS ${PROJECT_SOURCE_DIR}/src/meta/*.cc)
+file(GLOB MVCC_SRCS ${PROJECT_SOURCE_DIR}/src/mvcc/*.cc)
 file(GLOB COORDINATOR_SRCS ${PROJECT_SOURCE_DIR}/src/coordinator/*.cc)
 file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
@@ -593,6 +594,7 @@ add_library(DINGODB_OBJS
             ${CRONTAB_SRCS}
             ${HANDLER_SRCS}
             ${EVENT_SRCS}
+            ${MVCC_SRCS}
             ${META_SRCS}
             ${COORDINATOR_SRCS}
             ${STORE_SRCS}
@@ -674,8 +676,10 @@ add_executable(dingodb_client
                 src/coordinator/coordinator_interaction.cc
                 src/common/role.cc
                 src/common/helper.cc
+                src/common/serial_helper.cc
                 src/common/service_access.cc
                 src/coprocessor/utils.cc
+                src/mvcc/codec.cc
                 src/vector/codec.cc
                 src/document/codec.cc
                 ${SERIAL_SRCS}

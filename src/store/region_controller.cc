@@ -94,19 +94,17 @@ butil::Status CreateRegionTask::ValidateCreateRegion(std::shared_ptr<StoreMetaMa
   // check if there is a range conflict in the store
   auto all_regions = store_meta_manager->GetStoreRegionMeta()->GetAllRegion();
 
-  for (const auto& r : all_regions) {
-    if (r->Id() == region_id) {
+  for (const auto& region : all_regions) {
+    if (region->Id() == region_id) {
       DINGO_LOG(WARNING) << fmt::format("[control.region][region({})] create region, region already exist", region_id);
       return butil::Status(pb::error::EREGION_EXIST, fmt::format("Region {} already exist", region_id));
     }
 
-    if (Helper::IsConflictRange(r->Range(), region_definiton.range())) {
-      return butil::Status(
-          pb::error::EREGION_RANGE_CONFLICT,
-          fmt::format("CreateRegion {} range ({}-{}) conflict with local region {} range ({}-{})", region_id,
-                      Helper::StringToHex(region_definiton.range().start_key()),
-                      Helper::StringToHex(region_definiton.range().end_key()), r->Id(),
-                      Helper::StringToHex(r->Range().start_key()), Helper::StringToHex(r->Range().end_key())));
+    if (Helper::IsConflictRange(region->Range(false), region_definiton.range())) {
+      return butil::Status(pb::error::EREGION_RANGE_CONFLICT,
+                           fmt::format("CreateRegion {} range {} conflict with local region {} range {}", region_id,
+                                       Helper::RangeToString(region_definiton.range()), region->Id(),
+                                       Helper::RangeToString(region->Range(false))));
     }
   }
 
@@ -300,21 +298,21 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
 
   // Delete data
   DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete data", region_id);
-  if (!Helper::InvalidRange(region->Range())) {
+  auto range = region->Range(true);
+  if (!Helper::InvalidRange(range)) {
     std::vector<std::string> raw_cf_names;
     std::vector<std::string> txn_cf_names;
 
-    Helper::GetColumnFamilyNames(region->Range().start_key(), raw_cf_names, txn_cf_names);
+    Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
     if (region_raw_engine->GetRawEngineType() != pb::common::RAW_ENG_BDB) {
       if (!raw_cf_names.empty()) {
-        status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, region->Range());
+        status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, range);
         CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
                                           region->Id(), status.error_str());
       }
 
       if (!txn_cf_names.empty()) {
-        pb::common::Range txn_range = Helper::GetMemComparableRange(region->Range());
-        status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+        status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, range);
         CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
                                           region->Id(), status.error_str());
       }
@@ -325,7 +323,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
       command->set_create_timestamp(Helper::TimestampMs());
       command->set_region_cmd_type(pb::coordinator::CMD_DELETE_DATA);
       auto* mut_request = command->mutable_delete_data_request();
-      *mut_request->mutable_range() = region->Range();
+      *mut_request->mutable_range() = range;
       Helper::VectorToPbRepeated(raw_cf_names, mut_request->mutable_raw_cf_names());
       Helper::VectorToPbRepeated(txn_cf_names, mut_request->mutable_txn_cf_names());
 
@@ -420,12 +418,11 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   }
 
   const auto& split_key = split_request.split_watershed_key();
-  auto range = parent_region->Range();
+  auto range = parent_region->Range(false);
   if (range.start_key().compare(split_key) >= 0 || range.end_key().compare(split_key) <= 0) {
-    return butil::Status(
-        pb::error::EKEY_INVALID,
-        fmt::format("Split key is invalid, range: [{}-{}) split_key: {}", Helper::StringToHex(range.start_key()),
-                    Helper::StringToHex(range.end_key()), Helper::StringToHex(split_key)));
+    return butil::Status(pb::error::EKEY_INVALID,
+                         fmt::format("Split key is invalid, range: {} split_key: {}", Helper::RangeToString(range),
+                                     Helper::StringToHex(split_key)));
   }
 
   if (parent_region->State() == pb::common::SPLITTING) {
@@ -649,8 +646,8 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   // Check region adjoin
-  if (source_region->Range().end_key() != target_region->Range().start_key() &&
-      source_region->Range().start_key() != target_region->Range().end_key()) {
+  if (source_region->Range(false).end_key() != target_region->Range(false).start_key() &&
+      source_region->Range(false).start_key() != target_region->Range(false).end_key()) {
     return butil::Status(pb::error::EREGION_NOT_NEIGHBOR, "Not neighbor region");
   }
 
@@ -1087,7 +1084,8 @@ void TransferLeaderTask::Run() {
 }
 
 butil::Status SnapshotRegionTask::Snapshot(std::shared_ptr<Context> ctx, int64_t region_id) {
-  auto engine = Server::GetInstance().GetEngine();
+  auto regoin = Server::GetInstance().GetRegion(region_id);
+  auto engine = Server::GetInstance().GetEngine(regoin->GetStoreEngineType());
   return engine->SaveSnapshot(ctx, region_id, true);
 }
 
@@ -1573,7 +1571,7 @@ void SnapshotVectorIndexTask::Run() {
 }
 
 butil::Status DeleteDataTask::DeleteData(std::shared_ptr<Context>, RegionCmdPtr region_cmd) {
-  const auto& range = region_cmd->delete_data_request().range();
+  const auto& encode_range = region_cmd->delete_data_request().range();
   std::vector<std::string> raw_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().raw_cf_names());
   std::vector<std::string> txn_cf_names = Helper::PbRepeatedToVector(region_cmd->delete_data_request().txn_cf_names());
 
@@ -1581,16 +1579,15 @@ butil::Status DeleteDataTask::DeleteData(std::shared_ptr<Context>, RegionCmdPtr 
   CHECK(region_raw_engine != nullptr) << fmt::format(
       "[control.region][region({})] delete region, delete data, raw engine is null", region_cmd->region_id());
 
-  Helper::GetColumnFamilyNames(range.start_key(), raw_cf_names, txn_cf_names);
+  Helper::GetColumnFamilyNames(encode_range.start_key(), raw_cf_names, txn_cf_names);
   if (!raw_cf_names.empty()) {
-    auto status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, range);
+    auto status = region_raw_engine->Writer()->KvDeleteRange(raw_cf_names, encode_range);
     CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data raw failed, error: {}",
                                       region_cmd->region_id(), status.error_str());
   }
 
   if (!txn_cf_names.empty()) {
-    pb::common::Range txn_range = Helper::GetMemComparableRange(range);
-    auto status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, txn_range);
+    auto status = region_raw_engine->Writer()->KvDeleteRange(txn_cf_names, encode_range);
     CHECK(status.ok()) << fmt::format("[control.region][region({})] delete region data txn failed, error: {}",
                                       region_cmd->region_id(), status.error_str());
   }

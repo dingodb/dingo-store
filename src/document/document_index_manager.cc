@@ -93,7 +93,7 @@ void RebuildDocumentIndexTask::Run() {
     return;
   }
 
-  if (Helper::InvalidRange(region->Range())) {
+  if (Helper::InvalidRange(region->Range(false))) {
     DINGO_LOG(WARNING) << fmt::format("[document_index.rebuild][index_id({})][trace({})] region range invalid.",
                                       document_index_wrapper_->Id(), trace_);
     return;
@@ -1076,7 +1076,7 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   }
 
   int64_t min_document_id = 0, max_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(document_index->Range(), min_document_id, max_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, document_index->Range(false), min_document_id, max_document_id);
 
   std::vector<pb::common::DocumentWithId> documents;
   documents.reserve(Constant::kBuildDocumentIndexBatchSize);
@@ -1165,7 +1165,7 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
     return nullptr;
   }
 
-  auto range = region->Range();
+  auto range = region->Range(false);
   butil::Status status;
 
   auto document_index_path =
@@ -1177,9 +1177,8 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.build][index_id({})][trace({})] Build document index, range: [{}-{}), path:({})",
-      document_index_id, trace, Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-      document_index_path);
+      "[document_index.build][index_id({})][trace({})] Build document index, range: {}, path:({})", document_index_id,
+      trace, Helper::RangeToString(range), document_index_path);
 
   auto document_index = DocumentIndexFactory::LoadOrCreateIndex(
       document_index_id, document_index_path, document_index_wrapper->IndexParameter(), region->Epoch(), range, status);
@@ -1218,8 +1217,8 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.build][index_id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: "
       "({})",
-      document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::DecodeDocumentId(start_key),
-      Helper::StringToHex(end_key), DocumentCodec::DecodeDocumentId(end_key), document_index->WriteOpParallelNum(),
+      document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::UnPackageDocumentId(start_key),
+      Helper::StringToHex(end_key), DocumentCodec::UnPackageDocumentId(end_key), document_index->WriteOpParallelNum(),
       document_index_path);
 
   int64_t start_time = Helper::TimestampMs();
@@ -1262,7 +1261,7 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
     pb::common::DocumentWithId document;
 
     std::string key(iter->Key());
-    document.set_id(DocumentCodec::DecodeDocumentId(key));
+    document.set_id(DocumentCodec::UnPackageDocumentId(key));
 
     std::string value(iter->Value());
     if (!document.mutable_document()->ParseFromString(value)) {
@@ -1311,8 +1310,9 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
       "range({}) "
       "elapsed time({}/{}ms)",
       document_index_id, trace, document_index->WriteOpParallelNum(), count,
-      Helper::RegionEpochToString(document_index->Epoch()), DocumentCodec::DecodeRangeToString(document_index->Range()),
-      upsert_use_time, Helper::TimestampMs() - start_time);
+      Helper::RegionEpochToString(document_index->Epoch()),
+      DocumentCodec::DebugRange(false, document_index->Range(false)), upsert_use_time,
+      Helper::TimestampMs() - start_time);
 
   return document_index;
 }

@@ -58,6 +58,8 @@ struct PutDatum : public DatumAble {
     auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::PUT);
+    request->set_ts(ts);
+
     pb::raft::PutRequest* put_request = request->mutable_put();
     put_request->set_cf_name(cf_name);
     for (auto& kv : kvs) {
@@ -69,8 +71,58 @@ struct PutDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t ts{0};
   std::string cf_name;
   std::vector<pb::common::KeyValue> kvs;
+};
+
+struct DeleteBatchDatum : public DatumAble {
+  ~DeleteBatchDatum() override = default;
+  DatumType GetType() override { return DatumType::kDeleteBatch; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DELETEBATCH);
+    request->set_ts(ts);
+    pb::raft::DeleteBatchRequest* delete_batch_request = request->mutable_delete_batch();
+    delete_batch_request->set_cf_name(cf_name);
+    for (auto& key : keys) {
+      delete_batch_request->add_keys()->swap(key);
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  int64_t ts{0};
+  std::string cf_name;
+  std::vector<std::string> keys;
+};
+
+struct DeleteRangeDatum : public DatumAble {
+  ~DeleteRangeDatum() override = default;
+  DatumType GetType() override { return DatumType::kDeleteRange; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DELETERANGE);
+    pb::raft::DeleteRangeRequest* delete_range_request = request->mutable_delete_range();
+    delete_range_request->set_cf_name(cf_name);
+
+    for (const auto& range : ranges) {
+      *(delete_range_request->add_ranges()) = range;
+    }
+
+    return request;
+  }
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::Range> ranges;
 };
 
 struct MetaPutDatum : public DatumAble {
@@ -100,6 +152,8 @@ struct VectorAddDatum : public DatumAble {
     auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::VECTOR_ADD);
+    request->set_ts(ts);
+    request->set_ttl(ttl);
     pb::raft::VectorAddRequest* vector_add_request = request->mutable_vector_add();
     vector_add_request->set_cf_name(cf_name);
     for (auto& vector : vectors) {
@@ -112,6 +166,8 @@ struct VectorAddDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t ts;
+  int64_t ttl;
   std::string cf_name;
   std::vector<pb::common::VectorWithId> vectors;
   bool is_update{false};
@@ -125,6 +181,7 @@ struct VectorDeleteDatum : public DatumAble {
     auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::VECTOR_DELETE);
+    request->set_ts(ts);
     pb::raft::VectorDeleteRequest* vector_delete_request = request->mutable_vector_delete();
     vector_delete_request->set_cf_name(cf_name);
     for (const auto& id : ids) {
@@ -136,6 +193,7 @@ struct VectorDeleteDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t ts;
   std::string cf_name;
   std::vector<int64_t> ids;
 };
@@ -147,6 +205,7 @@ struct DocumentAddDatum : public DatumAble {
     auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::DOCUMENT_ADD);
+    request->set_ts(ts);
     pb::raft::DocumentAddRequest* document_add_request = request->mutable_document_add();
     document_add_request->set_cf_name(cf_name);
     for (auto& document : documents) {
@@ -159,6 +218,7 @@ struct DocumentAddDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t ts;
   std::string cf_name;
   std::vector<pb::common::DocumentWithId> documents;
   bool is_update{false};
@@ -172,6 +232,7 @@ struct DocumentDeleteDatum : public DatumAble {
     auto* request = new pb::raft::Request();
 
     request->set_cmd_type(pb::raft::CmdType::DOCUMENT_DELETE);
+    request->set_ts(ts);
     pb::raft::DocumentDeleteRequest* document_delete_request = request->mutable_document_delete();
     document_delete_request->set_cf_name(cf_name);
     for (const auto& id : ids) {
@@ -183,6 +244,7 @@ struct DocumentDeleteDatum : public DatumAble {
 
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
+  int64_t ts;
   std::string cf_name;
   std::vector<int64_t> ids;
 };
@@ -204,53 +266,6 @@ struct TxnDatum : public DatumAble {
   void TransformFromRaft(pb::raft::Response& resonse) override {}
 
   pb::raft::TxnRaftRequest txn_request_to_raft;
-};
-
-struct DeleteBatchDatum : public DatumAble {
-  ~DeleteBatchDatum() override = default;
-  DatumType GetType() override { return DatumType::kDeleteBatch; }
-
-  pb::raft::Request* TransformToRaft() override {
-    auto* request = new pb::raft::Request();
-
-    request->set_cmd_type(pb::raft::CmdType::DELETEBATCH);
-    pb::raft::DeleteBatchRequest* delete_batch_request = request->mutable_delete_batch();
-    delete_batch_request->set_cf_name(cf_name);
-    for (auto& key : keys) {
-      delete_batch_request->add_keys()->swap(key);
-    }
-
-    return request;
-  }
-
-  void TransformFromRaft(pb::raft::Response& resonse) override {}
-
-  std::string cf_name;
-  std::vector<std::string> keys;
-};
-
-struct DeleteRangeDatum : public DatumAble {
-  ~DeleteRangeDatum() override = default;
-  DatumType GetType() override { return DatumType::kDeleteRange; }
-
-  pb::raft::Request* TransformToRaft() override {
-    auto* request = new pb::raft::Request();
-
-    request->set_cmd_type(pb::raft::CmdType::DELETERANGE);
-    pb::raft::DeleteRangeRequest* delete_range_request = request->mutable_delete_range();
-    delete_range_request->set_cf_name(cf_name);
-
-    for (const auto& range : ranges) {
-      *(delete_range_request->add_ranges()) = range;
-    }
-
-    return request;
-  }
-
-  void TransformFromRaft(pb::raft::Response& resonse) override {}
-
-  std::string cf_name;
-  std::vector<pb::common::Range> ranges;
 };
 
 struct CreateSchemaDatum : public DatumAble {
@@ -412,11 +427,12 @@ class WriteData {
 class WriteDataBuilder {
  public:
   // PutDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
-                                               const std::vector<pb::common::KeyValue>& kvs) {
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, std::vector<pb::common::KeyValue>& kvs,
+                                               int64_t ts) {
     auto datum = std::make_shared<PutDatum>();
     datum->cf_name = cf_name;
-    datum->kvs = kvs;
+    datum->kvs.swap(kvs);
+    datum->ts = ts;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -425,12 +441,14 @@ class WriteDataBuilder {
   }
 
   // VectorAddDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, int64_t ts, int64_t ttl,
                                                const std::vector<pb::common::VectorWithId>& vectors, bool is_update) {
     auto datum = std::make_shared<VectorAddDatum>();
     datum->cf_name = cf_name;
     datum->vectors = vectors;
     datum->is_update = is_update;
+    datum->ts = ts;
+    datum->ttl = ttl;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -439,10 +457,12 @@ class WriteDataBuilder {
   }
 
   // VectorDeleteDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<int64_t>& ids) {
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, int64_t ts,
+                                               const std::vector<int64_t>& ids) {
     auto datum = std::make_shared<VectorDeleteDatum>();
     datum->cf_name = cf_name;
     datum->ids = ids;
+    datum->ts = ts;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -451,13 +471,14 @@ class WriteDataBuilder {
   }
 
   // DocumentAddDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, int64_t ts,
                                                const std::vector<pb::common::DocumentWithId>& documents,
                                                bool is_update) {
     auto datum = std::make_shared<DocumentAddDatum>();
     datum->cf_name = cf_name;
     datum->documents = documents;
     datum->is_update = is_update;
+    datum->ts = ts;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -466,11 +487,12 @@ class WriteDataBuilder {
   }
 
   // DocumentDeleteDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<int64_t>& ids,
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, int64_t ts, const std::vector<int64_t>& ids,
                                                bool is_document [[maybe_unused]]) {
     auto datum = std::make_shared<DocumentDeleteDatum>();
     datum->cf_name = cf_name;
     datum->ids = ids;
+    datum->ts = ts;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
@@ -479,10 +501,11 @@ class WriteDataBuilder {
   }
 
   // DeleteBatchDatum
-  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, const std::vector<std::string>& keys) {
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, std::vector<std::string>& keys, int64_t ts) {
     auto datum = std::make_shared<DeleteBatchDatum>();
     datum->cf_name = cf_name;
-    datum->keys = std::move(const_cast<std::vector<std::string>&>(keys));  // NOLINT
+    datum->keys.swap(keys);
+    datum->ts = ts;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

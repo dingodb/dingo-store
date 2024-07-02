@@ -24,6 +24,7 @@
 #include <utility>
 
 #include "bthread/mutex.h"
+#include "butil/compiler_specific.h"
 #include "butil/scoped_lock.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -31,6 +32,7 @@
 #include "common/synchronization.h"
 #include "config/config_helper.h"
 #include "fmt/core.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "server/server.h"
@@ -50,9 +52,9 @@ Region::~Region() {
   bthread_mutex_destroy(&mutex_);
 }
 
-std::shared_ptr<Region> Region::New(int64_t region_id) { return std::make_shared<Region>(region_id); }
+RegionPtr Region::New(int64_t region_id) { return std::make_shared<Region>(region_id); }
 
-std::shared_ptr<Region> Region::New(const pb::common::RegionDefinition& definition) {
+RegionPtr Region::New(const pb::common::RegionDefinition& definition) {
   auto region = std::make_shared<Region>(definition.id());
   if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_VECTOR) {
     region->inner_region_.set_region_type(pb::common::INDEX_REGION);
@@ -124,17 +126,17 @@ pb::common::StorageEngine Region::GetStoreEngineType() {
 }
 
 bool Region::IsTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsExecutorTxn(range.start_key()) || Helper::IsClientTxn(range.start_key());
 }
 
 bool Region::IsExecutorTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsExecutorTxn(range.start_key());
 }
 
 bool Region::IsClientTxn() {
-  auto range = Range(true);
+  auto range = Range(false);
   return Helper::IsClientTxn(range.start_key());
 }
 
@@ -153,9 +155,12 @@ void Region::LockRegionMeta() { bthread_mutex_lock(&mutex_); }
 
 void Region::UnlockRegionMeta() { bthread_mutex_unlock(&mutex_); }
 
+// range is user key
 void Region::SetEpochVersionAndRange(int64_t version, const pb::common::Range& range) {
   BAIDU_SCOPED_LOCK(mutex_);
+
   inner_region_.mutable_definition()->mutable_epoch()->set_version(version);
+
   *(inner_region_.mutable_definition()->mutable_range()) = range;
 }
 
@@ -186,20 +191,29 @@ void Region::SetLeaderId(int64_t leader_id) {
   inner_region_.set_leader_id(leader_id);
 }
 
-pb::common::Range Region::Range(bool lock) {
+pb::common::Range Region::Range(bool is_encode, bool lock) {
   if (lock) {
     BAIDU_SCOPED_LOCK(mutex_);
-    return inner_region_.definition().range();
+
+    return is_encode ? mvcc::Codec::EncodeRange(inner_region_.definition().range())
+                     : inner_region_.definition().range();
   } else {
-    return inner_region_.definition().range();
+    return is_encode ? mvcc::Codec::EncodeRange(inner_region_.definition().range())
+                     : inner_region_.definition().range();
   }
 }
 
-std::string Region::RangeToString() { return Helper::RangeToString(Range()); }
+std::string Region::RangeToString(bool is_encode) { return Helper::RangeToString(Range(is_encode)); }
 
 bool Region::CheckKeyInRange(const std::string& key) {
   auto region_range = Range();
   return key >= region_range.start_key() && key < region_range.end_key();
+}
+
+char Region::GetKeyPrefix() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return Helper::GetKeyPrefix(inner_region_.definition().range().start_key());
 }
 
 void Region::SetIndexParameter(const pb::common::IndexParameter& index_parameter) {
@@ -917,6 +931,7 @@ void StoreRegionMeta::UpdatePeers(int64_t region_id, std::vector<pb::common::Pee
   }
 }
 
+// range is user key
 void StoreRegionMeta::UpdateEpochVersionAndRange(store::RegionPtr region, int64_t version,
                                                  const pb::common::Range& range, const std::string& trace) {
   assert(region != nullptr);

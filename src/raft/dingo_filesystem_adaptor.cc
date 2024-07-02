@@ -25,6 +25,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "engine/iterator.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "server/server.h"
 
@@ -699,14 +700,9 @@ braft::FileAdaptor* DingoFileSystemAdaptor::OpenReaderAdaptor(const std::string&
     iter_context->cf_name = cf_name;
     iter_context->reading = false;
 
-    if (Helper::IsTxnColumnFamilyName(cf_name)) {
-      pb::common::Range txn_range = Helper::GetMemComparableRange(snapshot_context->range);
-      iter_context->lower_bound = txn_range.start_key();
-      iter_context->upper_bound = txn_range.end_key();
-    } else {
-      iter_context->lower_bound = snapshot_context->range.start_key();
-      iter_context->upper_bound = snapshot_context->range.end_key();
-    }
+    auto encode_range = mvcc::Codec::EncodeRange(snapshot_context->range);
+    iter_context->lower_bound = encode_range.start_key();
+    iter_context->upper_bound = encode_range.end_key();
 
     iter_context->applied_index = snapshot_context->applied_index;
     iter_context->snapshot_context = snapshot_context.get();

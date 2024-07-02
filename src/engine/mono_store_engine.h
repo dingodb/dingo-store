@@ -15,30 +15,43 @@
 #ifndef DINGODB_ENGINE_ROCKS_ENGINE_H_  // NOLINT
 #define DINGODB_ENGINE_ROCKS_ENGINE_H_
 
+#include <memory>
+
 #include "config/config.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
+#include "mvcc/reader.h"
+#include "mvcc/ts_provider.h"
 
 namespace dingodb {
 
+class MonoStoreEngine;
+using MonoStoreEnginePtr = std::shared_ptr<MonoStoreEngine>;
+
 class MonoStoreEngine : public Engine {
  public:
-  MonoStoreEngine(std::shared_ptr<RawEngine> raw_rocks_engine, std::shared_ptr<RawEngine> raw_bdb_engine,
-                  std::shared_ptr<EventListenerCollection> listeners);
+  MonoStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine, EventListenerCollectionPtr listeners,
+                  mvcc::TsProviderPtr ts_provider);
   ~MonoStoreEngine() override = default;
-  std::shared_ptr<MonoStoreEngine> GetSelfPtr();
 
   MonoStoreEngine(const MonoStoreEngine& rhs) = delete;
   MonoStoreEngine& operator=(const MonoStoreEngine& rhs) = delete;
   MonoStoreEngine(MonoStoreEngine&& rhs) = delete;
   MonoStoreEngine& operator=(MonoStoreEngine&& rhs) = delete;
 
+  MonoStoreEnginePtr GetSelfPtr();
+
+  static MonoStoreEnginePtr New(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
+                                EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider) {
+    return std::make_shared<MonoStoreEngine>(rocks_raw_engine, bdb_raw_engine, listeners, ts_provider);
+  }
+
   bool Init(std::shared_ptr<Config> config) override;
   bool Recover() override;
   std::string GetName() override;
   pb::common::StorageEngine GetID() override;
-  std::shared_ptr<RawEngine> GetRawEngine(pb::common::RawEngine type) override;
+  RawEnginePtr GetRawEngine(pb::common::RawEngine type) override;
 
   std::shared_ptr<Snapshot> GetSnapshot() override { return nullptr; }
   butil::Status SaveSnapshot(std::shared_ptr<Context>, int64_t, bool) override { return butil::Status(); }
@@ -49,8 +62,7 @@ class MonoStoreEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
-  // butil::Status AddNode(store::RegionPtr region, const RaftControlAble::AddNodeParameter& parameter);
-  // std::shared_ptr<StandAloneNode> GetNode(int64_t region_id);
+
   class Reader : public Engine::Reader {
    public:
     Reader(RawEngine::ReaderPtr reader) : reader_(reader) {}
@@ -68,10 +80,11 @@ class MonoStoreEngine : public Engine {
 
   class Writer : public Engine::Writer {
    public:
-    Writer(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MonoStoreEngine> rocks_engine)
-        : writer_raw_engine_(raw_engine), rocks_engine_(rocks_engine) {}
+    Writer(MonoStoreEnginePtr mono_engine, mvcc::TsProviderPtr ts_provider)
+        : mono_engine_(mono_engine), ts_provider_(ts_provider) {}
     butil::Status KvPut(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs) override;
-    butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys) override;
+    butil::Status KvDelete(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
+                           std::vector<bool>& key_states) override;
     butil::Status KvDeleteRange(std::shared_ptr<Context> ctx, const pb::common::Range& range) override;
     butil::Status KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::vector<pb::common::KeyValue>& kvs,
                                 bool is_atomic, std::vector<bool>& key_states) override;
@@ -80,27 +93,28 @@ class MonoStoreEngine : public Engine {
                                   std::vector<bool>& key_states) override;
 
    private:
-    std::shared_ptr<RawEngine> writer_raw_engine_;
-    std::shared_ptr<MonoStoreEngine> rocks_engine_;
+    MonoStoreEnginePtr mono_engine_;
+    mvcc::TsProviderPtr ts_provider_;
   };
 
   // Vector reader
   class VectorReader : public Engine::VectorReader {
    public:
-    VectorReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+    VectorReader(mvcc::ReaderPtr reader) : reader_(reader) {}
 
     butil::Status VectorBatchSearch(std::shared_ptr<VectorReader::Context> ctx,
                                     std::vector<pb::index::VectorWithDistanceResult>& results) override;
     butil::Status VectorBatchQuery(std::shared_ptr<VectorReader::Context> ctx,
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
-    butil::Status VectorGetBorderId(const pb::common::Range& region_range, bool get_min, int64_t& vector_id) override;
+    butil::Status VectorGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                    int64_t& vector_id) override;
     butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
     butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,
                                          VectorIndexWrapperPtr vector_index,
                                          pb::common::VectorIndexMetrics& region_metrics) override;
 
-    butil::Status VectorCount(const pb::common::Range& range, int64_t& count) override;
+    butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) override;
 
     butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
                                          std::vector<pb::index::VectorWithDistanceResult>& results,
@@ -108,19 +122,19 @@ class MonoStoreEngine : public Engine {
                                          int64_t& search_time_us) override;
 
    private:
-    RawEngine::ReaderPtr reader_;
+    mvcc::ReaderPtr reader_;
   };
 
   // Document reader
   class DocumentReader : public Engine::DocumentReader {
    public:
-    DocumentReader(RawEngine::ReaderPtr reader) : reader_(reader) {}
+    DocumentReader(mvcc::ReaderPtr reader) : reader_(reader) {}
 
     butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
                                  std::vector<pb::common::DocumentWithScore>& results) override;
     butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
                                      std::vector<pb::common::DocumentWithId>& document_with_ids) override;
-    butil::Status DocumentGetBorderId(const pb::common::Range& region_range, bool get_min,
+    butil::Status DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
                                       int64_t& document_id) override;
     butil::Status DocumentScanQuery(std::shared_ptr<DocumentReader::Context> ctx,
                                     std::vector<pb::common::DocumentWithId>& document_with_ids) override;
@@ -128,15 +142,15 @@ class MonoStoreEngine : public Engine {
                                            DocumentIndexWrapperPtr document_index,
                                            pb::common::DocumentIndexMetrics& region_metrics) override;
 
-    butil::Status DocumentCount(const pb::common::Range& range, int64_t& count) override;
+    butil::Status DocumentCount(int64_t ts, const pb::common::Range& range, int64_t& count) override;
 
    private:
-    RawEngine::ReaderPtr reader_;
+    mvcc::ReaderPtr reader_;
   };
 
   class TxnReader : public Engine::TxnReader {
    public:
-    TxnReader(std::shared_ptr<RawEngine> engine) : txn_reader_raw_engine_(engine) {}
+    TxnReader(RawEnginePtr engine) : txn_reader_raw_engine_(engine) {}
 
     butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
                               std::vector<pb::common::KeyValue>& kvs, const std::set<int64_t>& resolved_locks,
@@ -152,13 +166,13 @@ class MonoStoreEngine : public Engine {
                               std::string& end_scan_key) override;
 
    private:
-    std::shared_ptr<RawEngine> txn_reader_raw_engine_;
+    RawEnginePtr txn_reader_raw_engine_;
   };
 
   class TxnWriter : public Engine::TxnWriter {
    public:
-    TxnWriter(std::shared_ptr<RawEngine> raw_engine, std::shared_ptr<MonoStoreEngine> rocks_engine)
-        : txn_writer_raw_engine_(raw_engine), rocks_engine_(rocks_engine) {}
+    TxnWriter(RawEnginePtr raw_engine, MonoStoreEnginePtr rocks_engine)
+        : txn_writer_raw_engine_(raw_engine), mono_engine_(rocks_engine) {}
 
     butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                      const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
@@ -185,21 +199,24 @@ class MonoStoreEngine : public Engine {
     butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) override;
 
    private:
-    std::shared_ptr<RawEngine> txn_writer_raw_engine_;
-    std::shared_ptr<MonoStoreEngine> rocks_engine_;
+    RawEnginePtr txn_writer_raw_engine_;
+    MonoStoreEnginePtr mono_engine_;
   };
 
-  std::shared_ptr<Engine::Reader> NewReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::Writer> NewWriter(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::VectorReader> NewVectorReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::DocumentReader> NewDocumentReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::TxnReader> NewTxnReader(pb::common::RawEngine type) override;
-  std::shared_ptr<Engine::TxnWriter> NewTxnWriter(pb::common::RawEngine type) override;
+  mvcc::ReaderPtr NewMVCCReader(pb::common::RawEngine type) override;
+  Engine::ReaderPtr NewReader(pb::common::RawEngine type) override;
+  Engine::WriterPtr NewWriter(pb::common::RawEngine type) override;
+  Engine::VectorReaderPtr NewVectorReader(pb::common::RawEngine type) override;
+  Engine::DocumentReaderPtr NewDocumentReader(pb::common::RawEngine type) override;
+  Engine::TxnReaderPtr NewTxnReader(pb::common::RawEngine type) override;
+  Engine::TxnWriterPtr NewTxnWriter(pb::common::RawEngine type) override;
 
- protected:
-  std::shared_ptr<RawEngine> raw_rocks_engine;  // RocksDB, the system engine, for meta and data
-  std::shared_ptr<RawEngine> raw_bdb_engine;    // BDB, the engine for data
-  std::shared_ptr<EventListenerCollection> listeners;
+ private:
+  RawEnginePtr rocks_raw_engine_;  // RocksDB, the system engine, for meta and data
+  RawEnginePtr bdb_raw_engine_;    // BDB, the engine for data
+  EventListenerCollectionPtr listeners_;
+
+  mvcc::TsProviderPtr ts_provider_;
 };
 
 }  // namespace dingodb

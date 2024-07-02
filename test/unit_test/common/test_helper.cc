@@ -1094,32 +1094,6 @@ TEST_F(HelperTest, CleanFirstSlash) {
   EXPECT_EQ("hello.txt", dingodb::Helper::CleanFirstSlash("/hello.txt"));
 }
 
-TEST_F(HelperTest, PaddingUserKey) {
-  std::string a = "abc";
-  std::string pa = dingodb::Helper::HexToString("6162630000000000FA");
-
-  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
-  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
-
-  a = "aaaabbbb";
-  pa = dingodb::Helper::HexToString("6161616162626262FF0000000000000000F7");
-
-  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
-  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
-
-  a = "aaaabbbbc";
-  pa = dingodb::Helper::HexToString("6161616162626262FF6300000000000000F8");
-
-  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
-  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
-
-  a = "aaaabbbbaaaabbbbcc";
-  pa = dingodb::Helper::HexToString("6161616162626262FF6161616162626262FF6363000000000000F9");
-
-  EXPECT_EQ(pa, dingodb::Helper::PaddingUserKey(a));
-  EXPECT_EQ(a, dingodb::Helper::UnpaddingUserKey(pa));
-}
-
 TEST_F(HelperTest, IsContinuous) {
   // Test with an empty set
   std::set<int64_t> empty_set;
@@ -1208,24 +1182,6 @@ TEST_F(HelperTest, IsConflictRange) {
     range2.set_end_key("hello" + std::to_string(i + 3));
     EXPECT_TRUE(dingodb::Helper::IsConflictRange(range1, range2));
   }
-}
-
-TEST_F(HelperTest, GetMemComparableRange) {
-  std::string start_key = "hello";
-  std::string end_key = "hello0000";
-  dingodb::pb::common::Range range;
-  range.set_start_key(start_key);
-  range.set_end_key(end_key);
-
-  auto mem_comparable_range = dingodb::Helper::GetMemComparableRange(range);
-
-  DINGO_LOG(INFO) << "start_key: " << dingodb::Helper::StringToHex(range.start_key()) << " "
-                  << dingodb::Helper::StringToHex(mem_comparable_range.start_key());
-  DINGO_LOG(INFO) << "end_key: " << dingodb::Helper::StringToHex(range.end_key()) << " "
-                  << dingodb::Helper::StringToHex(mem_comparable_range.end_key());
-
-  EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.start_key()), mem_comparable_range.start_key());
-  EXPECT_EQ(dingodb::Helper::PaddingUserKey(range.end_key()), mem_comparable_range.end_key());
 }
 
 TEST_F(HelperTest, CompareRegionEpoch) {
@@ -1541,12 +1497,12 @@ TEST_F(HelperTest, VectorToString) {
 
   {
     std::vector<float> vec = {0.1, 0.2};
-    EXPECT_EQ("0.1, 0.2", dingodb::Helper::VectorToString(vec));
+    EXPECT_EQ("0.1,0.2", dingodb::Helper::VectorToString(vec));
   }
 
   {
     std::vector<float> vec = {0.1, 0.2, 0.3, 0.4};
-    EXPECT_EQ("0.1, 0.2, 0.3, 0.4", dingodb::Helper::VectorToString(vec));
+    EXPECT_EQ("0.1,0.2,0.3,0.4", dingodb::Helper::VectorToString(vec));
   }
 }
 

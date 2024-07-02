@@ -40,6 +40,7 @@
 #include "coprocessor/coprocessor_v2.h"
 #include "engine/rocks_raw_engine.h"
 #include "engine/txn_engine_helper.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store_internal.pb.h"
@@ -550,7 +551,7 @@ TEST_F(CoprocessorTestV2, Prepare) {
 
     end_ts = commit_ts;
 
-    std::string write_key = Helper::EncodeTxnKey(std::string(key_value.key()), commit_ts);
+    std::string write_key = mvcc::Codec::EncodeKey(std::string(key_value.key()), commit_ts);
 
     pb::store::WriteInfo write_info;
     write_info.set_start_ts(start_ts);
@@ -563,7 +564,7 @@ TEST_F(CoprocessorTestV2, Prepare) {
     engine->Writer()->KvPut(Constant::kTxnWriteCF, kv_write);
 
     pb::common::KeyValue kv_data;
-    std::string data_key = Helper::EncodeTxnKey(std::string(key_value.key()), start_ts);
+    std::string data_key = mvcc::Codec::EncodeKey(std::string(key_value.key()), start_ts);
     kv_data.set_key(data_key);
     kv_data.set_value(key_value.value());
 
@@ -1437,7 +1438,7 @@ TEST_F(CoprocessorTestV2, PrepareDisorder) {
 
     end_ts = commit_ts;
 
-    std::string write_key = Helper::EncodeTxnKey(std::string(key_value.key()), commit_ts);
+    std::string write_key = mvcc::Codec::EncodeKey(std::string(key_value.key()), commit_ts);
 
     pb::store::WriteInfo write_info;
     write_info.set_start_ts(start_ts);
@@ -1450,7 +1451,7 @@ TEST_F(CoprocessorTestV2, PrepareDisorder) {
     engine->Writer()->KvPut(Constant::kTxnWriteCF, kv_write);
 
     pb::common::KeyValue kv_data;
-    std::string data_key = Helper::EncodeTxnKey(std::string(key_value.key()), start_ts);
+    std::string data_key = mvcc::Codec::EncodeKey(std::string(key_value.key()), start_ts);
     kv_data.set_key(data_key);
     kv_data.set_value(key_value.value());
 

@@ -28,6 +28,7 @@
 #include "gflags/gflags.h"
 #include "handler/raft_apply_handler.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/raft.pb.h"
 #include "proto/store.pb.h"
@@ -253,10 +254,7 @@ void TxnHandler::HandleTxnDeleteRangeRequest(std::shared_ptr<Context> ctx, store
   auto *response = dynamic_cast<pb::store::TxnDeleteRangeResponse *>(ctx->Response());
   auto *error = response->mutable_error();
 
-  pb::common::Range range;
-
-  range.set_start_key(Helper::EncodeTxnKey(request.start_key(), Constant::kMaxVer));
-  range.set_end_key(Helper::EncodeTxnKey(request.end_key(), 0));
+  pb::common::Range range = mvcc::Codec::EncodeRange(request.start_key(), request.end_key());
 
   std::vector<pb::common::Range> data_ranges;
   std::vector<pb::common::Range> lock_ranges;

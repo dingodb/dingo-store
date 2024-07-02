@@ -98,6 +98,9 @@ class DebugServiceImpl : public pb::debug::DebugService {
   void ShowAffinity(google::protobuf::RpcController* controller,
                     const ::dingodb::pb::debug::ShowAffinityRequest* request,
                     ::dingodb::pb::debug::ShowAffinityResponse* response, ::google::protobuf::Closure* done) override;
+
+  void DumpRegion(google::protobuf::RpcController* controller, const ::dingodb::pb::debug::DumpRegionRequest* request,
+                  ::dingodb::pb::debug::DumpRegionResponse* response, ::google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb

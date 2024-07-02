@@ -52,8 +52,6 @@ DEFINE_bool(enable_async_document_search, true, "enable async document search");
 DEFINE_bool(enable_async_document_count, true, "enable async document count");
 DEFINE_bool(enable_async_document_operation, true, "enable async document operation");
 
-extern bvar::LatencyRecorder g_txn_latches_recorder;
-
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
@@ -101,6 +99,10 @@ static butil::Status ValidateDocumentBatchQueryRequest(StoragePtr storage,
                                      request->document_ids().size(), FLAGS_document_max_batch_count));
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -135,12 +137,13 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->document_ids = Helper::PbRepeatedToVector(request->document_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::DocumentWithId> document_with_ids;
   status = storage->DocumentBatchQuery(ctx, document_with_ids);
@@ -261,7 +264,7 @@ void DoDocumentSearch(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->document_index = region->DocumentIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter.Swap(mut_request->mutable_parameter());
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -326,6 +329,9 @@ static butil::Status ValidateDocumentAddRequest(StoragePtr storage, const pb::do
                          fmt::format("Param documents size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_document_max_request_size));
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -385,26 +391,6 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
-  // if (!request->ignore_check_exists()) {
-  //   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
-  //   ctx->partition_id = region->PartitionId();
-  //   ctx->region_id = region->Id();
-  //   ctx->region_range = region->Range();
-  //   for (const auto& document_with_id : request->documents()) {
-  //     ctx->document_ids.push_back(document_with_id.id());
-  //   }
-  //   ctx->with_scalar_data = false;
-  //   ctx->raw_engine_type = region->GetRawEngineType();
-  //   ctx->store_engine_type = region->GetStoreEngineType();
-
-  //   std::vector<pb::common::DocumentWithId> document_with_ids;
-  //   status = storage->DocumentBatchQuery(ctx, document_with_ids);
-  //   if (!status.ok()) {
-  //     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-  //     return;
-  //   }
-  // }
-
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -412,6 +398,9 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<pb::common::DocumentWithId> documents;
   for (const auto& document : request->documents()) {
@@ -528,7 +517,7 @@ void DoDocumentDelete(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  status = storage->DocumentDelete(ctx, is_sync, Helper::PbRepeatedToVector(request->ids()));
+  status = storage->DocumentDelete(ctx, is_sync, region, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -572,6 +561,9 @@ static butil::Status ValidateDocumentGetBorderIdRequest(StoragePtr storage,
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -604,7 +596,7 @@ void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* 
     return;
   }
   int64_t document_id = 0;
-  status = storage->DocumentGetBorderId(region, request->get_min(), document_id);
+  status = storage->DocumentGetBorderId(region, request->get_min(), request->ts(), document_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -661,6 +653,10 @@ static butil::Status ValidateDocumentScanQueryRequest(StoragePtr storage,
                          FLAGS_document_max_batch_count);
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -697,7 +693,7 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   auto ctx = std::make_shared<Engine::DocumentReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
   ctx->start_id = request->document_id_start();
@@ -706,6 +702,7 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   ctx->limit = request->max_scan_count();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::DocumentWithId> document_with_ids;
   status = storage->DocumentScanQuery(ctx, document_with_ids);
@@ -842,6 +839,10 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document_id_start/document_id_end range is error");
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -859,27 +860,26 @@ static butil::Status ValidateDocumentCountRequest(StoragePtr storage, const pb::
 }
 
 static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_document_id, int64_t end_document_id) {
-  pb::common::Range range;
+  pb::common::Range result;
 
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto range = region->Range(false);
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
   if (start_document_id == 0) {
-    range.set_start_key(region->Range().start_key());
+    result.set_start_key(range.start_key());
   } else {
-    std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, start_document_id, key);
-    range.set_start_key(key);
+    std::string key = DocumentCodec::PackageDocumentKey(prefix, partition_id, start_document_id);
+    result.set_start_key(key);
   }
 
   if (end_document_id == 0) {
-    range.set_end_key(region->Range().end_key());
+    result.set_end_key(range.end_key());
   } else {
-    std::string key;
-    DocumentCodec::EncodeDocumentKey(region_start_key[0], region_part_id, end_document_id, key);
-    range.set_end_key(key);
+    std::string key = DocumentCodec::PackageDocumentKey(prefix, partition_id, end_document_id);
+    result.set_end_key(key);
   }
 
-  return range;
+  return result;
 }
 
 void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -907,7 +907,7 @@ void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* contro
 
   int64_t count = 0;
   status = storage->DocumentCount(
-      region, GenCountRange(region, request->document_id_start(), request->document_id_end()), count);
+      region, GenCountRange(region, request->document_id_start(), request->document_id_end()), request->ts(), count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1068,7 +1068,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1127,7 +1127,7 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
@@ -1324,7 +1324,7 @@ static butil::Status ValidateDocumentTxnPrewriteRequest(StoragePtr storage,
 
   for (const auto& mutation : request->mutations()) {
     // check document_id is correctly encoded in key of mutation
-    int64_t document_id = DocumentCodec::DecodeDocumentId(mutation.key());
+    int64_t document_id = DocumentCodec::UnPackageDocumentId(mutation.key());
 
     if (BAIDU_UNLIKELY(!DocumentCodec::IsLegalDocumentId(document_id))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
@@ -1406,27 +1406,12 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(std::to_string(mutation.document().id()));
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
@@ -1552,7 +1537,7 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
 
   std::vector<int64_t> document_ids;
   for (const auto& key : request->keys()) {
-    int64_t document_id = DocumentCodec::DecodeDocumentId(key);
+    int64_t document_id = DocumentCodec::UnPackageDocumentId(key);
     if (document_id == 0) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param document id is error");
     }

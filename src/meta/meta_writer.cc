@@ -114,14 +114,12 @@ bool MetaWriter::DeletePrefix(const std::string& prefix) {
   std::string end_key = Helper::PrefixNext(prefix);  // end_key = prefix + 1
   range.set_end_key(end_key);
 
-  DINGO_LOG(INFO) << "DeletePrefix meta data, start_key: " << Helper::StringToHex(range.start_key())
-                  << " end_key: " << Helper::StringToHex(range.end_key());
+  DINGO_LOG(INFO) << "DeletePrefix meta data, range: " << Helper::RangeToString(range);
 
   auto status = engine_->Writer()->KvDeleteRange(Constant::kStoreMetaCF, range);
   if (status.error_code() == pb::error::Errno::EINTERNAL) {
     DINGO_LOG(FATAL) << "KvDeleteRange failed, errcode: " << status.error_code() << " " << status.error_str()
-                     << ", start_key(hex): " << Helper::StringToHex(range.start_key())
-                     << ", end_key(hex): " << Helper::StringToHex(range.end_key());
+                     << ", range(hex): " << Helper::RangeToString(range);
   }
   if (!status.ok()) {
     DINGO_LOG(ERROR) << "Meta delete_range failed, errcode: " << status.error_code() << " " << status.error_str();

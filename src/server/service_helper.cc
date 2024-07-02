@@ -32,6 +32,9 @@ namespace dingodb {
 
 DEFINE_int64(service_log_threshold_time_ns, 1000000000L, "service log threshold time");
 
+bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
+bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
+
 void ServiceHelper::SetError(pb::error::Error* error, int errcode, const std::string& errmsg) {
   error->set_errcode(static_cast<pb::error::Errno>(errcode));
   error->set_errmsg(errmsg);
@@ -64,7 +67,7 @@ butil::Status ServiceHelper::GetStoreRegionInfo(store::RegionPtr region, pb::err
   auto* store_region_info = error->mutable_store_region_info();
   store_region_info->set_region_id(region->Id());
   *(store_region_info->mutable_current_region_epoch()) = region->Epoch();
-  *(store_region_info->mutable_current_range()) = region->Range();
+  *(store_region_info->mutable_current_range()) = region->Range(false);
   for (const auto& peer : region->Peers()) {
     *(store_region_info->add_peers()) = peer;
   }
@@ -106,8 +109,8 @@ butil::Status ServiceHelper::ValidateRange(const pb::common::Range& range) {
   }
 
   if (BAIDU_UNLIKELY(range.start_key() >= range.end_key())) {
-    DINGO_LOG(ERROR) << fmt::format("pb::error::ERANGE_INVALID, Range is invalid start_key : {} end_key : {}",
-                                    Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()));
+    DINGO_LOG(ERROR) << fmt::format("pb::error::ERANGE_INVALID, Range is invalid range: {}",
+                                    Helper::RangeToString(range));
     return butil::Status(pb::error::ERANGE_INVALID, "Range is invalid");
   }
 
@@ -119,10 +122,9 @@ butil::Status ServiceHelper::ValidateKeyInRange(const pb::common::Range& range,
                                                 const std::vector<std::string_view>& keys) {
   for (const auto& key : keys) {
     if (range.start_key().compare(key) > 0 || range.end_key().compare(key) <= 0) {
-      return butil::Status(
-          pb::error::EKEY_OUT_OF_RANGE,
-          fmt::format("Key out of range, region range[{}-{}] key[{}]", Helper::StringToHex(range.start_key()),
-                      Helper::StringToHex(range.end_key()), Helper::StringToHex(key)));
+      return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                           fmt::format("Key out of range, region range{} key[{}]", Helper::RangeToString(range),
+                                       Helper::StringToHex(key)));
     }
   }
 
@@ -137,11 +139,9 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   std::string_view req_truncate_start_key(req_range.start_key().data(), min_length);
   std::string_view region_truncate_start_key(region_range.start_key().data(), min_length);
   if (req_truncate_start_key < region_truncate_start_key) {
-    return butil::Status(
-        pb::error::EKEY_OUT_OF_RANGE,
-        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
-                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
-                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
+    return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                         fmt::format("Key out of range, region range{} req range{}",
+                                     Helper::RangeToString(region_range), Helper::RangeToString(req_range)));
   }
 
   // Validate end_key
@@ -159,11 +159,9 @@ butil::Status ServiceHelper::ValidateRangeInRange(const pb::common::Range& regio
   }
 
   if (req_truncate_end_key > region_truncate_end_key) {
-    return butil::Status(
-        pb::error::EKEY_OUT_OF_RANGE,
-        fmt::format("Key out of range, region range[{}-{}] req range[{}-{}]",
-                    Helper::StringToHex(region_range.start_key()), Helper::StringToHex(region_range.end_key()),
-                    Helper::StringToHex(req_range.start_key()), Helper::StringToHex(req_range.end_key())));
+    return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
+                         fmt::format("Key out of range, region range{} req range{}",
+                                     Helper::RangeToString(region_range), Helper::RangeToString(req_range)));
   }
 
   return butil::Status();
@@ -176,7 +174,7 @@ butil::Status ServiceHelper::ValidateRegion(store::RegionPtr region, const std::
   }
 
   // for table region, Range is always equal to Range, so here we can use Range to validate
-  status = ValidateKeyInRange(region->Range(), keys);
+  status = ValidateKeyInRange(region->Range(false), keys);
   if (!status.ok()) {
     return status;
   }
@@ -190,15 +188,14 @@ butil::Status ServiceHelper::ValidateIndexRegion(store::RegionPtr region, const 
     return status;
   }
 
-  const auto& range = region->Range();
+  const auto& range = region->Range(false);
   int64_t min_vector_id = 0, max_vector_id = 0;
-  VectorCodec::DecodeRangeToVectorId(range, min_vector_id, max_vector_id);
+  VectorCodec::DecodeRangeToVectorId(false, range, min_vector_id, max_vector_id);
   for (auto vector_id : vector_ids) {
     if (vector_id < min_vector_id || vector_id >= max_vector_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
-                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
-                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-                                       min_vector_id, max_vector_id, vector_id));
+                           fmt::format("EKEY_OUT_OF_RANGE, region range{} / [{}-{}) req vector id {}",
+                                       Helper::RangeToString(range), min_vector_id, max_vector_id, vector_id));
     }
   }
 
@@ -211,15 +208,14 @@ butil::Status ServiceHelper::ValidateDocumentRegion(store::RegionPtr region, con
     return status;
   }
 
-  const auto& range = region->Range();
+  const auto& range = region->Range(false);
   int64_t min_document_id = 0, max_document_id = 0;
-  DocumentCodec::DecodeRangeToDocumentId(range, min_document_id, max_document_id);
+  DocumentCodec::DecodeRangeToDocumentId(false, range, min_document_id, max_document_id);
   for (auto document_id : document_ids) {
     if (document_id < min_document_id || document_id >= max_document_id) {
       return butil::Status(pb::error::EKEY_OUT_OF_RANGE,
-                           fmt::format("EKEY_OUT_OF_RANGE, region range[{}-{}) / [{}-{}) req vector id {}",
-                                       Helper::StringToHex(range.start_key()), Helper::StringToHex(range.end_key()),
-                                       min_document_id, max_document_id, document_id));
+                           fmt::format("EKEY_OUT_OF_RANGE, region range{} / [{}-{}) req vector id {}",
+                                       Helper::RangeToString(range), min_document_id, max_document_id, document_id));
     }
   }
 
@@ -251,6 +247,29 @@ butil::Status ServiceHelper::ValidateClusterReadOnly() {
   }
 
   return butil::Status();
+}
+
+LatchContextPtr ServiceHelper::LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys,
+                                              bool is_txn) {
+  auto start_time_us = butil::gettimeofday_us();
+
+  auto latch_ctx = LatchContext::New(keys);
+
+  bool latch_got = false;
+  while (!latch_got) {
+    latch_got = region->LatchesAcquire(latch_ctx->GetLock(), latch_ctx->Cid());
+    if (!latch_got) {
+      latch_ctx->SyncCond().IncreaseWait();
+    }
+  }
+
+  if (is_txn) {
+    g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  } else {
+    g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
+  }
+
+  return latch_ctx;
 }
 
 }  // namespace dingodb

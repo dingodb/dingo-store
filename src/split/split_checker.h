@@ -84,7 +84,7 @@ class SplitChecker {
   };
 
   // Calculate region split key.
-  virtual std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+  virtual std::string SplitKey(store::RegionPtr region, const pb::common::Range& range,
                                const std::vector<std::string>& cf_names, uint32_t& count) = 0;
 
  private:
@@ -102,7 +102,7 @@ class HalfSplitChecker : public SplitChecker {
   ~HalfSplitChecker() override = default;
 
   // base physics key, contain key of multi version.
-  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& range,
                        const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
@@ -124,7 +124,7 @@ class SizeSplitChecker : public SplitChecker {
   ~SizeSplitChecker() override = default;
 
   // base physics key, contain key of multi version.
-  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& range,
                        const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:
@@ -146,7 +146,7 @@ class KeysSplitChecker : public SplitChecker {
   ~KeysSplitChecker() override = default;
 
   // base logic key, ignore key of multi version.
-  std::string SplitKey(store::RegionPtr region, const pb::common::Range& physical_range,
+  std::string SplitKey(store::RegionPtr region, const pb::common::Range& range,
                        const std::vector<std::string>& cf_names, uint32_t& count) override;
 
  private:

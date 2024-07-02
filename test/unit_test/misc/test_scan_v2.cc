@@ -36,6 +36,8 @@
 #include "config/yaml_config.h"
 #include "crontab/crontab.h"
 #include "engine/rocks_raw_engine.h"
+#include "mvcc/codec.h"
+#include "mvcc/reader.h"
 #include "proto/common.pb.h"
 #include "scan/scan.h"
 #include "scan/scan_manager.h"
@@ -147,6 +149,7 @@ TEST_F(ScanV2Test, Time) {
 
 TEST_F(ScanV2Test, Open) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
   auto scan = this->GetScan(&scan_id);
   LOG(INFO) << "scan_id : " << scan_id;
@@ -156,30 +159,18 @@ TEST_F(ScanV2Test, Open) {
   butil::Status ok;
 
   // scan id empty failed
-  ok = scan->Open("", raw_rocks_engine, kDefaultCf);
+  ok = scan->Open("", mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  // // timeout == 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
-  // // max bytes rpc = 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
-  // // max_fetch_cnt_by_server == 0 failed
-  // ok = scan->Open(scan_id, raw_rocks_engine, kDefaultCf);
-  // EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
-
   // engin empty {} failed
-  ok = scan->Open(std::to_string(scan_id), {}, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), nullptr, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
   // kDefaultCf empty  failed
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, "");
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, "", 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::EILLEGAL_PARAMTETERS);
 
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 }
 
@@ -244,6 +235,7 @@ TEST_F(ScanV2Test, ScanBegin) {
 }
 
 TEST_F(ScanV2Test, InsertData) {
+  int64_t ts = 1000;
   auto raw_rocks_engine = this->GetRawRocksEngine();
   const std::string &cf_name = kDefaultCf;
   auto writer = raw_rocks_engine->Writer();
@@ -252,6 +244,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAA");
     kv.set_value("valueAA");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -263,6 +257,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyAA" + std::to_string(i));
       kv.set_value("valueAA" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -272,6 +268,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAAA");
     kv.set_value("valueAAA");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -283,6 +281,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyAAA" + std::to_string(i));
       kv.set_value("valueAAA" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -292,6 +292,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABB");
     kv.set_value("valueABB");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -303,6 +305,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyABB" + std::to_string(i));
       kv.set_value("valueABB" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -312,6 +316,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABC");
     kv.set_value("valueABC");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -323,6 +329,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyABC" + std::to_string(i));
       kv.set_value("valueABC" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -332,6 +340,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyABD");
     kv.set_value("valueABD");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -343,6 +353,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyABD" + std::to_string(i));
       kv.set_value("valueABD" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -352,6 +364,8 @@ TEST_F(ScanV2Test, InsertData) {
     dingodb::pb::common::KeyValue kv;
     kv.set_key("keyAB");
     kv.set_value("valueAB");
+
+    kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
 
     butil::Status ok = writer->KvPut(cf_name, kv);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -363,6 +377,8 @@ TEST_F(ScanV2Test, InsertData) {
       kv.set_key("keyAB" + std::to_string(i));
       kv.set_value("valueAB" + std::to_string(i));
 
+      kv = mvcc::Codec::EncodeKeyValueWithPut(ts, kv);
+
       butil::Status ok = writer->KvPut(cf_name, kv);
       EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
     }
@@ -371,6 +387,7 @@ TEST_F(ScanV2Test, InsertData) {
 
 TEST_F(ScanV2Test, ScanBeginEqual) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
   auto scan = this->GetScan(&scan_id);
   LOG(INFO) << "scan_id : " << scan_id;
@@ -379,7 +396,7 @@ TEST_F(ScanV2Test, ScanBeginEqual) {
 
   butil::Status ok;
 
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -408,6 +425,7 @@ TEST_F(ScanV2Test, ScanBeginEqual) {
 
 TEST_F(ScanV2Test, ScanBeginOthers) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -419,7 +437,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -459,7 +477,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -501,7 +519,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -516,7 +534,6 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
 
     range.set_start_key("keyAA");
     range.set_end_key("keyABB");
-
     // ok
     ok = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release, true, {}, &kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
@@ -539,7 +556,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -579,7 +596,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
     LOG(INFO) << "scan_id : " << scan_id;
 
     EXPECT_NE(scan.get(), nullptr);
-    ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+    ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
     EXPECT_NE(scan.get(), nullptr);
@@ -617,6 +634,7 @@ TEST_F(ScanV2Test, ScanBeginOthers) {
 
 TEST_F(ScanV2Test, ScanBeginNormal) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -627,7 +645,7 @@ TEST_F(ScanV2Test, ScanBeginNormal) {
   LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -732,6 +750,7 @@ TEST_F(ScanV2Test, IsRecyclable) {
 
 TEST_F(ScanV2Test, scan) {
   auto raw_rocks_engine = this->GetRawRocksEngine();
+  auto mvcc_reader = dingodb::mvcc::KvReader::New(raw_rocks_engine->Reader());
   int64_t scan_id = 1;
 
   butil::Status ok;
@@ -742,7 +761,7 @@ TEST_F(ScanV2Test, scan) {
   LOG(INFO) << "scan_id : " << scan_id;
 
   EXPECT_NE(scan.get(), nullptr);
-  ok = scan->Open(std::to_string(scan_id), raw_rocks_engine, kDefaultCf);
+  ok = scan->Open(std::to_string(scan_id), mvcc_reader, kDefaultCf, 0);
   EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
   EXPECT_NE(scan.get(), nullptr);
@@ -929,24 +948,19 @@ TEST_F(ScanV2Test, KvDeleteRange) {
     range.set_start_key("key");
     range.set_end_key("keyZZZ");
 
+    range = mvcc::Codec::EncodeRange(range);
+
     butil::Status ok = writer->KvDeleteRange(cf_name, range);
 
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
 
-    std::string start_key = "key";
-    std::string end_key = "keyZZZ";
     std::vector<dingodb::pb::common::KeyValue> kvs;
 
     auto reader = raw_rocks_engine->Reader();
 
-    ok = reader->KvScan(cf_name, start_key, end_key, kvs);
+    ok = reader->KvScan(cf_name, range.start_key(), range.end_key(), kvs);
     EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
-
-    LOG(INFO) << "start_key : " << start_key << " "
-              << "end_key : " << end_key;
-    for (const auto &kv : kvs) {
-      LOG(INFO) << kv.key() << ":" << kv.value();
-    }
+    EXPECT_EQ(0, kvs.size());
   }
 }
 

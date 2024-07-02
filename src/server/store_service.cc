@@ -26,6 +26,7 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
+#include "common/latch.h"
 #include "common/synchronization.h"
 #include "common/tracker.h"
 #include "common/version.h"
@@ -37,6 +38,7 @@
 #include "proto/store.pb.h"
 #include "server/server.h"
 #include "server/service_helper.h"
+#include "vector/vector_index.h"
 
 DEFINE_int32(raft_apply_worker_max_pending_num, 0, "raft apply worker num");
 
@@ -46,9 +48,6 @@ DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
 DECLARE_int64(max_scan_lock_limit);
 DECLARE_int64(max_prewrite_count);
-
-bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
-bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
 
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
@@ -76,6 +75,10 @@ static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest
 
   if (request->key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
+  }
+
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
   }
 
   std::vector<std::string_view> keys = {request->key()};
@@ -112,6 +115,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<dingodb::pb::store::KvGetRequest*>(request);
@@ -163,6 +167,10 @@ static butil::Status ValidateKvBatchGetRequest(const dingodb::pb::store::KvBatch
     return status;
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& key : request->keys()) {
     if (key.empty()) {
@@ -205,6 +213,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
@@ -257,6 +266,9 @@ static butil::Status ValidateKvPutRequest(const dingodb::pb::store::KvPutRequest
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   std::vector<std::string_view> keys = {request->kv().key()};
   status = ServiceHelper::ValidateRegion(region, keys);
@@ -291,25 +303,10 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -318,6 +315,9 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
@@ -367,6 +367,10 @@ static butil::Status ValidateKvBatchPutRequest(const dingodb::pb::store::KvBatch
     return status;
   }
 
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
@@ -408,27 +412,12 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -437,9 +426,13 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
-  status = storage->KvPut(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()));
+  auto kvs = Helper::PbRepeatedToVector(mut_request->mutable_kvs());
+  status = storage->KvPut(ctx, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -492,6 +485,9 @@ static butil::Status ValidateKvPutIfAbsentRequest(const dingodb::pb::store::KvPu
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   std::vector<std::string_view> keys = {request->kv().key()};
   status = ServiceHelper::ValidateRegion(region, keys);
@@ -526,25 +522,10 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -553,6 +534,9 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvPutIfAbsentRequest*>(request);
@@ -607,6 +591,10 @@ static butil::Status ValidateKvBatchPutIfAbsentRequest(const dingodb::pb::store:
     return status;
   }
 
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
+
   std::vector<std::string_view> keys;
   for (const auto& kv : request->kvs()) {
     if (kv.key().empty()) {
@@ -648,27 +636,13 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
 
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -677,6 +651,9 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
@@ -772,27 +749,12 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -802,12 +764,18 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
+  std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
-  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()));
+  status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), key_states);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+    return;
+  }
+
+  for (const auto& key_state : key_states) {
+    response->add_key_states(key_state);
   }
 }
 
@@ -857,7 +825,7 @@ static butil::Status ValidateKvDeleteRangeRequest(const pb::store::KvDeleteRange
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -899,12 +867,13 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->KvDeleteRange(ctx, correction_range);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+    return;
   }
 }
 
@@ -948,6 +917,9 @@ static butil::Status ValidateKvCompareAndSetRequest(const dingodb::pb::store::Kv
   if (request->kv().key().empty()) {
     return butil::Status(pb::error::EKEY_EMPTY, "Key is empty");
   }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
 
   std::vector<std::string_view> keys = {request->kv().key()};
   status = ServiceHelper::ValidateRegion(region, keys);
@@ -980,22 +952,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
 
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1004,6 +963,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
@@ -1097,27 +1059,12 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1186,12 +1133,16 @@ static butil::Status ValidateKvScanBeginRequest(const dingodb::pb::store::KvScan
     return status;
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = ServiceHelper::ValidateRange(req_range);
   if (!status.ok()) {
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1232,8 +1183,9 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   std::string scan_id;                    // NOLINT
@@ -1470,13 +1422,17 @@ static butil::Status ValidateKvScanBeginRequestV2(const dingodb::pb::store::KvSc
     return status;
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = ServiceHelper::ValidateRange(req_range);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1519,8 +1475,9 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetTs(request->ts());
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
 
   std::vector<pb::common::KeyValue> kvs;  // NOLINT
   int64_t scan_id = request->scan_id();
@@ -1816,7 +1773,7 @@ static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* req
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1869,7 +1826,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
@@ -1990,27 +1947,12 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2130,27 +2072,12 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2271,27 +2198,12 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2421,27 +2333,12 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2554,25 +2451,10 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_key());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2898,27 +2780,12 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -3009,7 +2876,7 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
   req_range.set_start_key(request->start_key());
   req_range.set_end_key(request->end_key());
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -3149,25 +3016,10 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_lock());
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -3315,7 +3167,7 @@ static butil::Status ValidateTxnDeleteRangeRequest(const dingodb::pb::store::Txn
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }

@@ -54,8 +54,6 @@ DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
 
-extern bvar::LatencyRecorder g_txn_latches_recorder;
-
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
@@ -102,6 +100,9 @@ static butil::Status ValidateVectorBatchQueryRequest(StoragePtr storage,
                          fmt::format("Param vector_ids size {} is exceed max batch count {}",
                                      request->vector_ids().size(), FLAGS_vector_max_batch_count));
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -132,7 +133,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->vector_ids = Helper::PbRepeatedToVector(request->vector_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
@@ -140,6 +141,7 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   ctx->with_table_data = !request->without_table_data();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage->VectorBatchQuery(ctx, vector_with_ids);
@@ -275,7 +277,7 @@ void DoVectorSearch(StoragePtr storage, google::protobuf::RpcController* control
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter.Swap(mut_request->mutable_parameter());
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -361,6 +363,9 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
     return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
                          fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
                                      FLAGS_vector_max_request_size));
+  }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
   }
 
   status = storage->ValidateLeader(region);
@@ -465,6 +470,9 @@ void DoVectorAdd(StoragePtr storage, google::protobuf::RpcController* controller
   ctx->SetRegionEpoch(request->context().region_epoch());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
 
   std::vector<pb::common::VectorWithId> vectors;
   for (const auto& vector : request->vectors()) {
@@ -580,7 +588,7 @@ void DoVectorDelete(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  status = storage->VectorDelete(ctx, is_sync, Helper::PbRepeatedToVector(request->ids()));
+  status = storage->VectorDelete(ctx, is_sync, region, Helper::PbRepeatedToVector(request->ids()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -628,6 +636,9 @@ static butil::Status ValidateVectorGetBorderIdRequest(StoragePtr storage,
   if (request->context().region_id() == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -654,8 +665,9 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
+
   int64_t vector_id = 0;
-  status = storage->VectorGetBorderId(region, request->get_min(), vector_id);
+  status = storage->VectorGetBorderId(region, request->get_min(), request->ts(), vector_id);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -717,6 +729,10 @@ static butil::Status ValidateVectorScanQueryRequest(StoragePtr storage,
                          FLAGS_vector_max_batch_count);
   }
 
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
+
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
     return status;
@@ -748,7 +764,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   auto ctx = std::make_shared<Engine::VectorReader::Context>();
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_vector_data = !request->without_vector_data();
   ctx->with_scalar_data = !request->without_scalar_data();
@@ -761,6 +777,7 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->scalar_data_for_filter = request->scalar_for_filter();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
+  ctx->ts = request->ts();
 
   std::vector<pb::common::VectorWithId> vector_with_ids;
   status = storage->VectorScanQuery(ctx, vector_with_ids);
@@ -901,6 +918,9 @@ static butil::Status ValidateVectorCountRequest(StoragePtr storage, const pb::in
   if (request->vector_id_start() > request->vector_id_end()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector_id_start/vector_id_end range is error");
   }
+  if (request->ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ts is error");
+  }
 
   status = storage->ValidateLeader(region);
   if (!status.ok()) {
@@ -920,27 +940,26 @@ static butil::Status ValidateVectorCountRequest(StoragePtr storage, const pb::in
 
 static pb::common::Range GenCountRange(store::RegionPtr region, int64_t start_vector_id,  // NOLINT
                                        int64_t end_vector_id) {                           // NOLINT
-  pb::common::Range range;
+  pb::common::Range result;
 
-  auto region_start_key = region->Range().start_key();
-  auto region_part_id = region->PartitionId();
+  auto range = region->Range(false);
+  auto prefix = region->GetKeyPrefix();
+  auto partition_id = region->PartitionId();
   if (start_vector_id == 0) {
-    range.set_start_key(region->Range().start_key());
+    result.set_start_key(range.start_key());
   } else {
-    std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, start_vector_id, key);
-    range.set_start_key(key);
+    std::string key = VectorCodec::PackageVectorKey(prefix, partition_id, start_vector_id);
+    result.set_start_key(key);
   }
 
   if (end_vector_id == 0) {
-    range.set_end_key(region->Range().end_key());
+    result.set_end_key(range.end_key());
   } else {
-    std::string key;
-    VectorCodec::EncodeVectorKey(region_start_key[0], region_part_id, end_vector_id, key);
-    range.set_end_key(key);
+    std::string key = VectorCodec::PackageVectorKey(prefix, partition_id, end_vector_id);
+    result.set_end_key(key);
   }
 
-  return range;
+  return result;
 }
 
 void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controller,
@@ -962,8 +981,8 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   int64_t count = 0;
-  status =
-      storage->VectorCount(region, GenCountRange(region, request->vector_id_start(), request->vector_id_end()), count);
+  status = storage->VectorCount(region, GenCountRange(region, request->vector_id_start(), request->vector_id_end()),
+                                request->ts(), count);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -1095,7 +1114,7 @@ void DoVectorSearchDebug(StoragePtr storage, google::protobuf::RpcController* co
   ctx->partition_id = region->PartitionId();
   ctx->region_id = region->Id();
   ctx->vector_index = region->VectorIndexWrapper();
-  ctx->region_range = region->Range();
+  ctx->region_range = region->Range(false);
   ctx->parameter = request->parameter();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
@@ -1282,7 +1301,7 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
     return status;
   }
 
-  status = ServiceHelper::ValidateRangeInRange(region->Range(), req_range);
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
   if (!status.ok()) {
     return status;
   }
@@ -1336,7 +1355,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(), uniform_range);
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
@@ -1548,7 +1567,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
 
   for (const auto& mutation : request->mutations()) {
     // check vector_id is correctly encoded in key of mutation
-    int64_t vector_id = VectorCodec::DecodeVectorId(mutation.key());
+    int64_t vector_id = VectorCodec::UnPackageVectorId(mutation.key());
 
     if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector_id))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
@@ -1647,27 +1666,12 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   // check latches
-  auto start_time_us = butil::gettimeofday_us();
   std::vector<std::string> keys_for_lock;
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(std::to_string(mutation.vector().id()));
   }
-  Lock lock(keys_for_lock);
-  BthreadCond sync_cond;
-  uint64_t cid = (uint64_t)(&sync_cond);
-
-  bool latch_got = false;
-  while (!latch_got) {
-    latch_got = region->LatchesAcquire(&lock, cid);
-    if (!latch_got) {
-      sync_cond.IncreaseWait();
-    }
-  }
-
-  g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
-
-  // release latches after done
-  DEFER(region->LatchesRelease(&lock, cid));
+  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
+  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
@@ -1803,7 +1807,7 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
 
   std::vector<int64_t> vector_ids;
   for (const auto& key : request->keys()) {
-    int64_t vector_id = VectorCodec::DecodeVectorId(key);
+    int64_t vector_id = VectorCodec::UnPackageVectorId(key);
     if (vector_id == 0) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vector id is error");
     }
