@@ -653,7 +653,7 @@ static butil::Status ValidateDocumentScanQueryRequest(StoragePtr storage,
   }
 
   if (request->max_scan_count() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count cant be 0");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param max_scan_count can't be 0");
   }
 
   if (request->max_scan_count() > FLAGS_document_max_batch_count) {

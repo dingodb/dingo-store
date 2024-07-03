@@ -1085,6 +1085,21 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
+  bool use_id_filter = false;
+  if (!parameter.document_ids().empty()) {
+    use_id_filter = true;
+  }
+
+  std::vector<uint64_t> alive_ids;
+  for (int64_t doc_id : parameter.document_ids()) {
+    alive_ids.push_back(doc_id);
+  }
+
+  std::vector<std::string> column_names;
+  for (const auto& column_name : parameter.column_names()) {
+    column_names.push_back(column_name);
+  }
+
   // Exist sibling document index, so need to separate search document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
@@ -1092,14 +1107,14 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
                                    Id());
     std::vector<pb::common::DocumentWithScore> results_1;
     auto status = sibling_document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX,
-                                                 false, {}, {}, results_1);
+                                                 use_id_filter, alive_ids, column_names, results_1);
     if (!status.ok()) {
       return status;
     }
 
     std::vector<pb::common::DocumentWithScore> results_2;
-    status = document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, false, {}, {},
-                                    results_2);
+    status = document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
+                                    alive_ids, column_names, results_2);
     if (!status.ok()) {
       return status;
     }
@@ -1122,7 +1137,7 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
 
     // use range filter
     return document_index->Search(parameter.top_n(), parameter.query_string(), true, min_document_id, max_document_id,
-                                  false, {}, {}, results);
+                                  use_id_filter, alive_ids, column_names, results);
 
     // auto ret =
     //     DocumentIndexWrapper::SetDocumentIndexRangeFilter(document_index, filters, min_document_id,
@@ -1139,8 +1154,8 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
       "[document_index.wrapper][index_id({})] search document in document index, range({}) query_string({}) top_n({})",
       Id(), DocumentCodec::DecodeRangeToString(region_range), parameter.query_string(), parameter.top_n());
 
-  return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, false, {}, {},
-                                results);
+  return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
+                                alive_ids, column_names, results);
 }
 
 // butil::Status DocumentIndexWrapper::SetDocumentIndexRangeFilter(
