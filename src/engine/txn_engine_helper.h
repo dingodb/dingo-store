@@ -47,6 +47,8 @@ class TxnReader {
                              pb::store::WriteInfo &write_info, int64_t &commit_ts);
   butil::Status GetRollbackInfo(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info);
 
+  butil::Status GetOldValue(const std::string &key, int64_t start_ts, bool prev_write_load,
+                            pb::store::WriteInfo &write_info, std::vector<pb::common::KeyValue> &kvs);
   std::shared_ptr<Iterator> GetWriteIter() { return write_iter_; }
   SnapshotPtr GetSnapshot() { return snapshot_; }
 
@@ -160,7 +162,8 @@ class TxnEngineHelper {
   static butil::Status PessimisticLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                        std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
                                        const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                       int64_t for_update_ts);
+                                       int64_t for_update_ts, bool return_values,
+                                       std::vector<pb::common::KeyValue> &kvs);
 
   static butil::Status PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,

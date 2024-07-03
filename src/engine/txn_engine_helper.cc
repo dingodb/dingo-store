@@ -294,6 +294,66 @@ butil::Status TxnReader::GetRollbackInfo(int64_t start_ts, const std::string &ke
   return butil::Status::OK();
 }
 
+butil::Status TxnReader::GetOldValue(const std::string &key, int64_t start_ts, bool prev_write_load,
+                                     pb::store::WriteInfo &prev_write_info, std::vector<pb::common::KeyValue> &kvs) {
+  pb::common::KeyValue kv;
+  kv.set_key(key);
+  if (prev_write_load) {
+    if (prev_write_info.op() == pb::store::Op::Put) {
+      if (!prev_write_info.short_value().empty()) {
+        kv.set_value(prev_write_info.short_value());
+        kvs.emplace_back(kv);
+        return butil::Status::OK();
+      }
+      auto ret1 = GetDataValue(mvcc::Codec::EncodeKey(key, prev_write_info.start_ts()), *kv.mutable_value());
+      if (!ret1.ok() && ret1.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(FATAL) << "[txn]GetOldValue read data failed, key: " << Helper::StringToHex(key)
+                         << ", status: " << ret1.error_str();
+      } else if (ret1.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(INFO) << "[txn]GetOldValue read data failed, data is illegally not found, key: "
+                        << Helper::StringToHex(key) << ", status: " << ret1.error_str()
+                        << ", ts: " << prev_write_info.start_ts();
+        kv.set_value(std::string());
+      }
+    } else {
+      DINGO_LOG(INFO) << "[txn]GetOldValue prev_write op: " << prev_write_info.op()
+                      << ", value should be empty, key: " << Helper::StringToHex(key)
+                      << ", ts: " << prev_write_info.start_ts();
+    }
+  } else {
+    pb::store::WriteInfo write_info;
+    int64_t commit_ts = 0;
+    auto ret2 = GetWriteInfo(0, start_ts, 0, key, false, true, true, write_info, commit_ts);
+    if (!ret2.ok()) {
+      DINGO_LOG(ERROR) << "[txn]GetOldValue get write info failed, key: " << Helper::StringToHex(key)
+                       << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
+      return ret2;
+    }
+    if (write_info.op() == pb::store::Op::Put) {
+      if (!write_info.short_value().empty()) {
+        kv.set_value(write_info.short_value());
+        kvs.emplace_back(kv);
+        return butil::Status::OK();
+      }
+      auto ret3 = GetDataValue(mvcc::Codec::EncodeKey(key, write_info.start_ts()), *kv.mutable_value());
+      if (!ret3.ok() && ret3.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(FATAL) << "[txn]GetOldValue read data failed, key: " << Helper::StringToHex(key)
+                         << ", status: " << ret3.error_str();
+      } else if (ret3.error_code() == pb::error::Errno::EKEY_NOT_FOUND) {
+        DINGO_LOG(INFO) << "[txn]GetOldValue read data failed, data is illegally not found, key: "
+                        << Helper::StringToHex(key) << ", status: " << ret3.error_str()
+                        << ", ts: " << write_info.start_ts();
+        kv.set_value(std::string());
+      }
+    } else {
+      DINGO_LOG(INFO) << "[txn]GetOldValue read data failed, data is illegally not found, key: "
+                      << Helper::StringToHex(key) << ", ts: " << write_info.start_ts();
+    }
+  }
+  kvs.emplace_back(kv);
+  return butil::Status::OK();
+}
+
 butil::Status TxnIterator::Init() {
   snapshot_ = raw_engine_->GetSnapshot();
   if (snapshot_ == nullptr) {
@@ -849,7 +909,8 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
       if (lock_info.for_update_ts() > 0) {
         if (lock_info.lock_type() == pb::store::Lock) {
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, but only on LOCK stage, it's ok, lock_info: "
+              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, but only on LOCK stage, it's ok, "
+                 "lock_info: "
               << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           return false;
         }
@@ -1301,14 +1362,15 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
                                                std::shared_ptr<Context> ctx,
                                                const std::vector<pb::store::Mutation> &mutations,
                                                const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                               int64_t for_update_ts) {
+                                               int64_t for_update_ts, bool return_values,
+                                               std::vector<pb::common::KeyValue> &kvs) {
   BvarLatencyGuard bvar_guard(&g_txn_pessimistic_lock_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
       << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-      << ", for_update_ts: " << for_update_ts;
+      << ", for_update_ts: " << for_update_ts << ", return_values: " << return_values;
 
   if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_pessimistic_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
@@ -1328,7 +1390,6 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
   }
 
   std::vector<pb::common::KeyValue> kv_puts_lock;
-
   auto *response = dynamic_cast<pb::store::TxnPessimisticLockResponse *>(ctx->Response());
   if (response == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
@@ -1348,6 +1409,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
 
   // for every mutation, check and do lock, if any one of the mutation is failed, the whole lock is failed
   // 1. check if a lock is exists:
+  // yjddebug 检查到任意锁冲突或者写冲突就应该直接跳出循环，返回错误了
   for (const auto &mutation : mutations) {
     if (mutation.op() != pb::store::Op::Lock) {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
@@ -1390,6 +1452,24 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
               << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
               << ", key: " << Helper::StringToHex(mutation.key())
               << " is locked by self, lock_info: " << lock_info.ShortDebugString();
+
+          if (return_values) {
+            pb::store::WriteInfo write_info;
+            auto ret2 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
+            if (!ret2.ok()) {
+              // Now we need to fatal exit to prevent data inconsistency between raft peers
+              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+                               << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
+                               << ", status: " << ret2.error_str();
+
+              error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+              error->set_errmsg(ret2.error_str());
+
+              // need response to client
+              return ret2;
+            }
+          }
+
           continue;
         } else if (lock_info.for_update_ts() < for_update_ts) {
           // this is a same pessimistic lock with a new for_update_ts, we need to update the lock
@@ -1404,8 +1484,24 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
           lock_info.set_lock_type(pb::store::Op::Lock);
           lock_info.set_extra_data(mutation.value());
           kv.set_value(lock_info.SerializeAsString());
-
           kv_puts_lock.push_back(kv);
+
+          if (return_values) {
+            pb::store::WriteInfo write_info;
+            auto ret3 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
+            if (!ret3.ok()) {
+              // Now we need to fatal exit to prevent data inconsistency between raft peers
+              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+                               << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
+                               << ", status: " << ret3.error_str();
+
+              error->set_errcode(static_cast<pb::error::Errno>(ret3.error_code()));
+              error->set_errmsg(ret3.error_str());
+
+              // need response to client
+              return ret3;
+            }
+          }
         } else {
           // lock_info.for_update_ts() > for_update_ts, this is a illegal request, we return lock_info
           DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
@@ -1440,17 +1536,20 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       // there is not lock exists, we need to check if for_update_ts will confict with commit_ts
       pb::store::WriteInfo write_info;
       int64_t commit_ts = 0;
-      auto ret2 = txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true, write_info,
-                                          commit_ts);
-      if (!ret2.ok()) {
+      int64_t min_commit_ts = start_ts;
+      if (return_values) {
+        min_commit_ts = 0;
+      }
+      auto ret4 = txn_reader.GetWriteInfo(min_commit_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
+                                          write_info, commit_ts);
+      if (!ret4.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
                          << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
-                         << ", start_ts: " << start_ts << ", status: " << ret2.error_str();
-        error->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
-        error->set_errmsg(ret2.error_str());
-        return ret2;
+                         << ", min_commit_ts: " << min_commit_ts << ", status: " << ret4.error_str();
+        error->set_errcode(static_cast<pb::error::Errno>(ret4.error_code()));
+        error->set_errmsg(ret4.error_str());
+        return ret4;
       }
-
       if (commit_ts >= for_update_ts) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << "find this transaction is committed,return  WriteConflict with for_update_ts: " << for_update_ts
@@ -1490,6 +1589,21 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         kv.set_value(lock_info.SerializeAsString());
 
         kv_puts_lock.push_back(kv);
+        if (return_values) {
+          auto ret5 = txn_reader.GetOldValue(mutation.key(), start_ts, true, write_info, kvs);
+          if (!ret5.ok()) {
+            // Now we need to fatal exit to prevent data inconsistency between raft peers
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+                             << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", status: " << ret5.error_str();
+
+            error->set_errcode(static_cast<pb::error::Errno>(ret5.error_code()));
+            error->set_errmsg(ret5.error_str());
+
+            // need response to client
+            return ret5;
+          }
+        }
       }
     }
   }
@@ -1869,8 +1983,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
 
       if (!prev_lock_info.primary_lock().empty()) {
-        // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip write
-        // to raft state machine
+        // for optimistic prewrite, if the key is locked by same start_ts, this is a repeated prewrite, will skip
+        // write to raft state machine
         if (prev_lock_info.lock_ts() == start_ts) {
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << fmt::format("[txn][region({})] Prewrite,", region->Id())
@@ -2190,8 +2304,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
 
     } else if (mutation.op() == pb::store::Op::CheckNotExists) {
-      // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
-      // exist. So it is more likely to be a get op in prewrite.
+      // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key
+      // is exist. So it is more likely to be a get op in prewrite.
 
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
           << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
@@ -3715,7 +3829,8 @@ butil::Status TxnEngineHelper::DoGc(RawEnginePtr raw_engine, std::shared_ptr<Eng
 
       if (safe_point_ts < internal_safe_point_ts) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
-            "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal with "
+            "[txn_gc][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll deal "
+            "with "
             "it next time. ignore.  start_key : {} end_key : {}",
             ctx->RegionId(), safe_point_ts, internal_safe_point_ts, Helper::StringToHex(region_start_key),
             Helper::StringToHex(region_end_key));

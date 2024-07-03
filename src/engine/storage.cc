@@ -1016,7 +1016,8 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
                                           const std::vector<pb::store::Mutation>& mutations,
                                           const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                          int64_t for_update_ts) {
+                                          int64_t for_update_ts, bool return_values,
+                                          std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
   if (!status.ok()) {
     return status;
@@ -1024,11 +1025,13 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
 
   DINGO_LOG(DEBUG) << "TxnPessimisticLock mutations size : " << mutations.size()
                    << " primary_lock : " << Helper::StringToHex(primary_lock) << " start_ts : " << start_ts
-                   << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts;
+                   << " lock_ttl : " << lock_ttl << " for_update_ts : " << for_update_ts
+                   << " return_values: " << return_values;
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts);
+  status =
+      writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts, return_values, kvs);
   if (!status.ok()) {
     return status;
   }

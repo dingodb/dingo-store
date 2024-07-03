@@ -568,9 +568,11 @@ butil::Status MonoStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /
 butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,
                                                              const std::vector<pb::store::Mutation>& mutations,
                                                              const std::string& primary_lock, int64_t start_ts,
-                                                             int64_t lock_ttl, int64_t for_update_ts) {
+                                                             int64_t lock_ttl, int64_t for_update_ts,
+                                                             bool return_values,
+                                                             std::vector<pb::common::KeyValue>& kvs) {
   return TxnEngineHelper::PessimisticLock(txn_writer_raw_engine_, mono_engine_, ctx, mutations, primary_lock, start_ts,
-                                          lock_ttl, for_update_ts);
+                                          lock_ttl, for_update_ts, return_values, kvs);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
