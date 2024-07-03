@@ -176,7 +176,8 @@ class MonoStoreEngine : public Engine {
 
     butil::Status TxnPessimisticLock(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
                                      const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                     int64_t for_update_ts) override;
+                                     int64_t for_update_ts, bool return_values,
+                                     std::vector<pb::common::KeyValue>& kvs) override;
     butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
                                          const std::vector<std::string>& keys) override;
     butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,

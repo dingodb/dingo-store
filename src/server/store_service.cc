@@ -1983,12 +1983,18 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   }
 
   std::vector<pb::common::KeyValue> kvs;
+  // yjddebug todo
   status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
-                                       request->lock_ttl(), request->for_update_ts());
+                                       request->lock_ttl(), request->for_update_ts(), true, kvs);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
+  }
+  if (!kvs.empty()) {
+    for (const auto& kv : kvs) {
+      *response->add_kvs() = kv;
+    }
   }
 }
 
