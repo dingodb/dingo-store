@@ -85,3 +85,7 @@
 [submodule "contrib/nlohmann-json"]
 	path = contrib/nlohmann-json
 	url = https://github.com/nlohmann/json.git
+
+[submodule "contrib/cli11"]
+	path = contrib/cli11
+	url = https://github.com/CLIUtils/CLI11.git
