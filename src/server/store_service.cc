@@ -305,8 +305,10 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   // check latches
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -416,8 +418,10 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -524,8 +528,10 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   // check latches
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -641,8 +647,9 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
     keys_for_lock.push_back(kv.key());
   }
 
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -753,8 +760,10 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -953,8 +962,9 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->kv().key());
 
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1063,8 +1073,10 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   for (const auto& kv : request->kvs()) {
     keys_for_lock.push_back(kv.key());
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, false);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -1951,8 +1963,10 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2076,8 +2090,9 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2202,8 +2217,10 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(mutation.key());
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2337,8 +2354,10 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2453,8 +2472,10 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   // check latches
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_key());
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -2784,8 +2805,10 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   for (const auto& key : request->keys()) {
     keys_for_lock.push_back(key);
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
@@ -3018,8 +3041,10 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   // check latches
   std::vector<std::string> keys_for_lock;
   keys_for_lock.push_back(request->primary_lock());
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);

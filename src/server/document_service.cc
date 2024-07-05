@@ -1410,8 +1410,10 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   for (const auto& mutation : request->mutations()) {
     keys_for_lock.push_back(std::to_string(mutation.document().id()));
   }
-  auto latch_ctx = ServiceHelper::LatchesAcquire(region, keys_for_lock, true);
-  DEFER(region->LatchesRelease(latch_ctx->GetLock(), latch_ctx->Cid()));
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(request->context().region_id());
