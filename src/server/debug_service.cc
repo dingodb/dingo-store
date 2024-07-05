@@ -1022,12 +1022,12 @@ std::vector<pb::debug::DumpRegionResponse::Vector> DumpRawVectorRegion(RawEngine
   return std::move(vectors);
 }
 
-std::vector<pb::debug::DumpRegionResponse::Ducument> DumpRawDucmentRegion(RawEnginePtr raw_engine,
+std::vector<pb::debug::DumpRegionResponse::Document> DumpRawDucmentRegion(RawEnginePtr raw_engine,
                                                                           const pb::common::Range& range,
                                                                           int64_t offset, int64_t limit) {
   auto reader = raw_engine->Reader();
 
-  std::vector<pb::debug::DumpRegionResponse::Ducument> documents;
+  std::vector<pb::debug::DumpRegionResponse::Document> documents;
 
   // vector data
   {
@@ -1050,24 +1050,24 @@ std::vector<pb::debug::DumpRegionResponse::Ducument> DumpRawDucmentRegion(RawEng
       int64_t document_id;
       DocumentCodec::DecodeFromEncodeKeyWithTs(key, partition_id, document_id);
 
-      pb::debug::DumpRegionResponse::Ducument ducument;
-      ducument.set_document_id(document_id);
-      ducument.set_ts(DocumentCodec::TruncateKeyForTs(key));
+      pb::debug::DumpRegionResponse::Document document;
+      document.set_document_id(document_id);
+      document.set_ts(DocumentCodec::TruncateKeyForTs(key));
 
       mvcc::ValueFlag flag;
       int64_t ttl;
       auto value = mvcc::Codec::UnPackageValue(iter->Value(), flag, ttl);
 
-      ducument.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
-      ducument.set_ttl(ttl);
+      document.set_flag(static_cast<pb::debug::DumpRegionResponse::ValueFlag>(flag));
+      document.set_ttl(ttl);
 
       if (flag == mvcc::ValueFlag::kPut || flag == mvcc::ValueFlag::kPutTTL) {
-        if (!ducument.mutable_document()->ParseFromArray(value.data(), value.size())) {
+        if (!document.mutable_document()->ParseFromArray(value.data(), value.size())) {
           DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
         }
       }
 
-      documents.push_back(ducument);
+      documents.push_back(document);
     }
   }
 
@@ -1109,7 +1109,7 @@ void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
     Helper::VectorToPbRepeated(vectors, response->mutable_data()->mutable_vectors());
   } else {
     auto documents = DumpRawDucmentRegion(raw_engine, region->Range(true), request->offset(), request->limit());
-    Helper::VectorToPbRepeated(documents, response->mutable_data()->mutable_ducuments());
+    Helper::VectorToPbRepeated(documents, response->mutable_data()->mutable_documents());
   }
 }
 
