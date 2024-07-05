@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "client_v2/client_interation.h"
+#include "client_v2/interation.h"
 
 #include <memory>
 #include <string>
 
 #include "bthread/bthread.h"
-#include "client_v2/client_helper.h"
+#include "client_v2/helper.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
@@ -116,7 +116,7 @@ void InteractionManager::SetStoreInteraction(ServerInteractionPtr interaction) {
 bool InteractionManager::CreateStoreInteraction(std::vector<std::string> addrs) {
   auto interaction = std::make_shared<ServerInteraction>();
   if (!interaction->Init(addrs)) {
-    DINGO_LOG(ERROR) << "Fail to init store_interaction";
+    std::cout << "Fail to init store_interaction" << std::endl;
     return false;
   }
 

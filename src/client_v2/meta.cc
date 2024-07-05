@@ -18,26 +18,31 @@
 #include <iostream>
 #include <limits>
 
-#include "client_v2/client_helper.h"
-#include "client_v2/subcommand_helper.h"
+#include "client_v2/helper.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "coordinator/tso_control.h"
-#include "subcommand_coordinator.h"
+#include "meta.h"
 namespace client_v2 {
+void SetUpMetaSubCommands(CLI::App &app){
+  SetUpCreateTable(app);
+  SetUpGetTable(app);
+  SetUpGetTableRange(app);
+  SetUpGetTableByName(app);
+  SetUpGenTso(app);
 
-void SetUpSubcommandMetaHello(CLI::App &app) {
+}
+void SetUpMetaHello(CLI::App &app) {
   auto opt = std::make_shared<MetaHelloOptions>();
   auto coor = app.add_subcommand("MetaHello", "Meta hello")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandMetaHello(*opt); });
+  coor->callback([opt]() { RunMetaHello(*opt); });
 }
 
-void RunSubcommandMetaHello(MetaHelloOptions const &opt) {
+void RunMetaHello(MetaHelloOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::HelloRequest request;
@@ -53,7 +58,7 @@ void RunSubcommandMetaHello(MetaHelloOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetSchema(CLI::App &app) {
+void SetUpGetSchema(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaOptions>();
   auto coor = app.add_subcommand("GetSchema", "Get schema ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -64,12 +69,11 @@ void SetUpSubcommandGetSchema(CLI::App &app) {
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetSchema(*opt); });
+  coor->callback([opt]() { RunGetSchema(*opt); });
 }
 
-void RunSubcommandGetSchema(GetSchemaOptions const &opt) {
+void RunGetSchema(GetSchemaOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetSchemaRequest request;
@@ -96,7 +100,7 @@ void RunSubcommandGetSchema(GetSchemaOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGetSchemas(CLI::App &app) {
+void SetUpGetSchemas(CLI::App &app) {
   auto opt = std::make_shared<GetSchemasOptions>();
   auto coor = app.add_subcommand("GetSchema", "Get schema ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -104,12 +108,11 @@ void SetUpSubcommandGetSchemas(CLI::App &app) {
   coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetSchemas(*opt); });
+  coor->callback([opt]() { RunGetSchemas(*opt); });
 }
 
-void RunSubcommandGetSchemas(GetSchemasOptions const &opt) {
+void RunGetSchemas(GetSchemasOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetSchemasRequest request;
@@ -132,7 +135,7 @@ void RunSubcommandGetSchemas(GetSchemasOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGetSchemaByName(CLI::App &app) {
+void SetUpGetSchemaByName(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaByNameOptions>();
   auto coor = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -143,12 +146,11 @@ void SetUpSubcommandGetSchemaByName(CLI::App &app) {
   coor->add_option("--name", opt->name, "Request parameter schema name")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetSchemaByName(*opt); });
+  coor->callback([opt]() { RunGetSchemaByName(*opt); });
 }
 
-void RunSubcommandGetSchemaByName(GetSchemaByNameOptions const &opt) {
+void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetSchemaByNameRequest request;
@@ -171,7 +173,7 @@ void RunSubcommandGetSchemaByName(GetSchemaByNameOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGetTablesBySchema(CLI::App &app) {
+void SetUpGetTablesBySchema(CLI::App &app) {
   auto opt = std::make_shared<GetTablesBySchemaOptions>();
   auto coor = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -180,12 +182,11 @@ void SetUpSubcommandGetTablesBySchema(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandGetTablesBySchema(*opt); });
+  coor->callback([opt]() { RunGetTablesBySchema(*opt); });
 }
 
-void RunSubcommandGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
+void RunGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTablesBySchemaRequest request;
@@ -209,7 +210,7 @@ void RunSubcommandGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
   DINGO_LOG(INFO) << "table_count=" << response.table_definition_with_ids_size();
 }
 
-void SetUpSubcommandGetTablesCount(CLI::App &app) {
+void SetUpGetTablesCount(CLI::App &app) {
   auto opt = std::make_shared<GetTablesCountOptions>();
   auto coor = app.add_subcommand("GetTablesCount", "Get tables count")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -218,12 +219,11 @@ void SetUpSubcommandGetTablesCount(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandGetTablesCount(*opt); });
+  coor->callback([opt]() { RunGetTablesCount(*opt); });
 }
 
-void RunSubcommandGetTablesCount(GetTablesCountOptions const &opt) {
+void RunGetTablesCount(GetTablesCountOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTablesCountRequest request;
@@ -241,7 +241,7 @@ void RunSubcommandGetTablesCount(GetTablesCountOptions const &opt) {
   DINGO_LOG(INFO) << "table_count=" << response.tables_count();
 }
 
-void SetUpSubcommandCreateTable(CLI::App &app) {
+void SetUpCreateTable(CLI::App &app) {
   auto opt = std::make_shared<CreateTableOptions>();
   auto coor = app.add_subcommand("CreateTable", "Create table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
@@ -258,12 +258,11 @@ void SetUpSubcommandCreateTable(CLI::App &app) {
       ->default_val(3)
       ->check(CLI::Range(0, std::numeric_limits<int32_t>::max()));
 
-  coor->callback([opt]() { RunSubcommandCreateTable(*opt); });
+  coor->callback([opt]() { RunCreateTable(*opt); });
 }
 
-void RunSubcommandCreateTable(CreateTableOptions const &opt) {
+void RunCreateTable(CreateTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateTableRequest request;
@@ -282,17 +281,20 @@ void RunSubcommandCreateTable(CreateTableOptions const &opt) {
     part_count = 1;
   }
   std::vector<int64_t> new_ids;
-  int ret = client_v2::SubcommandHelper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    std::cout << "GetCreateTableIds failed";
     return;
   }
   if (new_ids.empty()) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    std::cout << "GetCreateTableIds failed, new_ids is empty";
     return;
   }
   if (new_ids.size() != 1 + opt.part_count) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    std::cout << "GetCreateTableIds failed, new_ids size not equal part count";
     return;
   }
 
@@ -356,9 +358,10 @@ void RunSubcommandCreateTable(CreateTableOptions const &opt) {
   // Engine engine = 7;
   if (opt.engine != "rocksdb" && opt.engine != "bdb") {
     DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
+    std::cout << "engine must be rocksdb or bdb";
     return;
   }
-  table_definition->set_engine(client_v2::SubcommandHelper::GetEngine(opt.engine));
+  table_definition->set_engine(client_v2::Helper::GetEngine(opt.engine));
   // map<string, string> properties = 8;
   auto *prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -380,19 +383,19 @@ void RunSubcommandCreateTable(CreateTableOptions const &opt) {
   request.mutable_request_info()->set_request_id(1024);
 
   auto status = coordinator_interaction_meta->SendRequest("CreateTable", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "create table failed, error: "
+                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                     << " " << response.error().errmsg();
+    std::cout << "create table failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
     return;
   }
-
-  DINGO_LOG(INFO) << response.DebugString();
-  if (response.error().errcode() == 0) {
-    DINGO_LOG(INFO) << "create table success, table_id==" << response.table_id().entity_id();
-    std::cout << "create table success, table_id==" << response.table_id().entity_id() << std::endl;
-  }
+  std::cout << "create table success, table_id==" << response.table_id().entity_id() << std::endl;
 }
 
-void SetUpSubcommandCreateTableIds(CLI::App &app) {
+void SetUpCreateTableIds(CLI::App &app) {
   auto opt = std::make_shared<CreateTableIdsOptions>();
   auto coor = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -402,12 +405,11 @@ void SetUpSubcommandCreateTableIds(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandCreateTableIds(*opt); });
+  coor->callback([opt]() { RunCreateTableIds(*opt); });
 }
 
-void RunSubcommandCreateTableIds(CreateTableIdsOptions const &opt) {
+void RunCreateTableIds(CreateTableIdsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateTableIdsRequest request;
@@ -426,17 +428,16 @@ void RunSubcommandCreateTableIds(CreateTableIdsOptions const &opt) {
   DINGO_LOG(INFO) << "count = " << response.table_ids_size();
 }
 
-void SetUpSubcommandCreateTableId(CLI::App &app) {
+void SetUpCreateTableId(CLI::App &app) {
   auto opt = std::make_shared<CreateTableIdOptions>();
   auto coor = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateTableId(*opt); });
+  coor->callback([opt]() { RunCreateTableId(*opt); });
 }
 
-void RunSubcommandCreateTableId(CreateTableIdOptions const &opt) {
+void RunCreateTableId(CreateTableIdOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateTableIdRequest request;
@@ -451,18 +452,17 @@ void RunSubcommandCreateTableId(CreateTableIdOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropTable(CLI::App &app) {
+void SetUpDropTable(CLI::App &app) {
   auto opt = std::make_shared<DropTableOptions>();
   auto coor = app.add_subcommand("DropTable", "Drop Table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--id", opt->id, "Request parameter table id")->required();
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
-  coor->callback([opt]() { RunSubcommandDropTable(*opt); });
+  coor->callback([opt]() { RunDropTable(*opt); });
 }
 
-void RunSubcommandDropTable(DropTableOptions const &opt) {
+void RunDropTable(DropTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropTableRequest request;
@@ -491,7 +491,7 @@ void RunSubcommandDropTable(DropTableOptions const &opt) {
   }
 }
 
-void SetUpSubcommandCreateSchema(CLI::App &app) {
+void SetUpCreateSchema(CLI::App &app) {
   auto opt = std::make_shared<CreateSchemaOptions>();
   auto coor = app.add_subcommand("CreateSchema", "Create schema")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -502,12 +502,11 @@ void SetUpSubcommandCreateSchema(CLI::App &app) {
   coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateSchema(*opt); });
+  coor->callback([opt]() { RunCreateSchema(*opt); });
 }
 
-void RunSubcommandCreateSchema(CreateSchemaOptions const &opt) {
+void RunCreateSchema(CreateSchemaOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateSchemaRequest request;
@@ -529,7 +528,7 @@ void RunSubcommandCreateSchema(CreateSchemaOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropSchema(CLI::App &app) {
+void SetUpDropSchema(CLI::App &app) {
   auto opt = std::make_shared<DropSchemaOptions>();
   auto coor = app.add_subcommand("DropSchema", "Drop schema")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -537,12 +536,11 @@ void SetUpSubcommandDropSchema(CLI::App &app) {
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropSchema(*opt); });
+  coor->callback([opt]() { RunDropSchema(*opt); });
 }
 
-void RunSubcommandDropSchema(DropSchemaOptions const &opt) {
+void RunDropSchema(DropSchemaOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropSchemaRequest request;
@@ -558,7 +556,7 @@ void RunSubcommandDropSchema(DropSchemaOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetTable(CLI::App &app) {
+void SetUpGetTable(CLI::App &app) {
   auto opt = std::make_shared<GetTableOptions>();
   auto coor = app.add_subcommand("GetTable", "Get table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
@@ -566,12 +564,11 @@ void SetUpSubcommandGetTable(CLI::App &app) {
   coor->add_option("--id", opt->id, "Request parameter table id")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  coor->callback([opt]() { RunSubcommandGetTable(*opt); });
+  coor->callback([opt]() { RunGetTable(*opt); });
 }
 
-void RunSubcommandGetTable(GetTableOptions const &opt) {
+void RunGetTable(GetTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTableRequest request;
@@ -587,11 +584,12 @@ void RunSubcommandGetTable(GetTableOptions const &opt) {
 
   table_id->set_entity_id(opt.id);
   auto status = coordinator_interaction_meta->SendRequest("GetTable", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get table failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
     return;
   }
-  DINGO_LOG(INFO) << response.DebugString();
   std::cout << "table_definition_with_id { " << std::endl;
   std::cout << "  tenant_id: " << response.table_definition_with_id().tenant_id() << std::endl;
 
@@ -721,18 +719,17 @@ void RunSubcommandGetTable(GetTableOptions const &opt) {
   std::cout << "  }" << std::endl;
 }
 
-void SetUpSubcommandGetTableByName(CLI::App &app) {
+void SetUpGetTableByName(CLI::App &app) {
   auto opt = std::make_shared<GetTableByNameOptions>();
   auto coor = app.add_subcommand("GetTableByName", "Get table by name")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema_id")->required();
   coor->add_option("--name", opt->name, "Request parameter name")->required();
-  coor->callback([opt]() { RunSubcommandGetTableByName(*opt); });
+  coor->callback([opt]() { RunGetTableByName(*opt); });
 }
 
-void RunSubcommandGetTableByName(GetTableByNameOptions const &opt) {
+void RunGetTableByName(GetTableByNameOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTableByNameRequest request;
@@ -744,11 +741,17 @@ void RunSubcommandGetTableByName(GetTableByNameOptions const &opt) {
   schema_id->set_entity_id(opt.schema_id);
 
   auto status = coordinator_interaction_meta->SendRequest("GetTableByName", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "get table by name failed, error: "
+                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                     << " " << response.error().errmsg();
+    std::cout << "get table by name failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
     return;
   }
-  DINGO_LOG(INFO) << response.DebugString();
+
   std::cout << "table_definition_with_id { " << std::endl;
   std::cout << "  tenant_id: " << response.table_definition_with_id().tenant_id() << std::endl;
 
@@ -878,18 +881,17 @@ void RunSubcommandGetTableByName(GetTableByNameOptions const &opt) {
   std::cout << "  }" << std::endl;
 }
 
-void SetUpSubcommandGetTableRange(CLI::App &app) {
+void SetUpGetTableRange(CLI::App &app) {
   auto opt = std::make_shared<GetTableRangeOptions>();
   auto coor = app.add_subcommand("GetTableRange", "Get table range")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required();
-  coor->callback([opt]() { RunSubcommandGetTableRange(*opt); });
+  coor->callback([opt]() { RunGetTableRange(*opt); });
 }
 
-void RunSubcommandGetTableRange(GetTableRangeOptions const &opt) {
+void RunGetTableRange(GetTableRangeOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTableRangeRequest request;
@@ -901,18 +903,14 @@ void RunSubcommandGetTableRange(GetTableRangeOptions const &opt) {
   table_id->set_entity_id(opt.id);
 
   auto status = coordinator_interaction_meta->SendRequest("GetTableRange", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get table failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
     return;
   }
 
-  DINGO_LOG(INFO) << response.DebugString();
-
   for (const auto &it : response.table_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
-                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
-                    << ":" << it.leader().port() << "]";
     std::cout << "region_id=[" << it.id().entity_id() << "]" << "range=["
               << dingodb::Helper::StringToHex(it.range().start_key()) << ","
               << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host() << ":"
@@ -920,18 +918,17 @@ void RunSubcommandGetTableRange(GetTableRangeOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGetTableMetrics(CLI::App &app) {
+void SetUpGetTableMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetTableMetricsOptions>();
   auto coor = app.add_subcommand("GetTableByName", "Get table by name")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetTableMetrics(*opt); });
+  coor->callback([opt]() { RunGetTableMetrics(*opt); });
 }
 
-void RunSubcommandGetTableMetrics(GetTableMetricsOptions const &opt) {
+void RunGetTableMetrics(GetTableMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTableMetricsRequest request;
@@ -947,7 +944,7 @@ void RunSubcommandGetTableMetrics(GetTableMetricsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandSwitchAutoSplit(CLI::App &app) {
+void SetUpSwitchAutoSplit(CLI::App &app) {
   auto opt = std::make_shared<SwitchAutoSplitOptions>();
   auto coor = app.add_subcommand("SwitchAutoSplit", "Switch auto split")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -959,12 +956,11 @@ void SetUpSubcommandSwitchAutoSplit(CLI::App &app) {
   coor->add_flag("--auto_split", opt->auto_split, "Request parameter auto_split")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandSwitchAutoSplit(*opt); });
+  coor->callback([opt]() { RunSwitchAutoSplit(*opt); });
 }
 
-void RunSubcommandSwitchAutoSplit(SwitchAutoSplitOptions const &opt) {
+void RunSwitchAutoSplit(SwitchAutoSplitOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::SwitchAutoSplitRequest request;
@@ -984,18 +980,17 @@ void RunSubcommandSwitchAutoSplit(SwitchAutoSplitOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandGetDeletedTable(CLI::App &app) {
+void SetUpGetDeletedTable(CLI::App &app) {
   auto opt = std::make_shared<GetDeletedTableOptions>();
   auto coor = app.add_subcommand("GetDeletedTable", "Get deleted table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetDeletedTable(*opt); });
+  coor->callback([opt]() { RunGetDeletedTable(*opt); });
 }
 
-void RunSubcommandGetDeletedTable(GetDeletedTableOptions const &opt) {
+void RunGetDeletedTable(GetDeletedTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetDeletedTableRequest request;
@@ -1016,18 +1011,17 @@ void RunSubcommandGetDeletedTable(GetDeletedTableOptions const &opt) {
   DINGO_LOG(INFO) << "Deleted table count=" << response.table_definition_with_ids_size();
 }
 
-void SetUpSubcommandGetDeletedIndex(CLI::App &app) {
+void SetUpGetDeletedIndex(CLI::App &app) {
   auto opt = std::make_shared<GetDeletedIndexOptions>();
   auto coor = app.add_subcommand("GetDeletedIndex", "Get deleted index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetDeletedIndex(*opt); });
+  coor->callback([opt]() { RunGetDeletedIndex(*opt); });
 }
 
-void RunSubcommandGetDeletedIndex(GetDeletedIndexOptions const &opt) {
+void RunGetDeletedIndex(GetDeletedIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetDeletedIndexRequest request;
@@ -1048,18 +1042,17 @@ void RunSubcommandGetDeletedIndex(GetDeletedIndexOptions const &opt) {
   DINGO_LOG(INFO) << "Deleted index count=" << response.table_definition_with_ids_size();
 }
 
-void SetUpSubcommandCleanDeletedTable(CLI::App &app) {
+void SetUpCleanDeletedTable(CLI::App &app) {
   auto opt = std::make_shared<CleanDeletedTableOptions>();
   auto coor = app.add_subcommand("CleanDeletedTable", "Clean deleted table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCleanDeletedTable(*opt); });
+  coor->callback([opt]() { RunCleanDeletedTable(*opt); });
 }
 
-void RunSubcommandCleanDeletedTable(CleanDeletedTableOptions const &opt) {
+void RunCleanDeletedTable(CleanDeletedTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CleanDeletedTableRequest request;
@@ -1075,18 +1068,17 @@ void RunSubcommandCleanDeletedTable(CleanDeletedTableOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandCleanDeletedIndex(CLI::App &app) {
+void SetUpCleanDeletedIndex(CLI::App &app) {
   auto opt = std::make_shared<CleanDeletedIndexOptions>();
   auto coor = app.add_subcommand("CleanDeletedIndex", "Clean deleted index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter index id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCleanDeletedIndex(*opt); });
+  coor->callback([opt]() { RunCleanDeletedIndex(*opt); });
 }
 
-void RunSubcommandCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
+void RunCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CleanDeletedIndexRequest request;
@@ -1102,7 +1094,7 @@ void RunSubcommandCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandCreateTenant(CLI::App &app) {
+void SetUpCreateTenant(CLI::App &app) {
   auto opt = std::make_shared<CreateTenantOptions>();
   auto coor = app.add_subcommand("CreateTenant", "Create tenant")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1114,12 +1106,11 @@ void SetUpSubcommandCreateTenant(CLI::App &app) {
   coor->add_option("--id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateTenant(*opt); });
+  coor->callback([opt]() { RunCreateTenant(*opt); });
 }
 
-void RunSubcommandCreateTenant(CreateTenantOptions const &opt) {
+void RunCreateTenant(CreateTenantOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateTenantRequest request;
@@ -1133,7 +1124,7 @@ void RunSubcommandCreateTenant(CreateTenantOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateTenant(CLI::App &app) {
+void SetUpUpdateTenant(CLI::App &app) {
   auto opt = std::make_shared<UpdateTenantOptions>();
   auto coor = app.add_subcommand("UpdateTenant", "Update tenant")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1145,12 +1136,11 @@ void SetUpSubcommandUpdateTenant(CLI::App &app) {
   coor->add_option("--id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateTenant(*opt); });
+  coor->callback([opt]() { RunUpdateTenant(*opt); });
 }
 
-void RunSubcommandUpdateTenant(UpdateTenantOptions const &opt) {
+void RunUpdateTenant(UpdateTenantOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::UpdateTenantRequest request;
@@ -1164,7 +1154,7 @@ void RunSubcommandUpdateTenant(UpdateTenantOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropTenant(CLI::App &app) {
+void SetUpDropTenant(CLI::App &app) {
   auto opt = std::make_shared<DropTenantOptions>();
   auto coor = app.add_subcommand("DropTenant", "Drop tenant")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1172,12 +1162,11 @@ void SetUpSubcommandDropTenant(CLI::App &app) {
   coor->add_option("--id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropTenant(*opt); });
+  coor->callback([opt]() { RunDropTenant(*opt); });
 }
 
-void RunSubcommandDropTenant(DropTenantOptions const &opt) {
+void RunDropTenant(DropTenantOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropTenantRequest request;
@@ -1190,7 +1179,7 @@ void RunSubcommandDropTenant(DropTenantOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetTenant(CLI::App &app) {
+void SetUpGetTenant(CLI::App &app) {
   auto opt = std::make_shared<GetTenantOptions>();
   auto coor = app.add_subcommand("GetTenant", "Get tenant")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1198,12 +1187,11 @@ void SetUpSubcommandGetTenant(CLI::App &app) {
   coor->add_option("--id", opt->tenant_id, "Request parameter tenant id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetTenant(*opt); });
+  coor->callback([opt]() { RunGetTenant(*opt); });
 }
 
-void RunSubcommandGetTenant(GetTenantOptions const &opt) {
+void RunGetTenant(GetTenantOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTenantsRequest request;
@@ -1215,7 +1203,7 @@ void RunSubcommandGetTenant(GetTenantOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetIndexes(CLI::App &app) {
+void SetUpGetIndexes(CLI::App &app) {
   auto opt = std::make_shared<GetIndexesOptions>();
   auto coor = app.add_subcommand("GetIndexs", "Get index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1223,12 +1211,11 @@ void SetUpSubcommandGetIndexes(CLI::App &app) {
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndexes(*opt); });
+  coor->callback([opt]() { RunGetIndexes(*opt); });
 }
 
-void RunSubcommandGetIndexes(GetIndexesOptions const &opt) {
+void RunGetIndexes(GetIndexesOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexesRequest request;
@@ -1255,7 +1242,7 @@ void RunSubcommandGetIndexes(GetIndexesOptions const &opt) {
   DINGO_LOG(INFO) << "index_count=" << response.index_definition_with_ids_size();
 }
 
-void SetUpSubcommandGetIndexesCount(CLI::App &app) {
+void SetUpGetIndexesCount(CLI::App &app) {
   auto opt = std::make_shared<GetIndexesCountOptions>();
   auto coor = app.add_subcommand("GetIndexesCount", "Get index count")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1263,12 +1250,11 @@ void SetUpSubcommandGetIndexesCount(CLI::App &app) {
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndexesCount(*opt); });
+  coor->callback([opt]() { RunGetIndexesCount(*opt); });
 }
 
-void RunSubcommandGetIndexesCount(GetIndexesCountOptions const &opt) {
+void RunGetIndexesCount(GetIndexesCountOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexesCountRequest request;
@@ -1285,7 +1271,7 @@ void RunSubcommandGetIndexesCount(GetIndexesCountOptions const &opt) {
   DINGO_LOG(INFO) << "index_count=" << response.indexes_count();
 }
 
-void SetUpSubcommandCreateIndex(CLI::App &app) {
+void SetUpCreateIndex(CLI::App &app) {
   auto opt = std::make_shared<CreateIndexOptions>();
   auto coor = app.add_subcommand("CreateIndex", "Create index ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1334,11 +1320,10 @@ void SetUpSubcommandCreateIndex(CLI::App &app) {
                    "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
       ->default_val(8)
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateIndex(*opt); });
+  coor->callback([opt]() { RunCreateIndex(*opt); });
 }
-void RunSubcommandCreateIndex(CreateIndexOptions const &opt) {
+void RunCreateIndex(CreateIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateIndexRequest request;
@@ -1354,7 +1339,7 @@ void RunSubcommandCreateIndex(CreateIndexOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::SubcommandHelper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -1587,7 +1572,7 @@ void RunSubcommandCreateIndex(CreateIndexOptions const &opt) {
   }
 }
 
-void SetUpSubcommandCreateDocumentIndex(CLI::App &app) {
+void SetUpCreateDocumentIndex(CLI::App &app) {
   auto opt = std::make_shared<CreateDocumentIndexOptions>();
   auto coor =
       app.add_subcommand("CreateDocumentIndex", "Create document index ")->group("Coordinator Manager Commands");
@@ -1616,11 +1601,10 @@ void SetUpSubcommandCreateDocumentIndex(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandCreateDocumentIndex(*opt); });
+  coor->callback([opt]() { RunCreateDocumentIndex(*opt); });
 }
-void RunSubcommandCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
+void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateIndexRequest request;
@@ -1638,7 +1622,7 @@ void RunSubcommandCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::SubcommandHelper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -1739,16 +1723,15 @@ void RunSubcommandCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
   }
 }
 
-void SetUpSubcommandCreateIndexId(CLI::App &app) {
+void SetUpCreateIndexId(CLI::App &app) {
   auto opt = std::make_shared<CreateIndexIdOptions>();
   auto coor = app.add_subcommand("CreateIndexId", "Create index id ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateIndexId(*opt); });
+  coor->callback([opt]() { RunCreateIndexId(*opt); });
 }
-void RunSubcommandCreateIndexId(CreateIndexIdOptions const &opt) {
+void RunCreateIndexId(CreateIndexIdOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateIndexIdRequest request;
@@ -1764,7 +1747,7 @@ void RunSubcommandCreateIndexId(CreateIndexIdOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateIndex(CLI::App &app) {
+void SetUpUpdateIndex(CLI::App &app) {
   auto opt = std::make_shared<UpdateIndexOptions>();
   auto coor = app.add_subcommand("UpdateIndex", "Update Index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1772,11 +1755,10 @@ void SetUpSubcommandUpdateIndex(CLI::App &app) {
   coor->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
   coor->add_option("--max_elements", opt->max_elements, "Request parameter max_elements")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateIndex(*opt); });
+  coor->callback([opt]() { RunUpdateIndex(*opt); });
 }
-void RunSubcommandUpdateIndex(UpdateIndexOptions const &opt) {
+void RunUpdateIndex(UpdateIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexRequest get_request;
@@ -1834,17 +1816,16 @@ void RunSubcommandUpdateIndex(UpdateIndexOptions const &opt) {
   DINGO_LOG(INFO) << update_response.DebugString();
 }
 
-void SetUpSubcommandDropIndex(CLI::App &app) {
+void SetUpDropIndex(CLI::App &app) {
   auto opt = std::make_shared<DropIndexOptions>();
   auto coor = app.add_subcommand("DropIndex", "Drop Index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropIndex(*opt); });
+  coor->callback([opt]() { RunDropIndex(*opt); });
 }
-void RunSubcommandDropIndex(DropIndexOptions const &opt) {
+void RunDropIndex(DropIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropIndexRequest request;
@@ -1861,17 +1842,16 @@ void RunSubcommandDropIndex(DropIndexOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetIndex(CLI::App &app) {
+void SetUpGetIndex(CLI::App &app) {
   auto opt = std::make_shared<GetIndexOptions>();
   auto coor = app.add_subcommand("GetIndex", "Get Index")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndex(*opt); });
+  coor->callback([opt]() { RunGetIndex(*opt); });
 }
-void RunSubcommandGetIndex(GetIndexOptions const &opt) {
+void RunGetIndex(GetIndexOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexRequest request;
@@ -1888,18 +1868,17 @@ void RunSubcommandGetIndex(GetIndexOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetIndexByName(CLI::App &app) {
+void SetUpGetIndexByName(CLI::App &app) {
   auto opt = std::make_shared<GetIndexByNameOptions>();
   auto coor = app.add_subcommand("GetIndexByName", "Get index by name")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--name", opt->name, "Request parameter index name")->group("Coordinator Manager Commands");
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndexByName(*opt); });
+  coor->callback([opt]() { RunGetIndexByName(*opt); });
 }
-void RunSubcommandGetIndexByName(GetIndexByNameOptions const &opt) {
+void RunGetIndexByName(GetIndexByNameOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexByNameRequest request;
@@ -1915,17 +1894,16 @@ void RunSubcommandGetIndexByName(GetIndexByNameOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetIndexRange(CLI::App &app) {
+void SetUpGetIndexRange(CLI::App &app) {
   auto opt = std::make_shared<GetIndexRangeOptions>();
   auto coor = app.add_subcommand("GetIndexRange", "Get index range ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndexRange(*opt); });
+  coor->callback([opt]() { RunGetIndexRange(*opt); });
 }
-void RunSubcommandGetIndexRange(GetIndexRangeOptions const &opt) {
+void RunGetIndexRange(GetIndexRangeOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexRangeRequest request;
@@ -1949,17 +1927,16 @@ void RunSubcommandGetIndexRange(GetIndexRangeOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGetIndexMetrics(CLI::App &app) {
+void SetUpGetIndexMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetIndexMetricsOptions>();
   auto coor = app.add_subcommand("GetIndexMetrics", "Get index metrics")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetIndexMetrics(*opt); });
+  coor->callback([opt]() { RunGetIndexMetrics(*opt); });
 }
-void RunSubcommandGetIndexMetrics(GetIndexMetricsOptions const &opt) {
+void RunGetIndexMetrics(GetIndexMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetIndexMetricsRequest request;
@@ -1975,17 +1952,16 @@ void RunSubcommandGetIndexMetrics(GetIndexMetricsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGenerateTableIds(CLI::App &app) {
+void SetUpGenerateTableIds(CLI::App &app) {
   auto opt = std::make_shared<GenerateTableIdsOptions>();
   auto coor = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGenerateTableIds(*opt); });
+  coor->callback([opt]() { RunGenerateTableIds(*opt); });
 }
-void RunSubcommandGenerateTableIds(GenerateTableIdsOptions const &opt) {
+void RunGenerateTableIds(GenerateTableIdsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GenerateTableIdsRequest request;
@@ -2014,7 +1990,7 @@ void RunSubcommandGenerateTableIds(GenerateTableIdsOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandCreateTables(CLI::App &app) {
+void SetUpCreateTables(CLI::App &app) {
   auto opt = std::make_shared<CreateTablesOptions>();
   auto coor = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2032,11 +2008,10 @@ void SetUpSubcommandCreateTables(CLI::App &app) {
       ->default_val(3)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateTables(*opt); });
+  coor->callback([opt]() { RunCreateTables(*opt); });
 }
-void RunSubcommandCreateTables(CreateTablesOptions const &opt) {
+void RunCreateTables(CreateTablesOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   bool with_table_id = false;
@@ -2057,7 +2032,7 @@ void RunSubcommandCreateTables(CreateTablesOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::SubcommandHelper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -2123,7 +2098,7 @@ void RunSubcommandCreateTables(CreateTablesOptions const &opt) {
     DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
     return;
   }
-  table_definition->set_engine(client_v2::SubcommandHelper::GetEngine(opt.engine));
+  table_definition->set_engine(client_v2::Helper::GetEngine(opt.engine));
   // map<string, string> properties = 8;
   auto *prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -2148,7 +2123,7 @@ void RunSubcommandCreateTables(CreateTablesOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateTables(CLI::App &app) {
+void SetUpUpdateTables(CLI::App &app) {
   auto opt = std::make_shared<UpdateTablesOptions>();
   auto coor = app.add_subcommand("UpdateTables", "Update tables ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2178,11 +2153,10 @@ void SetUpSubcommandUpdateTables(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandUpdateTables(*opt); });
+  coor->callback([opt]() { RunUpdateTables(*opt); });
 }
-void RunSubcommandUpdateTables(UpdateTablesOptions const &opt) {
+void RunUpdateTables(UpdateTablesOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   bool with_increment = false;
@@ -2195,7 +2169,7 @@ void RunSubcommandUpdateTables(UpdateTablesOptions const &opt) {
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
     int64_t new_part_id = 0;
-    int ret = client_v2::SubcommandHelper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
+    int ret = client_v2::Helper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
       return;
@@ -2253,7 +2227,7 @@ void RunSubcommandUpdateTables(UpdateTablesOptions const &opt) {
     DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
     return;
   }
-  table_definition->set_engine(client_v2::SubcommandHelper::GetEngine(opt.engine));
+  table_definition->set_engine(client_v2::Helper::GetEngine(opt.engine));
   // map<string, string> properties = 8;
   auto *prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -2278,7 +2252,7 @@ void RunSubcommandUpdateTables(UpdateTablesOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandAddIndexOnTable(CLI::App &app) {
+void SetUpAddIndexOnTable(CLI::App &app) {
   auto opt = std::make_shared<AddIndexOnTableOptions>();
   auto coor = app.add_subcommand("AddIndexOnTable", "Add index on table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2311,11 +2285,10 @@ void SetUpSubcommandAddIndexOnTable(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandAddIndexOnTable(*opt); });
+  coor->callback([opt]() { RunAddIndexOnTable(*opt); });
 }
-void RunSubcommandAddIndexOnTable(AddIndexOnTableOptions const &opt) {
+void RunAddIndexOnTable(AddIndexOnTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   bool with_increment = false;
@@ -2328,7 +2301,7 @@ void RunSubcommandAddIndexOnTable(AddIndexOnTableOptions const &opt) {
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
     int64_t new_part_id = 0;
-    int ret = client_v2::SubcommandHelper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
+    int ret = client_v2::Helper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
       return;
@@ -2385,7 +2358,7 @@ void RunSubcommandAddIndexOnTable(AddIndexOnTableOptions const &opt) {
     DINGO_LOG(ERROR) << "engine must be rocksdb or bdb";
     return;
   }
-  table_definition->set_engine(client_v2::SubcommandHelper::GetEngine(opt.engine));
+  table_definition->set_engine(client_v2::Helper::GetEngine(opt.engine));
   // map<string, string> properties = 8;
   auto *prop = table_definition->mutable_properties();
   (*prop)["test property"] = "test_property_value";
@@ -2416,7 +2389,7 @@ void RunSubcommandAddIndexOnTable(AddIndexOnTableOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropIndexOnTable(CLI::App &app) {
+void SetUpDropIndexOnTable(CLI::App &app) {
   auto opt = std::make_shared<DropIndexOnTableOptions>();
   auto coor = app.add_subcommand("DropIndexOnTable", "Drop index on table")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2427,11 +2400,10 @@ void SetUpSubcommandDropIndexOnTable(CLI::App &app) {
   coor->add_option("--index_id", opt->index_id, "Request parameter index id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropIndexOnTable(*opt); });
+  coor->callback([opt]() { RunDropIndexOnTable(*opt); });
 }
-void RunSubcommandDropIndexOnTable(DropIndexOnTableOptions const &opt) {
+void RunDropIndexOnTable(DropIndexOnTableOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropIndexOnTableRequest request;
@@ -2447,18 +2419,17 @@ void RunSubcommandDropIndexOnTable(DropIndexOnTableOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetTables(CLI::App &app) {
+void SetUpGetTables(CLI::App &app) {
   auto opt = std::make_shared<GetTablesOptions>();
   auto coor = app.add_subcommand("GetTables", "Get tables")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetTables(*opt); });
+  coor->callback([opt]() { RunGetTables(*opt); });
 }
 
-void RunSubcommandGetTables(GetTablesOptions const &opt) {
+void RunGetTables(GetTablesOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetTablesRequest request;
@@ -2475,7 +2446,7 @@ void RunSubcommandGetTables(GetTablesOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandDropTables(CLI::App &app) {
+void SetUpDropTables(CLI::App &app) {
   auto opt = std::make_shared<DropTablesOptions>();
   auto coor = app.add_subcommand("DropTables", "drop tables")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2484,12 +2455,11 @@ void SetUpSubcommandDropTables(CLI::App &app) {
   coor->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropTables(*opt); });
+  coor->callback([opt]() { RunDropTables(*opt); });
 }
 
-void RunSubcommandDropTables(DropTablesOptions const &opt) {
+void RunDropTables(DropTablesOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DropTablesRequest request;
@@ -2505,17 +2475,16 @@ void RunSubcommandDropTables(DropTablesOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandGetAutoIncrements(CLI::App &app) {
+void SetUpGetAutoIncrements(CLI::App &app) {
   auto opt = std::make_shared<GetAutoIncrementsOptions>();
   auto coor = app.add_subcommand("GetAutoIncrements", "Get auto increments ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetAutoIncrements(*opt); });
+  coor->callback([opt]() { RunGetAutoIncrements(*opt); });
 }
 
-void RunSubcommandGetAutoIncrements(GetAutoIncrementsOptions const &opt) {
+void RunGetAutoIncrements(GetAutoIncrementsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetAutoIncrementsRequest request;
@@ -2526,18 +2495,17 @@ void RunSubcommandGetAutoIncrements(GetAutoIncrementsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetAutoIncrement(CLI::App &app) {
+void SetUpGetAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<GetAutoIncrementOptions>();
   auto coor = app.add_subcommand("GetAutoIncrement", "Get auto increment ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetAutoIncrement(*opt); });
+  coor->callback([opt]() { RunGetAutoIncrement(*opt); });
 }
 
-void RunSubcommandGetAutoIncrement(GetAutoIncrementOptions const &opt) {
+void RunGetAutoIncrement(GetAutoIncrementOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GetAutoIncrementRequest request;
@@ -2552,7 +2520,7 @@ void RunSubcommandGetAutoIncrement(GetAutoIncrementOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCreateAutoIncrement(CLI::App &app) {
+void SetUpCreateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<CreateAutoIncrementOptions>();
   auto coor =
       app.add_subcommand("CreateAutoIncrement", "Create auto increment ")->group("Coordinator Manager Commands");
@@ -2563,12 +2531,11 @@ void SetUpSubcommandCreateAutoIncrement(CLI::App &app) {
       ->default_val(1)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateAutoIncrement(*opt); });
+  coor->callback([opt]() { RunCreateAutoIncrement(*opt); });
 }
 
-void RunSubcommandCreateAutoIncrement(CreateAutoIncrementOptions const &opt) {
+void RunCreateAutoIncrement(CreateAutoIncrementOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::CreateAutoIncrementRequest request;
@@ -2586,7 +2553,7 @@ void RunSubcommandCreateAutoIncrement(CreateAutoIncrementOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateAutoIncrement(CLI::App &app) {
+void SetUpUpdateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<UpdateAutoIncrementOptions>();
   auto coor =
       app.add_subcommand("UpdateAutoIncrement", "Update auto increment ")->group("Coordinator Manager Commands");
@@ -2601,12 +2568,11 @@ void SetUpSubcommandUpdateAutoIncrement(CLI::App &app) {
       ->default_val(true)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateAutoIncrement(*opt); });
+  coor->callback([opt]() { RunUpdateAutoIncrement(*opt); });
 }
 
-void RunSubcommandUpdateAutoIncrement(UpdateAutoIncrementOptions const &opt) {
+void RunUpdateAutoIncrement(UpdateAutoIncrementOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::UpdateAutoIncrementRequest request;
@@ -2625,7 +2591,7 @@ void RunSubcommandUpdateAutoIncrement(UpdateAutoIncrementOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGenerateAutoIncrement(CLI::App &app) {
+void SetUpGenerateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<GenerateAutoIncrementOptions>();
   auto coor = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")
                   ->group("Coordinator Manager Commands");
@@ -2645,12 +2611,11 @@ void SetUpSubcommandGenerateAutoIncrement(CLI::App &app) {
       ->default_val(1)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGenerateAutoIncrement(*opt); });
+  coor->callback([opt]() { RunGenerateAutoIncrement(*opt); });
 }
 
-void RunSubcommandGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt) {
+void RunGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::GenerateAutoIncrementRequest request;
@@ -2670,7 +2635,7 @@ void RunSubcommandGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt)
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDeleteAutoIncrement(CLI::App &app) {
+void SetUpDeleteAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<DeleteAutoIncrementOptions>();
   auto coor = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")
                   ->group("Coordinator Manager Commands");
@@ -2678,12 +2643,11 @@ void SetUpSubcommandDeleteAutoIncrement(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandDeleteAutoIncrement(*opt); });
+  coor->callback([opt]() { RunDeleteAutoIncrement(*opt); });
 }
 
-void RunSubcommandDeleteAutoIncrement(DeleteAutoIncrementOptions const &opt) {
+void RunDeleteAutoIncrement(DeleteAutoIncrementOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::DeleteAutoIncrementRequest request;
@@ -2699,7 +2663,7 @@ void RunSubcommandDeleteAutoIncrement(DeleteAutoIncrementOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandListWatch(CLI::App &app) {
+void SetUpListWatch(CLI::App &app) {
   auto opt = std::make_shared<ListWatchOptions>();
   auto coor = app.add_subcommand("ListWatch", "List watch")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2708,12 +2672,11 @@ void SetUpSubcommandListWatch(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandListWatch(*opt); });
+  coor->callback([opt]() { RunListWatch(*opt); });
 }
 
-void RunSubcommandListWatch(ListWatchOptions const &opt) {
+void RunListWatch(ListWatchOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::ListWatchRequest request;
@@ -2733,7 +2696,7 @@ void RunSubcommandListWatch(ListWatchOptions const &opt) {
   }
 }
 
-void SetUpSubcommandCreateWatch(CLI::App &app) {
+void SetUpCreateWatch(CLI::App &app) {
   auto opt = std::make_shared<CreateWatchOptions>();
   auto coor = app.add_subcommand("CreateWatch", "Create watch")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2748,12 +2711,11 @@ void SetUpSubcommandCreateWatch(CLI::App &app) {
                    "Request parameter watch type must be all|region|table|index|schema|table_index")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateWatch(*opt); });
+  coor->callback([opt]() { RunCreateWatch(*opt); });
 }
 
-void RunSubcommandCreateWatch(CreateWatchOptions const &opt) {
+void RunCreateWatch(CreateWatchOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::WatchRequest request;
@@ -2815,7 +2777,7 @@ void RunSubcommandCreateWatch(CreateWatchOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCancelWatch(CLI::App &app) {
+void SetUpCancelWatch(CLI::App &app) {
   auto opt = std::make_shared<CancelWatchOptions>();
   auto coor = app.add_subcommand("CancelWatch", "Cancel watch")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2826,12 +2788,11 @@ void SetUpSubcommandCancelWatch(CLI::App &app) {
   coor->add_option("--start_revision", opt->start_revision, "Request parameter start revision")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCancelWatch(*opt); });
+  coor->callback([opt]() { RunCancelWatch(*opt); });
 }
 
-void RunSubcommandCancelWatch(CancelWatchOptions const &opt) {
+void RunCancelWatch(CancelWatchOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::WatchRequest request;
@@ -2847,7 +2808,7 @@ void RunSubcommandCancelWatch(CancelWatchOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandProgressWatch(CLI::App &app) {
+void SetUpProgressWatch(CLI::App &app) {
   auto opt = std::make_shared<ProgressWatchOptions>();
   auto coor = app.add_subcommand("ProgressWatch", "Progress watch")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2855,12 +2816,11 @@ void SetUpSubcommandProgressWatch(CLI::App &app) {
   coor->add_option("--watch_id", opt->watch_id, "Request parameter watch id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandProgressWatch(*opt); });
+  coor->callback([opt]() { RunProgressWatch(*opt); });
 }
 
-void RunSubcommandProgressWatch(ProgressWatchOptions const &opt) {
+void RunProgressWatch(ProgressWatchOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::WatchRequest request;
@@ -2884,16 +2844,15 @@ void RunSubcommandProgressWatch(ProgressWatchOptions const &opt) {
   }
 }
 
-void SetUpSubcommandGenTso(CLI::App &app) {
+void SetUpGenTso(CLI::App &app) {
   auto opt = std::make_shared<GenTsoOptions>();
   auto coor = app.add_subcommand("GenTso", "Generate tso ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->callback([opt]() { RunSubcommandGenTso(*opt); });
+  coor->callback([opt]() { RunGenTso(*opt); });
 }
 
-void RunSubcommandGenTso(GenTsoOptions const &opt) {
+void RunGenTso(GenTsoOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::TsoRequest request;
@@ -2903,9 +2862,15 @@ void RunSubcommandGenTso(GenTsoOptions const &opt) {
   request.set_count(10);
 
   auto status = coordinator_interaction_meta->SendRequest("TsoService", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "gen tso failed, error: "
+                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                     << " " << response.error().errmsg();
+    std::cout << "gen tso failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
   auto lambda_tso_2_timestamp_function = [](const ::dingodb::pb::meta::TsoTimestamp &tso) {
     return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
   };
@@ -2915,12 +2880,11 @@ void RunSubcommandGenTso(GenTsoOptions const &opt) {
     tso.set_physical(response.start_timestamp().physical());
     tso.set_logical(response.start_timestamp().logical() + i);
     int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
-    DINGO_LOG(INFO) << "time_safe_ts  : " << time_safe_ts;
     std::cout << "time_safe_ts: " << time_safe_ts << std::endl;
   }
 }
 
-void SetUpSubcommandResetTso(CLI::App &app) {
+void SetUpResetTso(CLI::App &app) {
   auto opt = std::make_shared<ResetTsoOptions>();
   auto coor = app.add_subcommand("ResetTso", "Reset tso ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2935,12 +2899,11 @@ void SetUpSubcommandResetTso(CLI::App &app) {
       ->default_val(0)
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandResetTso(*opt); });
+  coor->callback([opt]() { RunResetTso(*opt); });
 }
 
-void RunSubcommandResetTso(ResetTsoOptions const &opt) {
+void RunResetTso(ResetTsoOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::TsoRequest request;
@@ -2966,7 +2929,7 @@ void RunSubcommandResetTso(ResetTsoOptions const &opt) {
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
 
-void SetUpSubcommandUpdateTso(CLI::App &app) {
+void SetUpUpdateTso(CLI::App &app) {
   auto opt = std::make_shared<UpdateTsoOptions>();
   auto coor = app.add_subcommand("ResetTso", "Reset tso ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2981,12 +2944,11 @@ void SetUpSubcommandUpdateTso(CLI::App &app) {
       ->default_val(0)
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandUpdateTso(*opt); });
+  coor->callback([opt]() { RunUpdateTso(*opt); });
 }
 
-void RunSubcommandUpdateTso(UpdateTsoOptions const &opt) {
+void RunUpdateTso(UpdateTsoOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::meta::TsoRequest request;

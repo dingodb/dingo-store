@@ -29,7 +29,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "bthread/types.h"
-#include "client_v2/client_router.h"
+#include "client_v2/router.h"
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
