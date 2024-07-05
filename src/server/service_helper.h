@@ -39,9 +39,13 @@ using LatchContextPtr = std::shared_ptr<LatchContext>;
 
 class LatchContext {
  public:
-  LatchContext(const std::vector<std::string>& keys) : lock_(keys) {}
+  LatchContext(store::RegionPtr region, const std::vector<std::string>& keys) : region_(region), lock_(keys) {}
 
-  static LatchContextPtr New(const std::vector<std::string>& keys) { return std::make_shared<LatchContext>(keys); }
+  static LatchContextPtr New(store::RegionPtr region, const std::vector<std::string>& keys) {
+    return std::make_shared<LatchContext>(region, keys);
+  }
+
+  store::RegionPtr GetRegion() const { return region_; }
 
   uint64_t Cid() const { return (uint64_t)&sync_cond_; }
   Lock* GetLock() { return &lock_; };
@@ -49,6 +53,7 @@ class LatchContext {
   BthreadCond& SyncCond() { return sync_cond_; }
 
  private:
+  store::RegionPtr region_;
   Lock lock_;
   BthreadCond sync_cond_;
 };
@@ -75,7 +80,8 @@ class ServiceHelper {
   static butil::Status ValidateDocumentRegion(store::RegionPtr region, const std::vector<int64_t>& document_ids);
   static butil::Status ValidateClusterReadOnly();
 
-  static LatchContextPtr LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys, bool is_txn);
+  static void LatchesAcquire(LatchContext& latch_ctx, bool is_txn);
+  static void LatchesRelease(LatchContext& latch_ctx);
 };
 
 template <typename T>

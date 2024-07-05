@@ -21,6 +21,7 @@
 
 #include "butil/status.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "document/codec.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -249,17 +250,38 @@ butil::Status ServiceHelper::ValidateClusterReadOnly() {
   return butil::Status();
 }
 
-LatchContextPtr ServiceHelper::LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys,
-                                              bool is_txn) {
+// LatchContextPtr ServiceHelper::LatchesAcquire(store::RegionPtr region, const std::vector<std::string>& keys,
+//                                               bool is_txn) {
+//   auto start_time_us = butil::gettimeofday_us();
+
+//   auto latch_ctx = LatchContext::New(keys);
+
+//   bool latch_got = false;
+//   while (!latch_got) {
+//     latch_got = region->LatchesAcquire(latch_ctx->GetLock(), latch_ctx->Cid());
+//     if (!latch_got) {
+//       latch_ctx->SyncCond().IncreaseWait();
+//     }
+//   }
+
+//   if (is_txn) {
+//     g_txn_latches_recorder << butil::gettimeofday_us() - start_time_us;
+//   } else {
+//     g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
+//   }
+
+//   return latch_ctx;
+// }
+
+void ServiceHelper::LatchesAcquire(LatchContext& latch_ctx, bool is_txn) {
   auto start_time_us = butil::gettimeofday_us();
 
-  auto latch_ctx = LatchContext::New(keys);
-
+  store::RegionPtr region = latch_ctx.GetRegion();
   bool latch_got = false;
   while (!latch_got) {
-    latch_got = region->LatchesAcquire(latch_ctx->GetLock(), latch_ctx->Cid());
+    latch_got = region->LatchesAcquire(latch_ctx.GetLock(), latch_ctx.Cid());
     if (!latch_got) {
-      latch_ctx->SyncCond().IncreaseWait();
+      latch_ctx.SyncCond().IncreaseWait();
     }
   }
 
@@ -268,8 +290,11 @@ LatchContextPtr ServiceHelper::LatchesAcquire(store::RegionPtr region, const std
   } else {
     g_raw_latches_recorder << butil::gettimeofday_us() - start_time_us;
   }
+}
 
-  return latch_ctx;
+void ServiceHelper::LatchesRelease(LatchContext& latch_ctx) {
+  store::RegionPtr region = latch_ctx.GetRegion();
+  region->LatchesRelease(latch_ctx.GetLock(), latch_ctx.Cid());
 }
 
 }  // namespace dingodb
