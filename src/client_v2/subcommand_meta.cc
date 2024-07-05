@@ -85,9 +85,8 @@ void RunSubcommandGetSchema(GetSchemaOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]" << "schema_id=["
+                  << response.schema().id().entity_id() << "]" << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto &child_table_id : response.schema().table_ids()) {
     DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -125,8 +124,7 @@ void RunSubcommandGetSchemas(GetSchemasOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &schema : response.schemas()) {
-    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
-                    << "schema_name=[" << schema.name() << "]"
+    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]" << "schema_name=[" << schema.name() << "]"
                     << "child_table_count=" << schema.table_ids_size();
     for (const auto &child_table_id : schema.table_ids()) {
       DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -165,9 +163,8 @@ void RunSubcommandGetSchemaByName(GetSchemaByNameOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]" << "schema_id=["
+                  << response.schema().id().entity_id() << "]" << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto &child_table_id : response.schema().table_ids()) {
     DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -204,8 +201,8 @@ void RunSubcommandGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &table_definition_with_id : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-                    << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
+    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]" << "table_name=["
+                    << table_definition_with_id.table_definition().name() << "], column_count=["
                     << table_definition_with_id.table_definition().columns_size() << "]";
   }
 
@@ -683,12 +680,14 @@ void RunSubcommandGetTable(GetTableOptions const &opt) {
                 << " , nlinks: " << vector_index_parameter.hnsw_parameter().nlinks()
                 << " , max_elements: " << vector_index_parameter.hnsw_parameter().max_elements() << " }\n";
     } else if (vector_index_parameter.has_diskann_parameter()) {
+#if 0
       std::cout << "\t \t diskann_param: { dimension: " << vector_index_parameter.diskann_parameter().dimension()
                 << " , metric_type: "
                 << dingodb::pb::common::MetricType_Name(vector_index_parameter.diskann_parameter().metric_type())
                 << " , num_trees: " << vector_index_parameter.diskann_parameter().num_trees()
                 << " , num_neighbors: " << vector_index_parameter.diskann_parameter().num_neighbors()
                 << " , num_threads: " << vector_index_parameter.diskann_parameter().num_trees() << " }\n";
+#endif
     } else if (vector_index_parameter.has_bruteforce_parameter()) {
       std::cout << "\t \t bruteforce_param: { dimension: " << vector_index_parameter.bruteforce_parameter().dimension()
                 << " , metric_type: "
@@ -838,12 +837,14 @@ void RunSubcommandGetTableByName(GetTableByNameOptions const &opt) {
                 << " , nlinks: " << vector_index_parameter.hnsw_parameter().nlinks()
                 << " , max_elements: " << vector_index_parameter.hnsw_parameter().max_elements() << " }\n";
     } else if (vector_index_parameter.has_diskann_parameter()) {
+#if 0
       std::cout << "\t \t diskann_param: { dimension: " << vector_index_parameter.diskann_parameter().dimension()
                 << " , metric_type: "
                 << dingodb::pb::common::MetricType_Name(vector_index_parameter.diskann_parameter().metric_type())
                 << " , num_trees: " << vector_index_parameter.diskann_parameter().num_trees()
                 << " , num_neighbors: " << vector_index_parameter.diskann_parameter().num_neighbors()
                 << " , num_threads: " << vector_index_parameter.diskann_parameter().num_trees() << " }\n";
+#endif
     } else if (vector_index_parameter.has_bruteforce_parameter()) {
       std::cout << "\t \t bruteforce_param: { dimension: " << vector_index_parameter.bruteforce_parameter().dimension()
                 << " , metric_type: "
@@ -908,14 +909,14 @@ void RunSubcommandGetTableRange(GetTableRangeOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &it : response.table_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
-    std::cout << "region_id=[" << it.id().entity_id() << "]"
-              << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-              << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-              << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]" << std::endl;
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
+                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
+                    << ":" << it.leader().port() << "]";
+    std::cout << "region_id=[" << it.id().entity_id() << "]" << "range=["
+              << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+              << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host() << ":"
+              << it.leader().port() << "]" << std::endl;
   }
 }
 
@@ -1009,9 +1010,8 @@ void RunSubcommandGetDeletedTable(GetDeletedTableOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &table : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]"
-                    << "table_name=[" << table.table_definition().name() << "]"
-                    << " detail: " << table.ShortDebugString();
+    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]" << "table_name=["
+                    << table.table_definition().name() << "]" << " detail: " << table.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted table count=" << response.table_definition_with_ids_size();
 }
@@ -1042,9 +1042,8 @@ void RunSubcommandGetDeletedIndex(GetDeletedIndexOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &index : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]"
-                    << "index_name=[" << index.table_definition().name() << "]"
-                    << " detail: " << index.ShortDebugString();
+    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]" << "index_name=["
+                    << index.table_definition().name() << "]" << " detail: " << index.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted index count=" << response.table_definition_with_ids_size();
 }
@@ -1246,8 +1245,8 @@ void RunSubcommandGetIndexes(GetIndexesOptions const &opt) {
   // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &index_definition_with_id : response.index_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
-                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]" << "index_name=["
+                    << index_definition_with_id.index_definition().name() << "], index_type=["
                     << dingodb::pb::common::IndexType_Name(
                            index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
@@ -1943,10 +1942,10 @@ void RunSubcommandGetIndexRange(GetIndexRangeOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &it : response.index_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
+                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
+                    << ":" << it.leader().port() << "]";
   }
 }
 

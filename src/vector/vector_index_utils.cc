@@ -847,7 +847,7 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
   }
-
+#if 0
   // if vector_index_type is diskann, check diskann_parameter is set
   if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
     if (!vector_index_parameter.has_diskann_parameter()) {
@@ -875,35 +875,51 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
                                                                        std::to_string(diskann_parameter.metric_type()));
     }
 
-    // check diskann_parameter.num_trees
-    // The number of trees to be built in the index. This parameter affects the memory usage of the index and the
-    // accuracy of the search. This parameter must be greater than 0.
-    if (diskann_parameter.num_trees() <= 0) {
-      DINGO_LOG(ERROR) << "diskann_parameter.num_trees is illegal " << diskann_parameter.num_trees();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "diskann_parameter.num_trees is illegal " + std::to_string(diskann_parameter.num_trees()));
+    // check diskann_parameter.value_type
+    // Note that we currently only support float.
+    if (pb::common::ValueType::FLOAT != diskann_parameter.value_type()) {
+      std::string s = fmt::format("diskann_parameter.value_type is illegal, only support float :  {} {}",
+                                  static_cast<int>(diskann_parameter.value_type()),
+                                  pb::common::ValueType_Name(diskann_parameter.value_type()));
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
 
-    // check diskann_parameter.num_neighbors
-    // The number of nearest neighbors to be returned by the search. This parameter affects the accuracy of the
-    // search. This parameter must be greater than 0.
-    if (diskann_parameter.num_neighbors() <= 0) {
-      DINGO_LOG(ERROR) << "diskann_parameter.num_neighbors is illegal " << diskann_parameter.num_neighbors();
-      return butil::Status(
-          pb::error::Errno::EILLEGAL_PARAMTETERS,
-          "diskann_parameter.num_neighbors is illegal " + std::to_string(diskann_parameter.num_neighbors()));
+    // check diskann_parameter.max_degree
+    // the degree of the graph index, typically between 60 and 150.
+    if (diskann_parameter.max_degree() < 60 || diskann_parameter.max_degree() > 150) {
+      std::string s = fmt::format("diskann_parameter.max_degree is illegal : {} default : [60, 150]",
+                                  diskann_parameter.max_degree());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
 
-    // check diskann_parameter.num_threads
-    // The number of CPU cores to be used in building the index. This parameter affects the speed of the index
-    // building. This parameter must be greater than 0.
-    if (diskann_parameter.num_threads() <= 0) {
-      DINGO_LOG(ERROR) << "diskann_parameter.num_threads is illegal " << diskann_parameter.num_threads();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "diskann_parameter.num_threads is illegal " +
-                                                                       std::to_string(diskann_parameter.num_threads()));
+    // check diskann_parameter.search_list_size
+    // Typical values are between 75 to 200.
+    if (diskann_parameter.search_list_size() < 75 || diskann_parameter.search_list_size() > 200) {
+      std::string s = fmt::format("diskann_parameter.search_list_size is illegal : {} default : [75, 200]",
+                                  diskann_parameter.search_list_size());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
+
+    // check diskann_parameter.max_degree and diskann_parameter.search_list_size
+    if (diskann_parameter.max_degree() > diskann_parameter.search_list_size()) {
+      std::string s = fmt::format(
+          "diskann_parameter.max_degree : {} is greater than diskann_parameter.search_list_size : {}  is illegal",
+          diskann_parameter.max_degree(), diskann_parameter.search_list_size());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    // check diskann_parameter.qd
+    // check diskann_parameter.codebook_prefix
+    // check diskann_parameter.pq_disk_bytes
+    // check diskann_parameter.append_reorder_data
+    // check diskann_parameter.build_pq_bytes
+    // check diskann_parameter.use_opq
   }
-
+#endif
   return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
 }
 
