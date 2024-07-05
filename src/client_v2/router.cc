@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "client_v2/client_router.h"
+#include "client_v2/router.h"
 
 #include <memory>
 #include <utility>
 
-#include "client_v2/client_interation.h"
+#include "client_v2/interation.h"
 
 namespace client_v2 {
 
@@ -219,4 +219,4 @@ bool RegionRouter::UpdateRegion(RegionEntryPtr region_entry) {
   return true;
 }
 
-}  // namespace client
+}  // namespace client_v2

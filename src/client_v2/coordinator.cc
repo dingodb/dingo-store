@@ -13,56 +13,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "subcommand_coordinator.h"
+#include "coordinator.h"
 
 #include <iostream>
 #include <ostream>
 
-#include "client_v2/client_helper.h"
-#include "client_v2/subcommand_helper.h"
+#include "client_v2/helper.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "document/codec.h"
 
 namespace client_v2 {
-void SetUpSubCommands(CLI::App &app) {
+void SetUpCoordinatorSubCommands(CLI::App &app) {
   // coordinator commands
-  SetUpSubcommandGetCoordinatorMap(app);
-  SetUpSubcommandGetStoreMap(app);
-  SetUpSubcommandGetRegionMap(app);
-
-  SetUpSubcommandCreateTable(app);
-  SetUpSubcommandGetTable(app);
-  SetUpSubcommandGetTableRange(app);
-  SetUpSubcommandGetTableByName(app);
-  SetUpSubcommandGenTso(app);
-  SetUpSubcommandGetGCSafePoint(app);
-  SetUpSubcommandGetTaskList(app);
-  SetUpSubcommandCleanTaskList(app);
+  SetUpGetCoordinatorMap(app);
+  SetUpGetStoreMap(app);
+  SetUpGetRegionMap(app);
+  SetUpGetGCSafePoint(app);
+  SetUpGetTaskList(app);
+  SetUpCleanTaskList(app);
   // region commands
-  SetUpSubcommandAddPeerRegion(app);
-  SetUpSubcommandRemovePeerRegion(app);
-  SetUpSubcommandSplitRegion(app);
-  SetUpSubcommandMergeRegion(app);
-  SetUpSubcommandQueryRegion(app);
-  SetUpSubcommandSnapshot(app);
-  SetUpSubcommandRegionMetrics(app);
-
-  // kv commands
-  SetUpSubcommandKvGet(app);
-  SetUpSubcommandKvPut(app);
-  // txn commands
-  // tools
-  SetUpSubcommandTxnDump(app);
-  SetUpSubcommandStringToHex(app);
-  SetUpSubcommandHexToString(app);
-  SetUpSubcommandEncodeTablePrefixToHex(app);
-  SetUpSubcommandEncodeVectorPrefixToHex(app);
-  SetUpSubcommandDecodeTablePrefix(app);
-  SetUpSubcommandDecodeVectorPrefix(app);
-  SetUpSubcommandOctalToHex(app);
-  SetUpSubcommandCoordinatorDebug(app);
+  SetUpAddPeerRegion(app);
+  SetUpRemovePeerRegion(app);
+  SetUpSplitRegion(app);
+  SetUpMergeRegion(app);
+  SetUpQueryRegion(app);
 }
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
   braft::PeerId node;
@@ -81,32 +57,15 @@ bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
   return true;
 }
 
-std::string EncodeUint64(int64_t value) {
-  std::string str(reinterpret_cast<const char *>(&value), sizeof(value));
-  std::reverse(str.begin(), str.end());
-  return str;
-}
-
-int64_t DecodeUint64(const std::string &str) {
-  if (str.size() != sizeof(int64_t)) {
-    throw std::invalid_argument("Invalid string size for int64_t decoding");
-  }
-
-  std::string reversed_str(str.rbegin(), str.rend());
-  int64_t value;
-  std::memcpy(&value, reversed_str.data(), sizeof(value));
-  return value;
-}
-
-void SetUpSubcommandGetRegionMap(CLI::App &app) {
+void SetUpGetRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetRegionMapCommandOptions>();
   auto coor = app.add_subcommand("GetRegionMap", "Get region map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->callback([opt]() { RunSubcommandGetRegionMap(*opt); });
+  coor->callback([opt]() { RunGetRegionMap(*opt); });
 }
-void RunSubcommandGetRegionMap(GetRegionMapCommandOptions const &opt) {
+void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
+    std::cout << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetRegionMapRequest request;
@@ -115,11 +74,12 @@ void RunSubcommandGetRegionMap(GetRegionMapCommandOptions const &opt) {
   request.set_epoch(1);
 
   auto status = coordinator_interaction->SendRequest("GetRegionMap", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-
-  // for (const auto& region : response.regionmap().regions()) {
-  //   DINGO_LOG(INFO) << region.DebugString();
-  // }
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
 
   std::cout << "\n";
   int64_t normal_region_count = 0;
@@ -155,7 +115,7 @@ void RunSubcommandGetRegionMap(GetRegionMapCommandOptions const &opt) {
             << normal_region_count << "], online_region_count=[" << online_region_count << "]\n\n";
 }
 
-void SetUpSubcommandLogLevel(CLI::App &app) {
+void SetUpLogLevel(CLI::App &app) {
   auto opt = std::make_shared<GetLogLevelCommandOptions>();
   auto coor = app.add_subcommand("GetLogLevel", "Get log level")->group("Coordinator Manager Commands");
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
@@ -165,9 +125,9 @@ void SetUpSubcommandLogLevel(CLI::App &app) {
       ->default_val(60000)
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandLogLevel(*opt); });
+  coor->callback([opt]() { RunLogLevel(*opt); });
 }
-void RunSubcommandLogLevel(GetLogLevelCommandOptions const &opt) {
+void RunLogLevel(GetLogLevelCommandOptions const &opt) {
   dingodb::pb::node::GetLogLevelRequest request;
   dingodb::pb::node::GetLogLevelResponse response;
 
@@ -189,7 +149,7 @@ void RunSubcommandLogLevel(GetLogLevelCommandOptions const &opt) {
   DINGO_LOG(INFO) << ::dingodb::pb::node::LogLevel_descriptor()->FindValueByNumber(response.log_level())->name();
 }
 
-void SetUpSubcommandRaftAddPeer(CLI::App &app) {
+void SetUpRaftAddPeer(CLI::App &app) {
   auto opt = std::make_shared<RaftAddPeerCommandOptions>();
   auto coor = app.add_subcommand("RaftAddPeer", "coordinator RaftAddPeer")->group("Coordinator Manager Commands");
   coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
@@ -199,10 +159,10 @@ void SetUpSubcommandRaftAddPeer(CLI::App &app) {
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandRaftAddPeer(*opt); });
+  coor->callback([opt]() { RunRaftAddPeer(*opt); });
 }
 
-void RunSubcommandRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
+void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
 
@@ -218,7 +178,7 @@ void RunSubcommandRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
   } else if (opt.index == 3) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
-    DINGO_LOG(ERROR) << "index is error";
+    std::cout << "index is error";
     return;
   }
 
@@ -226,7 +186,7 @@ void RunSubcommandRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
   cntl.set_timeout_ms(timeout_ms);
 
   if (opt.coordinator_addr.empty()) {
-    DINGO_LOG(ERROR) << "Please set --addr or --coordinator_addr";
+    std::cout << "Please set --addr or --coordinator_addr";
     return;
   }
 
@@ -248,7 +208,7 @@ void RunSubcommandRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
   std::cout << "response:" << response.DebugString();
 }
 
-void SetUpSubcommandRaftRemovePeer(CLI::App &app) {
+void SetUpRaftRemovePeer(CLI::App &app) {
   auto opt = std::make_shared<RaftRemovePeerOption>();
 
   auto coor = app.add_subcommand("RaftRemovePeer", "Raft remove peer")->group("Coordinator Manager Commands");
@@ -260,9 +220,9 @@ void SetUpSubcommandRaftRemovePeer(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--index", opt->index, "Index")->expected(0, 1)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandRaftRemovePeer(*opt); });
+  coor->callback([opt]() { RunRaftRemovePeer(*opt); });
 }
-void RunSubcommandRaftRemovePeer(RaftRemovePeerOption const &opt) {
+void RunRaftRemovePeer(RaftRemovePeerOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
   request.set_add_peer(opt.peer);
@@ -273,7 +233,7 @@ void RunSubcommandRaftRemovePeer(RaftRemovePeerOption const &opt) {
   } else if (opt.index == 1) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
-    DINGO_LOG(ERROR) << "index is error";
+    std::cout << "index is error";
     return;
   }
 
@@ -294,9 +254,8 @@ void RunSubcommandRaftRemovePeer(RaftRemovePeerOption const &opt) {
   std::cout << "response:" << response.DebugString();
   DINGO_LOG(INFO) << response.DebugString();
 }
-// todo
 
-void SetUpSubcommandRaftTansferLeader(CLI::App &app) {
+void SetUpRaftTansferLeader(CLI::App &app) {
   auto opt = std::make_shared<RaftTansferLeaderOption>();
 
   auto coor = app.add_subcommand("RaftTansferLeader", "Raft transfer leader")->group("Coordinator Manager Commands");
@@ -308,9 +267,9 @@ void SetUpSubcommandRaftTansferLeader(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandRaftTansferLeader(*opt); });
+  coor->callback([opt]() { RunRaftTansferLeader(*opt); });
 }
-void RunSubcommandRaftTansferLeader(RaftTansferLeaderOption const &opt) {
+void RunRaftTansferLeader(RaftTansferLeaderOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
   request.set_add_peer(opt.peer);
@@ -324,7 +283,7 @@ void RunSubcommandRaftTansferLeader(RaftTansferLeaderOption const &opt) {
   } else if (opt.index == 3) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
-    DINGO_LOG(ERROR) << "index is error";
+    std::cout << "index is error";
     return;
   }
 
@@ -347,7 +306,7 @@ void RunSubcommandRaftTansferLeader(RaftTansferLeaderOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandRaftSnapshot(CLI::App &app) {
+void SetUpRaftSnapshot(CLI::App &app) {
   auto opt = std::make_shared<RaftSnapshotOption>();
   auto coor = app.add_subcommand("RaftSnapshot", "Raft snapshot")->group("Coordinator Manager Commands");
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
@@ -358,9 +317,9 @@ void SetUpSubcommandRaftSnapshot(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandRaftSnapshot(*opt); });
+  coor->callback([opt]() { RunRaftSnapshot(*opt); });
 }
-void RunSubcommandRaftSnapshot(RaftSnapshotOption const &opt) {
+void RunRaftSnapshot(RaftSnapshotOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
   request.set_add_peer(opt.peer);
@@ -375,7 +334,7 @@ void RunSubcommandRaftSnapshot(RaftSnapshotOption const &opt) {
   } else if (opt.index == 3) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
-    DINGO_LOG(ERROR) << "index is error";
+    std::cout << "index is error";
     return;
   }
 
@@ -400,7 +359,7 @@ void RunSubcommandRaftSnapshot(RaftSnapshotOption const &opt) {
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
-void SetUpSubcommandRaftResetPeer(CLI::App &app) {
+void SetUpRaftResetPeer(CLI::App &app) {
   auto opt = std::make_shared<RaftResetPeerOption>();
   auto coor = app.add_subcommand("RaftResetPeer", "Raft reset peer")->group("Coordinator Manager Commands");
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
@@ -411,9 +370,9 @@ void SetUpSubcommandRaftResetPeer(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandRaftResetPeer(*opt); });
+  coor->callback([opt]() { RunRaftResetPeer(*opt); });
 }
-void RunSubcommandRaftResetPeer(RaftResetPeerOption const &opt) {
+void RunRaftResetPeer(RaftResetPeerOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
 
@@ -425,7 +384,7 @@ void RunSubcommandRaftResetPeer(RaftResetPeerOption const &opt) {
   }
 
   if (tokens.empty()) {
-    DINGO_LOG(ERROR) << "peers is empty, for example: 127.0.0.1:22101,127.0.0.1:22102,127.0.0.1:22103";
+    std::cout << "peers is empty, for example: 127.0.0.1:22101,127.0.0.1:22102,127.0.0.1:22103";
     return;
   }
 
@@ -444,7 +403,7 @@ void RunSubcommandRaftResetPeer(RaftResetPeerOption const &opt) {
   } else if (opt.index == 3) {
     request.set_node_index(dingodb::pb::coordinator::RaftControlNodeIndex::AutoIncrementNodeIndex);
   } else {
-    DINGO_LOG(ERROR) << "index is error";
+    std::cout << "index is error";
     return;
   }
 
@@ -468,7 +427,7 @@ void RunSubcommandRaftResetPeer(RaftResetPeerOption const &opt) {
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
-void SetUpSubcommandGetNodeInfo(CLI::App &app) {
+void SetUpGetNodeInfo(CLI::App &app) {
   auto opt = std::make_shared<GetNodeInfoOption>();
   auto coor = app.add_subcommand("GetNodeInfo", "Get node info")->group("Coordinator Manager Commands");
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
@@ -479,9 +438,9 @@ void SetUpSubcommandGetNodeInfo(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandGetNodeInfo(*opt); });
+  coor->callback([opt]() { RunGetNodeInfo(*opt); });
 }
-void RunSubcommandGetNodeInfo(GetNodeInfoOption const &opt) {
+void RunGetNodeInfo(GetNodeInfoOption const &opt) {
   dingodb::pb::node::GetNodeInfoRequest request;
   dingodb::pb::node::GetNodeInfoResponse response;
 
@@ -510,7 +469,7 @@ void RunSubcommandGetNodeInfo(GetNodeInfoOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandChangeLogLevel(CLI::App &app) {
+void SetUpChangeLogLevel(CLI::App &app) {
   auto opt = std::make_shared<GetChangeLogLevelOption>();
   auto coor = app.add_subcommand("ChangeLogLevel", "Change log level")->group("Coordinator Manager Commands");
   coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
@@ -520,9 +479,9 @@ void SetUpSubcommandChangeLogLevel(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandChangeLogLevel(*opt); });
+  coor->callback([opt]() { RunChangeLogLevel(*opt); });
 }
-void RunSubcommandChangeLogLevel(GetChangeLogLevelOption const &opt) {
+void RunChangeLogLevel(GetChangeLogLevelOption const &opt) {
   dingodb::pb::node::ChangeLogLevelRequest request;
   dingodb::pb::node::ChangeLogLevelResponse response;
 
@@ -539,7 +498,7 @@ void RunSubcommandChangeLogLevel(GetChangeLogLevelOption const &opt) {
   } else if (opt.level == "FATAL") {
     request.set_log_level(dingodb::pb::node::FATAL);
   } else {
-    DINGO_LOG(WARNING) << "level is not valid, please set --level=DEBUG|INFO|WARNING|ERROR|FATAL";
+    std::cout << "level is not valid, please set --level=DEBUG|INFO|WARNING|ERROR|FATAL";
     return;
   }
 
@@ -567,16 +526,15 @@ void RunSubcommandChangeLogLevel(GetChangeLogLevelOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandHello(CLI::App &app) {
+void SetUpHello(CLI::App &app) {
   auto opt = std::make_shared<HelloOption>();
   auto coor = app.add_subcommand("Hello", "Coordinator hello ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandHello(*opt); });
+  coor->callback([opt]() { RunHello(*opt); });
 }
-void RunSubcommandHello(HelloOption const &opt) {
+void RunHello(HelloOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::HelloRequest request;
@@ -592,16 +550,15 @@ void RunSubcommandHello(HelloOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandStoreHeartbeat(CLI::App &app) {
+void SetUpStoreHeartbeat(CLI::App &app) {
   auto opt = std::make_shared<StoreHeartbeatOption>();
   auto coor = app.add_subcommand("StoreHeartbeat", "Store heart beat ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandStoreHeartbeat(*opt); });
+  coor->callback([opt]() { RunStoreHeartbeat(*opt); });
 }
-void RunSubcommandStoreHeartbeat(StoreHeartbeatOption const &opt) {
+void RunStoreHeartbeat(StoreHeartbeatOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   SendStoreHearbeatV2(coordinator_interaction, 100);
@@ -631,16 +588,15 @@ void SendStoreHearbeatV2(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCreateStore(CLI::App &app) {
+void SetUpCreateStore(CLI::App &app) {
   auto opt = std::make_shared<CreateStoreOption>();
   auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateStore(*opt); });
+  coor->callback([opt]() { RunCreateStore(*opt); });
 }
-void RunSubcommandCreateStore(CreateStoreOption const &opt) {
+void RunCreateStore(CreateStoreOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CreateStoreRequest request;
@@ -653,7 +609,7 @@ void RunSubcommandCreateStore(CreateStoreOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDeleteStore(CLI::App &app) {
+void SetUpDeleteStore(CLI::App &app) {
   auto opt = std::make_shared<DeleteStoreOption>();
   auto coor = app.add_subcommand("DeleteStore", "Delete store ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -662,11 +618,10 @@ void SetUpSubcommandDeleteStore(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDeleteStore(*opt); });
+  coor->callback([opt]() { RunDeleteStore(*opt); });
 }
-void RunSubcommandDeleteStore(DeleteStoreOption const &opt) {
+void RunDeleteStore(DeleteStoreOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteStoreRequest request;
@@ -683,7 +638,7 @@ void RunSubcommandDeleteStore(DeleteStoreOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateStore(CLI::App &app) {
+void SetUpUpdateStore(CLI::App &app) {
   auto opt = std::make_shared<UpdateStoreOption>();
   auto coor = app.add_subcommand("UpdateStore", "Update store state")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -693,11 +648,10 @@ void SetUpSubcommandUpdateStore(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
   coor->add_option("--state", opt->state, "set store state IN|OUT")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateStore(*opt); });
+  coor->callback([opt]() { RunUpdateStore(*opt); });
 }
-void RunSubcommandUpdateStore(UpdateStoreOption const &opt) {
+void RunUpdateStore(UpdateStoreOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateStoreRequest request;
@@ -722,7 +676,7 @@ void RunSubcommandUpdateStore(UpdateStoreOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCreateExecutor(CLI::App &app) {
+void SetUpCreateExecutor(CLI::App &app) {
   auto opt = std::make_shared<CreateExecutorOption>();
   auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -734,11 +688,10 @@ void SetUpSubcommandCreateExecutor(CLI::App &app) {
   coor->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
   coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunSubcommandCreateExecutor(*opt); });
+  coor->callback([opt]() { RunCreateExecutor(*opt); });
 }
-void RunSubcommandCreateExecutor(CreateExecutorOption const &opt) {
+void RunCreateExecutor(CreateExecutorOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CreateExecutorRequest request;
@@ -754,7 +707,7 @@ void RunSubcommandCreateExecutor(CreateExecutorOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDeleteExecutor(CLI::App &app) {
+void SetUpDeleteExecutor(CLI::App &app) {
   auto opt = std::make_shared<DeleteExecutorOption>();
   auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -764,11 +717,10 @@ void SetUpSubcommandDeleteExecutor(CLI::App &app) {
       ->group("Coordinator Manager Commands");
   coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter executor id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDeleteExecutor(*opt); });
+  coor->callback([opt]() { RunDeleteExecutor(*opt); });
 }
-void RunSubcommandDeleteExecutor(DeleteExecutorOption const &opt) {
+void RunDeleteExecutor(DeleteExecutorOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteExecutorRequest request;
@@ -784,7 +736,7 @@ void RunSubcommandDeleteExecutor(DeleteExecutorOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCreateExecutorUser(CLI::App &app) {
+void SetUpCreateExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<CreateExecutorUserOption>();
   auto coor = app.add_subcommand("CreateExecutorUser", "Create executor user ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -793,11 +745,10 @@ void SetUpSubcommandCreateExecutorUser(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
   coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateExecutorUser(*opt); });
+  coor->callback([opt]() { RunCreateExecutorUser(*opt); });
 }
-void RunSubcommandCreateExecutorUser(CreateExecutorUserOption const &opt) {
+void RunCreateExecutorUser(CreateExecutorUserOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CreateExecutorUserRequest request;
@@ -812,7 +763,7 @@ void RunSubcommandCreateExecutorUser(CreateExecutorUserOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateExecutorUser(CLI::App &app) {
+void SetUpUpdateExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<UpdateExecutorUserOption>();
   auto coor = app.add_subcommand("UpdateExecutorUser", "Update executor user ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -824,11 +775,10 @@ void SetUpSubcommandUpdateExecutorUser(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
   coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateExecutorUser(*opt); });
+  coor->callback([opt]() { RunUpdateExecutorUser(*opt); });
 }
-void RunSubcommandUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
+void RunUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateExecutorUserRequest request;
@@ -844,7 +794,7 @@ void RunSubcommandUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDeleteExecutorUser(CLI::App &app) {
+void SetUpDeleteExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<DeleteExecutorUserOption>();
   auto coor = app.add_subcommand("DeleteExecutorUser", "Delete executor user ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -853,11 +803,10 @@ void SetUpSubcommandDeleteExecutorUser(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
   coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDeleteExecutorUser(*opt); });
+  coor->callback([opt]() { RunDeleteExecutorUser(*opt); });
 }
-void RunSubcommandDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
+void RunDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteExecutorUserRequest request;
@@ -872,16 +821,15 @@ void RunSubcommandDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetExecutorUserMap(CLI::App &app) {
+void SetUpGetExecutorUserMap(CLI::App &app) {
   auto opt = std::make_shared<GetExecutorUserMapOption>();
   auto coor = app.add_subcommand("GetExecutorUserMap", "Get executor user map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetExecutorUserMap(*opt); });
+  coor->callback([opt]() { RunGetExecutorUserMap(*opt); });
 }
-void RunSubcommandGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
+void RunGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetExecutorUserMapRequest request;
@@ -893,7 +841,7 @@ void RunSubcommandGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandExecutorHeartbeat(CLI::App &app) {
+void SetUpExecutorHeartbeat(CLI::App &app) {
   auto opt = std::make_shared<ExecutorHeartbeatOption>();
   auto coor = app.add_subcommand("ExecutorHeartbeat", "Executor Heart beat ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -907,11 +855,10 @@ void SetUpSubcommandExecutorHeartbeat(CLI::App &app) {
   coor->add_option("--user", opt->user, "Request parameter user")
       ->default_val("administrator")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandExecutorHeartbeat(*opt); });
+  coor->callback([opt]() { RunExecutorHeartbeat(*opt); });
 }
-void RunSubcommandExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
+void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::ExecutorHeartbeatRequest request;
@@ -932,18 +879,17 @@ void RunSubcommandExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetStoreMap(CLI::App &app) {
+void SetUpGetStoreMap(CLI::App &app) {
   auto opt = std::make_shared<GetStoreMapOption>();
   auto coor = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_flag("--use_filter_store_type", opt->use_filter_store_type, "use filter_store_type")->default_val(false);
   coor->add_option("--filter_store_type", opt->filter_store_type, "store type 0:store;1:index;2:document")
       ->check(CLI::Range(0, 2));
-  coor->callback([opt]() { RunSubcommandGetStoreMap(*opt); });
+  coor->callback([opt]() { RunGetStoreMap(*opt); });
 }
-void RunSubcommandGetStoreMap(GetStoreMapOption const &opt) {
+void RunGetStoreMap(GetStoreMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetStoreMapRequest request;
@@ -955,12 +901,12 @@ void RunSubcommandGetStoreMap(GetStoreMapOption const &opt) {
   }
 
   auto status = coordinator_interaction->SendRequest("GetStoreMap", request, response);
-
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get store map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
     return;
   }
-  DINGO_LOG(INFO) << response.DebugString();
 
   std::map<std::string, dingodb::pb::common::Store> store_map_by_type_id;
   for (const auto &store : response.storemap().stores()) {
@@ -1005,16 +951,15 @@ void RunSubcommandGetStoreMap(GetStoreMapOption const &opt) {
   }
 }
 
-void SetUpSubcommandGetExecutorMap(CLI::App &app) {
+void SetUpGetExecutorMap(CLI::App &app) {
   auto opt = std::make_shared<GetExecutorMapOption>();
   auto coor = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetExecutorMap(*opt); });
+  coor->callback([opt]() { RunGetExecutorMap(*opt); });
 }
-void RunSubcommandGetExecutorMap(GetExecutorMapOption const &opt) {
+void RunGetExecutorMap(GetExecutorMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetExecutorMapRequest request;
@@ -1027,16 +972,15 @@ void RunSubcommandGetExecutorMap(GetExecutorMapOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetDeleteRegionMap(CLI::App &app) {
+void SetUpGetDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetDeleteRegionMapOption>();
   auto coor = app.add_subcommand("DeleteRegionMap", "Delete region map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetDeleteRegionMap(*opt); });
+  coor->callback([opt]() { RunGetDeleteRegionMap(*opt); });
 }
-void RunSubcommandGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
+void RunGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetDeletedRegionMapRequest request;
@@ -1058,18 +1002,17 @@ void RunSubcommandGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
   DINGO_LOG(INFO) << "Deleted region_count=" << response.regionmap().regions_size();
 }
 
-void SetUpSubcommandAddDeleteRegionMap(CLI::App &app) {
+void SetUpAddDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<AddDeleteRegionMapOption>();
   auto coor = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--is_force", opt->is_force, "Request parameter force ")->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandAddDeleteRegionMap(*opt); });
+  coor->callback([opt]() { RunAddDeleteRegionMap(*opt); });
 }
-void RunSubcommandAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
+void RunAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::AddDeletedRegionMapRequest request;
@@ -1082,17 +1025,16 @@ void RunSubcommandAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
 
-void SetUpSubcommandCleanDeleteRegionMap(CLI::App &app) {
+void SetUpCleanDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<CleanDeleteRegionMapOption>();
   auto coor = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCleanDeleteRegionMap(*opt); });
+  coor->callback([opt]() { RunCleanDeleteRegionMap(*opt); });
 }
-void RunSubcommandCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
+void RunCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CleanDeletedRegionMapRequest request;
@@ -1104,16 +1046,15 @@ void RunSubcommandCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
 
-void SetUpSubcommandGetRegionCount(CLI::App &app) {
+void SetUpGetRegionCount(CLI::App &app) {
   auto opt = std::make_shared<GetRegionCountOption>();
   auto coor = app.add_subcommand("GetRegionCount", "Get region map count")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetRegionCount(*opt); });
+  coor->callback([opt]() { RunGetRegionCount(*opt); });
 }
-void RunSubcommandGetRegionCount(GetRegionCountOption const &opt) {
+void RunGetRegionCount(GetRegionCountOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetRegionCountRequest request;
@@ -1127,16 +1068,15 @@ void RunSubcommandGetRegionCount(GetRegionCountOption const &opt) {
   DINGO_LOG(INFO) << " region_count=" << response.region_count();
 }
 
-void SetUpSubcommandGetCoordinatorMap(CLI::App &app) {
+void SetUpGetCoordinatorMap(CLI::App &app) {
   auto opt = std::make_shared<GetCoordinatorMapOption>();
   auto coor = app.add_subcommand("GetCoordinatorMap", "Get coordinator map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_flag("--get_coordinator_map", opt->get_coordinator_map, "Request patameter get_coordinaotor_map");
-  coor->callback([opt]() { RunSubcommandGetCoordinatorMap(*opt); });
+  coor->callback([opt]() { RunGetCoordinatorMap(*opt); });
 }
-void RunSubcommandGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
+void RunGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetCoordinatorMapRequest request;
@@ -1147,12 +1087,14 @@ void RunSubcommandGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
   request.set_get_coordinator_map(opt.get_coordinator_map);
 
   auto status = coordinator_interaction->SendRequest("GetCoordinatorMap", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << "SendRequest status=" << status;
+
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get coordinator map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
     return;
   }
 
-  DINGO_LOG(INFO) << response.DebugString();
   std::cout << "leader_location: { host=" << response.leader_location().host()
             << ", port=" << response.leader_location().port() << " }" << std::endl;
   std::cout << "kv_leader_location: { host=" << response.kv_leader_location().host()
@@ -1175,7 +1117,7 @@ void RunSubcommandGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
   std::cout << "}" << std::endl;
 }
 
-void SetUpSubcommandCreateRegionId(CLI::App &app) {
+void SetUpCreateRegionId(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionIdOption>();
   auto coor = app.add_subcommand("CreateRegionId", "Create Region ID")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1184,11 +1126,10 @@ void SetUpSubcommandCreateRegionId(CLI::App &app) {
       ->required()
       ->check(CLI::Range(1, 2048))
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateRegionId(*opt); });
+  coor->callback([opt]() { RunCreateRegionId(*opt); });
 }
-void RunSubcommandCreateRegionId(CreateRegionIdOption const &opt) {
+void RunCreateRegionId(CreateRegionIdOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CreateRegionIdRequest request;
@@ -1201,16 +1142,15 @@ void RunSubcommandCreateRegionId(CreateRegionIdOption const &opt) {
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
 
-void SetUpSubcommandQueryRegion(CLI::App &app) {
+void SetUpQueryRegion(CLI::App &app) {
   auto opt = std::make_shared<QueryRegionOption>();
   auto coor = app.add_subcommand("QueryRegion", "Query region ")->group("Region Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunSubcommandQueryRegion(*opt); });
+  coor->callback([opt]() { RunQueryRegion(*opt); });
 }
-void RunSubcommandQueryRegion(QueryRegionOption const &opt) {
+void RunQueryRegion(QueryRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::QueryRegionRequest request;
@@ -1218,35 +1158,26 @@ void RunSubcommandQueryRegion(QueryRegionOption const &opt) {
 
   request.set_region_id(opt.id);
   auto status = coordinator_interaction->SendRequest("QueryRegion", request, response);
-  DINGO_LOG(INFO) << response.DebugString();
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "query region " << opt.id << " failed, error: "
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-  } else {
-    auto region = response.region();
-    DINGO_LOG(INFO) << "Region id=" << region.id() << " name=" << region.definition().name()
-                    << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-                    << " leader_store_id=" << region.leader_store_id()
-                    << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
-                    << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status());
-    DINGO_LOG(INFO) << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]";
-    DINGO_LOG(INFO) << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]";
 
-    std::cout << "Region id=" << region.id() << " name=" << region.definition().name()
-              << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-              << " leader_store_id=" << region.leader_store_id()
-              << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
-              << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
-              << std::endl;
-    std::cout << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]"
-              << std::endl;
-    std::cout << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]"
-              << std::endl;
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "query region " << opt.id << " failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
   }
+  auto region = response.region();
+  std::cout << "Region id=" << region.id() << " name=" << region.definition().name()
+            << " state=" << dingodb::pb::common::RegionState_Name(region.state())
+            << " leader_store_id=" << region.leader_store_id()
+            << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
+            << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
+            << std::endl;
+  std::cout << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]"
+            << std::endl;
+  std::cout << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]" << std::endl;
 }
 
-void SetUpSubcommandCreateRegion(CLI::App &app) {
+void SetUpCreateRegion(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionOption>();
   auto coor = app.add_subcommand("CreateRegion", "Create region ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -1305,11 +1236,10 @@ void SetUpSubcommandCreateRegion(CLI::App &app) {
                    "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
       ->default_val(8)
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateRegion(*opt); });
+  coor->callback([opt]() { RunCreateRegion(*opt); });
 }
-void RunSubcommandCreateRegion(CreateRegionOption const &opt) {
+void RunCreateRegion(CreateRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   if (opt.name.empty()) {
@@ -1327,20 +1257,12 @@ void RunSubcommandCreateRegion(CreateRegionOption const &opt) {
 
   request.set_region_name(opt.name);
   request.set_replica_num(opt.replica);
-
-  // int64_t new_part_id = 0;
-  // int ret = GetCreateTableId(coordinator_interaction, new_part_id);
-  // if (ret != 0) {
-  //   DINGO_LOG(WARNING) << "GetCreateTableId failed";
-  //   return;
-  // }
-
   if (opt.raw_engine != "rocksdb" && opt.raw_engine != "bdb" && opt.raw_engine != "xdp") {
     DINGO_LOG(ERROR) << "raw_engine must be rocksdb, bdb or xdp";
     return;
   }
 
-  request.set_raw_engine(client_v2::SubcommandHelper::GetRawEngine(opt.raw_engine));
+  request.set_raw_engine(client_v2::Helper::GetRawEngine(opt.raw_engine));
 
   if (opt.create_document_region) {
     DINGO_LOG(INFO) << "create a document region";
@@ -1550,18 +1472,17 @@ void RunSubcommandCreateRegion(CreateRegionOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCreateRegionForSplit(CLI::App &app) {
+void SetUpCreateRegionForSplit(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionForSplitOption>();
   auto coor =
       app.add_subcommand("CreateRegionForSplit", "Create region for split")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCreateRegionForSplit(*opt); });
+  coor->callback([opt]() { RunCreateRegionForSplit(*opt); });
 }
-void RunSubcommandCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
+void RunCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -1612,17 +1533,16 @@ void RunSubcommandCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropRegion(CLI::App &app) {
+void SetUpDropRegion(CLI::App &app) {
   auto opt = std::make_shared<DropRegionOption>();
   auto coor = app.add_subcommand("DropRegion", "Drop region ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropRegion(*opt); });
+  coor->callback([opt]() { RunDropRegion(*opt); });
 }
-void RunSubcommandDropRegion(DropRegionOption const &opt) {
+void RunDropRegion(DropRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -1636,16 +1556,16 @@ void RunSubcommandDropRegion(DropRegionOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandDropRegionPermanently(CLI::App &app) {
+void SetUpDropRegionPermanently(CLI::App &app) {
   auto opt = std::make_shared<DropRegionPermanentlyOption>();
   auto coor =
       app.add_subcommand("DropRegionPermanently", "Drop region permanently")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDropRegionPermanently(*opt); });
+  coor->callback([opt]() { RunDropRegionPermanently(*opt); });
 }
-void RunSubcommandDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
+void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
     DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
@@ -1660,7 +1580,7 @@ void RunSubcommandDropRegionPermanently(DropRegionPermanentlyOption const &opt) 
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandSplitRegion(CLI::App &app) {
+void SetUpSplitRegion(CLI::App &app) {
   auto opt = std::make_shared<SplitRegionOption>();
   auto coor = app.add_subcommand("SplitRegion", "Split region ")->group("Region Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
@@ -1676,11 +1596,10 @@ void SetUpSubcommandSplitRegion(CLI::App &app) {
   coor->add_option("--document_id", opt->document_id, "Request parameter document_id ");
   coor->add_flag("--store_create_region", opt->store_create_region, "Request parameter store_create_region ")
       ->default_val(false);
-  coor->callback([opt]() { RunSubcommandSplitRegion(*opt); });
+  coor->callback([opt]() { RunSplitRegion(*opt); });
 }
-void RunSubcommandSplitRegion(SplitRegionOption const &opt) {
+void RunSplitRegion(SplitRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -1692,7 +1611,7 @@ void RunSubcommandSplitRegion(SplitRegionOption const &opt) {
   if (opt.split_from_id > 0) {
     request.mutable_split_request()->set_split_from_region_id(opt.split_from_id);
   } else {
-    DINGO_LOG(ERROR) << "split_from_id is empty";
+    std::cout << "split_from_id is empty";
     return;
   }
 
@@ -1700,23 +1619,27 @@ void RunSubcommandSplitRegion(SplitRegionOption const &opt) {
     std::string split_key = dingodb::Helper::HexToString(opt.split_key);
     request.mutable_split_request()->set_split_watershed_key(split_key);
   } else {
-    DINGO_LOG(ERROR) << "split_key is empty, will auto generate from the mid between start_key and end_key";
+    DINGO_LOG(INFO) << "split_key is empty, will auto generate from the mid between start_key and end_key";
     // query the region
     dingodb::pb::coordinator::QueryRegionRequest query_request;
     dingodb::pb::coordinator::QueryRegionResponse query_response;
     query_request.set_region_id(opt.split_from_id);
 
     auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
-    DINGO_LOG(INFO) << "SendRequest status=" << status;
-    DINGO_LOG(INFO) << query_response.DebugString();
+    if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+      std::cout << "query region failed, error: "
+                << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
+                << " " << query_response.error().errmsg();
+      return;
+    }
 
     if (query_response.region().definition().range().start_key().empty()) {
-      DINGO_LOG(ERROR) << "split from region " << opt.split_from_id << " has no start_key";
+      std::cout << "split from region " << opt.split_from_id << " has no start_key";
       return;
     }
 
     if (query_response.region().definition().range().end_key().empty()) {
-      DINGO_LOG(ERROR) << "split from region " << opt.split_from_id << " has no end_key";
+      std::cout << "split from region " << opt.split_from_id << " has no end_key";
       return;
     }
 
@@ -1749,12 +1672,11 @@ void RunSubcommandSplitRegion(SplitRegionOption const &opt) {
 
     if (query_response.region().definition().range().start_key().compare(real_mid) >= 0 ||
         query_response.region().definition().range().end_key().compare(real_mid) <= 0) {
-      DINGO_LOG(ERROR) << "SplitRegion split_watershed_key is illegal, split_watershed_key = "
-                       << dingodb::Helper::StringToHex(real_mid)
-                       << ", query_response.region()_id = " << query_response.region().id() << " start_key="
-                       << dingodb::Helper::StringToHex(query_response.region().definition().range().start_key())
-                       << ", end_key="
-                       << dingodb::Helper::StringToHex(query_response.region().definition().range().end_key());
+      std::cout << "SplitRegion split_watershed_key is illegal, split_watershed_key = "
+                << dingodb::Helper::StringToHex(real_mid)
+                << ", query_response.region()_id = " << query_response.region().id() << " start_key="
+                << dingodb::Helper::StringToHex(query_response.region().definition().range().start_key())
+                << ", end_key=" << dingodb::Helper::StringToHex(query_response.region().definition().range().end_key());
       return;
     }
   }
@@ -1762,33 +1684,23 @@ void RunSubcommandSplitRegion(SplitRegionOption const &opt) {
   if (opt.store_create_region) {
     request.mutable_split_request()->set_store_create_region(opt.store_create_region);
   }
-  DINGO_LOG(INFO) << "split from region_id=" << opt.split_from_id << ", to region_id=" << opt.split_to_id
-                  << ", store_create_region=" << opt.store_create_region << ", with watershed key ["
-                  << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] will be sent";
 
   auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
-                     << " store_create_region=" << opt.store_create_region << " with watershed key ["
-                     << dingodb::Helper::StringToHex(request.split_request().split_watershed_key())
-                     << "] failed, error: "
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-  } else {
-    DINGO_LOG(INFO) << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
-                    << " store_create_region=" << opt.store_create_region << " with watershed key ["
-                    << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] success";
     std::cout << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
               << " store_create_region=" << opt.store_create_region << " with watershed key ["
-              << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] success"
-              << std::endl;
+              << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
   }
+  std::cout << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
+            << " store_create_region=" << opt.store_create_region << " with watershed key ["
+            << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] success" << std::endl;
 }
 
-void SetUpSubcommandMergeRegion(CLI::App &app) {
+void SetUpMergeRegion(CLI::App &app) {
   auto opt = std::make_shared<MergeRegionOption>();
   auto coor = app.add_subcommand("MergeRegion", "Merge region ")->group("Region Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
@@ -1798,11 +1710,10 @@ void SetUpSubcommandMergeRegion(CLI::App &app) {
   coor->add_option("--source_id", opt->source_id, "Request parameter source id ")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  coor->callback([opt]() { RunSubcommandMergeRegion(*opt); });
+  coor->callback([opt]() { RunMergeRegion(*opt); });
 }
-void RunSubcommandMergeRegion(MergeRegionOption const &opt) {
+void RunMergeRegion(MergeRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -1812,45 +1723,40 @@ void RunSubcommandMergeRegion(MergeRegionOption const &opt) {
   if (opt.target_id > 0) {
     request.mutable_merge_request()->set_target_region_id(opt.target_id);
   } else {
-    DINGO_LOG(ERROR) << "target_id is empty";
+    std::cout << "target_id is empty";
     return;
   }
 
   if (opt.source_id > 0) {
     request.mutable_merge_request()->set_source_region_id(opt.source_id);
   } else {
-    DINGO_LOG(ERROR) << "source_id is empty";
+    std::cout << "source_id is empty";
     return;
   }
 
   auto status = coordinator_interaction->SendRequest("MergeRegion", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id
-                     << "] failed, error: "
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-  } else {
-    DINGO_LOG(INFO) << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id
-                    << " success";
-    std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id << " success"
-              << std::endl;
+    std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id
+              << "] failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
   }
+  std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id << " success"
+            << std::endl;
 }
 
-void SetUpSubcommandAddPeerRegion(CLI::App &app) {
+void SetUpAddPeerRegion(CLI::App &app) {
   auto opt = std::make_shared<AddPeerRegionOption>();
   auto coor = app.add_subcommand("AddPeerRegion", "Add peer region ")->group("Region Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   coor->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunSubcommandAddPeerRegion(*opt); });
+  coor->callback([opt]() { RunAddPeerRegion(*opt); });
 }
-void RunSubcommandAddPeerRegion(AddPeerRegionOption const &opt) {
+void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   // get StoreMap
@@ -1860,8 +1766,12 @@ void RunSubcommandAddPeerRegion(AddPeerRegionOption const &opt) {
   request.set_epoch(0);
 
   auto status = coordinator_interaction->SendRequest("GetStoreMap", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get store map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
   dingodb::pb::common::Peer new_peer;
   for (const auto &store : response.storemap().stores()) {
     if (store.id() == opt.store_id) {
@@ -1873,7 +1783,6 @@ void RunSubcommandAddPeerRegion(AddPeerRegionOption const &opt) {
   }
 
   if (new_peer.store_id() == 0) {
-    DINGO_LOG(ERROR) << "store_id not found";
     std::cout << "store_id not found";
     return;
   }
@@ -1885,17 +1794,22 @@ void RunSubcommandAddPeerRegion(AddPeerRegionOption const &opt) {
   query_request.set_region_id(opt.region_id);
 
   auto status2 = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status2;
+  if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "query region failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
+              << " " << query_response.error().errmsg();
+    return;
+  }
 
   if (query_response.region().definition().peers_size() == 0) {
-    DINGO_LOG(ERROR) << "region not found";
+    std::cout << "region not found";
     return;
   }
 
   // validate peer not exists in region peers
   for (const auto &peer : query_response.region().definition().peers()) {
     if (peer.store_id() == opt.store_id) {
-      DINGO_LOG(ERROR) << "peer already exists";
+      std::cout << "peer already exists";
       return;
     }
   }
@@ -1909,31 +1823,27 @@ void RunSubcommandAddPeerRegion(AddPeerRegionOption const &opt) {
   auto *new_peer_to_add = new_definition->add_peers();
   *new_peer_to_add = new_peer;
 
-  DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
-
   auto status3 = coordinator_interaction->SendRequest("ChangePeerRegion", change_peer_request, change_peer_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status3;
-  DINGO_LOG(INFO) << change_peer_response.DebugString();
-
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "change peer error: " << change_peer_response.error().DebugString();
-  } else {
-    DINGO_LOG(INFO) << "change peer success";
-    std::cout << "change peer success" << std::endl;
+    std::cout
+        << "change peer region failed, error: "
+        << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
+        << " " << change_peer_response.error().errmsg();
+    return;
   }
+  std::cout << "change peer success" << std::endl;
 }
 
-void SetUpSubcommandRemovePeerRegion(CLI::App &app) {
+void SetUpRemovePeerRegion(CLI::App &app) {
   auto opt = std::make_shared<RemovePeerRegionOption>();
   auto coor = app.add_subcommand("RemovePeerRegion", "Remove peer region")->group("Region Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   coor->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunSubcommandRemovePeerRegion(*opt); });
+  coor->callback([opt]() { RunRemovePeerRegion(*opt); });
 }
-void RunSubcommandRemovePeerRegion(RemovePeerRegionOption const &opt) {
+void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -1944,10 +1854,15 @@ void RunSubcommandRemovePeerRegion(RemovePeerRegionOption const &opt) {
   query_request.set_region_id(opt.region_id);
 
   auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "query region failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
+              << " " << query_response.error().errmsg();
+    return;
+  }
 
   if (query_response.region().definition().peers_size() == 0) {
-    DINGO_LOG(ERROR) << "region not found";
+    std::cout << "region not found";
     return;
   }
 
@@ -1961,7 +1876,7 @@ void RunSubcommandRemovePeerRegion(RemovePeerRegionOption const &opt) {
   }
 
   if (!found) {
-    DINGO_LOG(ERROR) << "peer not found";
+    std::cout << "peer not found";
     return;
   }
 
@@ -1982,18 +1897,18 @@ void RunSubcommandRemovePeerRegion(RemovePeerRegionOption const &opt) {
   DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
 
   auto status2 = coordinator_interaction->SendRequest("ChangePeerRegion", change_peer_request, change_peer_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status2;
-  DINGO_LOG(INFO) << change_peer_response.DebugString();
 
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "change peer error: " << change_peer_response.error().DebugString();
-  } else {
-    DINGO_LOG(INFO) << "change peer success";
-    std::cout << "change peer success" << std::endl;
+    std::cout
+        << "change peer region failed, error: "
+        << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
+        << " " << change_peer_response.error().errmsg();
+    return;
   }
+  std::cout << "change peer success" << std::endl;
 }
 
-void SetUpSubcommandTransferLeaderRegion(CLI::App &app) {
+void SetUpTransferLeaderRegion(CLI::App &app) {
   auto opt = std::make_shared<TransferLeaderRegionOption>();
   auto coor =
       app.add_subcommand("TransferLeaderRegion", "Transfer leader region")->group("Coordinator Manager Commands");
@@ -2005,11 +1920,10 @@ void SetUpSubcommandTransferLeaderRegion(CLI::App &app) {
   coor->add_option("--region_id", opt->region_id, "Request parameter region id ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandTransferLeaderRegion(*opt); });
+  coor->callback([opt]() { RunTransferLeaderRegion(*opt); });
 }
-void RunSubcommandTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
+void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2063,7 +1977,7 @@ void RunSubcommandTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
   }
 }
 
-void SetUpSubcommandGetOrphanRegion(CLI::App &app) {
+void SetUpGetOrphanRegion(CLI::App &app) {
   auto opt = std::make_shared<GetOrphanRegionOption>();
   auto coor =
       app.add_subcommand("TransferLeaderRegion", "Transfer leader region")->group("Coordinator Manager Commands");
@@ -2072,11 +1986,10 @@ void SetUpSubcommandGetOrphanRegion(CLI::App &app) {
   coor->add_option("--store_id", opt->store_id, "Request parameter store id ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetOrphanRegion(*opt); });
+  coor->callback([opt]() { RunGetOrphanRegion(*opt); });
 }
-void RunSubcommandGetOrphanRegion(GetOrphanRegionOption const &opt) {
+void RunGetOrphanRegion(GetOrphanRegionOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetOrphanRegionRequest request;
@@ -2099,7 +2012,7 @@ void RunSubcommandGetOrphanRegion(GetOrphanRegionOption const &opt) {
   }
 }
 
-void SetUpSubcommandScanRegions(CLI::App &app) {
+void SetUpScanRegions(CLI::App &app) {
   auto opt = std::make_shared<ScanRegionsOptions>();
   auto coor = app.add_subcommand("ScanRegions", "Scan region")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2114,11 +2027,10 @@ void SetUpSubcommandScanRegions(CLI::App &app) {
       ->default_val(50)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandScanRegions(*opt); });
+  coor->callback([opt]() { RunScanRegions(*opt); });
 }
-void RunSubcommandScanRegions(ScanRegionsOptions const &opt) {
+void RunScanRegions(ScanRegionsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::ScanRegionsRequest request;
@@ -2145,16 +2057,15 @@ void RunSubcommandScanRegions(ScanRegionsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetRangeRegionMap(CLI::App &app) {
+void SetUpGetRangeRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetRangeRegionMapOption>();
   auto coor = app.add_subcommand("GetRangeRegionMap", "Get range region map")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetRangeRegionMap(*opt); });
+  coor->callback([opt]() { RunGetRangeRegionMap(*opt); });
 }
-void RunSubcommandGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
+void RunGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetRangeRegionMapRequest request;
@@ -2169,7 +2080,7 @@ void RunSubcommandGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
   DINGO_LOG(INFO) << "region count: " << response.range_regions_size();
 }
 
-void SetUpSubcommandGetStoreOperation(CLI::App &app) {
+void SetUpGetStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<GetStoreOperationOption>();
   auto coor = app.add_subcommand("GetStoreOperation", "Get store operation ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2177,12 +2088,11 @@ void SetUpSubcommandGetStoreOperation(CLI::App &app) {
   coor->add_option("--store_id", opt->store_id, "Request parameter store id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetStoreOperation(*opt); });
+  coor->callback([opt]() { RunGetStoreOperation(*opt); });
 }
 
-void RunSubcommandGetStoreOperation(GetStoreOperationOption const &opt) {
+void RunGetStoreOperation(GetStoreOperationOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetStoreOperationRequest request;
@@ -2200,7 +2110,7 @@ void RunSubcommandGetStoreOperation(GetStoreOperationOption const &opt) {
   }
 }
 
-void SetUpSubcommandGetTaskList(CLI::App &app) {
+void SetUpGetTaskList(CLI::App &app) {
   auto opt = std::make_shared<GetTaskListOptions>();
   auto coor = app.add_subcommand("GetTaskList", "Get task list")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
@@ -2209,12 +2119,11 @@ void SetUpSubcommandGetTaskList(CLI::App &app) {
   coor->add_flag("--include_archive", opt->include_archive, "Request parameter include history archive")
       ->default_val(false);
   coor->add_option("--limit", opt->limit, "Request parameter limit ");
-  coor->callback([opt]() { RunSubcommandGetTaskList(*opt); });
+  coor->callback([opt]() { RunGetTaskList(*opt); });
 }
 
-void RunSubcommandGetTaskList(GetTaskListOptions const &opt) {
+void RunGetTaskList(GetTaskListOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetTaskListRequest request;
@@ -2226,28 +2135,29 @@ void RunSubcommandGetTaskList(GetTaskListOptions const &opt) {
   request.set_archive_start_id(opt.start_id);
 
   auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
-  DINGO_LOG_IF(ERROR, !status.ok()) << "SendRequest status=" << status;
-  DINGO_LOG_IF(ERROR, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get task list failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
 
   for (const auto &task_list : response.task_lists()) {
-    // DINGO_LOG(INFO) << "task_list: " << (opt.show_pretty ? task_list.DebugString() : task_list.ShortDebugString());
-    DINGO_LOG(INFO) << "task_list: " << task_list.DebugString();
     std::cout << "task_list: " << task_list.DebugString() << std::endl;
   }
 }
 
-void SetUpSubcommandCleanTaskList(CLI::App &app) {
+void SetUpCleanTaskList(CLI::App &app) {
   auto opt = std::make_shared<CleanTaskListOption>();
   auto coor = app.add_subcommand("CleanTaskList", "Clean task list")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_option("--id", opt->id, "Request parameter task id, if you want to clean all task_list, set --id=0")
       ->required();
-  coor->callback([opt]() { RunSubcommandCleanTaskList(*opt); });
+  coor->callback([opt]() { RunCleanTaskList(*opt); });
 }
 
-void RunSubcommandCleanTaskList(CleanTaskListOption const &opt) {
+void RunCleanTaskList(CleanTaskListOption const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CleanTaskListRequest request;
@@ -2256,17 +2166,17 @@ void RunSubcommandCleanTaskList(CleanTaskListOption const &opt) {
   request.set_task_list_id(opt.id);
 
   auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
+
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "Clean task list failed , error:"
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-  } else {
-    std::cout << "Clean task list success." << std::endl;
+    std::cout << "Clean task list failed , error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
   }
+  std::cout << "Clean task list success." << std::endl;
 }
 
-void SetUpSubcommandUpdateRegionCmdStatus(CLI::App &app) {
+void SetUpUpdateRegionCmdStatus(CLI::App &app) {
   auto opt = std::make_shared<UpdateRegionCmdStatusOptions>();
   auto coor =
       app.add_subcommand("UpdateRegionCmdStatus", "Update region cmd status")->group("Coordinator Manager Commands");
@@ -2285,12 +2195,11 @@ void SetUpSubcommandUpdateRegionCmdStatus(CLI::App &app) {
       ->required()
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->errmsg, "Request parameter errmsg")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateRegionCmdStatus(*opt); });
+  coor->callback([opt]() { RunUpdateRegionCmdStatus(*opt); });
 }
 
-void RunSubcommandUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
+void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
@@ -2306,18 +2215,17 @@ void RunSubcommandUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt)
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandCleanStoreOperation(CLI::App &app) {
+void SetUpCleanStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<CleanStoreOperationOptions>();
   auto coor = app.add_subcommand("CleanStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandCleanStoreOperation(*opt); });
+  coor->callback([opt]() { RunCleanStoreOperation(*opt); });
 }
 
-void RunSubcommandCleanStoreOperation(CleanStoreOperationOptions const &opt) {
+void RunCleanStoreOperation(CleanStoreOperationOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::CleanStoreOperationRequest request;
@@ -2330,7 +2238,7 @@ void RunSubcommandCleanStoreOperation(CleanStoreOperationOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandAddStoreOperation(CLI::App &app) {
+void SetUpAddStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<AddStoreOperationOptions>();
   auto coor = app.add_subcommand("AddStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2339,12 +2247,11 @@ void SetUpSubcommandAddStoreOperation(CLI::App &app) {
   coor->add_option("--region_id", opt->region_id, "Request parameter region id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandAddStoreOperation(*opt); });
+  coor->callback([opt]() { RunAddStoreOperation(*opt); });
 }
 
-void RunSubcommandAddStoreOperation(AddStoreOperationOptions const &opt) {
+void RunAddStoreOperation(AddStoreOperationOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2362,7 +2269,7 @@ void RunSubcommandAddStoreOperation(AddStoreOperationOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandRemoveStoreOperation(CLI::App &app) {
+void SetUpRemoveStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<RemoveStoreOperationOptions>();
   auto coor =
       app.add_subcommand("RemoveStoreOperation", "Remove store operation")->group("Coordinator Manager Commands");
@@ -2372,12 +2279,11 @@ void SetUpSubcommandRemoveStoreOperation(CLI::App &app) {
   coor->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandRemoveStoreOperation(*opt); });
+  coor->callback([opt]() { RunRemoveStoreOperation(*opt); });
 }
 
-void RunSubcommandRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
+void RunRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2391,7 +2297,7 @@ void RunSubcommandRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetRegionCmd(CLI::App &app) {
+void SetUpGetRegionCmd(CLI::App &app) {
   auto opt = std::make_shared<GetRegionCmdOptions>();
   auto coor = app.add_subcommand("GetRegionCmd", "Get region cmd")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2405,12 +2311,11 @@ void SetUpSubcommandGetRegionCmd(CLI::App &app) {
   coor->add_option("--end_region_cmd_id", opt->end_region_cmd_id, "Request parameter end region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetRegionCmd(*opt); });
+  coor->callback([opt]() { RunGetRegionCmd(*opt); });
 }
 
-void RunSubcommandGetRegionCmd(GetRegionCmdOptions const &opt) {
+void RunGetRegionCmd(GetRegionCmdOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2426,7 +2331,7 @@ void RunSubcommandGetRegionCmd(GetRegionCmdOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetStoreMetricsn(CLI::App &app) {
+void SetUpGetStoreMetricsn(CLI::App &app) {
   auto opt = std::make_shared<GetStoreMetricsOptions>();
   auto coor = app.add_subcommand("GetStoreMetrics", "Get store metrics")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2435,12 +2340,11 @@ void SetUpSubcommandGetStoreMetricsn(CLI::App &app) {
   coor->add_option("--region_id", opt->region_id, "Request parameter region id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetStoreMetrics(*opt); });
+  coor->callback([opt]() { RunGetStoreMetrics(*opt); });
 }
 
-void RunSubcommandGetStoreMetrics(GetStoreMetricsOptions const &opt) {
+void RunGetStoreMetrics(GetStoreMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2468,18 +2372,17 @@ void RunSubcommandGetStoreMetrics(GetStoreMetricsOptions const &opt) {
   }
 }
 
-void SetUpSubcommandDeleteStoreMetrics(CLI::App &app) {
+void SetUpDeleteStoreMetrics(CLI::App &app) {
   auto opt = std::make_shared<DeleteStoreMetricsOptions>();
   auto coor = app.add_subcommand("DeleteStoreMetrics", "Delete store metrics")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDeleteStoreMetrics(*opt); });
+  coor->callback([opt]() { RunDeleteStoreMetrics(*opt); });
 }
 
-void RunSubcommandDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
+void RunDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2492,18 +2395,17 @@ void RunSubcommandDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetRegionMetrics(CLI::App &app) {
+void SetUpGetRegionMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetRegionMetricsOptions>();
   auto coor = app.add_subcommand("GetRegionMetrics", "Get region metrics")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandGetRegionMetrics(*opt); });
+  coor->callback([opt]() { RunGetRegionMetrics(*opt); });
 }
 
-void RunSubcommandGetRegionMetrics(GetRegionMetricsOptions const &opt) {
+void RunGetRegionMetrics(GetRegionMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
 
@@ -2519,18 +2421,17 @@ void RunSubcommandGetRegionMetrics(GetRegionMetricsOptions const &opt) {
   DINGO_LOG(INFO) << "region_count=" << response.region_metrics_size();
 }
 
-void SetUpSubcommandDeleteRegionMetrics(CLI::App &app) {
+void SetUpDeleteRegionMetrics(CLI::App &app) {
   auto opt = std::make_shared<DeleteRegionMetricsOptions>();
   auto coor = app.add_subcommand("DeleteRegionMetrics", "Delete region metrics")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
   coor->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandDeleteRegionMetrics(*opt); });
+  coor->callback([opt]() { RunDeleteRegionMetrics(*opt); });
 }
 
-void RunSubcommandDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
+void RunDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteRegionMetricsRequest request;
@@ -2542,7 +2443,7 @@ void RunSubcommandDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandUpdateGCSafePoint(CLI::App &app) {
+void SetUpUpdateGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<UpdateGCSafePointOptions>();
   auto coor = app.add_subcommand("UpdateGCSafePoint", "Update GC safepoint ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2556,12 +2457,11 @@ void SetUpSubcommandUpdateGCSafePoint(CLI::App &app) {
   coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->group("Coordinator Manager Commands");
   coor->add_option("--safe_point2", opt->safe_point2, "Request parameter safe_point2 ")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateGCSafePoint(*opt); });
+  coor->callback([opt]() { RunUpdateGCSafePoint(*opt); });
 }
 
-void RunSubcommandUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
+void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateGCSafePointRequest request;
@@ -2591,19 +2491,18 @@ void RunSubcommandUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpSubcommandGetGCSafePoint(CLI::App &app) {
+void SetUpGetGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<GetGCSafePointOptions>();
   auto coor = app.add_subcommand("GetGCSafePoint", "Get GC safepoint ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   coor->add_flag("--get_all_tenant", opt->get_all_tenant, "Request parameter get_all_tenant")->default_val(false);
   coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id");
 
-  coor->callback([opt]() { RunSubcommandGetGCSafePoint(*opt); });
+  coor->callback([opt]() { RunGetGCSafePoint(*opt); });
 }
 
-void RunSubcommandGetGCSafePoint(GetGCSafePointOptions const &opt) {
+void RunGetGCSafePoint(GetGCSafePointOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::GetGCSafePointRequest request;
@@ -2616,19 +2515,17 @@ void RunSubcommandGetGCSafePoint(GetGCSafePointOptions const &opt) {
   request.set_get_all_tenant(opt.get_all_tenant);
 
   auto status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "get gc safe point failed , error:"
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-  } else {
-    std::cout << "gc_safe_point: " << response.safe_point() << " , gc_stop: " << response.gc_stop() << std::endl;
+    std::cout << "get gc safe point failed , error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
   }
+  std::cout << "gc_safe_point: " << response.safe_point() << " , gc_stop: " << response.gc_stop() << std::endl;
 }
 
-void SetUpSubcommandBalanceLeader(CLI::App &app) {
+void SetUpBalanceLeader(CLI::App &app) {
   auto opt = std::make_shared<BalanceLeaderOptions>();
   auto coor = app.add_subcommand("BalanceLeader", "Balance leader ")->group("Coordinator Manager Commands");
   coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
@@ -2639,10 +2536,10 @@ void SetUpSubcommandBalanceLeader(CLI::App &app) {
   coor->add_option("--type", opt->store_type, "Request parameter store_type")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandBalanceLeader(*opt); });
+  coor->callback([opt]() { RunBalanceLeader(*opt); });
 }
 
-void RunSubcommandBalanceLeader(BalanceLeaderOptions const &opt) {
+void RunBalanceLeader(BalanceLeaderOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
     DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
@@ -2661,7 +2558,7 @@ void RunSubcommandBalanceLeader(BalanceLeaderOptions const &opt) {
   }
 }
 
-void SetUpSubcommandUpdateForceReadOnly(CLI::App &app) {
+void SetUpUpdateForceReadOnly(CLI::App &app) {
   auto opt = std::make_shared<UpdateForceReadOnlyOptions>();
   auto coor =
       app.add_subcommand("UpdateForceReadOnly", "Update force read only ")->group("Coordinator Manager Commands");
@@ -2674,12 +2571,11 @@ void SetUpSubcommandUpdateForceReadOnly(CLI::App &app) {
                    "Request parameter storforce_read_only_reasone_type")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSubcommandUpdateForceReadOnly(*opt); });
+  coor->callback([opt]() { RunUpdateForceReadOnly(*opt); });
 }
 
-void RunSubcommandUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt) {
+void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt) {
   if (SetUp(opt.coor_url) < 0) {
-    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
   dingodb::pb::coordinator::ConfigCoordinatorRequest request;

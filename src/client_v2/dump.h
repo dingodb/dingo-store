@@ -15,11 +15,12 @@
 #ifndef DINGODB_STORE_TOOL_DUMP_H_  // NOLINT
 #define DINGODB_STORE_TOOL_DUMP_H_
 
-#include "client_v2/store_client_function.h"
+// #include "client_v2/store_function.h"
+#include "client_v2/store.h"
 namespace client_v2 {
 
-void DumpDb(std::shared_ptr<Context> ctx);
-void WhichRegion(std::shared_ptr<Context> ctx);
+void DumpDb(DumpDbOptions const& opt);
+void WhichRegion(WhichRegionOptions const& opt);
 
 }  // namespace client_v2
 

@@ -25,11 +25,15 @@
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
-#include "client_v2/client_helper.h"
-#include "client_v2/client_interation.h"
-#include "client_v2/store_client_function.h"
-#include "client_v2/store_tool_dump.h"
-#include "client_v2/subcommand_coordinator.h"
+#include "client_v2/coordinator.h"
+#include "client_v2/dump.h"
+#include "client_v2/helper.h"
+#include "client_v2/interation.h"
+#include "client_v2/kv.h"
+#include "client_v2/meta.h"
+#include "client_v2/store.h"
+//#include "client_v2/store_function.h"
+#include "client_v2/tools.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -40,17 +44,6 @@
 
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
-void EnsureDirectoryExists(const std::filesystem::path& dir) {
-  if (!std::filesystem::exists(dir)) {
-    if (std::filesystem::create_directories(dir)) {
-      DINGO_LOG(INFO) << "Directory created: " << dir << std::endl;
-    } else {
-      DINGO_LOG(ERROR) << "Failed to create directory: " << dir << std::endl;
-    }
-  }
-}
-
-//
 void PrintSubcommandHelp(const CLI::App& app, const std::string& subcommand_name) {
   CLI::App* subcommand = app.get_subcommand(subcommand_name);
   if (subcommand) {
@@ -62,7 +55,11 @@ void PrintSubcommandHelp(const CLI::App& app, const std::string& subcommand_name
 
 int InteractiveCli() {
   CLI::App app{"This is dingo_client_v2"};
-  client_v2::SetUpSubCommands(app);
+  client_v2::SetUpCoordinatorSubCommands(app);
+  client_v2::SetUpKVSubCommands(app);
+  client_v2::SetUpMetaSubCommands(app);
+  client_v2::SetUpStoreSubCommands(app);
+  client_v2::SetUpToolSubCommands(app);
   std::string input;
 
   while (true) {
@@ -101,16 +98,24 @@ int InteractiveCli() {
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = false;
+  FLAGS_logtostderr = false;
   FLAGS_colorlogtostdout = true;
   FLAGS_logbufsecs = 0;
   FLAGS_log_dir = "./client_v2_log";
-  EnsureDirectoryExists(FLAGS_log_dir);
+  if (!dingodb::Helper::IsExistPath(FLAGS_log_dir)) {
+    dingodb::Helper::CreateDirectories(FLAGS_log_dir);
+  }
+
   google::InitGoogleLogging(argv[0]);
 
   if (argc > 1) {
     CLI::App app{"dingo_client_v2"};
     app.get_formatter()->column_width(40);  // 列的宽度
-    client_v2::SetUpSubCommands(app);
+    client_v2::SetUpCoordinatorSubCommands(app);
+    client_v2::SetUpKVSubCommands(app);
+    client_v2::SetUpMetaSubCommands(app);
+    client_v2::SetUpStoreSubCommands(app);
+    client_v2::SetUpToolSubCommands(app);
     CLI11_PARSE(app, argc, argv);
   } else {
     InteractiveCli();
