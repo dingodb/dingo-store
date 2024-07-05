@@ -256,15 +256,15 @@ class Helper {
       }
     }
 
-    for (const auto& ducument : response.data().ducuments()) {
-      auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(ducument.flag());
-      std::cout << fmt::format("doc_id({}) ts({}) flag({}) ttl({}) data({})", ducument.document_id(), ducument.ts(),
-                               flag, ducument.ttl(), FormatDocument(ducument.document()))
+    for (const auto& document : response.data().documents()) {
+      auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(document.flag());
+      std::cout << fmt::format("doc_id({}) ts({}) flag({}) ttl({}) data({})", document.document_id(), document.ts(),
+                               flag, document.ttl(), FormatDocument(document.document()))
                 << std::endl;
     }
 
     int size = std::max(response.data().kvs_size(), response.data().vectors_size());
-    size = std::max(size, response.data().ducuments_size());
+    size = std::max(size, response.data().documents_size());
 
     std::cout << fmt::format("==================== size({}) ====================", size) << std::endl;
   }
