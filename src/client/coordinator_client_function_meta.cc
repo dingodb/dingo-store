@@ -60,9 +60,14 @@ DECLARE_int64(tenant_id);
 DECLARE_bool(with_scalar_schema);
 DECLARE_bool(enable_rocks_engine);
 
+DECLARE_uint32(max_degree);
+DECLARE_uint32(search_list_size);
+
 DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
 DEFINE_bool(use_json_parameter, false, "use json parameter");
+
+
 
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -864,6 +869,8 @@ void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coor
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
   } else if (FLAGS_vector_index_type == "ivf_pq") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+  } else if (FLAGS_vector_index_type == "diskann") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN);
   } else {
     DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
     return;
@@ -930,6 +937,13 @@ void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coor
     ivf_pq_index_parameter->set_ncentroids(FLAGS_ncentroids);
     ivf_pq_index_parameter->set_nsubvector(FLAGS_nsubvector);
     ivf_pq_index_parameter->set_nbits_per_idx(FLAGS_nbits_per_idx);
+  } else if (FLAGS_vector_index_type == "diskann") {
+    auto* diskann_parameter = vector_index_parameter->mutable_diskann_parameter();
+    diskann_parameter->set_dimension(FLAGS_dimension);
+    diskann_parameter->set_metric_type(metric_type);
+    diskann_parameter->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    diskann_parameter->set_max_degree(FLAGS_max_degree);
+    diskann_parameter->set_search_list_size(FLAGS_search_list_size);
   }
 
   index_definition->set_version(1);

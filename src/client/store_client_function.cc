@@ -2716,6 +2716,201 @@ void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, u
   out.close();
 }
 
+void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
+                      bool import_for_add) {
+  if (step_count == 0) {
+    DINGO_LOG(ERROR) << "step_count must be greater than 0";
+    return;
+  }
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  if (dimension == 0) {
+    DINGO_LOG(ERROR) << "dimension must be greater than 0";
+    return;
+  }
+  if (count == 0) {
+    DINGO_LOG(ERROR) << "count must be greater than 0";
+    return;
+  }
+  if (start_id < 0) {
+    DINGO_LOG(ERROR) << "start_id must be greater than 0";
+    return;
+  }
+
+  int64_t total = 0;
+
+  if (count % step_count != 0) {
+    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", count, step_count);
+    return;
+  }
+
+  uint32_t cnt = count / step_count;
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(0.0, 10.0);
+
+  std::vector<float> random_seeds;
+  random_seeds.resize(count * dimension);
+  for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t j = 0; j < dimension; ++j) {
+      random_seeds[i * dimension + j] = distrib(rng);
+    }
+
+    if (i % 10000 == 0) {
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, count);
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", count, count);
+
+  for (uint32_t x = 0; x < cnt; x++) {
+    auto start = std::chrono::steady_clock::now();
+    {
+      dingodb::pb::index::VectorImportRequest request;
+      dingodb::pb::index::VectorImportResponse response;
+
+      *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+      int64_t real_start_id = start_id + x * step_count;
+      for (int64_t i = real_start_id; i < real_start_id + step_count; ++i) {
+        if (import_for_add) {  // add
+          auto* vector_with_id = request.add_vectors();
+          vector_with_id->set_id(i);
+          vector_with_id->mutable_vector()->set_dimension(dimension);
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          for (int j = 0; j < dimension; j++) {
+            vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
+          }
+
+          if (!FLAGS_without_scalar) {
+            for (int k = 0; k < 3; k++) {
+              ::dingodb::pb::common::ScalarValue scalar_value;
+              int index = k + (i < 30 ? 0 : 1);
+              scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+              ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+              field->set_string_data("value" + std::to_string(index));
+
+              vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert(
+                  {"key" + std::to_string(index), scalar_value});
+            }
+          }
+        } else {  // delete
+          request.add_delete_ids(i);
+        }
+      }
+
+      butil::Status status =
+          InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorImport", request, response);
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << "index : " << x << " : " << diff << " us, avg : " << static_cast<long double>(diff) / step_count
+                    << " us";
+
+    total += diff;
+  }
+
+  DINGO_LOG(INFO) << fmt::format("total : {} cost : {} (us) avg : {} us", count, total,
+                                 static_cast<long double>(total) / count);
+}
+
+void SendVectorBuild(int64_t region_id) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorBuildRequest request;
+  dingodb::pb::index::VectorBuildResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorBuild", request, response);
+
+  DINGO_LOG(INFO) << "VectorBuild request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorBuild response: " << response.DebugString();
+}
+
+void SendVectorLoad(int64_t region_id, bool direct_load_without_build, uint32_t num_nodes_to_cache, bool warmup) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorLoadRequest request;
+  dingodb::pb::index::VectorLoadResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  request.mutable_parameter()->mutable_diskann()->set_direct_load_without_build(direct_load_without_build);
+  request.mutable_parameter()->mutable_diskann()->set_num_nodes_to_cache(num_nodes_to_cache);
+  request.mutable_parameter()->mutable_diskann()->set_warmup(warmup);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorLoad", request, response);
+
+  DINGO_LOG(INFO) << "VectorLoad request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorLoad response: " << response.DebugString();
+}
+
+void SendVectorStatus(int64_t region_id) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorStatusRequest request;
+  dingodb::pb::index::VectorStatusResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorStatus", request, response);
+
+  DINGO_LOG(INFO) << "VectorStatus request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorStatus response: " << response.DebugString();
+}
+
+void SendVectorReset(int64_t region_id, bool delete_data_file) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorResetRequest request;
+  dingodb::pb::index::VectorResetResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  request.set_delete_data_file(delete_data_file);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorReset", request, response);
+
+  DINGO_LOG(INFO) << "VectorReset request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorReset response: " << response.DebugString();
+}
+
+void SendVectorDump(int64_t region_id, bool dump_all) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorDumpRequest request;
+  dingodb::pb::index::VectorDumpResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  request.set_dump_all(dump_all);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorDump", request, response);
+
+  DINGO_LOG(INFO) << "VectorDump request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorDump response: " << response.DebugString();
+}
+
 void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
                              int64_t start_id, const std::string& file) {
   if (step_count == 0) {
@@ -3025,6 +3220,19 @@ int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCount", request, response);
 
+  return response.error().errcode() != 0 ? 0 : response.count();
+}
+
+int64_t SendVectorCountMemory(int64_t region_id) {
+  ::dingodb::pb::index::VectorCountMemoryRequest request;
+  ::dingodb::pb::index::VectorCountMemoryResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCountMemory", request, response);
+
+  DINGO_LOG(INFO) << "VectorCountMemory request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorCountMemory response: " << response.DebugString();
   return response.error().errcode() != 0 ? 0 : response.count();
 }
 

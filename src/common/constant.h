@@ -16,6 +16,7 @@
 #define DINGODB_COMMON_CONSTANT_H_
 
 #include <cstdint>
+#include <limits>
 #include <string>
 
 namespace dingodb {
@@ -239,6 +240,23 @@ class Constant {
   static const uint32_t kLeaderNumWeightDefaultValue = 1;
 
   static const uint32_t kReserveTaskListRecentDayDefaultValue = 7;
+
+  // diskann
+  // min count of vectors for diskann
+  // do not change this parameter or it will crash.
+  inline static const int64_t kDiskannMinCount = 2;
+  // max count of vectors for diskann
+  inline static const int64_t kDiskannMaxCount = std::numeric_limits<uint32_t>::max();
+  inline static const std::string kDiskannStore = "store";
+  inline static const std::string kDiskannPathConfigName = "path";
+  inline static const std::string kDiskannNumThreadsConfigName = "num_threads";
+  inline static const std::string kDiskannSearchDramBudgetGbConfigName = "search_dram_budget_gb";
+  inline static const std::string kDiskannBuildDramBudgetGbConfigName = "build_dram_budget_gb";
+  inline static const std::string kDiskannImportTimeoutSecondConfigName = "import_timeout_s";
+  inline static const uint32_t kDiskannNumThreadsDefaultValue = 64;
+  inline static const float kDiskannSearchDramBudgetGbDefaultValue = 1.0f;
+  inline static const float kDiskannBuildDramBudgetGbDefaultValue = 10.0f;
+  inline static const int64_t kDiskannImportTimeoutSecondDefaultValue = 30;
 };
 
 }  // namespace dingodb

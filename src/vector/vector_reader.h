@@ -57,6 +57,24 @@ class VectorReader {
                                        pb::common::VectorIndexMetrics& region_metrics);
 
   butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count);
+  butil::Status VectorCountMemory(std::shared_ptr<Engine::VectorReader::Context> ctx, int64_t& count);
+
+  butil::Status VectorBuild(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                            const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                            pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorLoad(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                           const pb::common::VectorLoadParameter& parameter,
+                           pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                             pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,
+                            pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
+                           std::vector<std::string>& dump_datas);
 
   // This function is for testing only
   butil::Status VectorBatchSearchDebug(std::shared_ptr<Engine::VectorReader::Context> ctx,

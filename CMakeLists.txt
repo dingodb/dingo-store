@@ -433,13 +433,14 @@ include_directories(${FAISS_INCLUDE_DIR})
 set(VECTOR_LIB ${FAISS_LIBRARIES} ${OPENMP_LIBRARY})
 
 if(WITH_DISKANN)
+  add_definitions(-DENABLE_DISKANN_MODULE=ON)
   if(NOT WITH_MKL)
     message(FATAL_ERROR "The WITH_MKL is not ON, please install enable WITH_MKL to build diskann.")
   endif()
 
-  if(NOT MKL_FOUND)
-    message(FATAL_ERROR "The MKL is not found, please install intel mkl to build diskann.")
-  endif()
+  # if(NOT MKL_FOUND) message( FATAL_ERROR "The MKL is not found, please install intel mkl to build diskann.") endif()
+
+  find_package(MKL CONFIG REQUIRED)
 
   if(NOT BOOST_SEARCH_PATH)
     find_package(Boost REQUIRED COMPONENTS program_options)
@@ -450,7 +451,7 @@ if(WITH_DISKANN)
   include(diskann)
   include_directories(${DISKANN_INCLUDE_DIR})
   set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
-  set(VECTOR_LIB {VECTOR_LIB} ${DISKANN_LIBRARIES})
+  set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} aio)
 endif()
 
 if(LINK_TCMALLOC)
@@ -499,12 +500,18 @@ file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
 file(GLOB CLIENT_V2_SRCS ${PROJECT_SOURCE_DIR}/src/client_v2/*.cc)
+if(WITH_DISKANN)
+  file(GLOB DISKANN_SRCS ${PROJECT_SOURCE_DIR}/src/diskann/*.cc)
+endif()
 
 if(NOT ENABLE_XDPROCKS)
   list(REMOVE_ITEM ENGINE_SRCS "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
 endif()
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
+if(NOT WITH_DISKANN)
+  list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/diskann_service.cc")
+endif()
 
 include(CheckSymbolExists)
 
@@ -582,7 +589,12 @@ add_library(
   ${METRICS_SRCS}
   ${SERIAL_SRCS}
   ${COPROCESSOR_SRCS}
-  ${LIBEXPR_SRCS})
+  ${LIBEXPR_SRCS}
+  ${DISKANN_SRCS})
+
+if(NOT WITH_DISKANN)
+  list(REMOVE_ITEM DINGODB_OBJS ${DISKANN_SRCS})
+endif()
 
 # bin output dir
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)

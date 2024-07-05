@@ -53,6 +53,11 @@ DEFINE_int64(vector_max_request_size, 8388608, "vector max batch count in one re
 DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
+DEFINE_bool(enable_async_vector_build, true, "enable async vector build");
+DEFINE_bool(enable_async_vector_load, true, "enable async vector load");
+DEFINE_bool(enable_async_vector_status, true, "enable async vector status");
+DEFINE_bool(enable_async_vector_reset, true, "enable async vector reset");
+DEFINE_bool(enable_async_vector_dump, true, "enable async vector dump");
 
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
@@ -390,6 +395,12 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
   }
 
+  if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s =
+        fmt::format("Vector index {}, type is  DISKANN, can not support add. use import instead.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
   for (const auto& vector : request->vectors()) {
     if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector.id()))) {
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
@@ -559,6 +570,12 @@ static butil::Status ValidateVectorDeleteRequest(StoragePtr storage, const pb::i
     }
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s =
+        fmt::format("Vector index {}, type is  DISKANN, can not support delete. use import instead.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
   }
 
   return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->ids()));
@@ -1020,6 +1037,872 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
   });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorCountMemoryRequest(StoragePtr storage,
+                                                      const pb::index::VectorCountMemoryRequest* request,
+                                                      store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support count memory.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorCountMemory(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::index::VectorCountMemoryRequest* request,
+                         pb::index::VectorCountMemoryResponse* response, TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorCountMemoryRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorCountMemoryRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  int64_t count = 0;
+  status = storage->VectorCountMemory(ctx, count);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    return;
+  }
+
+  response->set_count(count);
+}
+
+void IndexServiceImpl::VectorCountMemory(google::protobuf::RpcController* controller,
+                                         const pb::index::VectorCountMemoryRequest* request,
+                                         pb::index::VectorCountMemoryResponse* response,
+                                         ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_count) {
+    return DoVectorCountMemory(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorCountMemory(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorImportRequestForAdd(StoragePtr storage,
+                                                       const pb::index::VectorImportRequest* request,
+                                                       store::RegionPtr region) {
+  butil::Status status;
+  if (request->vectors_size() > FLAGS_vector_max_batch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param vectors size {} is exceed max batch count {}", request->vectors_size(),
+                                     FLAGS_vector_max_batch_count));
+  }
+
+  if (request->ByteSizeLong() > FLAGS_vector_max_request_size) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_REQUEST_SIZE,
+                         fmt::format("Param vectors size {} is exceed max batch size {}", request->ByteSizeLong(),
+                                     FLAGS_vector_max_request_size));
+  }
+  if (request->ttl() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param ttl is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (vector_index_wrapper->IsExceedsMaxElements()) {
+    return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
+                         fmt::format("Vector index {} exceeds max elements.", region->Id()));
+  }
+
+  if (vector_index_wrapper->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support import.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  for (const auto& vector : request->vectors()) {
+    if (BAIDU_UNLIKELY(!VectorCodec::IsLegalVectorId(vector.id()))) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                           "Param vector id is not allowed to be zero, INT64_MAX or negative");
+    }
+
+    if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
+      return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+    }
+  }
+
+  auto dimension = vector_index_wrapper->GetDimension();
+  for (const auto& vector : request->vectors()) {
+    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      if (vector.vector().binary_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    }
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto scalar_schema = region->ScalarSchema();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+      << fmt::format("vector add scalar schema: {}", scalar_schema.ShortDebugString());
+
+  std::vector<int64_t> vector_ids;
+  for (const auto& vector : request->vectors()) {
+    if (0 != scalar_schema.fields_size()) {
+      status = VectorIndexUtils::ValidateVectorScalarData(scalar_schema, vector.scalar_data());
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    }
+    vector_ids.push_back(vector.id());
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, vector_ids);
+}
+
+static butil::Status ValidateVectorImportRequestForDelete(StoragePtr storage,
+                                                          const pb::index::VectorImportRequest* request,
+                                                          store::RegionPtr region) {
+  butil::Status status;
+
+  if (request->delete_ids_size() > FLAGS_vector_max_batch_count) {
+    return butil::Status(pb::error::EVECTOR_EXCEED_MAX_BATCH_COUNT,
+                         fmt::format("Param ids size {} is exceed max batch count {}", request->delete_ids_size(),
+                                     FLAGS_vector_max_batch_count));
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  if (!vector_index_wrapper->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (vector_index_wrapper->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support import.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, Helper::PbRepeatedToVector(request->delete_ids()));
+}
+
+static butil::Status ValidateVectorImportRequest(StoragePtr storage, const pb::index::VectorImportRequest* request,
+                                                 store::RegionPtr region) {
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  if (request->vectors_size() == 0 && request->delete_ids_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Vector quantity is empty");
+  }
+
+  if (request->vectors_size() > 0 && request->delete_ids_size() > 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param vectors and delete_ids can not be both set");
+  }
+
+  if (request->vectors_size() > 0) {
+    return ValidateVectorImportRequestForAdd(storage, request, region);
+  } else {
+    return ValidateVectorImportRequestForDelete(storage, request, region);
+  }
+}
+
+void DoVectorImport(StoragePtr storage, google::protobuf::RpcController* controller,
+                    const pb::index::VectorImportRequest* request, pb::index::VectorImportResponse* response,
+                    TrackClosure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  auto status = ValidateVectorImportRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+  if (request->ttl() > 0) {
+    ctx->SetTtl(Helper::TimestampMs() + request->ttl());
+  }
+
+  std::vector<pb::common::VectorWithId> vectors;
+  for (const auto& vector : request->vectors()) {
+    vectors.push_back(vector);
+  }
+
+  std::vector<int64_t> delete_ids;
+  for (const auto& id : request->delete_ids()) {
+    delete_ids.push_back(id);
+  }
+
+  status = storage->VectorImport(ctx, is_sync, vectors, delete_ids);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    if (!is_sync) done->Run();
+  }
+}
+
+void IndexServiceImpl::VectorImport(google::protobuf::RpcController* controller,
+                                    const pb::index::VectorImportRequest* request,
+                                    pb::index::VectorImportResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (IsRaftApplyPendingExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Raft apply queue is full, please wait and retry, please wait and retry");
+    return;
+  }
+
+  if (IsBackgroundPendingTaskCountExceed()) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "Background pending task count is full, please wait and retry");
+    return;
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorImport(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorBuildRequest(StoragePtr storage, const pb::index::VectorBuildRequest* request,
+                                                store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support build.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorBuild(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const pb::index::VectorBuildRequest* request, pb::index::VectorBuildResponse* response,
+                   TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorBuildRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorBuildRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  pb::common::VectorStateParameter vector_state_parameter;
+  const pb::common::VectorBuildParameter& parameter = request->parameter();
+  status = storage->VectorBuild(ctx, parameter, request->ts(), vector_state_parameter);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  response->mutable_state()->Swap(&vector_state_parameter);
+}
+
+void IndexServiceImpl::VectorBuild(google::protobuf::RpcController* controller,
+                                   const pb::index::VectorBuildRequest* request,
+                                   pb::index::VectorBuildResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_build) {
+    return DoVectorBuild(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorBuild(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorLoadRequest(StoragePtr storage, const pb::index::VectorLoadRequest* request,
+                                               store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  if (!request->parameter().has_diskann()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param diskann not found");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support load.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorLoad(StoragePtr storage, google::protobuf::RpcController* controller,
+                  const pb::index::VectorLoadRequest* request, pb::index::VectorLoadResponse* response,
+                  TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorLoadRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorLoadRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  pb::common::VectorStateParameter vector_state_parameter;
+  const pb::common::VectorLoadParameter& parameter = request->parameter();
+  status = storage->VectorLoad(ctx, parameter, vector_state_parameter);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  response->mutable_state()->Swap(&vector_state_parameter);
+}
+
+void IndexServiceImpl::VectorLoad(google::protobuf::RpcController* controller,
+                                  const pb::index::VectorLoadRequest* request, pb::index::VectorLoadResponse* response,
+                                  ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_load) {
+    return DoVectorLoad(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorLoad(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorStatusRequest(StoragePtr storage, const pb::index::VectorStatusRequest* request,
+                                                 store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support status.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorStatus(StoragePtr storage, google::protobuf::RpcController* controller,
+                    const pb::index::VectorStatusRequest* request, pb::index::VectorStatusResponse* response,
+                    TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorStatusRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorStatusRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  pb::common::VectorStateParameter vector_state_parameter;
+  status = storage->VectorStatus(ctx, vector_state_parameter);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    return;
+  }
+
+  response->mutable_state()->Swap(&vector_state_parameter);
+}
+
+void IndexServiceImpl::VectorStatus(google::protobuf::RpcController* controller,
+                                    const pb::index::VectorStatusRequest* request,
+                                    pb::index::VectorStatusResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_status) {
+    return DoVectorStatus(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorStatus(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorResetRequest(StoragePtr storage, const pb::index::VectorResetRequest* request,
+                                                store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support reset.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorReset(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const pb::index::VectorResetRequest* request, pb::index::VectorResetResponse* response,
+                   TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorResetRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorResetRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  pb::common::VectorStateParameter vector_state_parameter;
+  status = storage->VectorReset(ctx, request->delete_data_file(), vector_state_parameter);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    return;
+  }
+
+  response->mutable_state()->Swap(&vector_state_parameter);
+}
+
+void IndexServiceImpl::VectorReset(google::protobuf::RpcController* controller,
+                                   const pb::index::VectorResetRequest* request,
+                                   pb::index::VectorResetResponse* response, ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_reset) {
+    return DoVectorReset(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorReset(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorDumpRequest(StoragePtr storage, const pb::index::VectorDumpRequest* request,
+                                               store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support dump.", region->Id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorDump(StoragePtr storage, google::protobuf::RpcController* controller,
+                  const pb::index::VectorDumpRequest* request, pb::index::VectorDumpResponse* response,
+                  TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorDumpRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorDumpRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  std::vector<std::string> dump_datas;
+  status = storage->VectorDump(ctx, request->dump_all(), dump_datas);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    return;
+  }
+
+  for (auto& dump_data : dump_datas) {
+    response->add_dump_datas(std::move(dump_data));
+  }
+}
+
+void IndexServiceImpl::VectorDump(google::protobuf::RpcController* controller,
+                                  const pb::index::VectorDumpRequest* request, pb::index::VectorDumpResponse* response,
+                                  ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_dump) {
+    return DoVectorDump(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorDump(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");

@@ -29,8 +29,8 @@ message(STATUS "diskann search boost in ${BOOST_SEARCH_PATH}")
 set(DISKANN_BUILD_TYPE ${THIRD_PARTY_BUILD_TYPE})
 
 if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
-  message(STATUS "diskann does not support Debug, use RelWithDebInfo instead")
-  set(DISKANN_BUILD_TYPE "RelWithDebInfo")
+  # message(STATUS "diskann does not support Debug, use RelWithDebInfo instead") set(DISKANN_BUILD_TYPE
+  # "RelWithDebInfo")
 endif()
 
 ExternalProject_Add(
@@ -46,6 +46,7 @@ ExternalProject_Add(
              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
              -DCMAKE_BUILD_TYPE=${DISKANN_BUILD_TYPE}
              -DCMAKE_PREFIX_PATH=${prefix_path}
+             -DOMP_PATH="/opt/intel/oneapi/compiler/latest/lib/libiomp5.so"
              ${EXTERNAL_OPTIONAL_ARGS}
   LIST_SEPARATOR |
   CMAKE_CACHE_ARGS
@@ -54,7 +55,7 @@ ExternalProject_Add(
   BUILD_COMMAND $(MAKE) diskann
   INSTALL_COMMAND mkdir -p ${DISKANN_INSTALL_DIR}/lib/
   COMMAND cp ${DISKANN_BINARY_DIR}/src/libdiskann.a ${DISKANN_LIBRARIES}
-  COMMAND cp -r ${DISKANN_SOURCES_DIR}/include ${DISKANN_INCLUDE_DIR}/)
+  COMMAND cp -a ${DISKANN_SOURCES_DIR}/include ${DISKANN_INCLUDE_DIR})
 
 add_library(diskann STATIC IMPORTED GLOBAL)
 set_property(TARGET diskann PROPERTY IMPORTED_LOCATION ${DISKANN_LIBRARIES})

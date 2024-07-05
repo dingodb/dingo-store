@@ -23,6 +23,7 @@
 #include "common/stream.h"
 #include "common/synchronization.h"
 #include "common/tracker.h"
+#include "diskann/diskann_utils.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
@@ -132,6 +133,8 @@ class Context {
 
   StreamPtr Stream() { return stream_; }
   void SetStream(StreamPtr stream) { stream_ = stream; }
+  DiskANNCoreState DiskANNCoreStateX() { return diskann_core_state_; };
+  void SetDiskANNCoreStateX(enum DiskANNCoreState state) { diskann_core_state_ = state; }
 
  private:
   // brpc framework free resource
@@ -169,6 +172,8 @@ class Context {
   StreamPtr stream_;
 
   TrackerPtr tracker_;
+
+  enum DiskANNCoreState diskann_core_state_ {};
 };
 
 using ContextPtr = std::shared_ptr<Context>;

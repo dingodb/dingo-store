@@ -126,6 +126,13 @@ void SendVectorGetMaxId(int64_t region_id);
 void SendVectorGetMinId(int64_t region_id);
 void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                         const std::string& file);
+void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
+                      bool import_for_add);
+void SendVectorBuild(int64_t region_id);
+void SendVectorLoad(int64_t region_id, bool direct_load_without_build, uint32_t num_nodes_to_cache, bool warmup);
+void SendVectorStatus(int64_t region_id);
+void SendVectorReset(int64_t region_id, bool delete_data_file);
+void SendVectorDump(int64_t region_id, bool dump_all);
 void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
 void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
 void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,
@@ -136,6 +143,7 @@ void SendVectorCalcDistance(uint32_t dimension, const std::string& alg_type, con
 void SendCalcDistance();
 
 int64_t SendVectorCount(int64_t region_id, int64_t start_vector_id, int64_t end_vector_id);
+int64_t SendVectorCountMemory(int64_t region_id);
 void CountVectorTable(std::shared_ptr<Context> ctx);
 
 // key/value

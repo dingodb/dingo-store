@@ -46,6 +46,28 @@ class IndexServiceImpl : public pb::index::IndexService {
                               google::protobuf::Closure* done) override;
   void VectorCount(google::protobuf::RpcController* controller, const pb::index::VectorCountRequest* request,
                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorCountMemory(google::protobuf::RpcController* controller, const pb::index::VectorCountMemoryRequest* request,
+                   pb::index::VectorCountMemoryResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorImport(google::protobuf::RpcController* controller, const pb::index::VectorImportRequest* request,
+                    pb::index::VectorImportResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorBuild(google::protobuf::RpcController* controller, const pb::index::VectorBuildRequest* request,
+                   pb::index::VectorBuildResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorLoad(google::protobuf::RpcController* controller, const pb::index::VectorLoadRequest* request,
+                  pb::index::VectorLoadResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorStatus(google::protobuf::RpcController* controller, const pb::index::VectorStatusRequest* request,
+                    pb::index::VectorStatusResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorReset(google::protobuf::RpcController* controller, const pb::index::VectorResetRequest* request,
+                   pb::index::VectorResetResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorDump(google::protobuf::RpcController* controller, const pb::index::VectorDumpRequest* request,
+                  pb::index::VectorDumpResponse* response, ::google::protobuf::Closure* done) override;
+
   // for debug
   void VectorSearchDebug(google::protobuf::RpcController* controller,
                          const pb::index::VectorSearchDebugRequest* request,

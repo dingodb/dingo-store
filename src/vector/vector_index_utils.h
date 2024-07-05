@@ -183,6 +183,7 @@ class VectorIndexUtils {
   static butil::Status CheckVectorIndexParameterCompatibility(const pb::common::VectorIndexParameter& source,
                                                               const pb::common::VectorIndexParameter& target);
   static butil::Status ValidateVectorIndexParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
+  static butil::Status ValidateDiskannParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
 
   static butil::Status ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema);
 

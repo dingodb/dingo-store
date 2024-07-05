@@ -53,3 +53,11 @@ store:
 gc:
   update_safe_point_interval_s: 60
   do_gc_interval_s: 60
+diskann:
+  listen_host: $DISKANN_SERVER_LISTEN_HOST$
+  host: $DISKANN_SERVER_HOST$
+  port: $DISKANN_SERVER_PORT$
+  diskann_server_build_worker_num: 64 # the number of build worker used by diskann_service
+  diskann_server_build_worker_max_pending_num: 256 # 0 is unlimited
+  diskann_server_load_worker_num: 128 # the number of load worker used by diskann_service
+  diskann_server_load_worker_max_pending_num: 1024 # 0 is unlimited
