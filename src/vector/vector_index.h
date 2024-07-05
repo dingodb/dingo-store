@@ -29,6 +29,8 @@
 #include "common/helper.h"
 #include "common/runnable.h"
 #include "common/threadpool.h"
+#include "diskann/diskann_utils.h"
+#include "engine/engine.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/IDSelector.h"
 #include "fmt/core.h"
@@ -37,6 +39,11 @@
 #include "vector/vector_index_snapshot.h"
 
 namespace dingodb {
+
+namespace mvcc {
+class Reader;
+using ReaderPtr = std::shared_ptr<Reader>;
+}  // namespace mvcc
 
 namespace store {
 class Region;
@@ -192,6 +199,30 @@ class VectorIndex {
   virtual bool IsTrained() { return true; }
   virtual bool NeedToSave(int64_t last_save_log_behind) = 0;
   virtual bool SupportSave() { return false; }
+  virtual butil::Status Build(const pb::common::Range& /*region_range*/, mvcc::ReaderPtr /*reader*/,
+                              const pb::common::VectorBuildParameter& /*parameter*/, int64_t /*ts*/,
+                              pb::common::VectorStateParameter& /*vector_state_parameter*/) {
+    return butil::Status::OK();
+  }
+
+  virtual butil::Status Load(const pb::common::VectorLoadParameter& /*parameter*/,
+                             pb::common::VectorStateParameter& /*vector_state_parameter*/) {
+    return butil::Status::OK();
+  }
+
+  virtual butil::Status Status(pb::common::VectorStateParameter& /*vector_state_parameter*/) {
+    return butil::Status::OK();
+  }
+
+  virtual butil::Status Reset(bool /*delete_data_file*/, pb::common::VectorStateParameter& /*vector_state_parameter*/) {
+    return butil::Status::OK();
+  }
+
+  virtual butil::Status Drop() { return butil::Status::OK(); }
+
+  virtual butil::Status Dump(bool /*dump_all*/, std::vector<std::string>& /*dump_datas*/) {
+    return butil::Status::OK();
+  }
 
   virtual uint32_t WriteOpParallelNum() { return 1; }
 
@@ -222,6 +253,7 @@ class VectorIndex {
   static void SetSimdHook();
   static void SetSimdHookForFaiss();
   static void SetSimdHookForHnswlib();
+  static void IndexInit();
 
  protected:
   // vector index id
@@ -393,6 +425,16 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
                             std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters, bool reconstruct,
                             const pb::common::VectorSearchParameter& parameter,
                             std::vector<pb::index::VectorWithDistanceResult>& results);
+  butil::Status Build(const pb::common::Range& region_range, mvcc::ReaderPtr reader,
+                      const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                      pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status Load(const pb::common::VectorLoadParameter& parameter,
+                     pb::common::VectorStateParameter& vector_state_parameter);
+  butil::Status Status(pb::common::VectorStateParameter& vector_state_parameter);
+  butil::Status Reset(bool delete_data_file, pb::common::VectorStateParameter& vector_state_parameter);
+  butil::Status Drop();
+  butil::Status Dump(bool dump_all, std::vector<std::string>& dump_datas);
 
   static butil::Status SetVectorIndexRangeFilter(
       VectorIndexPtr vector_index,

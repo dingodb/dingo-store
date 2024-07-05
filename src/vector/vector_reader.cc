@@ -611,6 +611,37 @@ butil::Status VectorReader::VectorCount(int64_t ts, const pb::common::Range& ran
   return reader_->KvCount(Constant::kVectorDataCF, ts, range.start_key(), range.end_key(), count);
 }
 
+butil::Status VectorReader::VectorCountMemory(std::shared_ptr<Engine::VectorReader::Context> ctx, int64_t& count) {
+  return ctx->vector_index->GetCount(count);
+}
+
+butil::Status VectorReader::VectorBuild(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                        const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                                        pb::common::VectorStateParameter& vector_state_parameter) {
+  return ctx->vector_index->Build(ctx->region_range, reader_, parameter, ts, vector_state_parameter);
+}
+
+butil::Status VectorReader::VectorLoad(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                       const pb::common::VectorLoadParameter& parameter,
+                                       pb::common::VectorStateParameter& vector_state_parameter) {
+  return ctx->vector_index->Load(parameter, vector_state_parameter);
+}
+
+butil::Status VectorReader::VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                         pb::common::VectorStateParameter& vector_state_parameter) {
+  return ctx->vector_index->Status(vector_state_parameter);
+}
+
+butil::Status VectorReader::VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,
+                                        pb::common::VectorStateParameter& vector_state_parameter) {
+  return ctx->vector_index->Reset(delete_data_file, vector_state_parameter);
+}
+
+butil::Status VectorReader::VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
+                                       std::vector<std::string>& dump_datas) {
+  return ctx->vector_index->Dump(dump_all, dump_datas);
+}
+
 // GetBorderId
 butil::Status VectorReader::GetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
                                         int64_t& vector_id) {
@@ -769,6 +800,14 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {  // NOLINT
   // scalar pre filter search
   butil::Status status;
+
+  // if vector index type is diskann, not support scalar pre filter search!!!
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = "DiskANN not support scalar pre filter search";
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
   bool use_coprocessor = parameter.has_vector_coprocessor();
 
   if (!use_coprocessor && vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
@@ -1011,6 +1050,13 @@ butil::Status VectorReader::DoVectorSearchForTableCoprocessor(  // NOLINT(*stati
   //   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
 
   DINGO_LOG(DEBUG) << "vector index search table filter for coprocessor support";
+
+  // if vector index type is diskann, not support scalar pre filter search!!!
+  if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_DISKANN) {
+    std::string s = "DiskANN not support scalar pre filter search";
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
 
   // table pre filter search
 

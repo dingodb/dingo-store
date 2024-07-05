@@ -137,6 +137,28 @@ class Storage {
                                        pb::common::VectorIndexMetrics& region_metrics);
 
   butil::Status VectorCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count);
+  butil::Status VectorCountMemory(std::shared_ptr<Engine::VectorReader::Context> ctx, int64_t& count);
+
+  butil::Status VectorImport(std::shared_ptr<Context> ctx, bool is_sync,
+                             const std::vector<pb::common::VectorWithId>& vectors,
+                             const std::vector<int64_t>& delete_ids);
+
+  butil::Status VectorBuild(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                            const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                            pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorLoad(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                           const pb::common::VectorLoadParameter& parameter,
+                           pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                             pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,
+                            pb::common::VectorStateParameter& vector_state_parameter);
+
+  butil::Status VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
+                           std::vector<std::string>& dump_datas);
 
   static butil::Status VectorCalcDistance(
       const ::dingodb::pb::index::VectorCalcDistanceRequest& request,

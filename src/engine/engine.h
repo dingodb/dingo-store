@@ -43,6 +43,14 @@ class Reader;
 using ReaderPtr = std::shared_ptr<Reader>;
 }  // namespace mvcc
 
+namespace store {
+class Region;
+using RegionPtr = std::shared_ptr<Region>;
+}  // namespace store
+
+class VectorIndexWrapper;
+using VectorIndexWrapperPtr = std::shared_ptr<VectorIndexWrapper>;
+
 class Engine : public std::enable_shared_from_this<Engine> {
   using Errno = pb::error::Errno;
 
@@ -158,6 +166,23 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                                  pb::common::VectorIndexMetrics& region_metrics) = 0;
 
     virtual butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) = 0;
+    virtual butil::Status VectorCountMemory(std::shared_ptr<VectorReader::Context> ctx, int64_t& count) = 0;
+    virtual butil::Status VectorBuild(std::shared_ptr<VectorReader::Context> ctx,
+                                      const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                                      pb::common::VectorStateParameter& vector_state_parameter) = 0;
+
+    virtual butil::Status VectorLoad(std::shared_ptr<VectorReader::Context> ctx,
+                                     const pb::common::VectorLoadParameter& parameter,
+                                     pb::common::VectorStateParameter& vector_state_parameter) = 0;
+
+    virtual butil::Status VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
+                                       pb::common::VectorStateParameter& vector_state_parameter) = 0;
+
+    virtual butil::Status VectorReset(std::shared_ptr<VectorReader::Context> ctx, bool delete_data_file,
+                                      pb::common::VectorStateParameter& vector_state_parameter) = 0;
+
+    virtual butil::Status VectorDump(std::shared_ptr<VectorReader::Context> ctx, bool dump_all,
+                                     std::vector<std::string>& dump_datas) = 0;
 
     // This function is for testing only
     virtual butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,

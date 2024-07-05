@@ -250,6 +250,45 @@ butil::Status MonoStoreEngine::VectorReader::VectorCount(int64_t ts, const pb::c
   return vector_reader->VectorCount(ts, range, count);
 }
 
+butil::Status MonoStoreEngine::VectorReader::VectorCountMemory(std::shared_ptr<VectorReader::Context> ctx,
+                                                               int64_t& count) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorCountMemory(ctx, count);
+}
+
+butil::Status MonoStoreEngine::VectorReader::VectorBuild(std::shared_ptr<VectorReader::Context> ctx,
+                                                         const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                                                         pb::common::VectorStateParameter& vector_state_parameter) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorBuild(ctx, parameter, ts, vector_state_parameter);
+}
+
+butil::Status MonoStoreEngine::VectorReader::VectorLoad(std::shared_ptr<VectorReader::Context> ctx,
+                                                        const pb::common::VectorLoadParameter& parameter,
+                                                        pb::common::VectorStateParameter& vector_state_parameter) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorLoad(ctx, parameter, vector_state_parameter);
+}
+
+butil::Status MonoStoreEngine::VectorReader::VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
+                                                          pb::common::VectorStateParameter& vector_state_parameter) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorStatus(ctx, vector_state_parameter);
+}
+
+butil::Status MonoStoreEngine::VectorReader::VectorReset(std::shared_ptr<VectorReader::Context> ctx,
+                                                         bool delete_data_file,
+                                                         pb::common::VectorStateParameter& vector_state_parameter) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorReset(ctx, delete_data_file, vector_state_parameter);
+}
+
+butil::Status MonoStoreEngine::VectorReader::VectorDump(std::shared_ptr<VectorReader::Context> ctx, bool dump_all,
+                                                        std::vector<std::string>& dump_datas) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorDump(ctx, dump_all, dump_datas);
+}
+
 butil::Status MonoStoreEngine::VectorReader::VectorBatchSearchDebug(
     std::shared_ptr<VectorReader::Context> ctx,  // NOLINT
     std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& deserialization_id_time_us,

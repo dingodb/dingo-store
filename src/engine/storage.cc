@@ -646,6 +646,165 @@ butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range ra
   return butil::Status();
 }
 
+butil::Status Storage::VectorCountMemory(std::shared_ptr<Engine::VectorReader::Context> ctx, int64_t& count) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorCountMemory(ctx, count);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorImport(std::shared_ptr<Context> ctx, bool is_sync,
+                                    const std::vector<pb::common::VectorWithId>& vectors,
+                                    const std::vector<int64_t>& delete_ids) {
+  int64_t ts = ts_provider_->GetTs();
+  if (BAIDU_UNLIKELY(ts == 0)) {
+    return butil::Status(pb::error::ETSO_NOT_AVAILABLE, "TSO not available");
+  }
+
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
+
+  if (!vectors.empty()) {
+    if (is_sync) {
+      auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, true));
+      auto* response = dynamic_cast<pb::index::VectorImportResponse*>(ctx->Response());
+      CHECK(response != nullptr) << "VectorImportResponse is nullptr.";
+      if (!status.ok()) {
+        Helper::SetPbMessageError(status, ctx->Response());
+      }
+      response->set_ttl(ctx->Ttl());
+      return status;
+    }
+
+    return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, ctx->Ttl(), vectors, true),
+                              [ts, &vectors](std::shared_ptr<Context> ctx, butil::Status status) {
+                                auto* response = dynamic_cast<pb::index::VectorImportResponse*>(ctx->Response());
+                                CHECK(response != nullptr) << "VectorImportResponse is nullptr.";
+                                if (!status.ok()) {
+                                  Helper::SetPbMessageError(status, ctx->Response());
+                                }
+                                response->set_ttl(ctx->Ttl());
+                              });
+  } else {
+    if (is_sync) {
+      auto status = engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, delete_ids));
+      auto* response = dynamic_cast<pb::index::VectorImportResponse*>(ctx->Response());
+      CHECK(response != nullptr) << "VectorImportResponse is nullptr.";
+      if (!status.ok()) {
+        Helper::SetPbMessageError(status, ctx->Response());
+      }
+      response->set_ttl(ctx->Ttl());
+
+      return status;
+    }
+
+    return engine->AsyncWrite(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), ts, delete_ids),
+                              [&ts](std::shared_ptr<Context> ctx, butil::Status status) {
+                                auto* response = dynamic_cast<pb::index::VectorImportResponse*>(ctx->Response());
+                                CHECK(response != nullptr) << "VectorImportResponse is nullptr.";
+                                if (!status.ok()) {
+                                  Helper::SetPbMessageError(status, ctx->Response());
+                                }
+                                response->set_ttl(ctx->Ttl());
+                              });
+  }
+}
+
+butil::Status Storage::VectorBuild(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                   const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                                   pb::common::VectorStateParameter& vector_state_parameter) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorBuild(ctx, parameter, ts, vector_state_parameter);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorLoad(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                  const pb::common::VectorLoadParameter& parameter,
+                                  pb::common::VectorStateParameter& vector_state_parameter) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorLoad(ctx, parameter, vector_state_parameter);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                    pb::common::VectorStateParameter& vector_state_parameter) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorStatus(ctx, vector_state_parameter);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,
+                                   pb::common::VectorStateParameter& vector_state_parameter) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorReset(ctx, delete_data_file, vector_state_parameter);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
+                                  std::vector<std::string>& dump_datas) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = vector_reader->VectorDump(ctx, dump_all, dump_datas);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
                                           std::vector<std::vector<float>>& distances,
                                           std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,

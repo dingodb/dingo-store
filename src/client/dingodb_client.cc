@@ -212,6 +212,27 @@ DEFINE_bool(include_archive, false, "include history archive");
 
 DEFINE_bool(show_pretty, false, "show pretty");
 
+// diskann
+DEFINE_uint32(max_degree, 64, "diskann the degree of the graph index, typically between 60 and 150. default is 64.");
+DEFINE_uint32(
+    search_list_size, 100,
+    "diskann the size of search list during index build. Typical values are between 75 to 200. default is 100.");
+DEFINE_bool(import_for_add, true, "diskann execute import for add or delete, default is add");
+
+DEFINE_bool(
+    direct_load_without_build, false,
+    "diskann if true, direct load without build index. default is false. Note: If it is true, do not call the import "
+    "build interface, call load directly. If it is false, first import the data, then build, and then call load");
+DEFINE_uint32(num_nodes_to_cache, 0,
+              "While serving the index, the entire graph is stored on SSD.For faster search performance, you can cache "
+              "a few frequently accessed nodes in memory.(default is 0): required.");
+DEFINE_bool(warmup, true,
+            "Whether to warm up the index. If true, the index will be loaded into memory and kept in memory for "
+            "faster. (default is true): required.");
+DEFINE_bool(delete_data_file, false, "diskann If true, delete data file after reset.");
+DEFINE_bool(dump_all, false,
+            "diskann If true, dump all vector id data from diskann. or just dump the data of this region.");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -493,6 +514,19 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorAddBatch") {
       client::SendVectorAddBatch(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                  FLAGS_vector_index_add_cost_file);
+    } else if (method == "VectorImport") {
+      client::SendVectorImport(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
+                               FLAGS_import_for_add);
+    } else if (method == "VectorBuild") {
+      client::SendVectorBuild(FLAGS_region_id);
+    } else if (method == "VectorLoad") {
+      client::SendVectorLoad(FLAGS_region_id, FLAGS_direct_load_without_build, FLAGS_num_nodes_to_cache, FLAGS_warmup);
+    } else if (method == "VectorStatus") {
+      client::SendVectorStatus(FLAGS_region_id);
+    } else if (method == "VectorReset") {
+      client::SendVectorReset(FLAGS_region_id, FLAGS_delete_data_file);
+    } else if (method == "VectorDump") {
+      client::SendVectorDump(FLAGS_region_id, FLAGS_dump_all);
     } else if (method == "VectorAddBatchDebug") {
       client::SendVectorAddBatchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                       FLAGS_vector_index_add_cost_file);
@@ -504,6 +538,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorCount") {
       int64_t count = client::SendVectorCount(FLAGS_region_id, FLAGS_start_id, FLAGS_end_id);
       std::cout << "count: " << count << std::endl;
+    } else if (method == "VectorCountMemory") {
+      client::SendVectorCountMemory(FLAGS_region_id);
     } else if (method == "CountVectorTable") {
       ctx->table_id = FLAGS_table_id;
       client::CountVectorTable(ctx);

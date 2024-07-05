@@ -847,7 +847,18 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
   }
-#if 0
+#if 10
+  butil::Status status = ValidateDiskannParameter(vector_index_parameter);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+#endif
+  return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
+}
+
+butil::Status VectorIndexUtils::ValidateDiskannParameter(
+    const pb::common::VectorIndexParameter& vector_index_parameter) {
   // if vector_index_type is diskann, check diskann_parameter is set
   if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
     if (!vector_index_parameter.has_diskann_parameter()) {
@@ -878,7 +889,7 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     // check diskann_parameter.value_type
     // Note that we currently only support float.
     if (pb::common::ValueType::FLOAT != diskann_parameter.value_type()) {
-      std::string s = fmt::format("diskann_parameter.value_type is illegal, only support float :  {} {}",
+      std::string s = fmt::format("diskann_parameter.value_type is illegal, only support float. but now is  {} {}",
                                   static_cast<int>(diskann_parameter.value_type()),
                                   pb::common::ValueType_Name(diskann_parameter.value_type()));
       DINGO_LOG(ERROR) << s;
@@ -919,8 +930,8 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     // check diskann_parameter.build_pq_bytes
     // check diskann_parameter.use_opq
   }
-#endif
-  return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
+
+  return butil::Status::OK();
 }
 
 butil::Status VectorIndexUtils::ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema) {

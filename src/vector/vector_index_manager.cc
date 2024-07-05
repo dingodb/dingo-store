@@ -41,6 +41,7 @@
 #include "server/server.h"
 #include "vector/codec.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_diskann.h"
 #include "vector/vector_index_factory.h"
 #include "vector/vector_index_snapshot.h"
 #include "vector/vector_index_snapshot_manager.h"
@@ -740,6 +741,8 @@ bool VectorIndexManager::Init() {
 
   VectorIndex::SetSimdHook();
 
+  VectorIndexDiskANN::Init();
+
   return true;
 }
 
@@ -1139,6 +1142,11 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
     return nullptr;
   }
 
+  // diskann index only need to build index, no need to build data !!!
+  if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN == vector_index_wrapper->Type()) {
+    return vector_index;
+  }
+
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
     // Get last applied log id
     auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
@@ -1370,7 +1378,8 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.load][index_id({})][trace({})] Load vector index snapshot success, epoch: {} elapsed time: {}ms.",
+      "[vector_index.load][index_id({})][trace({})] Load vector index snapshot success, epoch: {} elapsed time: "
+      "{}ms.",
       vector_index_id, trace, Helper::RegionEpochToString(vector_index->Epoch()), Helper::TimestampMs() - start_time);
 
   // catch up wal
@@ -1402,39 +1411,42 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
   int64_t start_time = Helper::TimestampMs();
 
   // Get region
-  auto regoin = Server::GetInstance().GetRegion(vector_index_wrapper->Id());
-  if (regoin == nullptr) {
+  auto region = Server::GetInstance().GetRegion(vector_index_wrapper->Id());
+  if (region == nullptr) {
     return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found region.");
   }
 
-  if (regoin->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
-    {
-      start_time = Helper::TimestampMs();
+  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+    // diskann index need not catch up log !!!
+    if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN != vector_index_wrapper->Type()) {
+      auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
+      {
+        start_time = Helper::TimestampMs();
 
-      DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
-            bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
+        DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
+              bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
 
-      int64_t start_log_id = vector_index->ApplyLogId() + 1;
-      int64_t end_log_id = raft_meta->AppliedId();
-      // second ground replay wal
-      auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
-      if (!status.ok()) {
-        vector_index_wrapper->SetRebuildError();
-        return status;
+        int64_t start_log_id = vector_index->ApplyLogId() + 1;
+        int64_t end_log_id = raft_meta->AppliedId();
+        // second ground replay wal
+        auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
+        if (!status.ok()) {
+          vector_index_wrapper->SetRebuildError();
+          return status;
+        }
+
+        DINGO_LOG(INFO) << fmt::format(
+            "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success.", vector_index_id,
+            trace, start_log_id, end_log_id);
       }
-
-      DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success.", vector_index_id, trace,
-          start_log_id, end_log_id);
     }
-  } else if (regoin->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+  } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
   } else {
     return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
   }
   pb::common::RegionEpoch epoch;
   pb::common::Range range;
-  regoin->GetEpochAndRange(epoch, range);
+  region->GetEpochAndRange(epoch, range);
   vector_index->SetEpochAndRange(epoch, range);
 
   vector_index_wrapper->UpdateVectorIndex(vector_index, trace);

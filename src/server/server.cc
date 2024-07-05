@@ -190,28 +190,31 @@ bool Server::InitDirectory() {
     return false;
   }
 
-  // checkpoint path
-  checkpoint_path_ = fmt::format("{}/rocksdb_checkpoint", db_path);
-  ret = Helper::CreateDirectories(checkpoint_path_);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create checkpoint directory failed: " << checkpoint_path_;
-    return false;
-  }
+  // diskann not need this
+  if (GetRole() != pb::common::DISKANN) {
+    // checkpoint path
+    checkpoint_path_ = fmt::format("{}/rocksdb_checkpoint", db_path);
+    ret = Helper::CreateDirectories(checkpoint_path_);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create checkpoint directory failed: " << checkpoint_path_;
+      return false;
+    }
 
-  // raft data path
-  auto raft_data_path = config->GetString("raft.path");
-  ret = Helper::CreateDirectories(raft_data_path);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_data_path;
-    return false;
-  }
+    // raft data path
+    auto raft_data_path = config->GetString("raft.path");
+    ret = Helper::CreateDirectories(raft_data_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_data_path;
+      return false;
+    }
 
-  // raft log path
-  auto raft_log_path = config->GetString("raft.log_path");
-  ret = Helper::CreateDirectories(raft_log_path);
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "Create raft log directory failed: " << raft_log_path;
-    return false;
+    // raft log path
+    auto raft_log_path = config->GetString("raft.log_path");
+    ret = Helper::CreateDirectories(raft_log_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create raft log directory failed: " << raft_log_path;
+      return false;
+    }
   }
 
   // vector index path

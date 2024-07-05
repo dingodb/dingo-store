@@ -34,6 +34,7 @@
 #include "server/server.h"
 #include "simd/hook.h"
 #include "vector/codec.h"
+#include "vector/vector_index_diskann.h"
 #include "vector/vector_index_snapshot_manager.h"
 
 #ifndef ENABLE_SIMD_HOOK
@@ -182,6 +183,8 @@ void VectorIndex::SetSimdHookForHnswlib() {
   DINGO_LOG(INFO) << fmt::format("set hnswlib hook : {} {}", "fvec_L2sqr", "fvec_inner_product");
 #endif
 }
+
+void VectorIndex::IndexInit() { VectorIndexDiskANN::Init(); }
 
 butil::Status VectorIndex::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool) {
   return Add(vector_with_ids);
@@ -395,6 +398,14 @@ void VectorIndexWrapper::Destroy() {
   if (!status.ok()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] delete meta failed.", Id());
   }
+
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return;
+  }
+
+  vector_index->Drop();
 }
 
 bool VectorIndexWrapper::Recover() {
@@ -1199,6 +1210,94 @@ butil::Status VectorIndexWrapper::RangeSearch(std::vector<pb::common::VectorWith
   }
 
   return vector_index->RangeSearchByParallel(vector_with_ids, radius, filters, reconstruct, parameter, results);
+}
+
+butil::Status VectorIndexWrapper::Build(const pb::common::Range& region_range, mvcc::ReaderPtr reader,
+                                        const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                                        pb::common::VectorStateParameter& vector_state_parameter) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Build(region_range, reader, parameter, ts, vector_state_parameter);
+}
+
+butil::Status VectorIndexWrapper::Load(const pb::common::VectorLoadParameter& parameter,
+                                       pb::common::VectorStateParameter& vector_state_parameter) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Load(parameter, vector_state_parameter);
+}
+
+butil::Status VectorIndexWrapper::Status(pb::common::VectorStateParameter& vector_state_parameter) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Status(vector_state_parameter);
+}
+
+butil::Status VectorIndexWrapper::Reset(bool delete_data_file,
+                                        pb::common::VectorStateParameter& vector_state_parameter) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Reset(delete_data_file, vector_state_parameter);
+}
+
+butil::Status VectorIndexWrapper::Drop() {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Drop();
+}
+
+butil::Status VectorIndexWrapper::Dump(bool dump_all, std::vector<std::string>& dump_datas) {
+  if (!IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());
+  }
+
+  return vector_index->Dump(dump_all, dump_datas);
 }
 
 bool VectorIndexWrapper::IsPermanentHoldVectorIndex(store::RegionPtr region) {

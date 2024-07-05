@@ -73,6 +73,12 @@
 #include "server/util_service.h"
 #include "server/version_service.h"
 
+#if defined(ENABLE_DISKANN_MODULE)
+#include "diskann/diskann_item_manager.h"
+#include "diskann/diskann_item_runtime.h"
+#include "server/diskann_service.h"
+#endif
+
 DEFINE_string(conf, "", "server config");
 DECLARE_string(coor_url);
 
@@ -845,6 +851,8 @@ bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
       FLAGS_conf = "./conf/index.yaml";
     } else if (role == dingodb::pb::common::DOCUMENT && std::filesystem::exists("./conf/document.yaml")) {
       FLAGS_conf = "./conf/document.yaml";
+    } else if (role == dingodb::pb::common::DISKANN && std::filesystem::exists("./conf/diskann.yaml")) {
+      FLAGS_conf = "./conf/diskann.yaml";
     } else {
       DINGO_LOG(ERROR) << "unknown role:" << role;
       return false;
@@ -868,7 +876,7 @@ int main(int argc, char *argv[]) {
     dingodb::DingoShowVerion();
 
     printf(
-        "Usage: %s --role=[coordinator|store|index] --conf ./conf/[coordinator|store|index].yaml "
+        "Usage: %s --role=[coordinator|store|index|diskann] --conf ./conf/[coordinator|store|index|diskann].yaml "
         "--coor_url=[file://./conf/coor_list]\n",
         argv[0]);
     printf("Example: \n");
@@ -878,6 +886,8 @@ int main(int argc, char *argv[]) {
         "--coor_url=file://./conf/coor_list\n");
     printf("         bin/dingodb_server --role store --conf ./conf/store.yaml --coor_url=file://./conf/coor_list\n");
     printf("         bin/dingodb_server --role index --conf ./conf/index.yaml --coor_url=file://./conf/coor_list\n");
+    printf(
+        "         bin/dingodb_server --role diskann --conf ./conf/diskann.yaml --coor_url=file://./conf/coor_list\n");
     exit(-1);
   }
 
@@ -949,8 +959,10 @@ int main(int argc, char *argv[]) {
 
   dingo_server.SetServerLocation(GetServerLocation(config));
   dingo_server.SetServerListenEndpoint(GetServerListenEndPoint(config));
-  dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
-  dingo_server.SetRaftListenEndpoint(GetRaftListenEndPoint(config));
+  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
+    dingo_server.SetRaftEndpoint(GetRaftEndPoint(config));
+    dingo_server.SetRaftListenEndpoint(GetRaftListenEndPoint(config));
+  }
 
   // for all role
   dingodb::NodeServiceImpl node_service;
@@ -983,6 +995,9 @@ int main(int argc, char *argv[]) {
 
   brpc::Server brpc_server;
   brpc::Server raft_server;
+#if defined(ENABLE_DISKANN_MODULE)
+  dingodb::DiskAnnServiceImpl diskann_service;
+#endif
 
   brpc::ServerOptions options;
 
@@ -1737,24 +1752,51 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+  }
+#if defined(ENABLE_DISKANN_MODULE)
+  else if (role == dingodb::pb::common::ClusterRole::DISKANN) {
+    InitBthreadWorkerThreadNum(config);
+    if (!dingodb::DiskANNItemRuntime::Init(config)) {
+      LOG(ERROR) << "Fail to init diskann item runtime!";
+      return -1;
+    }
 
-  } else {
+    if (!dingodb::DiskANNItemManager::GetInstance().Init(config)) {
+      LOG(ERROR) << "Fail to init diskann item manager!";
+      return -1;
+    }
+
+    // bthread::FLAGS_bthread_concurrency = dingodb::DiskANNItemRuntime::GetNumBthreads();
+
+    FLAGS_brpc_common_worker_num = bthread::FLAGS_bthread_concurrency;
+
+    options.num_threads = bthread::FLAGS_bthread_concurrency;
+
+    if (brpc_server.AddService(&diskann_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
+      LOG(ERROR) << "Fail to add diskann service to brpc_server!";
+      return -1;
+    }
+  }
+#endif
+  else {
     DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";
     return -1;
   }
 
-  if (!dingo_server.InitHeartbeat()) {
-    DINGO_LOG(ERROR) << "InitHeartbeat failed!";
-    return -1;
-  }
-  if (!dingo_server.Recover()) {
-    DINGO_LOG(ERROR) << "Recover failed!";
-    return -1;
-  }
+  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
+    if (!dingo_server.InitHeartbeat()) {
+      DINGO_LOG(ERROR) << "InitHeartbeat failed!";
+      return -1;
+    }
+    if (!dingo_server.Recover()) {
+      DINGO_LOG(ERROR) << "Recover failed!";
+      return -1;
+    }
 
-  if (!dingo_server.InitCrontabManager()) {
-    DINGO_LOG(ERROR) << "InitCrontabManager failed!";
-    return -1;
+    if (!dingo_server.InitCrontabManager()) {
+      DINGO_LOG(ERROR) << "InitCrontabManager failed!";
+      return -1;
+    }
   }
 
   // Start server after raft server started.
@@ -1775,9 +1817,13 @@ int main(int argc, char *argv[]) {
   }
   DINGO_LOG(INFO) << "Server is going to quit";
 
-  raft_server.Stop(0);
+  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
+    raft_server.Stop(0);
+  }
   brpc_server.Stop(0);
-  raft_server.Join();
+  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
+    raft_server.Join();
+  }
   brpc_server.Join();
 
   dingo_server.Destroy();

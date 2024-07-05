@@ -124,6 +124,19 @@ class MonoStoreEngine : public Engine {
                                          pb::common::VectorIndexMetrics& region_metrics) override;
 
     butil::Status VectorCount(int64_t ts, const pb::common::Range& range, int64_t& count) override;
+    butil::Status VectorCountMemory(std::shared_ptr<VectorReader::Context> ctx, int64_t& count) override;
+    butil::Status VectorBuild(std::shared_ptr<VectorReader::Context> ctx,
+                              const pb::common::VectorBuildParameter& parameter, int64_t ts,
+                              pb::common::VectorStateParameter& vector_state_parameter) override;
+    butil::Status VectorLoad(std::shared_ptr<VectorReader::Context> ctx,
+                             const pb::common::VectorLoadParameter& parameter,
+                             pb::common::VectorStateParameter& vector_state_parameter) override;
+    butil::Status VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
+                               pb::common::VectorStateParameter& vector_state_parameter) override;
+    butil::Status VectorReset(std::shared_ptr<VectorReader::Context> ctx, bool delete_data_file,
+                              pb::common::VectorStateParameter& vector_state_parameter) override;
+    butil::Status VectorDump(std::shared_ptr<VectorReader::Context> ctx, bool dump_all,
+                             std::vector<std::string>& dump_datas) override;
 
     butil::Status VectorBatchSearchDebug(std::shared_ptr<VectorReader::Context> ctx,
                                          std::vector<pb::index::VectorWithDistanceResult>& results,

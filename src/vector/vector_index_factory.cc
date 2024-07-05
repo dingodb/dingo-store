@@ -22,10 +22,12 @@
 #include "server/server.h"
 #include "vector/vector_index.h"
 #include "vector/vector_index_bruteforce.h"
+#include "vector/vector_index_diskann.h"
 #include "vector/vector_index_flat.h"
 #include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_ivf_flat.h"
 #include "vector/vector_index_ivf_pq.h"
+#include "vector/vector_index_utils.h"
 
 namespace dingodb {
 
@@ -59,8 +61,7 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
       break;
     }
     case pb::common::VECTOR_INDEX_TYPE_DISKANN: {
-      DINGO_LOG(ERROR) << "vector_index_parameter = diskann not implement, type=" << index_parameter.vector_index_type()
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      vector_index = NewDiskANN(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VectorIndexType_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -315,6 +316,35 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfPq(int64_t id,
     return new_ivf_pq_index;
   } catch (std::exception& e) {
     DINGO_LOG(ERROR) << "create ivf pq index failed of exception occurred, " << e.what() << ", id=" << id
+                     << ", parameter=" << index_parameter.ShortDebugString();
+    return nullptr;
+  }
+}
+
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewDiskANN(int64_t id,
+                                                            const pb::common::VectorIndexParameter& index_parameter,
+                                                            const pb::common::RegionEpoch& epoch,
+                                                            const pb::common::Range& range, ThreadPoolPtr thread_pool) {
+  butil::Status status = VectorIndexUtils::ValidateDiskannParameter(index_parameter);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "validate diskann parameter failed, " << status.error_cstr();
+    return nullptr;
+  }
+
+  // create index may throw exception, so we need to catch it
+  try {
+    auto new_diskann_index = std::make_shared<VectorIndexDiskANN>(id, index_parameter, epoch, range, thread_pool);
+    if (new_diskann_index == nullptr) {
+      DINGO_LOG(ERROR) << "create diskann index failed of new_diskann_index is nullptr"
+                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      return nullptr;
+    } else {
+      DINGO_LOG(INFO) << "create diskann index success, id=" << id
+                      << ", parameter=" << index_parameter.ShortDebugString();
+    }
+    return new_diskann_index;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << "create diskann index failed of exception occurred, " << e.what() << ", id=" << id
                      << ", parameter=" << index_parameter.ShortDebugString();
     return nullptr;
   }
