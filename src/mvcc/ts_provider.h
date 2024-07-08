@@ -75,6 +75,7 @@ class BatchTs {
 
   int64_t Physical() const { return physical_; }
 
+  int64_t CreateTime() const { return create_time_; };
   void SetDeadTime(int64_t dead_time) { dead_time_ = dead_time; }
   int64_t DeadTime() const { return dead_time_; };
 
@@ -87,6 +88,8 @@ class BatchTs {
   std::atomic<int64_t> start_ts_{0};
   int64_t end_ts_{0};
 
+  // create time
+  int64_t create_time_{0};
   // dead time ms
   int64_t dead_time_{0};
 };
@@ -117,6 +120,8 @@ class BatchTsList {
   int64_t ActiveCount() const { return active_count_.load(std::memory_order_relaxed); }
   int64_t DeadCount() const { return dead_count_.load(std::memory_order_relaxed); }
 
+  int64_t LastPhysical() const { return last_physical_.load(std::memory_order_relaxed); }
+
   void CleanDead();
 
   std::string DebugInfo();
@@ -135,6 +140,7 @@ class BatchTsList {
   std::atomic<BatchTs*> dead_head_{nullptr};
   std::atomic<BatchTs*> dead_tail_{nullptr};
 
+  // tso physical time
   std::atomic<int64_t> last_physical_{0};
 
   std::atomic<int64_t> min_valid_ts_{0};
@@ -142,18 +148,16 @@ class BatchTsList {
   // statistics
   std::atomic<int64_t> active_count_{1};
   std::atomic<int64_t> dead_count_{1};
-
-  std::atomic<int64_t> push_count_{1};
-  std::atomic<int64_t> pop_count_{0};
-
-  std::atomic<int64_t> dead_push_count_{1};
-  std::atomic<int64_t> dead_pop_count_{0};
 };
 
 // manage local tso, provide ts to customer
 class TsProvider : public std::enable_shared_from_this<TsProvider> {
  public:
-  TsProvider(CoordinatorInteractionPtr interaction) : interaction_(interaction) {
+  TsProvider(CoordinatorInteractionPtr interaction)
+      : interaction_(interaction),
+        get_ts_count_("dingo_ts_provider_get_ts_count"),
+        get_ts_fail_count_("dingo_ts_provider_get_ts_fail_count"),
+        renew_epoch_("dingo_ts_provider_renew_epoch") {
     worker_ = Worker::New();
     batch_ts_list_ = BatchTsList::New();
   }
@@ -167,7 +171,18 @@ class TsProvider : public std::enable_shared_from_this<TsProvider> {
 
   int64_t GetTs(int64_t after_ts = 0);
 
-  uint64_t RenewEpoch() const { return renew_epoch_.load(std::memory_order_relaxed); };
+  uint64_t GetTsCount() const { return get_ts_count_.get_value(); }
+  uint64_t GetTsFailCount() const { return get_ts_fail_count_.get_value(); }
+
+  uint64_t RenewEpoch() const { return renew_epoch_.get_value(); };
+
+  uint32_t ActualCount() { return batch_ts_list_->ActualCount(); }
+  uint32_t ActualDeadCount() { return batch_ts_list_->ActualDeadCount(); }
+
+  int64_t ActiveCount() const { return batch_ts_list_->ActiveCount(); }
+  uint32_t DeadCount() const { return batch_ts_list_->DeadCount(); }
+
+  int64_t LastPhysical() const { return batch_ts_list_->LastPhysical(); }
 
   void SetMinValidTs(int64_t min_valid_ts) {
     if (batch_ts_list_ != nullptr) {
@@ -197,9 +212,10 @@ class TsProvider : public std::enable_shared_from_this<TsProvider> {
   CoordinatorInteractionPtr interaction_;
 
   // statistics
-  std::atomic<uint64_t> get_ts_count_{0};
-  std::atomic<uint64_t> get_ts_fail_count_{0};
-  std::atomic<uint64_t> renew_epoch_{0};
+  bvar::Adder<uint64_t> get_ts_count_;
+  bvar::Adder<uint64_t> get_ts_fail_count_;
+
+  bvar::Adder<uint64_t> renew_epoch_;
 };
 
 // take BatchTs task, run at worker

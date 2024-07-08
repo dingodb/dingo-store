@@ -40,7 +40,9 @@ namespace mvcc {
 static int64_t ComposeTs(int64_t physical, int64_t logical) { return (physical << 18) + logical; }
 
 BatchTs::BatchTs(int64_t physical, int64_t logical, uint32_t count)
-    : physical_(physical), start_ts_(ComposeTs(physical, logical)), end_ts_(ComposeTs(physical, logical + count)) {}
+    : physical_(physical), start_ts_(ComposeTs(physical, logical)), end_ts_(ComposeTs(physical, logical + count)) {
+  create_time_ = Helper::TimestampMs();
+}
 
 BatchTsList::BatchTsList() {
   head_.store(BatchTs::New());
@@ -84,9 +86,8 @@ void BatchTsList::Push(BatchTs* batch_ts) {
 
   for (;;) {
     tail = tail_.load();
-    tail_next = tail->next.load();
-
     CHECK(tail != nullptr) << "tail is nullptr.";
+    tail_next = tail->next.load();
 
     if (tail != tail_.load()) {
       continue;
@@ -98,18 +99,23 @@ void BatchTsList::Push(BatchTs* batch_ts) {
     }
 
     if (tail->next.compare_exchange_weak(tail_next, batch_ts)) {
-      tail_.compare_exchange_weak(tail, batch_ts);
+      // tail_.compare_exchange_weak(tail, batch_ts);
       active_count_.fetch_add(1, std::memory_order_relaxed);
-      push_count_.fetch_add(1);
-      last_physical_.store(batch_ts->Physical(), std::memory_order_relaxed);
+      last_physical_.store(batch_ts->Physical(), std::memory_order_release);
       break;
     }
   }
 }
 
 bool BatchTsList::IsStale(BatchTs* batch_ts) {
+  int64_t local_physical_time = Helper::TimestampMs();
+
+  if (batch_ts->CreateTime() + FLAGS_ts_provider_batch_ts_stale_interval_ms < local_physical_time) {
+    return true;
+  }
+
   return (batch_ts->Physical() + FLAGS_ts_provider_batch_ts_stale_interval_ms) <
-         last_physical_.load(std::memory_order_relaxed);
+         last_physical_.load(std::memory_order_acquire);
 }
 
 int64_t BatchTsList::GetTs(int64_t after_ts) {
@@ -119,10 +125,10 @@ int64_t BatchTsList::GetTs(int64_t after_ts) {
 
   for (;;) {
     head = head_.load();
-    tail = tail_.load();
-    head_next = head->next.load();
-
     CHECK(head != nullptr) << "head is nullptr.";
+    tail = tail_.load();
+    CHECK(tail != nullptr) << "tail is nullptr.";
+    head_next = head->next.load();
 
     if (!IsStale(head)) {
       int64_t ts = head->GetTs();
@@ -131,19 +137,18 @@ int64_t BatchTsList::GetTs(int64_t after_ts) {
       }
     }
 
-    if (head == tail && head_next == nullptr) {
+    if (head_next == nullptr) {
       return 0;
     }
 
-    if (head == tail && head_next != nullptr) {
+    if (head == tail) {
       tail_.compare_exchange_weak(tail, head_next);
       continue;
     }
 
     if (head_.compare_exchange_weak(head, head_next)) {
-      PushDead(head);
       active_count_.fetch_sub(1, std::memory_order_relaxed);
-      pop_count_.fetch_add(1);
+      PushDead(head);
     }
   }
 
@@ -159,9 +164,8 @@ void BatchTsList::PushDead(BatchTs* batch_ts) {
 
   for (;;) {
     tail = dead_tail_.load();
-    tail_next = tail->next.load();
-
     CHECK(tail != nullptr) << "dead tail is nullptr.";
+    tail_next = tail->next.load();
 
     if (tail != dead_tail_.load()) {
       continue;
@@ -173,44 +177,41 @@ void BatchTsList::PushDead(BatchTs* batch_ts) {
     }
 
     if (tail->next.compare_exchange_weak(tail_next, batch_ts)) {
-      dead_tail_.compare_exchange_weak(tail, batch_ts);
+      // dead_tail_.compare_exchange_weak(tail, batch_ts);
       dead_count_.fetch_add(1, std::memory_order_relaxed);
-      dead_push_count_.fetch_add(1);
       break;
     }
   }
 }
 
 void BatchTsList::CleanDead() {
-  int64_t clean_ms = Helper::TimestampMs() - FLAGS_ts_provider_clean_dead_interval_ms;
-
   BatchTs* head = nullptr;
   BatchTs* tail = nullptr;
   BatchTs* head_next = nullptr;
 
   for (;;) {
     head = dead_head_.load();
+    CHECK(head != nullptr) << "dead head is nullptr.";
     tail = dead_tail_.load();
+    CHECK(tail != nullptr) << "dead tail is nullptr.";
     head_next = head->next.load();
 
-    CHECK(head != nullptr) << "dead head is nullptr.";
-
+    int64_t clean_ms = Helper::TimestampMs() - FLAGS_ts_provider_clean_dead_interval_ms;
     if (head->DeadTime() >= clean_ms) {
       return;
     }
 
-    if (head == tail && head_next == nullptr) {
+    if (head_next == nullptr) {
       return;
     }
 
-    if (head == tail && head_next != nullptr) {
-      tail_.compare_exchange_weak(tail, head_next);
+    if (head == tail) {
+      dead_tail_.compare_exchange_weak(tail, head_next);
       continue;
     }
 
     if (dead_head_.compare_exchange_weak(head, head_next)) {
       dead_count_.fetch_sub(1, std::memory_order_relaxed);
-      dead_pop_count_.fetch_add(1);
       delete head;
     }
   }
@@ -223,7 +224,9 @@ void BatchTsList::Flush() {
 
   for (;;) {
     head = head_.load();
+    CHECK(head != nullptr) << "head is nullptr.";
     tail = tail_.load();
+    CHECK(tail != nullptr) << "tail is nullptr.";
     head_next = head->next.load();
 
     head->Flush();
@@ -267,11 +270,12 @@ uint32_t BatchTsList::ActualDeadCount() {
 }
 
 std::string BatchTsList::DebugInfo() {
-  return fmt::format(
-      "actual_count({})  active_count({}) push_count({}) pop_count({}) actual_dead_count({}) dead_count({}) "
-      "dead_push_count({}) dead_pop_count({})",
-      ActualCount(), active_count_.load(), push_count_.load(), pop_count_.load(), ActualDeadCount(), dead_count_.load(),
-      dead_push_count_.load(), dead_pop_count_.load());
+  bool is_valid = head_.load() == tail_.load();
+  bool is_dead_valid = dead_head_.load() == dead_tail_.load();
+
+  return fmt::format("actual_count({})  active_count({}) same({}) actual_dead_count({}) dead_count({}) dead_same({}) ",
+                     ActualCount(), active_count_.load(), is_valid ? "true" : "false", ActualDeadCount(),
+                     dead_count_.load(), is_dead_valid ? "true" : "false");
 }
 
 bool TsProvider::Init() {
@@ -284,7 +288,7 @@ int64_t TsProvider::GetTs(int64_t after_ts) {
   for (; retry_count < FLAGS_ts_provider_max_retry_num; ++retry_count) {
     int64_t ts = batch_ts_list_->GetTs(after_ts);
     if (ts > 0) {
-      get_ts_count_.fetch_add(1, std::memory_order_relaxed);
+      get_ts_count_ << 1;
       return ts;
     }
 
@@ -295,7 +299,7 @@ int64_t TsProvider::GetTs(int64_t after_ts) {
     DINGO_LOG(ERROR) << fmt::format("get ts retry({}) too much.", retry_count);
   }
 
-  get_ts_fail_count_.fetch_add(1, std::memory_order_relaxed);
+  get_ts_fail_count_ << 1;
 
   return 0;
 }
@@ -309,7 +313,7 @@ void TsProvider::RenewBatchTs() {
     }
 
     batch_ts_list_->Push(batch_ts);
-    renew_epoch_.fetch_add(1, std::memory_order_relaxed);
+    renew_epoch_ << 1;
     // clean dead BatchTs
     batch_ts_list_->CleanDead();
     return;
@@ -334,8 +338,7 @@ void TsProvider::LaunchRenewBatchTs(bool is_sync) {
 void TsProvider::TriggerRenewBatchTs() { LaunchRenewBatchTs(false); }
 
 std::string TsProvider::DebugInfo() {
-  return fmt::format("{} ts_count({}/{}) renew({})", batch_ts_list_->DebugInfo(),
-                     get_ts_count_.load(std::memory_order_relaxed), get_ts_fail_count_.load(std::memory_order_relaxed),
+  return fmt::format("{} ts_count({}/{}) renew({})", batch_ts_list_->DebugInfo(), GetTsCount(), GetTsFailCount(),
                      RenewEpoch());
 }
 
@@ -358,8 +361,6 @@ BatchTs* GenBatchTsForTest() {
 }
 
 BatchTs* TsProvider::SendTsoRequest() {
-  // return GenBatchTsForTest();
-
   pb::meta::TsoRequest tso_request;
   tso_request.set_op_type(pb::meta::TsoOpType::OP_GEN_TSO);
   tso_request.set_count(FLAGS_ts_provider_batch_size);

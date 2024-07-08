@@ -76,11 +76,9 @@ butil::Status KvReader::KvScan(const std::string& cf_name, int64_t ts, const std
   for (iter->Seek(encode_start_key); iter->Valid(); iter->Next()) {
     pb::common::KeyValue kv;
 
-    auto key = iter->Key();
-
     std::string decode_key;
     int64_t ts = 0;
-    Codec::DecodeKey(key, decode_key, ts);
+    Codec::DecodeKey(iter->Key(), decode_key, ts);
 
     kv.set_ts(ts);
     kv.set_key(decode_key);
