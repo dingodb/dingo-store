@@ -689,6 +689,7 @@ butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::C
       }
     }
   } else {
+    encode_seek_key = Helper::PrefixNext(encode_seek_key);
     if (encode_seek_key > encode_range.end_key()) {
       encode_seek_key = encode_range.end_key();
     }
