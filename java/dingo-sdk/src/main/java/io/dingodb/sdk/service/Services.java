@@ -157,7 +157,7 @@ public class Services {
     public static CoordinatorChannelProvider autoIncrementChannelProvider(Set<Location> locations) {
         return new CoordinatorChannelProvider(locations, GetCoordinatorMapResponse::getAutoIncrementLeaderLocation);
     }
-    
+
     public static Set<Location> parse(String locations) {
         return Arrays.stream(locations.split(","))
             .map(ss -> ss.split(":"))
@@ -312,6 +312,15 @@ public class Services {
         Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
         ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
         return new ServiceCaller<>(regionProvider, retry, DEFAULT, IndexService.Impl::new).getService();
+    }
+
+    @SneakyThrows
+    public static UtilService utilService(
+            Set<Location> locations, long regionId, int retry
+    ) {
+        Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
+        ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, UtilService.Impl::new).getService();
     }
 
     @SneakyThrows
