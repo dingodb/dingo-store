@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_CLIENT_COORDINATOR_H_
+#define DINGODB_CLIENT_COORDINATOR_H_
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -25,14 +28,12 @@
 #include "CLI/CLI.hpp"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
-// #include "client_v2/store_function.h"
 #include "client_v2/store.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
 
-#ifndef DINGODB__COORDINATOR_H_
-#define DINGODB__COORDINATOR_H_
 namespace client_v2 {
+
 void SetUpCoordinatorSubCommands(CLI::App &app);
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel);
@@ -122,7 +123,7 @@ struct StoreHeartbeatOption {
 };
 void SetUpStoreHeartbeat(CLI::App &app);
 void RunStoreHeartbeat(StoreHeartbeatOption const &opt);
-void SendStoreHearbeatV2(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t store_id);
+void SendStoreHearbeatV2(dingodb::CoordinatorInteractionPtr coordinator_interaction, int64_t store_id);
 
 struct CreateStoreOption {
   std::string coor_url;
@@ -520,4 +521,5 @@ void SetUpUpdateForceReadOnly(CLI::App &app);
 void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt);
 
 }  // namespace client_v2
-#endif  // DINGODB__COORDINATOR_H_
+
+#endif  // DINGODB_CLIENT_COORDINATOR_H_

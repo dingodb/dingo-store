@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_CLIENT_TOOLS_H_
+#define DINGODB_CLIENT_TOOLS_H_
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -25,14 +28,12 @@
 #include "CLI/CLI.hpp"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
-// #include "client_v2/store_function.h"
 #include "client_v2/store.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
 
-#ifndef DINGODB_TOOLS_H
-#define DINGODB_TOOLS_H
 namespace client_v2 {
+
 void SetUpToolSubCommands(CLI::App &app);
 std::string EncodeUint64(int64_t value);
 int64_t DecodeUint64(const std::string &str);
@@ -94,5 +95,7 @@ struct CoordinatorDebugOptions {
 };
 void SetUpCoordinatorDebug(CLI::App &app);
 void RunCoordinatorDebug(CoordinatorDebugOptions const &opt);
+
 }  // namespace client_v2
-#endif  // DINGODB_TOOLS_H
+
+#endif  // DINGODB_CLIENT_TOOLS_H_

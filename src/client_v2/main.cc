@@ -32,7 +32,6 @@
 #include "client_v2/kv.h"
 #include "client_v2/meta.h"
 #include "client_v2/store.h"
-//#include "client_v2/store_function.h"
 #include "client_v2/tools.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -53,18 +52,15 @@ void PrintSubcommandHelp(const CLI::App& app, const std::string& subcommand_name
   }
 }
 
-int InteractiveCli() {
-  CLI::App app{"This is dingo_client_v2"};
-  client_v2::SetUpCoordinatorSubCommands(app);
-  client_v2::SetUpKVSubCommands(app);
-  client_v2::SetUpMetaSubCommands(app);
-  client_v2::SetUpStoreSubCommands(app);
-  client_v2::SetUpToolSubCommands(app);
-  std::string input;
-
+int InteractiveCli(CLI::App& app) {
   while (true) {
     std::cout << "> ";
+    std::string input;
     std::getline(std::cin, input);
+
+    if (input.empty()) {
+      continue;
+    }
 
     if (input == "exit" || input == "quit") {
       break;
@@ -82,19 +78,26 @@ int InteractiveCli() {
       }
       continue;
     }
-    std::vector<std::string> args;
+
+    std::vector<std::string> args = {"dingo_client_v2"};
     std::istringstream iss(input);
-    for (std::string s; iss >> s;) args.push_back(s);
+    for (std::string s; iss >> s;) {
+      args.push_back(s);
+    }
 
     std::vector<char*> argv;
+    argv.reserve(args.size() + 1);
     for (auto& arg : args) {
-      argv.push_back(&arg[0]);
+      argv.push_back(arg.data());
     }
     argv.push_back(nullptr);
+
     CLI11_PARSE(app, argv.size() - 1, argv.data());
   }
+
   return 0;
 }
+
 int main(int argc, char* argv[]) {
   FLAGS_minloglevel = google::GLOG_INFO;
   FLAGS_logtostdout = false;
@@ -102,23 +105,26 @@ int main(int argc, char* argv[]) {
   FLAGS_colorlogtostdout = true;
   FLAGS_logbufsecs = 0;
   FLAGS_log_dir = "./client_v2_log";
+
   if (!dingodb::Helper::IsExistPath(FLAGS_log_dir)) {
     dingodb::Helper::CreateDirectories(FLAGS_log_dir);
   }
 
   google::InitGoogleLogging(argv[0]);
 
+  CLI::App app{"dingo_client_v2"};
+  app.get_formatter()->column_width(40);  // 列的宽度
+  client_v2::SetUpCoordinatorSubCommands(app);
+  client_v2::SetUpKVSubCommands(app);
+  client_v2::SetUpMetaSubCommands(app);
+  client_v2::SetUpStoreSubCommands(app);
+  client_v2::SetUpToolSubCommands(app);
+
   if (argc > 1) {
-    CLI::App app{"dingo_client_v2"};
-    app.get_formatter()->column_width(40);  // 列的宽度
-    client_v2::SetUpCoordinatorSubCommands(app);
-    client_v2::SetUpKVSubCommands(app);
-    client_v2::SetUpMetaSubCommands(app);
-    client_v2::SetUpStoreSubCommands(app);
-    client_v2::SetUpToolSubCommands(app);
     CLI11_PARSE(app, argc, argv);
+
   } else {
-    InteractiveCli();
+    InteractiveCli(app);
   }
 
   return 0;

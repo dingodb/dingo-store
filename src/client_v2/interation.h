@@ -44,8 +44,9 @@
 namespace client_v2 {
 
 const int kMaxRetry = 5;
-const int64_t timeout_ms = 60000;
-const bool log_each_request = true;
+const int64_t kTimeoutMs = 60000;
+const bool kLogEachRequest = true;
+
 class ServerInteraction {
  public:
   ServerInteraction() : leader_index_(0){};
@@ -112,11 +113,11 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
   int retry_count = 0;
   do {
     brpc::Controller cntl;
-    cntl.set_timeout_ms(timeout_ms);
+    cntl.set_timeout_ms(kTimeoutMs);
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
-    if (log_each_request) {
+    if (kLogEachRequest) {
       DINGO_LOG(INFO) << fmt::format("send request api [{}] {} response: {} request: {}", leader_index, api_name,
                                      response.ShortDebugString().substr(0, 256),
                                      request.ShortDebugString().substr(0, 256));
@@ -140,7 +141,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
         NextLeader(response.error().leader_location());
 
       } else {
-        if (!log_each_request) {
+        if (!kLogEachRequest) {
           DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
                                           dingodb::pb::error::Errno_Name(response.error().errcode()),
                                           response.error().errmsg());

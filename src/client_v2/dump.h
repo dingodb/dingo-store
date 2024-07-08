@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef DINGODB_STORE_TOOL_DUMP_H_  // NOLINT
-#define DINGODB_STORE_TOOL_DUMP_H_
+#ifndef DINGODB_CLIENT_DUMP_H_
+#define DINGODB_CLIENT_DUMP_H_
 
-// #include "client_v2/store_function.h"
 #include "client_v2/store.h"
+
 namespace client_v2 {
 
 void DumpDb(DumpDbOptions const& opt);
@@ -24,4 +24,4 @@ void WhichRegion(WhichRegionOptions const& opt);
 
 }  // namespace client_v2
 
-#endif  // DINGODB_STORE_TOOL_DUMP_H_
+#endif  // DINGODB_CLIENT_DUMP_H_
