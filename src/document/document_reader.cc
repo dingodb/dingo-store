@@ -298,6 +298,7 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
       }
     }
   } else {
+    encode_seek_key = Helper::PrefixNext(encode_seek_key);
     if (encode_seek_key > encode_range.end_key()) {
       encode_seek_key = encode_range.end_key();
     }
