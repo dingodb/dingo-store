@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_CLIENT_META_H_
+#define DINGODB_CLIENT_META_H_
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -25,14 +28,12 @@
 #include "CLI/CLI.hpp"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
-// #include "client_v2/store_function.h"
 #include "client_v2/store.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
 
-#ifndef DINGODB_META_H
-#define DINGODB_META_H
 namespace client_v2 {
+
 void SetUpMetaSubCommands(CLI::App &app);
 
 struct MetaHelloOptions {
@@ -498,5 +499,7 @@ struct UpdateTsoOptions {
 };
 void SetUpUpdateTso(CLI::App &app);
 void RunUpdateTso(UpdateTsoOptions const &opt);
+
 }  // namespace client_v2
-#endif  // DINGODB_META_H
+
+#endif  // DINGODB_CLIENT_META_H_

@@ -25,6 +25,7 @@
 #include "document/codec.h"
 
 namespace client_v2 {
+
 void SetUpCoordinatorSubCommands(CLI::App &app) {
   // coordinator commands
   SetUpGetCoordinatorMap(app);
@@ -40,6 +41,7 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpMergeRegion(app);
   SetUpQueryRegion(app);
 }
+
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
   braft::PeerId node;
   if (node.parse(location) != 0) {
@@ -50,7 +52,7 @@ bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
   // rpc for leader access
   if (channel.Init(node.addr, nullptr) != 0) {
     DINGO_LOG(ERROR) << "Fail to init channel to " << location;
-    bthread_usleep(timeout_ms * 1000L);
+    bthread_usleep(kTimeoutMs * 1000L);
     return false;
   }
 
@@ -59,12 +61,13 @@ bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
 
 void SetUpGetRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetRegionMapCommandOptions>();
-  auto coor = app.add_subcommand("GetRegionMap", "Get region map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->callback([opt]() { RunGetRegionMap(*opt); });
+  auto *cmd = app.add_subcommand("GetRegionMap", "Get region map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->callback([opt]() { RunGetRegionMap(*opt); });
 }
+
 void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     std::cout << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
@@ -117,15 +120,15 @@ void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
 
 void SetUpLogLevel(CLI::App &app) {
   auto opt = std::make_shared<GetLogLevelCommandOptions>();
-  auto coor = app.add_subcommand("GetLogLevel", "Get log level")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("GetLogLevel", "Get log level")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--timeout_ms", opt->timeout_ms, "Timeout for each request")
+  cmd->add_option("--timeout_ms", opt->timeout_ms, "Timeout for each request")
       ->default_val(60000)
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunLogLevel(*opt); });
+  cmd->callback([opt]() { RunLogLevel(*opt); });
 }
 void RunLogLevel(GetLogLevelCommandOptions const &opt) {
   dingodb::pb::node::GetLogLevelRequest request;
@@ -151,15 +154,15 @@ void RunLogLevel(GetLogLevelCommandOptions const &opt) {
 
 void SetUpRaftAddPeer(CLI::App &app) {
   auto opt = std::make_shared<RaftAddPeerCommandOptions>();
-  auto coor = app.add_subcommand("RaftAddPeer", "coordinator RaftAddPeer")->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  auto *cmd = app.add_subcommand("RaftAddPeer", "coordinator RaftAddPeer")->group("Coordinator Manager Commands");
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 1)->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 1)->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunRaftAddPeer(*opt); });
+  cmd->callback([opt]() { RunRaftAddPeer(*opt); });
 }
 
 void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
@@ -183,7 +186,7 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   if (opt.coordinator_addr.empty()) {
     std::cout << "Please set --addr or --coordinator_addr";
@@ -211,16 +214,16 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
 void SetUpRaftRemovePeer(CLI::App &app) {
   auto opt = std::make_shared<RaftRemovePeerOption>();
 
-  auto coor = app.add_subcommand("RaftRemovePeer", "Raft remove peer")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("RaftRemovePeer", "Raft remove peer")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 1)->group("Coordinator Manager Commands");
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 1)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunRaftRemovePeer(*opt); });
+  cmd->callback([opt]() { RunRaftRemovePeer(*opt); });
 }
 void RunRaftRemovePeer(RaftRemovePeerOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
@@ -238,7 +241,7 @@ void RunRaftRemovePeer(RaftRemovePeerOption const &opt) {
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -258,16 +261,16 @@ void RunRaftRemovePeer(RaftRemovePeerOption const &opt) {
 void SetUpRaftTansferLeader(CLI::App &app) {
   auto opt = std::make_shared<RaftTansferLeaderOption>();
 
-  auto coor = app.add_subcommand("RaftTansferLeader", "Raft transfer leader")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("RaftTansferLeader", "Raft transfer leader")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunRaftTansferLeader(*opt); });
+  cmd->callback([opt]() { RunRaftTansferLeader(*opt); });
 }
 void RunRaftTansferLeader(RaftTansferLeaderOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
@@ -289,7 +292,7 @@ void RunRaftTansferLeader(RaftTansferLeaderOption const &opt) {
 
   brpc::Controller cntl;
 
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -308,16 +311,16 @@ void RunRaftTansferLeader(RaftTansferLeaderOption const &opt) {
 
 void SetUpRaftSnapshot(CLI::App &app) {
   auto opt = std::make_shared<RaftSnapshotOption>();
-  auto coor = app.add_subcommand("RaftSnapshot", "Raft snapshot")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("RaftSnapshot", "Raft snapshot")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunRaftSnapshot(*opt); });
+  cmd->callback([opt]() { RunRaftSnapshot(*opt); });
 }
 void RunRaftSnapshot(RaftSnapshotOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
@@ -340,7 +343,7 @@ void RunRaftSnapshot(RaftSnapshotOption const &opt) {
 
   brpc::Controller cntl;
 
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -361,16 +364,16 @@ void RunRaftSnapshot(RaftSnapshotOption const &opt) {
 
 void SetUpRaftResetPeer(CLI::App &app) {
   auto opt = std::make_shared<RaftResetPeerOption>();
-  auto coor = app.add_subcommand("RaftResetPeer", "Raft reset peer")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("RaftResetPeer", "Raft reset peer")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunRaftResetPeer(*opt); });
+  cmd->callback([opt]() { RunRaftResetPeer(*opt); });
 }
 void RunRaftResetPeer(RaftResetPeerOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
@@ -408,7 +411,7 @@ void RunRaftResetPeer(RaftResetPeerOption const &opt) {
   }
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -429,16 +432,16 @@ void RunRaftResetPeer(RaftResetPeerOption const &opt) {
 
 void SetUpGetNodeInfo(CLI::App &app) {
   auto opt = std::make_shared<GetNodeInfoOption>();
-  auto coor = app.add_subcommand("GetNodeInfo", "Get node info")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("GetNodeInfo", "Get node info")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
+  cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
+  cmd->add_option("--index", opt->index, "Index")->expected(0, 3)->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunGetNodeInfo(*opt); });
+  cmd->callback([opt]() { RunGetNodeInfo(*opt); });
 }
 void RunGetNodeInfo(GetNodeInfoOption const &opt) {
   dingodb::pb::node::GetNodeInfoRequest request;
@@ -449,7 +452,7 @@ void RunGetNodeInfo(GetNodeInfoOption const &opt) {
   request.set_cluster_id(0);
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -471,15 +474,15 @@ void RunGetNodeInfo(GetNodeInfoOption const &opt) {
 
 void SetUpChangeLogLevel(CLI::App &app) {
   auto opt = std::make_shared<GetChangeLogLevelOption>();
-  auto coor = app.add_subcommand("ChangeLogLevel", "Change log level")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
+  auto *cmd = app.add_subcommand("ChangeLogLevel", "Change log level")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--level", opt->level, "Request parameter log level, DEBUG|INFO|WARNING|ERROR|FATAL")
+  cmd->add_option("--level", opt->level, "Request parameter log level, DEBUG|INFO|WARNING|ERROR|FATAL")
       ->required()
       ->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunChangeLogLevel(*opt); });
+  cmd->callback([opt]() { RunChangeLogLevel(*opt); });
 }
 void RunChangeLogLevel(GetChangeLogLevelOption const &opt) {
   dingodb::pb::node::ChangeLogLevelRequest request;
@@ -508,7 +511,7 @@ void RunChangeLogLevel(GetChangeLogLevelOption const &opt) {
   log_detail->set_stop_logging_if_full_disk(false);
 
   brpc::Controller cntl;
-  cntl.set_timeout_ms(timeout_ms);
+  cntl.set_timeout_ms(kTimeoutMs);
 
   brpc::Channel channel;
   if (!GetBrpcChannel(opt.coordinator_addr, channel)) {
@@ -528,13 +531,14 @@ void RunChangeLogLevel(GetChangeLogLevelOption const &opt) {
 
 void SetUpHello(CLI::App &app) {
   auto opt = std::make_shared<HelloOption>();
-  auto coor = app.add_subcommand("Hello", "Coordinator hello ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("Hello", "Coordinator hello ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunHello(*opt); });
+  cmd->callback([opt]() { RunHello(*opt); });
 }
+
 void RunHello(HelloOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::HelloRequest request;
@@ -552,20 +556,21 @@ void RunHello(HelloOption const &opt) {
 
 void SetUpStoreHeartbeat(CLI::App &app) {
   auto opt = std::make_shared<StoreHeartbeatOption>();
-  auto coor = app.add_subcommand("StoreHeartbeat", "Store heart beat ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("StoreHeartbeat", "Store heart beat ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunStoreHeartbeat(*opt); });
+  cmd->callback([opt]() { RunStoreHeartbeat(*opt); });
 }
+
 void RunStoreHeartbeat(StoreHeartbeatOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   SendStoreHearbeatV2(coordinator_interaction, 100);
   SendStoreHearbeatV2(coordinator_interaction, 200);
   SendStoreHearbeatV2(coordinator_interaction, 300);
 }
-void SendStoreHearbeatV2(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t store_id) {
+void SendStoreHearbeatV2(dingodb::CoordinatorInteractionPtr coordinator_interaction, int64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
   dingodb::pb::coordinator::StoreHeartbeatResponse response;
 
@@ -590,13 +595,14 @@ void SendStoreHearbeatV2(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
 
 void SetUpCreateStore(CLI::App &app) {
   auto opt = std::make_shared<CreateStoreOption>();
-  auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCreateStore(*opt); });
+  cmd->callback([opt]() { RunCreateStore(*opt); });
 }
+
 void RunCreateStore(CreateStoreOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CreateStoreRequest request;
@@ -611,17 +617,18 @@ void RunCreateStore(CreateStoreOption const &opt) {
 
 void SetUpDeleteStore(CLI::App &app) {
   auto opt = std::make_shared<DeleteStoreOption>();
-  auto coor = app.add_subcommand("DeleteStore", "Delete store ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DeleteStore", "Delete store ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDeleteStore(*opt); });
+  cmd->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDeleteStore(*opt); });
 }
+
 void RunDeleteStore(DeleteStoreOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteStoreRequest request;
@@ -640,18 +647,19 @@ void RunDeleteStore(DeleteStoreOption const &opt) {
 
 void SetUpUpdateStore(CLI::App &app) {
   auto opt = std::make_shared<UpdateStoreOption>();
-  auto coor = app.add_subcommand("UpdateStore", "Update store state")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("UpdateStore", "Update store state")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--state", opt->state, "set store state IN|OUT")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunUpdateStore(*opt); });
+  cmd->add_option("--id", opt->id, "store id")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--state", opt->state, "set store state IN|OUT")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunUpdateStore(*opt); });
 }
+
 void RunUpdateStore(UpdateStoreOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateStoreRequest request;
@@ -678,20 +686,21 @@ void RunUpdateStore(UpdateStoreOption const &opt) {
 
 void SetUpCreateExecutor(CLI::App &app) {
   auto opt = std::make_shared<CreateExecutorOption>();
-  auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
 
-  coor->callback([opt]() { RunCreateExecutor(*opt); });
+  cmd->callback([opt]() { RunCreateExecutor(*opt); });
 }
+
 void RunCreateExecutor(CreateExecutorOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CreateExecutorRequest request;
@@ -709,18 +718,19 @@ void RunCreateExecutor(CreateExecutorOption const &opt) {
 
 void SetUpDeleteExecutor(CLI::App &app) {
   auto opt = std::make_shared<DeleteExecutorOption>();
-  auto coor = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter executor id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDeleteExecutor(*opt); });
+  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--id", opt->id, "Request parameter executor id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDeleteExecutor(*opt); });
 }
+
 void RunDeleteExecutor(DeleteExecutorOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteExecutorRequest request;
@@ -738,17 +748,18 @@ void RunDeleteExecutor(DeleteExecutorOption const &opt) {
 
 void SetUpCreateExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<CreateExecutorUserOption>();
-  auto coor = app.add_subcommand("CreateExecutorUser", "Create executor user ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateExecutorUser", "Create executor user ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCreateExecutorUser(*opt); });
+  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunCreateExecutorUser(*opt); });
 }
+
 void RunCreateExecutorUser(CreateExecutorUserOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CreateExecutorUserRequest request;
@@ -765,20 +776,21 @@ void RunCreateExecutorUser(CreateExecutorUserOption const &opt) {
 
 void SetUpUpdateExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<UpdateExecutorUserOption>();
-  auto coor = app.add_subcommand("UpdateExecutorUser", "Update executor user ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("UpdateExecutorUser", "Update executor user ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--new_keyring", opt->new_keyring, "Request parameter new keyring")
+  cmd->add_option("--new_keyring", opt->new_keyring, "Request parameter new keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunUpdateExecutorUser(*opt); });
+  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunUpdateExecutorUser(*opt); });
 }
+
 void RunUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateExecutorUserRequest request;
@@ -796,17 +808,17 @@ void RunUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
 
 void SetUpDeleteExecutorUser(CLI::App &app) {
   auto opt = std::make_shared<DeleteExecutorUserOption>();
-  auto coor = app.add_subcommand("DeleteExecutorUser", "Delete executor user ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DeleteExecutorUser", "Delete executor user ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDeleteExecutorUser(*opt); });
+  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDeleteExecutorUser(*opt); });
 }
 void RunDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteExecutorUserRequest request;
@@ -823,13 +835,14 @@ void RunDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
 
 void SetUpGetExecutorUserMap(CLI::App &app) {
   auto opt = std::make_shared<GetExecutorUserMapOption>();
-  auto coor = app.add_subcommand("GetExecutorUserMap", "Get executor user map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetExecutorUserMap", "Get executor user map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetExecutorUserMap(*opt); });
+  cmd->callback([opt]() { RunGetExecutorUserMap(*opt); });
 }
+
 void RunGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetExecutorUserMapRequest request;
@@ -843,22 +856,23 @@ void RunGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
 
 void SetUpExecutorHeartbeat(CLI::App &app) {
   auto opt = std::make_shared<ExecutorHeartbeatOption>();
-  auto coor = app.add_subcommand("ExecutorHeartbeat", "Executor Heart beat ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("ExecutorHeartbeat", "Executor Heart beat ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--keyring", opt->keyring, "Request parameter keyring")
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
       ->default_val("TO_BE_CONTINUED")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter executor id")->group("Coordinator Manager Commands");
-  coor->add_option("--user", opt->user, "Request parameter user")
+  cmd->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--id", opt->id, "Request parameter executor id")->group("Coordinator Manager Commands");
+  cmd->add_option("--user", opt->user, "Request parameter user")
       ->default_val("administrator")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunExecutorHeartbeat(*opt); });
+  cmd->callback([opt]() { RunExecutorHeartbeat(*opt); });
 }
+
 void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::ExecutorHeartbeatRequest request;
@@ -881,15 +895,16 @@ void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
 
 void SetUpGetStoreMap(CLI::App &app) {
   auto opt = std::make_shared<GetStoreMapOption>();
-  auto coor = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_flag("--use_filter_store_type", opt->use_filter_store_type, "use filter_store_type")->default_val(false);
-  coor->add_option("--filter_store_type", opt->filter_store_type, "store type 0:store;1:index;2:document")
+  auto *cmd = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_flag("--use_filter_store_type", opt->use_filter_store_type, "use filter_store_type")->default_val(false);
+  cmd->add_option("--filter_store_type", opt->filter_store_type, "store type 0:store;1:index;2:document")
       ->check(CLI::Range(0, 2));
-  coor->callback([opt]() { RunGetStoreMap(*opt); });
+  cmd->callback([opt]() { RunGetStoreMap(*opt); });
 }
+
 void RunGetStoreMap(GetStoreMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetStoreMapRequest request;
@@ -953,13 +968,14 @@ void RunGetStoreMap(GetStoreMapOption const &opt) {
 
 void SetUpGetExecutorMap(CLI::App &app) {
   auto opt = std::make_shared<GetExecutorMapOption>();
-  auto coor = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetExecutorMap(*opt); });
+  cmd->callback([opt]() { RunGetExecutorMap(*opt); });
 }
+
 void RunGetExecutorMap(GetExecutorMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetExecutorMapRequest request;
@@ -974,13 +990,14 @@ void RunGetExecutorMap(GetExecutorMapOption const &opt) {
 
 void SetUpGetDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetDeleteRegionMapOption>();
-  auto coor = app.add_subcommand("DeleteRegionMap", "Delete region map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DeleteRegionMap", "Delete region map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetDeleteRegionMap(*opt); });
+  cmd->callback([opt]() { RunGetDeleteRegionMap(*opt); });
 }
+
 void RunGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetDeletedRegionMapRequest request;
@@ -1004,15 +1021,16 @@ void RunGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
 
 void SetUpAddDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<AddDeleteRegionMapOption>();
-  auto coor = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--is_force", opt->is_force, "Request parameter force ")->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunAddDeleteRegionMap(*opt); });
+  cmd->add_option("--is_force", opt->is_force, "Request parameter force ")->group("Coordinator Manager Commands");
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunAddDeleteRegionMap(*opt); });
 }
+
 void RunAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::AddDeletedRegionMapRequest request;
@@ -1027,14 +1045,15 @@ void RunAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
 
 void SetUpCleanDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<CleanDeleteRegionMapOption>();
-  auto coor = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCleanDeleteRegionMap(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunCleanDeleteRegionMap(*opt); });
 }
+
 void RunCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CleanDeletedRegionMapRequest request;
@@ -1048,13 +1067,14 @@ void RunCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
 
 void SetUpGetRegionCount(CLI::App &app) {
   auto opt = std::make_shared<GetRegionCountOption>();
-  auto coor = app.add_subcommand("GetRegionCount", "Get region map count")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetRegionCount", "Get region map count")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetRegionCount(*opt); });
+  cmd->callback([opt]() { RunGetRegionCount(*opt); });
 }
+
 void RunGetRegionCount(GetRegionCountOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetRegionCountRequest request;
@@ -1070,13 +1090,14 @@ void RunGetRegionCount(GetRegionCountOption const &opt) {
 
 void SetUpGetCoordinatorMap(CLI::App &app) {
   auto opt = std::make_shared<GetCoordinatorMapOption>();
-  auto coor = app.add_subcommand("GetCoordinatorMap", "Get coordinator map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_flag("--get_coordinator_map", opt->get_coordinator_map, "Request patameter get_coordinaotor_map");
-  coor->callback([opt]() { RunGetCoordinatorMap(*opt); });
+  auto *cmd = app.add_subcommand("GetCoordinatorMap", "Get coordinator map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_flag("--get_coordinator_map", opt->get_coordinator_map, "Request patameter get_coordinaotor_map");
+  cmd->callback([opt]() { RunGetCoordinatorMap(*opt); });
 }
+
 void RunGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetCoordinatorMapRequest request;
@@ -1119,17 +1140,18 @@ void RunGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
 
 void SetUpCreateRegionId(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionIdOption>();
-  auto coor = app.add_subcommand("CreateRegionId", "Create Region ID")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateRegionId", "Create Region ID")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "count must > 0 and < 2048")
+  cmd->add_option("--count", opt->count, "count must > 0 and < 2048")
       ->required()
       ->check(CLI::Range(1, 2048))
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCreateRegionId(*opt); });
+  cmd->callback([opt]() { RunCreateRegionId(*opt); });
 }
+
 void RunCreateRegionId(CreateRegionIdOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CreateRegionIdRequest request;
@@ -1144,13 +1166,14 @@ void RunCreateRegionId(CreateRegionIdOption const &opt) {
 
 void SetUpQueryRegion(CLI::App &app) {
   auto opt = std::make_shared<QueryRegionOption>();
-  auto coor = app.add_subcommand("QueryRegion", "Query region ")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunQueryRegion(*opt); });
+  auto *cmd = app.add_subcommand("QueryRegion", "Query region ")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required();
+  cmd->callback([opt]() { RunQueryRegion(*opt); });
 }
+
 void RunQueryRegion(QueryRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::QueryRegionRequest request;
@@ -1179,67 +1202,67 @@ void RunQueryRegion(QueryRegionOption const &opt) {
 
 void SetUpCreateRegion(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionOption>();
-  auto coor = app.add_subcommand("CreateRegion", "Create region ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CreateRegion", "Create region ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--name", opt->name, "Request parameter region name")
+  cmd->add_option("--name", opt->name, "Request parameter region name")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
+  cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--raw_engine", opt->raw_engine, "Request parameter raw_engine , rocksdb|bdb|xdp")
+  cmd->add_option("--raw_engine", opt->raw_engine, "Request parameter raw_engine , rocksdb|bdb|xdp")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_flag("--create_document_region", opt->create_document_region, "Request parameter create document region")
+  cmd->add_flag("--create_document_region", opt->create_document_region, "Request parameter create document region")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--region_prefix", opt->region_prefix, "Request parameter region prefix, size must be 1")
+  cmd->add_option("--region_prefix", opt->region_prefix, "Request parameter region prefix, size must be 1")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--part_id", opt->part_id, "Request parameter part id")
+  cmd->add_option("--part_id", opt->part_id, "Request parameter part id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter start_id")
+  cmd->add_option("--end_id", opt->end_id, "Request parameter start_id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--end_key", opt->end_key, "Request parameter end_key")
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_flag("--use_json_parameter", opt->use_json_parameter, "Request parameter use_json_parameter swtich")
+  cmd->add_flag("--use_json_parameter", opt->use_json_parameter, "Request parameter use_json_parameter swtich")
       ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->group("Coordinator Manager Commands");
+  cmd->add_option("--vector_index_type", opt->vector_index_type,
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_index_type", opt->vector_index_type,
-                   "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")->group("Coordinator Manager Commands");
-  coor->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->group("Coordinator Manager Commands");
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")
       ->ignore_case()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--max_elements", opt->max_elements, "Request parameter max_elements")
+  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction")
+  cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--nlinks", opt->nlinks, "Request parameter nlinks")->group("Coordinator Manager Commands");
-  coor->add_option("--ncentroids", opt->ncentroids, "Request parameter ncentroids, ncentroids default 10")
+  cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks")->group("Coordinator Manager Commands");
+  cmd->add_option("--ncentroids", opt->ncentroids, "Request parameter ncentroids, ncentroids default 10")
       ->default_val(10)
       ->group("Coordinator Manager Commands");
-  coor->add_option("--nsubvector", opt->nsubvector, "Request parameter nsubvector, ivf pq default subvector nums 8")
+  cmd->add_option("--nsubvector", opt->nsubvector, "Request parameter nsubvector, ivf pq default subvector nums 8")
       ->default_val(8)
       ->group("Coordinator Manager Commands");
-  coor->add_option("--nbits_per_idx", opt->nbits_per_idx,
-                   "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
+  cmd->add_option("--nbits_per_idx", opt->nbits_per_idx,
+                  "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
       ->default_val(8)
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCreateRegion(*opt); });
+  cmd->callback([opt]() { RunCreateRegion(*opt); });
 }
+
 void RunCreateRegion(CreateRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   if (opt.name.empty()) {
@@ -1474,15 +1497,16 @@ void RunCreateRegion(CreateRegionOption const &opt) {
 
 void SetUpCreateRegionForSplit(CLI::App &app) {
   auto opt = std::make_shared<CreateRegionForSplitOption>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("CreateRegionForSplit", "Create region for split")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCreateRegionForSplit(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunCreateRegionForSplit(*opt); });
 }
+
 void RunCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1535,14 +1559,14 @@ void RunCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
 
 void SetUpDropRegion(CLI::App &app) {
   auto opt = std::make_shared<DropRegionOption>();
-  auto coor = app.add_subcommand("DropRegion", "Drop region ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DropRegion", "Drop region ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDropRegion(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDropRegion(*opt); });
 }
 void RunDropRegion(DropRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1558,15 +1582,16 @@ void RunDropRegion(DropRegionOption const &opt) {
 
 void SetUpDropRegionPermanently(CLI::App &app) {
   auto opt = std::make_shared<DropRegionPermanentlyOption>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("DropRegionPermanently", "Drop region permanently")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDropRegionPermanently(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id ")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDropRegionPermanently(*opt); });
 }
+
 void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
@@ -1582,24 +1607,25 @@ void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
 
 void SetUpSplitRegion(CLI::App &app) {
   auto opt = std::make_shared<SplitRegionOption>();
-  auto coor = app.add_subcommand("SplitRegion", "Split region ")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--split_to_id", opt->split_to_id, "Request parameter split to region id")
+  auto *cmd = app.add_subcommand("SplitRegion", "Split region ")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--split_to_id", opt->split_to_id, "Request parameter split to region id")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()));
-  coor->add_option("--split_from_id", opt->split_from_id, "Request parameter split from region id")
+  cmd->add_option("--split_from_id", opt->split_from_id, "Request parameter split from region id")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  coor->add_option("--split_key", opt->split_key,
-                   "Request parameter split_water_shed_key, if key is empty will auto generate from the mid between "
-                   "start_key and end_key");
-  coor->add_option("--vector_id", opt->vector_id, "Request parameter vector_id");
-  coor->add_option("--document_id", opt->document_id, "Request parameter document_id ");
-  coor->add_flag("--store_create_region", opt->store_create_region, "Request parameter store_create_region ")
+  cmd->add_option("--split_key", opt->split_key,
+                  "Request parameter split_water_shed_key, if key is empty will auto generate from the mid between "
+                  "start_key and end_key");
+  cmd->add_option("--vector_id", opt->vector_id, "Request parameter vector_id");
+  cmd->add_option("--document_id", opt->document_id, "Request parameter document_id ");
+  cmd->add_flag("--store_create_region", opt->store_create_region, "Request parameter store_create_region ")
       ->default_val(false);
-  coor->callback([opt]() { RunSplitRegion(*opt); });
+  cmd->callback([opt]() { RunSplitRegion(*opt); });
 }
+
 void RunSplitRegion(SplitRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1702,18 +1728,19 @@ void RunSplitRegion(SplitRegionOption const &opt) {
 
 void SetUpMergeRegion(CLI::App &app) {
   auto opt = std::make_shared<MergeRegionOption>();
-  auto coor = app.add_subcommand("MergeRegion", "Merge region ")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--target_id", opt->target_id, "Request parameter target id ")
+  auto *cmd = app.add_subcommand("MergeRegion", "Merge region ")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--target_id", opt->target_id, "Request parameter target id ")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  coor->add_option("--source_id", opt->source_id, "Request parameter source id ")
+  cmd->add_option("--source_id", opt->source_id, "Request parameter source id ")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  coor->callback([opt]() { RunMergeRegion(*opt); });
+  cmd->callback([opt]() { RunMergeRegion(*opt); });
 }
+
 void RunMergeRegion(MergeRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1749,14 +1776,15 @@ void RunMergeRegion(MergeRegionOption const &opt) {
 
 void SetUpAddPeerRegion(CLI::App &app) {
   auto opt = std::make_shared<AddPeerRegionOption>();
-  auto coor = app.add_subcommand("AddPeerRegion", "Add peer region ")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunAddPeerRegion(*opt); });
+  auto *cmd = app.add_subcommand("AddPeerRegion", "Add peer region ")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
+  cmd->callback([opt]() { RunAddPeerRegion(*opt); });
 }
+
 void RunAddPeerRegion(AddPeerRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   // get StoreMap
@@ -1836,14 +1864,15 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
 
 void SetUpRemovePeerRegion(CLI::App &app) {
   auto opt = std::make_shared<RemovePeerRegionOption>();
-  auto coor = app.add_subcommand("RemovePeerRegion", "Remove peer region")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
-  coor->callback([opt]() { RunRemovePeerRegion(*opt); });
+  auto *cmd = app.add_subcommand("RemovePeerRegion", "Remove peer region")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
+  cmd->callback([opt]() { RunRemovePeerRegion(*opt); });
 }
+
 void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1910,20 +1939,21 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
 
 void SetUpTransferLeaderRegion(CLI::App &app) {
   auto opt = std::make_shared<TransferLeaderRegionOption>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("TransferLeaderRegion", "Transfer leader region")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--store_id", opt->store_id, "Request parameter store id ")
+  cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id ")
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTransferLeaderRegion(*opt); });
+  cmd->callback([opt]() { RunTransferLeaderRegion(*opt); });
 }
+
 void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -1979,17 +2009,17 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
 
 void SetUpGetOrphanRegion(CLI::App &app) {
   auto opt = std::make_shared<GetOrphanRegionOption>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("TransferLeaderRegion", "Transfer leader region")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--store_id", opt->store_id, "Request parameter store id ")
+  cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetOrphanRegion(*opt); });
+  cmd->callback([opt]() { RunGetOrphanRegion(*opt); });
 }
 void RunGetOrphanRegion(GetOrphanRegionOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetOrphanRegionRequest request;
@@ -2014,23 +2044,22 @@ void RunGetOrphanRegion(GetOrphanRegionOption const &opt) {
 
 void SetUpScanRegions(CLI::App &app) {
   auto opt = std::make_shared<ScanRegionsOptions>();
-  auto coor = app.add_subcommand("ScanRegions", "Scan region")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("ScanRegions", "Scan region")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--range_end", opt->range_end, "Request parameter key")
+  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->group("Coordinator Manager Commands");
+  cmd->add_option("--range_end", opt->range_end, "Request parameter key")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")
       ->default_val(50)
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunScanRegions(*opt); });
+  cmd->callback([opt]() { RunScanRegions(*opt); });
 }
 void RunScanRegions(ScanRegionsOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::ScanRegionsRequest request;
@@ -2059,13 +2088,13 @@ void RunScanRegions(ScanRegionsOptions const &opt) {
 
 void SetUpGetRangeRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetRangeRegionMapOption>();
-  auto coor = app.add_subcommand("GetRangeRegionMap", "Get range region map")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetRangeRegionMap", "Get range region map")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetRangeRegionMap(*opt); });
+  cmd->callback([opt]() { RunGetRangeRegionMap(*opt); });
 }
 void RunGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetRangeRegionMapRequest request;
@@ -2082,17 +2111,17 @@ void RunGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
 
 void SetUpGetStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<GetStoreOperationOption>();
-  auto coor = app.add_subcommand("GetStoreOperation", "Get store operation ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetStoreOperation", "Get store operation ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--store_id", opt->store_id, "Request parameter store id")
+  cmd->add_option("--store_id", opt->store_id, "Request parameter store id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetStoreOperation(*opt); });
+  cmd->callback([opt]() { RunGetStoreOperation(*opt); });
 }
 
 void RunGetStoreOperation(GetStoreOperationOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetStoreOperationRequest request;
@@ -2112,18 +2141,18 @@ void RunGetStoreOperation(GetStoreOperationOption const &opt) {
 
 void SetUpGetTaskList(CLI::App &app) {
   auto opt = std::make_shared<GetTaskListOptions>();
-  auto coor = app.add_subcommand("GetTaskList", "Get task list")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--id", opt->id, "Request parameter task id");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start id");
-  coor->add_flag("--include_archive", opt->include_archive, "Request parameter include history archive")
+  auto *cmd = app.add_subcommand("GetTaskList", "Get task list")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter task id");
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
+  cmd->add_flag("--include_archive", opt->include_archive, "Request parameter include history archive")
       ->default_val(false);
-  coor->add_option("--limit", opt->limit, "Request parameter limit ");
-  coor->callback([opt]() { RunGetTaskList(*opt); });
+  cmd->add_option("--limit", opt->limit, "Request parameter limit ");
+  cmd->callback([opt]() { RunGetTaskList(*opt); });
 }
 
 void RunGetTaskList(GetTaskListOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetTaskListRequest request;
@@ -2149,15 +2178,15 @@ void RunGetTaskList(GetTaskListOptions const &opt) {
 
 void SetUpCleanTaskList(CLI::App &app) {
   auto opt = std::make_shared<CleanTaskListOption>();
-  auto coor = app.add_subcommand("CleanTaskList", "Clean task list")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--id", opt->id, "Request parameter task id, if you want to clean all task_list, set --id=0")
+  auto *cmd = app.add_subcommand("CleanTaskList", "Clean task list")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all task_list, set --id=0")
       ->required();
-  coor->callback([opt]() { RunCleanTaskList(*opt); });
+  cmd->callback([opt]() { RunCleanTaskList(*opt); });
 }
 
 void RunCleanTaskList(CleanTaskListOption const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CleanTaskListRequest request;
@@ -2178,28 +2207,28 @@ void RunCleanTaskList(CleanTaskListOption const &opt) {
 
 void SetUpUpdateRegionCmdStatus(CLI::App &app) {
   auto opt = std::make_shared<UpdateRegionCmdStatusOptions>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("UpdateRegionCmdStatus", "Update region cmd status")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--task_list_id", opt->task_list_id, "Request parameter task_list_id")
+  cmd->add_option("--task_list_id", opt->task_list_id, "Request parameter task_list_id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")
+  cmd->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--status", opt->status, "Request parameter status, must be 1 [DONE] or 2 [FAIL]")
+  cmd->add_option("--status", opt->status, "Request parameter status, must be 1 [DONE] or 2 [FAIL]")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--errcode", opt->errcode, "Request parameter errcode ")
+  cmd->add_option("--errcode", opt->errcode, "Request parameter errcode ")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->errmsg, "Request parameter errmsg")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunUpdateRegionCmdStatus(*opt); });
+  cmd->add_option("--id", opt->errmsg, "Request parameter errmsg")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunUpdateRegionCmdStatus(*opt); });
 }
 
 void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
@@ -2217,15 +2246,15 @@ void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
 
 void SetUpCleanStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<CleanStoreOperationOptions>();
-  auto coor = app.add_subcommand("CleanStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("CleanStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCleanStoreOperation(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunCleanStoreOperation(*opt); });
 }
 
 void RunCleanStoreOperation(CleanStoreOperationOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::CleanStoreOperationRequest request;
@@ -2240,18 +2269,18 @@ void RunCleanStoreOperation(CleanStoreOperationOptions const &opt) {
 
 void SetUpAddStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<AddStoreOperationOptions>();
-  auto coor = app.add_subcommand("AddStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("AddStoreOperation", "Clean store operation")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
+  cmd->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunAddStoreOperation(*opt); });
+  cmd->callback([opt]() { RunAddStoreOperation(*opt); });
 }
 
 void RunAddStoreOperation(AddStoreOperationOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2271,19 +2300,19 @@ void RunAddStoreOperation(AddStoreOperationOptions const &opt) {
 
 void SetUpRemoveStoreOperation(CLI::App &app) {
   auto opt = std::make_shared<RemoveStoreOperationOptions>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("RemoveStoreOperation", "Remove store operation")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")
+  cmd->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunRemoveStoreOperation(*opt); });
+  cmd->callback([opt]() { RunRemoveStoreOperation(*opt); });
 }
 
 void RunRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2299,23 +2328,23 @@ void RunRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
 
 void SetUpGetRegionCmd(CLI::App &app) {
   auto opt = std::make_shared<GetRegionCmdOptions>();
-  auto coor = app.add_subcommand("GetRegionCmd", "Get region cmd")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetRegionCmd", "Get region cmd")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->store_id, "Request parameter store id")
+  cmd->add_option("--id", opt->store_id, "Request parameter store id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--start_region_cmd_id", opt->start_region_cmd_id, "Request parameter start region cmd id")
+  cmd->add_option("--start_region_cmd_id", opt->start_region_cmd_id, "Request parameter start region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--end_region_cmd_id", opt->end_region_cmd_id, "Request parameter end region cmd id")
+  cmd->add_option("--end_region_cmd_id", opt->end_region_cmd_id, "Request parameter end region cmd id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetRegionCmd(*opt); });
+  cmd->callback([opt]() { RunGetRegionCmd(*opt); });
 }
 
 void RunGetRegionCmd(GetRegionCmdOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2333,18 +2362,18 @@ void RunGetRegionCmd(GetRegionCmdOptions const &opt) {
 
 void SetUpGetStoreMetricsn(CLI::App &app) {
   auto opt = std::make_shared<GetStoreMetricsOptions>();
-  auto coor = app.add_subcommand("GetStoreMetrics", "Get store metrics")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetStoreMetrics", "Get store metrics")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
+  cmd->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetStoreMetrics(*opt); });
+  cmd->callback([opt]() { RunGetStoreMetrics(*opt); });
 }
 
 void RunGetStoreMetrics(GetStoreMetricsOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2374,15 +2403,15 @@ void RunGetStoreMetrics(GetStoreMetricsOptions const &opt) {
 
 void SetUpDeleteStoreMetrics(CLI::App &app) {
   auto opt = std::make_shared<DeleteStoreMetricsOptions>();
-  auto coor = app.add_subcommand("DeleteStoreMetrics", "Delete store metrics")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DeleteStoreMetrics", "Delete store metrics")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDeleteStoreMetrics(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter store id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDeleteStoreMetrics(*opt); });
 }
 
 void RunDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2397,15 +2426,15 @@ void RunDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
 
 void SetUpGetRegionMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetRegionMetricsOptions>();
-  auto coor = app.add_subcommand("GetRegionMetrics", "Get region metrics")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("GetRegionMetrics", "Get region metrics")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetRegionMetrics(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunGetRegionMetrics(*opt); });
 }
 
 void RunGetRegionMetrics(GetRegionMetricsOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2423,15 +2452,15 @@ void RunGetRegionMetrics(GetRegionMetricsOptions const &opt) {
 
 void SetUpDeleteRegionMetrics(CLI::App &app) {
   auto opt = std::make_shared<DeleteRegionMetricsOptions>();
-  auto coor = app.add_subcommand("DeleteRegionMetrics", "Delete region metrics")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("DeleteRegionMetrics", "Delete region metrics")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDeleteRegionMetrics(*opt); });
+  cmd->add_option("--id", opt->id, "Request parameter region id")->required()->group("Coordinator Manager Commands");
+  cmd->callback([opt]() { RunDeleteRegionMetrics(*opt); });
 }
 
 void RunDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::DeleteRegionMetricsRequest request;
@@ -2445,23 +2474,23 @@ void RunDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
 
 void SetUpUpdateGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<UpdateGCSafePointOptions>();
-  auto coor = app.add_subcommand("UpdateGCSafePoint", "Update GC safepoint ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("UpdateGCSafePoint", "Update GC safepoint ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--safe_point", opt->safe_point, "Request parameter safe point")
+  cmd->add_option("--safe_point", opt->safe_point, "Request parameter safe point")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--gc_flag", opt->gc_flag, "Request parameter gc_flag must be start|stop")
+  cmd->add_option("--gc_flag", opt->gc_flag, "Request parameter gc_flag must be start|stop")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->group("Coordinator Manager Commands");
-  coor->add_option("--safe_point2", opt->safe_point2, "Request parameter safe_point2 ")
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->group("Coordinator Manager Commands");
+  cmd->add_option("--safe_point2", opt->safe_point2, "Request parameter safe_point2 ")
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunUpdateGCSafePoint(*opt); });
+  cmd->callback([opt]() { RunUpdateGCSafePoint(*opt); });
 }
 
 void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::UpdateGCSafePointRequest request;
@@ -2493,16 +2522,16 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
 
 void SetUpGetGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<GetGCSafePointOptions>();
-  auto coor = app.add_subcommand("GetGCSafePoint", "Get GC safepoint ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_flag("--get_all_tenant", opt->get_all_tenant, "Request parameter get_all_tenant")->default_val(false);
-  coor->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id");
+  auto *cmd = app.add_subcommand("GetGCSafePoint", "Get GC safepoint ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_flag("--get_all_tenant", opt->get_all_tenant, "Request parameter get_all_tenant")->default_val(false);
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id");
 
-  coor->callback([opt]() { RunGetGCSafePoint(*opt); });
+  cmd->callback([opt]() { RunGetGCSafePoint(*opt); });
 }
 
 void RunGetGCSafePoint(GetGCSafePointOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetGCSafePointRequest request;
@@ -2527,20 +2556,20 @@ void RunGetGCSafePoint(GetGCSafePointOptions const &opt) {
 
 void SetUpBalanceLeader(CLI::App &app) {
   auto opt = std::make_shared<BalanceLeaderOptions>();
-  auto coor = app.add_subcommand("BalanceLeader", "Balance leader ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  auto *cmd = app.add_subcommand("BalanceLeader", "Balance leader ")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_option("--dryrun", opt->dryrun, "Request parameter safe dryrun")
+  cmd->add_option("--dryrun", opt->dryrun, "Request parameter safe dryrun")
       ->default_val(true)
       ->group("Coordinator Manager Commands");
-  coor->add_option("--type", opt->store_type, "Request parameter store_type")
+  cmd->add_option("--type", opt->store_type, "Request parameter store_type")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunBalanceLeader(*opt); });
+  cmd->callback([opt]() { RunBalanceLeader(*opt); });
 }
 
 void RunBalanceLeader(BalanceLeaderOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
     exit(-1);
   }
@@ -2560,22 +2589,22 @@ void RunBalanceLeader(BalanceLeaderOptions const &opt) {
 
 void SetUpUpdateForceReadOnly(CLI::App &app) {
   auto opt = std::make_shared<UpdateForceReadOnlyOptions>();
-  auto coor =
+  auto *cmd =
       app.add_subcommand("UpdateForceReadOnly", "Update force read only ")->group("Coordinator Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
       ->group("Coordinator Manager Commands");
-  coor->add_flag("--force_read_only", opt->force_read_only, "Request parameter safe dryrun")
+  cmd->add_flag("--force_read_only", opt->force_read_only, "Request parameter safe dryrun")
       ->default_val(false)
       ->group("Coordinator Manager Commands");
-  coor->add_option("--force_read_only_reason", opt->force_read_only_reason,
-                   "Request parameter storforce_read_only_reasone_type")
+  cmd->add_option("--force_read_only_reason", opt->force_read_only_reason,
+                  "Request parameter storforce_read_only_reasone_type")
       ->required()
       ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunUpdateForceReadOnly(*opt); });
+  cmd->callback([opt]() { RunUpdateForceReadOnly(*opt); });
 }
 
 void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
   dingodb::pb::coordinator::ConfigCoordinatorRequest request;

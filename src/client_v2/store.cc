@@ -44,13 +44,33 @@
 const int kBatchSize = 1000;
 
 namespace client_v2 {
+
 void SetUpStoreSubCommands(CLI::App& app) {
   SetUpKvGet(app);
   SetUpKvPut(app);
   SetUpTxnDump(app);
   SetUpSnapshot(app);
   SetUpRegionMetrics(app);
+  SetUpDumpRegion(app);
 }
+
+static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
+  if (Helper::SetUp(url) < 0) {
+    exit(-1);
+  }
+  if (!addrs.empty()) {
+    return client_v2::InteractionManager::GetInstance().CreateStoreInteraction(addrs);
+  } else {
+    // Get store addr from coordinator
+    auto status = client_v2::InteractionManager::GetInstance().CreateStoreInteraction(region_id);
+    if (!status.ok()) {
+      std::cout << "Create store interaction failed, error: " << status.error_cstr() << std::endl;
+      return false;
+    }
+  }
+  return true;
+}
+
 dingodb::pb::common::RegionDefinition BuildRegionDefinitionV2(int64_t region_id, const std::string& raft_group,
                                                               std::vector<std::string>& raft_addrs,
                                                               const std::string& start_key,
@@ -84,26 +104,19 @@ dingodb::pb::common::RegionDefinition BuildRegionDefinitionV2(int64_t region_id,
 
 void SetUpAddRegion(CLI::App& app) {
   auto opt = std::make_shared<AddRegionOptions>();
-  auto coor = app.add_subcommand("AddRegion", "Add Region")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_addrs", opt->raft_addrs,
-                   "example --raft_addr:127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter raft_group")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunAddRegion(*opt); });
+  auto* cmd = app.add_subcommand("AddRegion", "Add Region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--raft_addrs", opt->raft_addrs,
+                  "example --raft_addr:127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0")
+      ->required();
+  cmd->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")->required();
+  cmd->add_option("--region_id", opt->region_id, "Request parameter raft_group")->required();
+  cmd->callback([opt]() { RunAddRegion(*opt); });
 }
 
 void RunAddRegion(AddRegionOptions const& opt) {
-  std::vector<std::string> empty_vec;
   std::string value;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   std::vector<std::string> raft_addrs;
@@ -117,20 +130,16 @@ void RunAddRegion(AddRegionOptions const& opt) {
 
 void SetUpKvGet(CLI::App& app) {
   auto opt = std::make_shared<KvGetOptions>();
-  auto coor = app.add_subcommand("KvGet", "Kv get")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvGet(*opt); });
+  auto* cmd = app.add_subcommand("KvGet", "Kv get")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunKvGet(*opt); });
 }
 
 void RunKvGet(KvGetOptions const& opt) {
-  std::vector<std::string> empty_vec;
   std::string value;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvGet(opt, value);
@@ -138,20 +147,16 @@ void RunKvGet(KvGetOptions const& opt) {
 
 void SetUpKvPut(CLI::App& app) {
   auto opt = std::make_shared<KvPutOptions>();
-  auto coor = app.add_subcommand("KvPut", "Kv put")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--value", opt->value, "Request parameter value")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvPut(*opt); });
+  auto* cmd = app.add_subcommand("KvPut", "Kv put")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--value", opt->value, "Request parameter value");
+  cmd->callback([opt]() { RunKvPut(*opt); });
 }
 
 void RunKvPut(KvPutOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   std::string value = opt.value.empty() ? client_v2::Helper::GenRandomString(256) : opt.value;
@@ -160,22 +165,16 @@ void RunKvPut(KvPutOptions const& opt) {
 
 void SetUpChangeRegion(CLI::App& app) {
   auto opt = std::make_shared<ChangeRegionOptions>();
-  auto coor = app.add_subcommand("ChangeRegion", "Change region")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_addrs", opt->raft_addrs, "Request parameter value")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunChangeRegion(*opt); });
+  auto* cmd = app.add_subcommand("ChangeRegion", "Change region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")->required();
+  cmd->add_option("--raft_addrs", opt->raft_addrs, "Request parameter value");
+  cmd->callback([opt]() { RunChangeRegion(*opt); });
 }
 
 void RunChangeRegion(ChangeRegionOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -184,21 +183,15 @@ void RunChangeRegion(ChangeRegionOptions const& opt) {
 
 void SetUpMergeRegionAtStore(CLI::App& app) {
   auto opt = std::make_shared<MergeRegionAtStoreOptions>();
-  auto coor = app.add_subcommand("MergeRegionAtStore", "Merge region at store ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--source_id", opt->source_id, "Request parameter source region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--target_id", opt->target_id, "Request parameter target region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunMergeRegionAtStore(*opt); });
+  auto* cmd = app.add_subcommand("MergeRegionAtStore", "Merge region at store ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--source_id", opt->source_id, "Request parameter source region id")->required();
+  cmd->add_option("--target_id", opt->target_id, "Request parameter target region id")->required();
+  cmd->callback([opt]() { RunMergeRegionAtStore(*opt); });
 }
 
 void RunMergeRegionAtStore(MergeRegionAtStoreOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, 0, opt.source_id)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.source_id)) {
     exit(-1);
   }
   client_v2::SendMergeRegion(opt);
@@ -206,18 +199,14 @@ void RunMergeRegionAtStore(MergeRegionAtStoreOptions const& opt) {
 
 void SetUpDestroyRegion(CLI::App& app) {
   auto opt = std::make_shared<DestroyRegionOptions>();
-  auto coor = app.add_subcommand("DestroyRegion", "Destroy region")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDestroyRegion(*opt); });
+  auto* cmd = app.add_subcommand("DestroyRegion", "Destroy region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunDestroyRegion(*opt); });
 }
 
 void RunDestroyRegion(DestroyRegionOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDestroyRegion(opt);
@@ -225,15 +214,14 @@ void RunDestroyRegion(DestroyRegionOptions const& opt) {
 
 void SetUpSnapshot(CLI::App& app) {
   auto opt = std::make_shared<SnapshotOptions>();
-  auto coor = app.add_subcommand("Snapshot", "Snapshot")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  coor->callback([opt]() { RunSnapshot(*opt); });
+  auto* cmd = app.add_subcommand("Snapshot", "Snapshot")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunSnapshot(*opt); });
 }
 
 void RunSnapshot(SnapshotOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendSnapshot(opt);
@@ -241,29 +229,19 @@ void RunSnapshot(SnapshotOptions const& opt) {
 
 void SetUpBatchAddRegion(CLI::App& app) {
   auto opt = std::make_shared<BatchAddRegionOptions>();
-  auto coor = app.add_subcommand("BatchAddRegion", "Batch add region")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("BatchAddRegion", "Batch add region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
-  coor->add_option("--region_count", opt->region_count, "Request parameter region id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--thread_num", opt->thread_num, "Request parameter region id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_addrs", opt->raft_addrs, "Request parameter value")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunBatchAddRegion(*opt); });
+  cmd->add_option("--region_count", opt->region_count, "Request parameter region id")->default_val(1);
+  cmd->add_option("--thread_num", opt->thread_num, "Request parameter region id")->default_val(1);
+  cmd->add_option("--raft_group", opt->raft_group, "Request parameter raft_group")->required();
+  cmd->add_option("--raft_addrs", opt->raft_addrs, "Request parameter value");
+  cmd->callback([opt]() { RunBatchAddRegion(*opt); });
 }
 
 void RunBatchAddRegion(BatchAddRegionOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -272,18 +250,14 @@ void RunBatchAddRegion(BatchAddRegionOptions const& opt) {
 
 void SetUpSnapshotVectorIndex(CLI::App& app) {
   auto opt = std::make_shared<SnapshotVectorIndexOptions>();
-  auto coor = app.add_subcommand("SnapshotVectorIndex", "Snapshot vector index")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunSnapshotVectorIndex(*opt); });
+  auto* cmd = app.add_subcommand("SnapshotVectorIndex", "Snapshot vector index")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunSnapshotVectorIndex(*opt); });
 }
 
 void RunSnapshotVectorIndex(SnapshotVectorIndexOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendSnapshotVectorIndex(opt);
@@ -291,14 +265,13 @@ void RunSnapshotVectorIndex(SnapshotVectorIndexOptions const& opt) {
 
 void SetUpCompact(CLI::App& app) {
   auto opt = std::make_shared<CompactOptions>();
-  auto coor = app.add_subcommand("Compact", "Compact ")->group("Store Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCompact(*opt); });
+  auto* cmd = app.add_subcommand("Compact", "Compact ")->group("Store Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs");
+  cmd->callback([opt]() { RunCompact(*opt); });
 }
 
 void RunCompact(CompactOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore("", {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
     exit(-1);
   }
   client_v2::SendCompact("");
@@ -306,16 +279,13 @@ void RunCompact(CompactOptions const& opt) {
 
 void SetUpGetMemoryStats(CLI::App& app) {
   auto opt = std::make_shared<GetMemoryStatsOptions>();
-  auto coor = app.add_subcommand("GetMemoryStats", "GetMemory stats ")->group("Store Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunGetMemoryStats(*opt); });
+  auto* cmd = app.add_subcommand("GetMemoryStats", "GetMemory stats ")->group("Store Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->callback([opt]() { RunGetMemoryStats(*opt); });
 }
 
 void RunGetMemoryStats(GetMemoryStatsOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore("", {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
     exit(-1);
   }
   client_v2::GetMemoryStats();
@@ -323,17 +293,14 @@ void RunGetMemoryStats(GetMemoryStatsOptions const& opt) {
 
 void SetUpReleaseFreeMemory(CLI::App& app) {
   auto opt = std::make_shared<ReleaseFreeMemoryOptions>();
-  auto coor = app.add_subcommand("ReleaseFreeMemory", "Release free memory ")->group("Store Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--rate", opt->rate, "server addrs")->default_val(0.0)->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunReleaseFreeMemory(*opt); });
+  auto* cmd = app.add_subcommand("ReleaseFreeMemory", "Release free memory ")->group("Store Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--rate", opt->rate, "server addrs")->default_val(0.0);
+  cmd->callback([opt]() { RunReleaseFreeMemory(*opt); });
 }
 
 void RunReleaseFreeMemory(ReleaseFreeMemoryOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore("", {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
     exit(-1);
   }
   client_v2::ReleaseFreeMemory(opt);
@@ -341,25 +308,17 @@ void RunReleaseFreeMemory(ReleaseFreeMemoryOptions const& opt) {
 
 void SetUpKvBatchGet(CLI::App& app) {
   auto opt = std::make_shared<KvBatchGetOptions>();
-  auto coor = app.add_subcommand("KvBatchGet", "Kv batch get")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--req_num", opt->req_num, "Request parameter region id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvBatchGet", "Kv batch get")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
+  cmd->add_option("--req_num", opt->req_num, "Request parameter region id")->default_val(1);
 
-  coor->callback([opt]() { RunKvBatchGet(*opt); });
+  cmd->callback([opt]() { RunKvBatchGet(*opt); });
 }
 
 void RunKvBatchGet(KvBatchGetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvBatchGet(opt);
@@ -367,25 +326,17 @@ void RunKvBatchGet(KvBatchGetOptions const& opt) {
 
 void SetUpKvBatchPut(CLI::App& app) {
   auto opt = std::make_shared<KvBatchPutOptions>();
-  auto coor = app.add_subcommand("KvBatchPut", "Kv batch put")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter region id")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvBatchPut", "Kv batch put")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
+  cmd->add_option("--count", opt->count, "Request parameter region id")->default_val(50);
 
-  coor->callback([opt]() { RunKvBatchPut(*opt); });
+  cmd->callback([opt]() { RunKvBatchPut(*opt); });
 }
 
 void RunKvBatchPut(KvBatchPutOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvBatchPut(opt);
@@ -393,20 +344,16 @@ void RunKvBatchPut(KvBatchPutOptions const& opt) {
 
 void SetUpKvPutIfAbsent(CLI::App& app) {
   auto opt = std::make_shared<KvPutIfAbsentOptions>();
-  auto coor = app.add_subcommand("KvPutIfAbsent", "Kv put if absent")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter prefix")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvPutIfAbsent(*opt); });
+  auto* cmd = app.add_subcommand("KvPutIfAbsent", "Kv put if absent")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--key", opt->key, "Request parameter prefix")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunKvPutIfAbsent(*opt); });
 }
 
 void RunKvPutIfAbsent(KvPutIfAbsentOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvPutIfAbsent(opt);
@@ -414,24 +361,16 @@ void RunKvPutIfAbsent(KvPutIfAbsentOptions const& opt) {
 
 void SetUpKvBatchPutIfAbsent(CLI::App& app) {
   auto opt = std::make_shared<KvBatchPutIfAbsentOptions>();
-  auto coor = app.add_subcommand("KvBatchPutIfAbsent", "Kv batch put if absent")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter region id")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvBatchPutIfAbsent(*opt); });
+  auto* cmd = app.add_subcommand("KvBatchPutIfAbsent", "Kv batch put if absent")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
+  cmd->add_option("--count", opt->count, "Request parameter region id")->default_val(50);
+  cmd->callback([opt]() { RunKvBatchPutIfAbsent(*opt); });
 }
 
 void RunKvBatchPutIfAbsent(KvBatchPutIfAbsentOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvBatchPutIfAbsent(opt);
@@ -439,19 +378,15 @@ void RunKvBatchPutIfAbsent(KvBatchPutIfAbsentOptions const& opt) {
 
 void SetUpKvBatchDelete(CLI::App& app) {
   auto opt = std::make_shared<KvBatchDeleteOptions>();
-  auto coor = app.add_subcommand("KvBatchDelete", "Kv batch delete")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvBatchDelete(*opt); });
+  auto* cmd = app.add_subcommand("KvBatchDelete", "Kv batch delete")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunKvBatchDelete(*opt); });
 }
 
 void RunKvBatchDelete(KvBatchDeleteOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvBatchDelete(opt);
@@ -459,21 +394,15 @@ void RunKvBatchDelete(KvBatchDeleteOptions const& opt) {
 
 void SetUpKvDeleteRange(CLI::App& app) {
   auto opt = std::make_shared<KvDeleteRangeOptions>();
-  auto coor = app.add_subcommand("KvDeleteRange", "Kv delete range")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvDeleteRange(*opt); });
+  auto* cmd = app.add_subcommand("KvDeleteRange", "Kv delete range")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
+  cmd->callback([opt]() { RunKvDeleteRange(*opt); });
 }
 
 void RunKvDeleteRange(KvDeleteRangeOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvDeleteRange(opt);
@@ -481,21 +410,15 @@ void RunKvDeleteRange(KvDeleteRangeOptions const& opt) {
 
 void SetUpKvScan(CLI::App& app) {
   auto opt = std::make_shared<KvScanOptions>();
-  auto coor = app.add_subcommand("KvScan", "Kv scan")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvScan(*opt); });
+  auto* cmd = app.add_subcommand("KvScan", "Kv scan")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
+  cmd->callback([opt]() { RunKvScan(*opt); });
 }
 
 void RunKvScan(KvScanOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvScan(opt);
@@ -503,19 +426,15 @@ void RunKvScan(KvScanOptions const& opt) {
 
 void SetUpKvCompareAndSet(CLI::App& app) {
   auto opt = std::make_shared<KvCompareAndSetOptions>();
-  auto coor = app.add_subcommand("KvCompareAndSet", "Kv compare and set")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvCompareAndSet(*opt); });
+  auto* cmd = app.add_subcommand("KvCompareAndSet", "Kv compare and set")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunKvCompareAndSet(*opt); });
 }
 
 void RunKvCompareAndSet(KvCompareAndSetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvCompareAndSet(opt);
@@ -523,25 +442,17 @@ void RunKvCompareAndSet(KvCompareAndSetOptions const& opt) {
 
 void SetUpKvBatchCompareAndSet(CLI::App& app) {
   auto opt = std::make_shared<KvBatchCompareAndSetOptions>();
-  auto coor = app.add_subcommand("KvBatchCompareAndSet", "Kv batch compare and set")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "Request parameter prefix")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvBatchCompareAndSet", "Kv batch compare and set")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--prefix", opt->prefix, "Request parameter prefix")->required();
   ;
-  coor->add_option("--count", opt->count, "Request parameter count")
-      ->default_val(100)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvBatchCompareAndSet(*opt); });
+  cmd->add_option("--count", opt->count, "Request parameter count")->default_val(100);
+  cmd->callback([opt]() { RunKvBatchCompareAndSet(*opt); });
 }
 
 void RunKvBatchCompareAndSet(KvBatchCompareAndSetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -550,22 +461,16 @@ void RunKvBatchCompareAndSet(KvBatchCompareAndSetOptions const& opt) {
 
 void SetUpKvScanBeginV2(CLI::App& app) {
   auto opt = std::make_shared<KvScanBeginV2Options>();
-  auto coor = app.add_subcommand("KvScanBeginV2", "Kv scan beginV2")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvScanBeginV2", "Kv scan beginV2")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
-  coor->add_option("--scan_id", opt->scan_id, "Request parameter scan id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvScanBeginV2(*opt); });
+  cmd->add_option("--scan_id", opt->scan_id, "Request parameter scan id")->default_val(1);
+  cmd->callback([opt]() { RunKvScanBeginV2(*opt); });
 }
 
 void RunKvScanBeginV2(KvScanBeginV2Options const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvScanBeginV2(opt);
@@ -573,22 +478,16 @@ void RunKvScanBeginV2(KvScanBeginV2Options const& opt) {
 
 void SetUpKvScanContinueV2(CLI::App& app) {
   auto opt = std::make_shared<KvScanContinueV2Options>();
-  auto coor = app.add_subcommand("KvScanContinueV2", "Kv scan continueV2 ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvScanContinueV2", "Kv scan continueV2 ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
-  coor->add_option("--scan_id", opt->scan_id, "Request parameter scan id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvScanContinueV2(*opt); });
+  cmd->add_option("--scan_id", opt->scan_id, "Request parameter scan id")->default_val(1);
+  cmd->callback([opt]() { RunKvScanContinueV2(*opt); });
 }
 
 void RunKvScanContinueV2(KvScanContinueV2Options const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvScanContinueV2(opt);
@@ -596,22 +495,16 @@ void RunKvScanContinueV2(KvScanContinueV2Options const& opt) {
 
 void SetUpKvScanReleaseV2(CLI::App& app) {
   auto opt = std::make_shared<KvScanReleaseV2Options>();
-  auto coor = app.add_subcommand("KvScanReleaseV2", "Kv scan releaseV2 ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvScanReleaseV2", "Kv scan releaseV2 ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
-  coor->add_option("--scan_id", opt->scan_id, "Request parameter scan id")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunKvScanReleaseV2(*opt); });
+  cmd->add_option("--scan_id", opt->scan_id, "Request parameter scan id")->default_val(1);
+  cmd->callback([opt]() { RunKvScanReleaseV2(*opt); });
 }
 
 void RunKvScanReleaseV2(KvScanReleaseV2Options const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendKvScanReleaseV2(opt);
@@ -619,28 +512,19 @@ void RunKvScanReleaseV2(KvScanReleaseV2Options const& opt) {
 
 void SetUpTxnGet(CLI::App& app) {
   auto opt = std::make_shared<TxnGetOptions>();
-  auto coor = app.add_subcommand("TxnGet", "Txn get ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "key is hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks")
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnGet(*opt); });
+  auto* cmd = app.add_subcommand("TxnGet", "Txn get ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "key is hex")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
+  cmd->callback([opt]() { RunTxnGet(*opt); });
 }
 
 void RunTxnGet(TxnGetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnGet(opt);
@@ -648,48 +532,25 @@ void RunTxnGet(TxnGetOptions const& opt) {
 
 void SetUpTxnScan(CLI::App& app) {
   auto opt = std::make_shared<TxnScanOptions>();
-  auto coor = app.add_subcommand("TxnGet", "Txn scan")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_key", opt->end_key, "Request parameter start_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse ")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_only", opt->key_only, "Request parameter key_only")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_start", opt->with_start, "Request parameter with_start")
-      ->default_val(true)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_end", opt->with_end, "Request parameter with_end")
-      ->default_val(true)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnScan(*opt); });
+  auto* cmd = app.add_subcommand("TxnGet", "Txn scan")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter start_key")->required();
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse ")->default_val(false);
+  cmd->add_flag("--key_only", opt->key_only, "Request parameter key_only")->default_val(false);
+  cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--with_start", opt->with_start, "Request parameter with_start")->default_val(true);
+  cmd->add_flag("--with_end", opt->with_end, "Request parameter with_end")->default_val(true);
+  cmd->callback([opt]() { RunTxnScan(*opt); });
 }
 
 void RunTxnScan(TxnScanOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnScan(opt);
@@ -697,44 +558,24 @@ void RunTxnScan(TxnScanOptions const& opt) {
 
 void SetUpTxnPessimisticLock(CLI::App& app) {
   auto opt = std::make_shared<TxnPessimisticLockOptions>();
-  auto coor = app.add_subcommand("TxnPessimisticLock", "Txn pessimistic lock")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--lock_ttl", opt->lock_ttl, "Request parameter lock_ttl")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--mutation_op", opt->mutation_op, "Request parameter mutation_op must be one of [lock]")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--value", opt->value, "Request parameter with_start")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnPessimisticLock(*opt); });
+  auto* cmd = app.add_subcommand("TxnPessimisticLock", "Txn pessimistic lock")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")->required();
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--lock_ttl", opt->lock_ttl, "Request parameter lock_ttl")->required();
+  cmd->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")->required();
+  cmd->add_option("--mutation_op", opt->mutation_op, "Request parameter mutation_op must be one of [lock]")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_option("--value", opt->value, "Request parameter with_start")->required();
+  cmd->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnPessimisticLock(*opt); });
 }
 
 void RunTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnPessimisticLock(opt);
@@ -742,29 +583,19 @@ void RunTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
 
 void SetUpTxnPessimisticRollback(CLI::App& app) {
   auto opt = std::make_shared<TxnPessimisticRollbackOptions>();
-  auto coor = app.add_subcommand("TxnPessimisticLock", "Txn pessimistic lock")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnPessimisticRollback(*opt); });
+  auto* cmd = app.add_subcommand("TxnPessimisticLock", "Txn pessimistic lock")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnPessimisticRollback(*opt); });
 }
 
 void RunTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnPessimisticRollback(opt);
@@ -772,64 +603,37 @@ void RunTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
 
 void SetUpTxnPrewrite(CLI::App& app) {
   auto opt = std::make_shared<TxnPrewriteOptions>();
-  auto coor = app.add_subcommand("TxnPrewrite", "Txn prewrite")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--lock_ttl", opt->lock_ttl, "Request parameter lock_ttl")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--txn_size", opt->txn_size, "Request parameter txn_size")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--try_one_pc", opt->try_one_pc, "Request parameter try_one_pc")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--max_commit_ts", opt->max_commit_ts, "Request parameter max_commit_ts ")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--mutation_op", opt->mutation_op,
-                   "Request parameter mutation_op must be one of [put, delete, insert]")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--key2", opt->key2, "Request parameter key2")->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--value", opt->value, "Request parameter value2")->group("Coordinator Manager Commands");
-  coor->add_option("--value2", opt->value2, "Request parameter value2")->group("Coordinator Manager Commands");
-  coor->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--extra_data", opt->extra_data, "Request parameter extra_data ")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_id", opt->vector_id, "Request parameter vector_id ")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_id", opt->document_id, "Request parameter document_id ")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_text1", opt->document_text1, "Request parameter document_text1 ")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_text2", opt->document_text2, "Request parameter document_text2 ")
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("TxnPrewrite", "Txn prewrite")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")->required();
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--lock_ttl", opt->lock_ttl, "Request parameter lock_ttl")->required();
+  cmd->add_option("--txn_size", opt->txn_size, "Request parameter txn_size")->required();
+  cmd->add_flag("--try_one_pc", opt->try_one_pc, "Request parameter try_one_pc")->default_val(false);
+  cmd->add_option("--max_commit_ts", opt->max_commit_ts, "Request parameter max_commit_ts ")->default_val(0);
+  cmd->add_option("--mutation_op", opt->mutation_op,
+                  "Request parameter mutation_op must be one of [put, delete, insert]")
+      ->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--key2", opt->key2, "Request parameter key2");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_option("--value", opt->value, "Request parameter value2");
+  cmd->add_option("--value2", opt->value2, "Request parameter value2");
+  cmd->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")->default_val(false);
+  cmd->add_option("--extra_data", opt->extra_data, "Request parameter extra_data ");
+  cmd->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ");
+  cmd->add_option("--vector_id", opt->vector_id, "Request parameter vector_id ");
+  cmd->add_option("--document_id", opt->document_id, "Request parameter document_id ");
+  cmd->add_option("--document_text1", opt->document_text1, "Request parameter document_text1 ");
+  cmd->add_option("--document_text2", opt->document_text2, "Request parameter document_text2 ");
 
-  coor->callback([opt]() { RunTxnPrewrite(*opt); });
+  cmd->callback([opt]() { RunTxnPrewrite(*opt); });
 }
 
 void RunTxnPrewrite(TxnPrewriteOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnPrewrite(opt);
@@ -837,30 +641,20 @@ void RunTxnPrewrite(TxnPrewriteOptions const& opt) {
 
 void SetUpTxnCommit(CLI::App& app) {
   auto opt = std::make_shared<TxnCommitOptions>();
-  auto coor = app.add_subcommand("TxnCommit", "Txn commit")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--key2", opt->key2, "Request parameter key2")->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnCommit(*opt); });
+  auto* cmd = app.add_subcommand("TxnCommit", "Txn commit")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--key2", opt->key2, "Request parameter key2");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnCommit(*opt); });
 }
 
 void RunTxnCommit(TxnCommitOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnCommit(opt);
@@ -868,34 +662,20 @@ void RunTxnCommit(TxnCommitOptions const& opt) {
 
 void SetUpTxnCheckTxnStatus(CLI::App& app) {
   auto opt = std::make_shared<TxnCheckTxnStatusOptions>();
-  auto coor = app.add_subcommand("TxnCheckTxnStatus", "Txn check txn status")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--primary_key", opt->primary_key, "Request parameter primary_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--lock_ts", opt->lock_ts, "Request parameter lock_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--caller_start_ts", opt->caller_start_ts, "Request parameter caller_start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--current_ts", opt->current_ts, "Request parameter current_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnCheckTxnStatus(*opt); });
+  auto* cmd = app.add_subcommand("TxnCheckTxnStatus", "Txn check txn status")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--primary_key", opt->primary_key, "Request parameter primary_key")->required();
+  cmd->add_option("--lock_ts", opt->lock_ts, "Request parameter lock_ts")->required();
+  cmd->add_option("--caller_start_ts", opt->caller_start_ts, "Request parameter caller_start_ts")->required();
+  cmd->add_option("--current_ts", opt->current_ts, "Request parameter current_ts")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnCheckTxnStatus(*opt); });
 }
 
 void RunTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnCheckTxnStatus(opt);
@@ -903,31 +683,21 @@ void RunTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
 
 void SetUpTxnResolveLock(CLI::App& app) {
   auto opt = std::make_shared<TxnResolveLockOptions>();
-  auto coor = app.add_subcommand("TxnResolveLock", "Txn resolve lock ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts, if commmit=0, will do rollback")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key,
-                   "Request parameter key, if key is empty, will do resolve lock for all keys of this transaction")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnResolveLock(*opt); });
+  auto* cmd = app.add_subcommand("TxnResolveLock", "Txn resolve lock ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts, if commmit=0, will do rollback")
+      ->required();
+  cmd->add_option("--key", opt->key,
+                  "Request parameter key, if key is empty, will do resolve lock for all keys of this transaction");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnResolveLock(*opt); });
 }
 
 void RunTxnResolveLock(TxnResolveLockOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnResolveLock(opt);
@@ -935,30 +705,21 @@ void RunTxnResolveLock(TxnResolveLockOptions const& opt) {
 
 void SetUpTxnBatchGet(CLI::App& app) {
   auto opt = std::make_shared<TxnBatchGetOptions>();
-  auto coor = app.add_subcommand("TxnBatchGet", "Txn batch get ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--key2", opt->key2, "Request parameter key2")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("TxnBatchGet", "Txn batch get ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--key2", opt->key2, "Request parameter key2")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
 
-  coor->callback([opt]() { RunTxnBatchGet(*opt); });
+  cmd->callback([opt]() { RunTxnBatchGet(*opt); });
 }
 
 void RunTxnBatchGet(TxnBatchGetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnBatchGet(opt);
@@ -966,27 +727,19 @@ void RunTxnBatchGet(TxnBatchGetOptions const& opt) {
 
 void SetUpTxnBatchRollback(CLI::App& app) {
   auto opt = std::make_shared<TxnBatchRollbackOptions>();
-  auto coor = app.add_subcommand("TxnBatchRollback", "Txn batch rollback ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--key2", opt->key2, "Request parameter key2")->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnBatchRollback(*opt); });
+  auto* cmd = app.add_subcommand("TxnBatchRollback", "Txn batch rollback ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--key2", opt->key2, "Request parameter key2");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnBatchRollback(*opt); });
 }
 
 void RunTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnBatchRollback(opt);
@@ -994,34 +747,20 @@ void RunTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
 
 void SetUpTxnScanLock(CLI::App& app) {
   auto opt = std::make_shared<TxnScanLockOptions>();
-  auto coor = app.add_subcommand("TxnScanLock", "Txn scan lock ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--max_ts", opt->max_ts, "Request parameter max_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_key", opt->end_key, "Request parameter end_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnScanLock(*opt); });
+  auto* cmd = app.add_subcommand("TxnScanLock", "Txn scan lock ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--max_ts", opt->max_ts, "Request parameter max_ts")->required();
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->callback([opt]() { RunTxnScanLock(*opt); });
 }
 
 void RunTxnScanLock(TxnScanLockOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnScanLock(opt);
@@ -1029,31 +768,19 @@ void RunTxnScanLock(TxnScanLockOptions const& opt) {
 
 void SetUpTxnHeartBeat(CLI::App& app) {
   auto opt = std::make_shared<TxnHeartBeatOptions>();
-  auto coor = app.add_subcommand("TxnHeartBeat", "Txn heart beat ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--advise_lock_ttl", opt->advise_lock_ttl, "Request parameter advise_lock_ttl")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnHeartBeat(*opt); });
+  auto* cmd = app.add_subcommand("TxnHeartBeat", "Txn heart beat ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")->required();
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--advise_lock_ttl", opt->advise_lock_ttl, "Request parameter advise_lock_ttl")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnHeartBeat(*opt); });
 }
 
 void RunTxnHeartBeat(TxnHeartBeatOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnHeartBeat(opt);
@@ -1061,22 +788,16 @@ void RunTxnHeartBeat(TxnHeartBeatOptions const& opt) {
 
 void SetUpTxnGC(CLI::App& app) {
   auto opt = std::make_shared<TxnGCOptions>();
-  auto coor = app.add_subcommand("TxnGC", "Txn gc ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--safe_point_ts", opt->safe_point_ts, "Request parameter safe_point_ts")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnGC(*opt); });
+  auto* cmd = app.add_subcommand("TxnGC", "Txn gc ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--safe_point_ts", opt->safe_point_ts, "Request parameter safe_point_ts")->required();
+  cmd->callback([opt]() { RunTxnGC(*opt); });
 }
 
 void RunTxnGC(TxnGCOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnGc(opt);
@@ -1084,28 +805,18 @@ void RunTxnGC(TxnGCOptions const& opt) {
 
 void SetUpTxnDeleteRange(CLI::App& app) {
   auto opt = std::make_shared<TxnDeleteRangeOptions>();
-  auto coor = app.add_subcommand("TxnDeleteRange", "Txn delete range ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_key", opt->end_key, "Request parameter end_key")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTxnDeleteRange(*opt); });
+  auto* cmd = app.add_subcommand("TxnDeleteRange", "Txn delete range ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->callback([opt]() { RunTxnDeleteRange(*opt); });
 }
 
 void RunTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnDeleteRange(opt);
@@ -1113,21 +824,20 @@ void RunTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
 
 void SetUpTxnDump(CLI::App& app) {
   auto opt = std::make_shared<TxnDumpOptions>();
-  auto coor = app.add_subcommand("TxnDump", "Txn dump")->group("Region Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  coor->add_flag("--rc", opt->rc, "read commit")->default_val(false);
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
-  coor->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
-  coor->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
-  coor->add_option("--end_ts", opt->end_ts, "Request parameter end_ts")->required();
-  coor->callback([opt]() { RunTxnDump(*opt); });
+  auto* cmd = app.add_subcommand("TxnDump", "Txn dump")->group("Region Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--end_ts", opt->end_ts, "Request parameter end_ts")->required();
+  cmd->callback([opt]() { RunTxnDump(*opt); });
 }
 
 void RunTxnDump(TxnDumpOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendTxnDump(opt);
@@ -1135,24 +845,16 @@ void RunTxnDump(TxnDumpOptions const& opt) {
 
 void SetUpDocumentDelete(CLI::App& app) {
   auto opt = std::make_shared<DocumentDeleteOptions>();
-  auto coor = app.add_subcommand("DocumentDelete", "Document delete ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter start id")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentDelete(*opt); });
+  auto* cmd = app.add_subcommand("DocumentDelete", "Document delete ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start id")->required();
+  cmd->add_option("--count", opt->count, "Request parameter start id")->default_val(50);
+  cmd->callback([opt]() { RunDocumentDelete(*opt); });
 }
 
 void RunDocumentDelete(DocumentDeleteOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentDelete(opt);
@@ -1160,30 +862,18 @@ void RunDocumentDelete(DocumentDeleteOptions const& opt) {
 
 void SetUpDocumentAdd(CLI::App& app) {
   auto opt = std::make_shared<DocumentAddOptions>();
-  auto coor = app.add_subcommand("DocumentAdd", "Document add ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_id", opt->document_id, "Request parameter document_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_text1", opt->document_text1, "Request parameter document_text1")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_text2", opt->document_text2, "Request parameter document_text2")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--is_update", opt->is_update, "Request parameter is_update")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentAdd(*opt); });
+  auto* cmd = app.add_subcommand("DocumentAdd", "Document add ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--document_id", opt->document_id, "Request parameter document_id")->required();
+  cmd->add_option("--document_text1", opt->document_text1, "Request parameter document_text1")->required();
+  cmd->add_option("--document_text2", opt->document_text2, "Request parameter document_text2")->required();
+  cmd->add_flag("--is_update", opt->is_update, "Request parameter is_update")->default_val(false);
+  cmd->callback([opt]() { RunDocumentAdd(*opt); });
 }
 
 void RunDocumentAdd(DocumentAddOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentAdd(opt);
@@ -1191,25 +881,17 @@ void RunDocumentAdd(DocumentAddOptions const& opt) {
 
 void SetUpDocumentSearch(CLI::App& app) {
   auto opt = std::make_shared<DocumentSearchOptions>();
-  auto coor = app.add_subcommand("DocumentSearch", "Document search ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--query_string", opt->query_string, "Request parameter query_string")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--topn", opt->topn, "Request parameter topn")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentSearch(*opt); });
+  auto* cmd = app.add_subcommand("DocumentSearch", "Document search ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--query_string", opt->query_string, "Request parameter query_string")->required();
+  cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->callback([opt]() { RunDocumentSearch(*opt); });
 }
 
 void RunDocumentSearch(DocumentSearchOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentSearch(opt);
@@ -1217,25 +899,17 @@ void RunDocumentSearch(DocumentSearchOptions const& opt) {
 
 void SetUpDocumentBatchQuery(CLI::App& app) {
   auto opt = std::make_shared<DocumentBatchQueryOptions>();
-  auto coor = app.add_subcommand("DocumentBatchQuery", "Document batch query ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--document_id", opt->document_id, "Request parameter document id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentBatchQuery(*opt); });
+  auto* cmd = app.add_subcommand("DocumentBatchQuery", "Document batch query ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--document_id", opt->document_id, "Request parameter document id")->required();
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->callback([opt]() { RunDocumentBatchQuery(*opt); });
 }
 
 void RunDocumentBatchQuery(DocumentBatchQueryOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentBatchQuery(opt);
@@ -1243,34 +917,20 @@ void RunDocumentBatchQuery(DocumentBatchQueryOptions const& opt) {
 
 void SetUpDocumentScanQuery(CLI::App& app) {
   auto opt = std::make_shared<DocumentScanQueryOptions>();
-  auto coor = app.add_subcommand("DocumentScanQuery", "Document scan query ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter end id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentScanQuery(*opt); });
+  auto* cmd = app.add_subcommand("DocumentScanQuery", "Document scan query ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start id")->required();
+  cmd->add_option("--end_id", opt->end_id, "Request parameter end id")->required();
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse")->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->callback([opt]() { RunDocumentScanQuery(*opt); });
 }
 
 void RunDocumentScanQuery(DocumentScanQueryOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentScanQuery(opt);
@@ -1278,18 +938,14 @@ void RunDocumentScanQuery(DocumentScanQueryOptions const& opt) {
 
 void SetUpDocumentGetMaxId(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetMaxIdOptions>();
-  auto coor = app.add_subcommand("DocumentGetMaxId", "Document get max id ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentGetMaxId(*opt); });
+  auto* cmd = app.add_subcommand("DocumentGetMaxId", "Document get max id ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunDocumentGetMaxId(*opt); });
 }
 
 void RunDocumentGetMaxId(DocumentGetMaxIdOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentGetMaxId(opt);
@@ -1297,18 +953,14 @@ void RunDocumentGetMaxId(DocumentGetMaxIdOptions const& opt) {
 
 void SetUpDocumentGetMinId(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetMinIdOptions>();
-  auto coor = app.add_subcommand("DocumentGetMinId", "Document get min id ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentGetMinId(*opt); });
+  auto* cmd = app.add_subcommand("DocumentGetMinId", "Document get min id ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunDocumentGetMinId(*opt); });
 }
 
 void RunDocumentGetMinId(DocumentGetMinIdOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentGetMinId(opt);
@@ -1316,24 +968,16 @@ void RunDocumentGetMinId(DocumentGetMinIdOptions const& opt) {
 
 void SetUpDocumentCount(CLI::App& app) {
   auto opt = std::make_shared<DocumentCountOptions>();
-  auto coor = app.add_subcommand("DocumentCount", "Document count ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter end id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentCount(*opt); });
+  auto* cmd = app.add_subcommand("DocumentCount", "Document count ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start id")->required();
+  cmd->add_option("--end_id", opt->end_id, "Request parameter end id")->required();
+  cmd->callback([opt]() { RunDocumentCount(*opt); });
 }
 
 void RunDocumentCount(DocumentCountOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentCount(opt);
@@ -1341,19 +985,15 @@ void RunDocumentCount(DocumentCountOptions const& opt) {
 
 void SetUpDocumentGetRegionMetrics(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetRegionMetricsOptions>();
-  auto coor =
+  auto* cmd =
       app.add_subcommand("DocumentGetRegionMetrics", "Document get region metrics ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDocumentGetRegionMetrics(*opt); });
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunDocumentGetRegionMetrics(*opt); });
 }
 
 void RunDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendDocumentGetRegionMetrics(opt);
@@ -1361,65 +1001,39 @@ void RunDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const& opt) {
 
 void SetUpVectorSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorSearchOptions>();
-  auto coor = app.add_subcommand("VectorSearch", "Vector search ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--topn", opt->topn, "Request parameter topn")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--vector_data", opt->vector_data, "Request parameter vector data")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_table_pre_filter", opt->with_table_pre_filter, "Search vector with table data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter,
-                 "Search vector with scalar data post filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--bruteforce", opt->bruteforce, "Use bruteforce search")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--ef_search", opt->ef_search, "hnsw index search ef")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--csv_output", opt->csv_output, "csv output")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorSearch(*opt); });
+  auto* cmd = app.add_subcommand("VectorSearch", "Vector search ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
+  cmd->add_option("--vector_data", opt->vector_data, "Request parameter vector data");
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false);
+  cmd->add_flag("--with_table_pre_filter", opt->with_table_pre_filter, "Search vector with table data pre filter")
+      ->default_val(false);
+  cmd->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key");
+  cmd->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value");
+  cmd->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2");
+  cmd->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2");
+  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
+      ->default_val(false);
+  cmd->add_flag("--bruteforce", opt->bruteforce, "Use bruteforce search")->default_val(false);
+  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false);
+  cmd->add_option("--ef_search", opt->ef_search, "hnsw index search ef")->default_val(0);
+  cmd->add_option("--csv_output", opt->csv_output, "csv output");
+  cmd->callback([opt]() { RunVectorSearch(*opt); });
 }
 
 void RunVectorSearch(VectorSearchOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1428,53 +1042,34 @@ void RunVectorSearch(VectorSearchOptions const& opt) {
 
 void SetUpVectorSearchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorSearchDebugOptions>();
-  auto coor = app.add_subcommand("VectorSearchDebug", "Vector search debug")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--topn", opt->topn, "Request parameter topn")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--batch_count", opt->batch_count, "Request parameter batch count")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_option("--value", opt->value, "Request parameter value")->group("Coordinator Manager Commands");
-  coor->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_ids_count", opt->vector_ids_count, "Request parameter vector_ids_count")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("VectorSearchDebug", "Vector search debug")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
+  cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
+  cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch count")->required();
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_option("--value", opt->value, "Request parameter value");
+  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false);
+  cmd->add_option("--vector_ids_count", opt->vector_ids_count, "Request parameter vector_ids_count")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false);
 
-  coor->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter,
-                 "Search vector with scalar data post filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
+      ->default_val(false);
 
-  coor->callback([opt]() { RunVectorSearchDebug(*opt); });
+  cmd->callback([opt]() { RunVectorSearchDebug(*opt); });
 }
 
 void RunVectorSearchDebug(VectorSearchDebugOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorSearchDebug(opt);
@@ -1482,47 +1077,29 @@ void RunVectorSearchDebug(VectorSearchDebugOptions const& opt) {
 
 void SetUpVectorRangeSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorRangeSearchOptions>();
-  auto coor = app.add_subcommand("VectorRangeSearch", "Vector range search ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--radius", opt->radius, "Request parameter radius")
-      ->default_val(10.1)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter,
-                 "Search vector with scalar data post filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorRangeSearch(*opt); });
+  auto* cmd = app.add_subcommand("VectorRangeSearch", "Vector range search ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
+      ->default_val(false);
+  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false);
+  cmd->callback([opt]() { RunVectorRangeSearch(*opt); });
 }
 
 void RunVectorRangeSearch(VectorRangeSearchOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorRangeSearch(opt);
@@ -1530,57 +1107,34 @@ void RunVectorRangeSearch(VectorRangeSearchOptions const& opt) {
 
 void SetUpVectorRangeSearchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorRangeSearchDebugOptions>();
-  auto coor =
+  auto* cmd =
       app.add_subcommand("VectorRangeSearchDebug", "Vector range search debug")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--radius", opt->radius, "Request parameter radius")
-      ->default_val(10.1)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_option("--value", opt->value, "Request parameter value")->group("Coordinator Manager Commands");
-  coor->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--vector_ids_count", opt->vector_ids_count, "Search vector with vector ids count")
-      ->default_val(100)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter,
-                 "Search vector with scalar data post filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorRangeSearchDebug(*opt); });
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
+  cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
+  cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_option("--value", opt->value, "Request parameter value");
+  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false);
+  cmd->add_flag("--vector_ids_count", opt->vector_ids_count, "Search vector with vector ids count")->default_val(100);
+  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
+      ->default_val(false);
+  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false);
+  cmd->callback([opt]() { RunVectorRangeSearchDebug(*opt); });
 }
 
 void RunVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorRangeSearchDebug(opt);
@@ -1588,48 +1142,30 @@ void RunVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
 
 void SetUpVectorBatchSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorBatchSearchOptions>();
-  auto coor = app.add_subcommand("VectorBatchSearch", "Vector batch search")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--topn", opt->topn, "Request parameter topn")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter,
-                 "Search vector with scalar data post filter")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorBatchSearch(*opt); });
+  auto* cmd = app.add_subcommand("VectorBatchSearch", "Vector batch search")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
+  cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false);
+  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
+      ->default_val(false);
+  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false);
+  cmd->callback([opt]() { RunVectorBatchSearch(*opt); });
 }
 
 void RunVectorBatchSearch(VectorBatchSearchOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorBatchSearch(opt);
@@ -1637,30 +1173,20 @@ void RunVectorBatchSearch(VectorBatchSearchOptions const& opt) {
 
 void SetUpVectorBatchQuery(CLI::App& app) {
   auto opt = std::make_shared<VectorBatchQueryOptions>();
-  auto coor = app.add_subcommand("VectorBatchQuery", "Vector batch query")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_ids", opt->vector_ids, "Request parameter vector_ids")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorBatchQuery(*opt); });
+  auto* cmd = app.add_subcommand("VectorBatchQuery", "Vector batch query")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--vector_ids", opt->vector_ids, "Request parameter vector_ids");
+  cmd->add_option("--key", opt->key, "Request parameter key");
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->callback([opt]() { RunVectorBatchQuery(*opt); });
 }
 
 void RunVectorBatchQuery(VectorBatchQueryOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorBatchQuery(opt);
@@ -1668,52 +1194,31 @@ void RunVectorBatchQuery(VectorBatchQueryOptions const& opt) {
 
 void SetUpVectorScanQuery(CLI::App& app) {
   auto opt = std::make_shared<VectorScanQueryOptions>();
-  auto coor = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter end_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--end_id", opt->end_id, "Request parameter end_id")->required();
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse")->default_val(false);
 
-  coor->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Search vector without table data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->group("Coordinator Manager Commands");
+  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false);
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--key", opt->key, "Request parameter key");
 
-  coor->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2")
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key");
+  cmd->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value");
+  cmd->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2");
+  cmd->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2");
 
-  coor->callback([opt]() { RunVectorScanQuery(*opt); });
+  cmd->callback([opt]() { RunVectorScanQuery(*opt); });
 }
 
 void RunVectorScanQuery(VectorScanQueryOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1722,34 +1227,20 @@ void RunVectorScanQuery(VectorScanQueryOptions const& opt) {
 
 void SetUpVectorScanDump(CLI::App& app) {
   auto opt = std::make_shared<VectorScanDumpOptions>();
-  auto coor = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter end_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Request parameter limit")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--is_reverse", opt->is_reverse, "Request parameter is_reverse")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--csv_output", opt->csv_output, "Request parameter is_reverse")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--end_id", opt->end_id, "Request parameter end_id")->required();
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->add_option("--is_reverse", opt->is_reverse, "Request parameter is_reverse")->default_val(false);
+  cmd->add_option("--csv_output", opt->csv_output, "Request parameter is_reverse")->required();
 
-  coor->callback([opt]() { RunVectorScanDump(*opt); });
+  cmd->callback([opt]() { RunVectorScanDump(*opt); });
 }
 
 void RunVectorScanDump(VectorScanDumpOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1758,19 +1249,15 @@ void RunVectorScanDump(VectorScanDumpOptions const& opt) {
 
 void SetUpVectorGetRegionMetrics(CLI::App& app) {
   auto opt = std::make_shared<VectorGetRegionMetricsOptions>();
-  auto coor =
+  auto* cmd =
       app.add_subcommand("VectorGetRegionMetrics", "Vector get region metrics")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorGetRegionMetricsd(*opt); });
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorGetRegionMetricsd(*opt); });
 }
 
 void RunVectorGetRegionMetricsd(VectorGetRegionMetricsOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1779,46 +1266,29 @@ void RunVectorGetRegionMetricsd(VectorGetRegionMetricsOptions const& opt) {
 
 void SetUpVectorAdd(CLI::App& app) {
   auto opt = std::make_shared<VectorAddOptions>();
-  auto coor = app.add_subcommand("VectorAdd", "Vector add ")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Request parameter table_id")->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter count")->group("Coordinator Manager Commands");
-  coor->add_option("--step_count", opt->step_count, "Request parameter step_count")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_table", opt->without_table, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--csv_data", opt->csv_data, "Request parameter csv_data")->group("Coordinator Manager Commands");
-  coor->add_option("--json_data", opt->json_data, "Request parameter json_data")->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("VectorAdd", "Vector add ")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table_id");
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--count", opt->count, "Request parameter count");
+  cmd->add_option("--step_count", opt->step_count, "Request parameter step_count");
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->add_flag("--without_table", opt->without_table, "Request parameter without_scalar")->default_val(false);
+  cmd->add_option("--csv_data", opt->csv_data, "Request parameter csv_data");
+  cmd->add_option("--json_data", opt->json_data, "Request parameter json_data");
 
-  coor->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request parameter scalar_filter_key")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2")
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request parameter scalar_filter_key");
+  cmd->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value");
+  cmd->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2");
+  cmd->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2");
 
-  coor->callback([opt]() { RunVectorAdd(*opt); });
+  cmd->callback([opt]() { RunVectorAdd(*opt); });
 }
 
 void RunVectorAdd(VectorAddOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1832,22 +1302,16 @@ void RunVectorAdd(VectorAddOptions const& opt) {
 
 void SetUpVectorDelete(CLI::App& app) {
   auto opt = std::make_shared<VectorDeleteOptions>();
-  auto coor = app.add_subcommand("VectorDelete", "Vector delete")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter count")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorDelete(*opt); });
+  auto* cmd = app.add_subcommand("VectorDelete", "Vector delete")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--count", opt->count, "Request parameter count")->required();
+  cmd->callback([opt]() { RunVectorDelete(*opt); });
 }
 
 void RunVectorDelete(VectorDeleteOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1856,18 +1320,14 @@ void RunVectorDelete(VectorDeleteOptions const& opt) {
 
 void SetUpVectorGetMaxId(CLI::App& app) {
   auto opt = std::make_shared<VectorGetMaxIdOptions>();
-  auto coor = app.add_subcommand("VectorGetMaxId", "Vector get max id")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorGetMaxId(*opt); });
+  auto* cmd = app.add_subcommand("VectorGetMaxId", "Vector get max id")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorGetMaxId(*opt); });
 }
 
 void RunVectorGetMaxId(VectorGetMaxIdOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1876,18 +1336,14 @@ void RunVectorGetMaxId(VectorGetMaxIdOptions const& opt) {
 
 void SetUpVectorGetMinId(CLI::App& app) {
   auto opt = std::make_shared<VectorGetMinIdOptions>();
-  auto coor = app.add_subcommand("VectorGetMinId", "Vector get min id")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorGetMinId(*opt); });
+  auto* cmd = app.add_subcommand("VectorGetMinId", "Vector get min id")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorGetMinId(*opt); });
 }
 
 void RunVectorGetMinId(VectorGetMinIdOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1896,35 +1352,22 @@ void RunVectorGetMinId(VectorGetMinIdOptions const& opt) {
 
 void SetUpVectorAddBatch(CLI::App& app) {
   auto opt = std::make_shared<VectorAddBatchOptions>();
-  auto coor = app.add_subcommand("VectorAddBatch", "Vector add batch")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter count")->group("Coordinator Manager Commands");
-  coor->add_option("--step_count", opt->step_count, "Request parameter step_count")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_index_add_cost_file", opt->vector_index_add_cost_file, "exec batch vector add. cost time")
-      ->default_val("./cost.txt")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("VectorAddBatch", "Vector add batch")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--count", opt->count, "Request parameter count");
+  cmd->add_option("--step_count", opt->step_count, "Request parameter step_count")->required();
+  cmd->add_option("--vector_index_add_cost_file", opt->vector_index_add_cost_file, "exec batch vector add. cost time")
+      ->default_val("./cost.txt");
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
 
-  coor->callback([opt]() { RunVectorAddBatch(*opt); });
+  cmd->callback([opt]() { RunVectorAddBatch(*opt); });
 }
 
 void RunVectorAddBatch(VectorAddBatchOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1933,34 +1376,21 @@ void RunVectorAddBatch(VectorAddBatchOptions const& opt) {
 
 void SetUpVectorAddBatchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorAddBatchDebugOptions>();
-  auto coor = app.add_subcommand("VectorAddBatchDebug", "Vector add batch debug")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--count", opt->count, "Request parameter count")->group("Coordinator Manager Commands");
-  coor->add_option("--step_count", opt->step_count, "Request parameter step_count")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_index_add_cost_file", opt->vector_index_add_cost_file, "exec batch vector add. cost time")
-      ->default_val("./cost.txt")
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorAddBatchDebug(*opt); });
+  auto* cmd = app.add_subcommand("VectorAddBatchDebug", "Vector add batch debug")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--count", opt->count, "Request parameter count");
+  cmd->add_option("--step_count", opt->step_count, "Request parameter step_count")->required();
+  cmd->add_option("--vector_index_add_cost_file", opt->vector_index_add_cost_file, "exec batch vector add. cost time")
+      ->default_val("./cost.txt");
+  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->callback([opt]() { RunVectorAddBatchDebug(*opt); });
 }
 
 void RunVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -1969,36 +1399,20 @@ void RunVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
 
 void SetUpVectorCalcDistance(CLI::App& app) {
   auto opt = std::make_shared<VectorCalcDistanceOptions>();
-  auto coor = app.add_subcommand("VectorCalcDistance", "Vector add batch debug")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--dimension", opt->dimension, "Request parameter dimension")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--alg_type", opt->alg_type, "use alg type. such as faiss or hnsw")
-      ->default_val("faiss")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--metric_type", opt->metric_type, "metric type. such as L2 or IP or cosine")
-      ->default_val("L2")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--left_vector_size", opt->left_vector_size, "left vector size. <= 0 error")
-      ->default_val(2)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--right_vector_size", opt->right_vector_size, "right vector size. <= 0 error")
-      ->default_val(3)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--is_return_normlize", opt->is_return_normlize, "is return normlize")
-      ->default_val(true)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorCalcDistance(*opt); });
+  auto* cmd = app.add_subcommand("VectorCalcDistance", "Vector add batch debug")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--alg_type", opt->alg_type, "use alg type. such as faiss or hnsw")->default_val("faiss");
+  cmd->add_option("--metric_type", opt->metric_type, "metric type. such as L2 or IP or cosine")->default_val("L2");
+  cmd->add_option("--left_vector_size", opt->left_vector_size, "left vector size. <= 0 error")->default_val(2);
+  cmd->add_option("--right_vector_size", opt->right_vector_size, "right vector size. <= 0 error")->default_val(3);
+  cmd->add_flag("--is_return_normlize", opt->is_return_normlize, "is return normlize")->default_val(true);
+  cmd->callback([opt]() { RunVectorCalcDistance(*opt); });
 }
 
 void RunVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorCalcDistance(opt);
@@ -2006,38 +1420,26 @@ void RunVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
 
 void SetUpCalcDistance(CLI::App& app) {
   auto opt = std::make_shared<CalcDistanceOptions>();
-  auto coor = app.add_subcommand("CalcDistance", "Calc distance")->group("Store Manager Commands");
-  coor->add_option("--vector_data1", opt->vector_data1, "Request parameter vector_data1")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--vector_data2", opt->vector_data2, "Request parameter vector_data2")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCalcDistance(*opt); });
+  auto* cmd = app.add_subcommand("CalcDistance", "Calc distance")->group("Store Manager Commands");
+  cmd->add_option("--vector_data1", opt->vector_data1, "Request parameter vector_data1")->required();
+  cmd->add_option("--vector_data2", opt->vector_data2, "Request parameter vector_data2")->required();
+  cmd->callback([opt]() { RunCalcDistance(*opt); });
 }
 
 void RunCalcDistance(CalcDistanceOptions const& opt) { client_v2::SendCalcDistance(opt); }
 
 void SetUpVectorCount(CLI::App& app) {
   auto opt = std::make_shared<VectorCountOptions>();
-  auto coor = app.add_subcommand("VectorCount", "Vector count")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--start_id", opt->start_id, "Request parameter start_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--end_id", opt->end_id, "Request parameter end_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunVectorCount(*opt); });
+  auto* cmd = app.add_subcommand("VectorCount", "Vector count")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
+  cmd->add_option("--end_id", opt->end_id, "Request parameter end_id")->required();
+  cmd->callback([opt]() { RunVectorCount(*opt); });
 }
 
 void RunVectorCount(VectorCountOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::SendVectorCount(opt);
@@ -2045,20 +1447,15 @@ void RunVectorCount(VectorCountOptions const& opt) {
 
 void SetUpCountVectorTable(CLI::App& app) {
   auto opt = std::make_shared<CountVectorTableOptions>();
-  auto coor = app.add_subcommand("CountVectorTable", "Count vector table")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Request parameter table_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCountVectorTable(*opt); });
+  auto* cmd = app.add_subcommand("CountVectorTable", "Count vector table")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table_id")->required();
+  cmd->callback([opt]() { RunCountVectorTable(*opt); });
 }
 
 void RunCountVectorTable(CountVectorTableOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore(opt.coor_url, {opt.store_addrs}, 0)) {
     exit(-1);
   }
 
@@ -2068,28 +1465,18 @@ void RunCountVectorTable(CountVectorTableOptions const& opt) {
 // test operation
 void SetUpTestBatchPutGet(CLI::App& app) {
   auto opt = std::make_shared<TestBatchPutGetOptions>();
-  auto coor = app.add_subcommand("TestBatchPutGet", "Test batch put and get")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Request parameter table_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--thread_num", opt->thread_num, "Number of threads sending requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--req_num", opt->req_num, "Number of requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "key prefix")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTestBatchPutGet(*opt); });
+  auto* cmd = app.add_subcommand("TestBatchPutGet", "Test batch put and get")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table_id")->required();
+  cmd->add_option("--thread_num", opt->thread_num, "Number of threads sending requests")->default_val(1);
+  cmd->add_option("--req_num", opt->req_num, "Number of requests")->default_val(1);
+  cmd->add_option("--prefix", opt->prefix, "key prefix");
+  cmd->callback([opt]() { RunTestBatchPutGet(*opt); });
 }
 
 void RunTestBatchPutGet(TestBatchPutGetOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -2098,32 +1485,21 @@ void RunTestBatchPutGet(TestBatchPutGetOptions const& opt) {
 
 void SetUpTestRegionLifecycle(CLI::App& app) {
   auto opt = std::make_shared<TestRegionLifecycleOptions>();
-  auto coor = app.add_subcommand("TestRegionLifecycle", "Test region lifecycle")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_group", opt->raft_group, "Request parameter raft group")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--raft_addrs", opt->raft_addrs,
-                   "example --raft_addr:127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--thread_num", opt->thread_num, "Number of threads sending requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--req_num", opt->req_num, "Number of requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "key prefix")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTestRegionLifecycle(*opt); });
+  auto* cmd = app.add_subcommand("TestRegionLifecycle", "Test region lifecycle")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--raft_group", opt->raft_group, "Request parameter raft group")->required();
+  cmd->add_option("--raft_addrs", opt->raft_addrs,
+                  "example --raft_addr:127.0.0.1:10101:0,127.0.0.1:10102:0,127.0.0.1:10103:0")
+      ->required();
+  cmd->add_option("--thread_num", opt->thread_num, "Number of threads sending requests")->default_val(1);
+  cmd->add_option("--req_num", opt->req_num, "Number of requests")->default_val(1);
+  cmd->add_option("--prefix", opt->prefix, "key prefix");
+  cmd->callback([opt]() { RunTestRegionLifecycle(*opt); });
 }
 
 void RunTestRegionLifecycle(TestRegionLifecycleOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   std::vector<std::string> raft_addrs;
@@ -2133,24 +1509,18 @@ void RunTestRegionLifecycle(TestRegionLifecycleOptions const& opt) {
 
 void SetUpTestDeleteRangeWhenTransferLeader(CLI::App& app) {
   auto opt = std::make_shared<TestDeleteRangeWhenTransferLeaderOptions>();
-  auto coor =
+  auto* cmd =
       app.add_subcommand("TestDeleteRangeWhenTransferLeaderOptions", "Test delete range when transfer leader options")
           ->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--region_id", opt->region_id, "Request parameter region id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--req_num", opt->req_num, "Number of requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--prefix", opt->prefix, "key prefix")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunTestDeleteRangeWhenTransferLeader(*opt); });
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--req_num", opt->req_num, "Number of requests")->default_val(1);
+  cmd->add_option("--prefix", opt->prefix, "key prefix");
+  cmd->callback([opt]() { RunTestDeleteRangeWhenTransferLeader(*opt); });
 }
 
 void RunTestDeleteRangeWhenTransferLeader(TestDeleteRangeWhenTransferLeaderOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore(opt.coor_url, empty_vec, opt.region_id, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
   client_v2::TestDeleteRangeWhenTransferLeader(opt);
@@ -2158,24 +1528,16 @@ void RunTestDeleteRangeWhenTransferLeader(TestDeleteRangeWhenTransferLeaderOptio
 
 void SetUpAutoMergeRegion(CLI::App& app) {
   auto opt = std::make_shared<AutoMergeRegionOptions>();
-  auto coor = app.add_subcommand("AutoMergeRegion", "Auto merge region")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Request parameter table_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--index_id", opt->index_id, "Request parameter index_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunAutoMergeRegion(*opt); });
+  auto* cmd = app.add_subcommand("AutoMergeRegion", "Auto merge region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table_id")->required();
+  cmd->add_option("--index_id", opt->index_id, "Request parameter index_id")->required();
+  cmd->callback([opt]() { RunAutoMergeRegion(*opt); });
 }
 
 void RunAutoMergeRegion(AutoMergeRegionOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore("", {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
     exit(-1);
   }
 
@@ -2184,17 +1546,14 @@ void RunAutoMergeRegion(AutoMergeRegionOptions const& opt) {
 
 void SetUpAutoDropTable(CLI::App& app) {
   auto opt = std::make_shared<AutoDropTableOptions>();
-  auto coor = app.add_subcommand("AutoDropTable", "Auto drop table")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--req_num", opt->req_num, "Number of requests")
-      ->default_val(1)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunAutoDropTable(*opt); });
+  auto* cmd = app.add_subcommand("AutoDropTable", "Auto drop table")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--req_num", opt->req_num, "Number of requests")->default_val(1);
+  cmd->callback([opt]() { RunAutoDropTable(*opt); });
 }
 
 void RunAutoDropTable(AutoDropTableOptions const& opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2203,18 +1562,15 @@ void RunAutoDropTable(AutoDropTableOptions const& opt) {
 
 void SetUpCheckTableDistribution(CLI::App& app) {
   auto opt = std::make_shared<CheckTableDistributionOptions>();
-  auto coor = app.add_subcommand("CheckTableDistribution", "Check table distribution")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Number of table_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Number of key")->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCheckTableDistribution(*opt); });
+  auto* cmd = app.add_subcommand("CheckTableDistribution", "Check table distribution")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Number of table_id")->required();
+  cmd->add_option("--key", opt->key, "Number of key");
+  cmd->callback([opt]() { RunCheckTableDistribution(*opt); });
 }
 
 void RunCheckTableDistribution(CheckTableDistributionOptions const& opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2223,17 +1579,14 @@ void RunCheckTableDistribution(CheckTableDistributionOptions const& opt) {
 
 void SetUpCheckIndexDistribution(CLI::App& app) {
   auto opt = std::make_shared<CheckIndexDistributionOptions>();
-  auto coor = app.add_subcommand("CheckIndexDistribution", "Check index distribution")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Number of table_id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunCheckIndexDistribution(*opt); });
+  auto* cmd = app.add_subcommand("CheckIndexDistribution", "Check index distribution")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Number of table_id")->required();
+  cmd->callback([opt]() { RunCheckIndexDistribution(*opt); });
 }
 
 void RunCheckIndexDistribution(CheckIndexDistributionOptions const& opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2242,40 +1595,26 @@ void RunCheckIndexDistribution(CheckIndexDistributionOptions const& opt) {
 
 void SetUpDumpDb(CLI::App& app) {
   auto opt = std::make_shared<DumpDbOptions>();
-  auto coor = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Number of table_id")->group("Coordinator Manager Commands");
-  coor->add_option("--index_id", opt->index_id, "Number of index_id")->group("Coordinator Manager Commands");
-  coor->add_option("--db_path", opt->db_path, "rocksdb path")->group("Coordinator Manager Commands");
-  coor->add_option("--offset", opt->offset, "Number of offset, must greatern than 0")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--limit", opt->limit, "Number of limit")->default_val(50)->group("Coordinator Manager Commands");
-  coor->add_flag("--show_vector", opt->show_vector, "show vector data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Number of table_id");
+  cmd->add_option("--index_id", opt->index_id, "Number of index_id");
+  cmd->add_option("--db_path", opt->db_path, "rocksdb path");
+  cmd->add_option("--offset", opt->offset, "Number of offset, must greatern than 0");
+  cmd->add_option("--limit", opt->limit, "Number of limit")->default_val(50);
+  cmd->add_flag("--show_vector", opt->show_vector, "show vector data")->default_val(false);
 
-  coor->add_flag("--show_lock", opt->show_lock, "show lock")->default_val(false)->group("Coordinator Manager Commands");
-  coor->add_flag("--show_write", opt->show_write, "show write")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--show_last_data", opt->show_last_data, "show last data")
-      ->default_val(true)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--show_all_data", opt->show_all_data, "show all data")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_flag("--show_pretty", opt->show_pretty, "show  pretty")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--print_column_width", opt->print_column_width, "print column width")
-      ->default_val(24)
-      ->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunDumpDb(*opt); });
+  cmd->add_flag("--show_lock", opt->show_lock, "show lock")->default_val(false);
+  cmd->add_flag("--show_write", opt->show_write, "show write")->default_val(false);
+  cmd->add_flag("--show_last_data", opt->show_last_data, "show last data")->default_val(true);
+  cmd->add_flag("--show_all_data", opt->show_all_data, "show all data")->default_val(false);
+  cmd->add_flag("--show_pretty", opt->show_pretty, "show  pretty")->default_val(false);
+  cmd->add_option("--print_column_width", opt->print_column_width, "print column width")->default_val(24);
+  cmd->callback([opt]() { RunDumpDb(*opt); });
 }
 
 void RunDumpDb(DumpDbOptions const& opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2284,17 +1623,16 @@ void RunDumpDb(DumpDbOptions const& opt) {
 
 void SetUpWhichRegion(CLI::App& app) {
   auto opt = std::make_shared<WhichRegionOptions>();
-  auto coor = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
-  coor->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  coor->add_option("--table_id", opt->table_id, "Number of table_id")->group("Coordinator Manager Commands");
-  coor->add_option("--index_id", opt->index_id, "Number of index_id")->group("Coordinator Manager Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->callback([opt]() { RunWhichRegion(*opt); });
+  auto* cmd = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Number of table_id");
+  cmd->add_option("--index_id", opt->index_id, "Number of index_id");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunWhichRegion(*opt); });
 }
 
 void RunWhichRegion(WhichRegionOptions const& opt) {
-  if (SetUp(opt.coor_url) < 0) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
 
@@ -2309,21 +1647,51 @@ void RunWhichRegion(WhichRegionOptions const& opt) {
   WhichRegion(opt);
 }
 
+void SetUpDumpRegion(CLI::App& app) {
+  auto opt = std::make_shared<DumpRegionOptions>();
+  auto* cmd = app.add_subcommand("DumpRegion", "Dump region")->group("Store Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Number of region_id")->required();
+  cmd->add_option("--offset", opt->offset, "Request parameter offset")->default_val(0);
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(10);
+  cmd->add_option("--show_detail", opt->show_detail, "Request parameter show_detail")->default_val(false);
+  cmd->callback([opt]() { RunDumpRegion(*opt); });
+}
+
+void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, bool show_detail) {
+  dingodb::pb::debug::DumpRegionRequest request;
+  dingodb::pb::debug::DumpRegionResponse response;
+
+  request.set_region_id(region_id);
+  request.set_offset(offset);
+  request.set_limit(limit);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DumpRegion", request, response);
+  Helper::PrintRegionData(response, show_detail);
+}
+
+void RunDumpRegion(DumpRegionOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
+    exit(-1);
+  }
+
+  SendDumpRegion(opt.region_id, opt.offset, opt.limit, opt.show_detail);
+}
+
 void SetUpRegionMetrics(CLI::App& app) {
   auto opt = std::make_shared<RegionMetricsOptions>();
-  auto coor = app.add_subcommand("GetRegionMetrics", "Get region metrics ")->group("Region Manager Commands");
-  coor->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
-  coor->add_option("--region_ids", opt->region_ids, "Request parameter, empty means query all regions");
-  coor->add_option("--type", opt->type,
-                   "Request parameter type, only support 6 or 8, 6 means store region metrics;8 means store region "
-                   "actual metrics.")
+  auto* cmd = app.add_subcommand("GetRegionMetrics", "Get region metrics ")->group("Region Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--region_ids", opt->region_ids, "Request parameter, empty means query all regions");
+  cmd->add_option("--type", opt->type,
+                  "Request parameter type, only support 6 or 8, 6 means store region metrics;8 means store region "
+                  "actual metrics.")
       ->required();
-  coor->callback([opt]() { RunRegionMetrics(*opt); });
+  cmd->callback([opt]() { RunRegionMetrics(*opt); });
 }
 
 void RunRegionMetrics(RegionMetricsOptions const& opt) {
-  std::vector<std::string> empty_vec;
-  if (!SetUpStore("", {opt.store_addrs}, 0, 0)) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
     exit(-1);
   }
   dingodb::pb::debug::DebugRequest request;

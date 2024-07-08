@@ -22,7 +22,9 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "proto/version.pb.h"
+
 namespace client_v2 {
+
 void SetUpToolSubCommands(CLI::App &app) {
   SetUpStringToHex(app);
   SetUpHexToString(app);
@@ -33,6 +35,7 @@ void SetUpToolSubCommands(CLI::App &app) {
   SetUpOctalToHex(app);
   SetUpCoordinatorDebug(app);
 }
+
 std::string EncodeUint64(int64_t value) {
   std::string str(reinterpret_cast<const char *>(&value), sizeof(value));
   std::reverse(str.begin(), str.end());
@@ -52,9 +55,9 @@ int64_t DecodeUint64(const std::string &str) {
 
 void SetUpStringToHex(CLI::App &app) {
   auto opt = std::make_shared<StringToHexOptions>();
-  auto coor = app.add_subcommand("StringToHex", "String to hex")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required();
-  coor->callback([opt]() { RunStringToHex(*opt); });
+  auto *cmd = app.add_subcommand("StringToHex", "String to hex")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunStringToHex(*opt); });
 }
 
 void RunStringToHex(StringToHexOptions const &opt) {
@@ -64,9 +67,9 @@ void RunStringToHex(StringToHexOptions const &opt) {
 
 void SetUpHexToString(CLI::App &app) {
   auto opt = std::make_shared<HexToStringOptions>();
-  auto coor = app.add_subcommand("HexToString", "Hex to string")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required();
-  coor->callback([opt]() { RunHexToString(*opt); });
+  auto *cmd = app.add_subcommand("HexToString", "Hex to string")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunHexToString(*opt); });
 }
 
 void RunHexToString(HexToStringOptions const &opt) {
@@ -76,12 +79,12 @@ void RunHexToString(HexToStringOptions const &opt) {
 
 void SetUpEncodeTablePrefixToHex(CLI::App &app) {
   auto opt = std::make_shared<EncodeTablePrefixToHexOptions>();
-  auto coor = app.add_subcommand("EncodeTablePrefixToHex", "Encode table prefix to hex")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required();
-  coor->add_option("--part_id", opt->part_id, "Request parameter part_id");
-  coor->add_option("--region_prefix", opt->region_prefix, "Request parameter region_prefix")->required();
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
-  coor->callback([opt]() { RunEncodeTablePrefixToHexr(*opt); });
+  auto *cmd = app.add_subcommand("EncodeTablePrefixToHex", "Encode table prefix to hex")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--part_id", opt->part_id, "Request parameter part_id");
+  cmd->add_option("--region_prefix", opt->region_prefix, "Request parameter region_prefix")->required();
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
+  cmd->callback([opt]() { RunEncodeTablePrefixToHexr(*opt); });
 }
 
 void RunEncodeTablePrefixToHexr(EncodeTablePrefixToHexOptions const &opt) {
@@ -104,12 +107,12 @@ void RunEncodeTablePrefixToHexr(EncodeTablePrefixToHexOptions const &opt) {
 
 void SetUpEncodeVectorPrefixToHex(CLI::App &app) {
   auto opt = std::make_shared<EncodeVectorPrefixToHexOptions>();
-  auto coor = app.add_subcommand("EncodeVectorPrefixToHex", "Encode vector prefix to hex")->group("Tool Commands");
-  coor->add_option("--vector_id", opt->vector_id, "Request parameter key")->required();
-  coor->add_option("--part_id", opt->part_id, "Request parameter part_id");
-  coor->add_option("--region_prefix", opt->region_prefix, "Request parameter region_prefix")->required();
+  auto *cmd = app.add_subcommand("EncodeVectorPrefixToHex", "Encode vector prefix to hex")->group("Tool Commands");
+  cmd->add_option("--vector_id", opt->vector_id, "Request parameter key")->required();
+  cmd->add_option("--part_id", opt->part_id, "Request parameter part_id");
+  cmd->add_option("--region_prefix", opt->region_prefix, "Request parameter region_prefix")->required();
 
-  coor->callback([opt]() { RunEncodeVectorPrefixToHex(*opt); });
+  cmd->callback([opt]() { RunEncodeVectorPrefixToHex(*opt); });
 }
 
 void RunEncodeVectorPrefixToHex(EncodeVectorPrefixToHexOptions const &opt) {
@@ -126,11 +129,11 @@ void RunEncodeVectorPrefixToHex(EncodeVectorPrefixToHexOptions const &opt) {
 
 void SetUpDecodeTablePrefix(CLI::App &app) {
   auto opt = std::make_shared<DecodeTablePrefixOptions>();
-  auto coor = app.add_subcommand("DecodeTablePrefix", "Decode table prefix")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_option("--part_id", opt->part_id, "Request parameter part_id")->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
-  coor->callback([opt]() { RunDecodeTablePrefix(*opt); });
+  auto *cmd = app.add_subcommand("DecodeTablePrefix", "Decode table prefix")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
+  cmd->add_option("--part_id", opt->part_id, "Request parameter part_id")->group("Coordinator Manager Commands");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
+  cmd->callback([opt]() { RunDecodeTablePrefix(*opt); });
 }
 
 void RunDecodeTablePrefix(DecodeTablePrefixOptions const &opt) {
@@ -144,10 +147,10 @@ void RunDecodeTablePrefix(DecodeTablePrefixOptions const &opt) {
 
 void SetUpDecodeVectorPrefix(CLI::App &app) {
   auto opt = std::make_shared<DecodeVectorPrefixOptions>();
-  auto coor = app.add_subcommand("DecodeVectorPrefix", "Decode vector prefix")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  coor->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
-  coor->callback([opt]() { RunDecodeVectorPrefix(*opt); });
+  auto *cmd = app.add_subcommand("DecodeVectorPrefix", "Decode vector prefix")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
+  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter region_prefix")->default_val(false);
+  cmd->callback([opt]() { RunDecodeVectorPrefix(*opt); });
 }
 
 void RunDecodeVectorPrefix(DecodeVectorPrefixOptions const &opt) {
@@ -160,9 +163,9 @@ void RunDecodeVectorPrefix(DecodeVectorPrefixOptions const &opt) {
 
 void SetUpOctalToHex(CLI::App &app) {
   auto opt = std::make_shared<OctalToHexOptions>();
-  auto coor = app.add_subcommand("OctalToHex", "Octal to hex")->group("Tool Commands");
-  coor->add_option("--key", opt->key, "Request parameter key")->required();
-  coor->callback([opt]() { RunOctalToHex(*opt); });
+  auto *cmd = app.add_subcommand("OctalToHex", "Octal to hex")->group("Tool Commands");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->callback([opt]() { RunOctalToHex(*opt); });
 }
 
 void RunOctalToHex(OctalToHexOptions const &opt) {
@@ -172,10 +175,10 @@ void RunOctalToHex(OctalToHexOptions const &opt) {
 
 void SetUpCoordinatorDebug(CLI::App &app) {
   auto opt = std::make_shared<CoordinatorDebugOptions>();
-  auto coor = app.add_subcommand("CoordinatorDebug", "Coordinator debug")->group("Tool Commands");
-  coor->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
-  coor->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  coor->callback([opt]() { RunCoordinatorDebug(*opt); });
+  auto *cmd = app.add_subcommand("CoordinatorDebug", "Coordinator debug")->group("Tool Commands");
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
+  cmd->callback([opt]() { RunCoordinatorDebug(*opt); });
 }
 
 void RunCoordinatorDebug(CoordinatorDebugOptions const &opt) {

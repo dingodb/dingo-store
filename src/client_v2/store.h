@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_CLIENT_STORE_H_
+#define DINGODB_CLIENT_STORE_H_
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -25,17 +28,15 @@
 #include "CLI/CLI.hpp"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
-// #include "client_v2/store_function.h"
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
 #include "proto/meta.pb.h"
 #include "proto/store.pb.h"
 
-#ifndef DINGODB_STORE_H
-#define DINGODB_STORE_H
 namespace client_v2 {
 
 void SetUpStoreSubCommands(CLI::App &app);
+
 // store/index/document commands
 struct AddRegionOptions {
   std::string coor_url;
@@ -888,6 +889,16 @@ struct WhichRegionOptions {
 void SetUpWhichRegion(CLI::App &app);
 void RunWhichRegion(WhichRegionOptions const &opt);
 
+struct DumpRegionOptions {
+  std::string coor_url;
+  int64_t region_id;
+  int32_t offset;
+  int32_t limit;
+  bool show_detail;
+};
+void SetUpDumpRegion(CLI::App &app);
+void RunDumpRegion(DumpRegionOptions const &opt);
+
 struct RegionMetricsOptions {
   std::string coor_url;
   std::string store_addrs;
@@ -897,14 +908,15 @@ struct RegionMetricsOptions {
 void SetUpRegionMetrics(CLI::App &app);
 void RunRegionMetrics(RegionMetricsOptions const &opt);
 
-// store function
 // meta
 dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
 dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
 dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id);
+
 // coordinator
 dingodb::pb::common::Region SendQueryRegion(int64_t region_id);
+
 // document
 void SendDocumentAdd(DocumentAddOptions const &opt);
 void SendDocumentDelete(DocumentDeleteOptions const &opt);
@@ -918,15 +930,10 @@ void SendDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const &opt);
 
 // vector
 void SendVectorSearch(VectorSearchOptions const &opt);
-
 void SendVectorSearchDebug(VectorSearchDebugOptions const &opt);
-
 void SendVectorRangeSearch(VectorRangeSearchOptions const &opt);
-
 void SendVectorRangeSearchDebug(VectorRangeSearchDebugOptions const &opt);
-
 void SendVectorBatchSearch(VectorBatchSearchOptions const &opt);
-
 void SendVectorBatchQuery(VectorBatchQueryOptions const &opt);
 void SendVectorAddRetry(VectorAddOptions const &opt);
 void SendVectorAdd(VectorAddOptions const &opt);
@@ -935,20 +942,17 @@ void SendVectorGetMaxId(VectorGetMaxIdOptions const &opt);
 void SendVectorGetMinId(VectorGetMinIdOptions const &opt);
 void SendVectorAddBatch(VectorAddBatchOptions const &opt);
 void SendVectorScanQuery(VectorScanQueryOptions const &opt);
-
 void SendVectorScanDump(VectorScanDumpOptions const &opt);
 void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const &opt);
 void SendVectorGetRegionMetrics(VectorGetRegionMetricsOptions const &opt);
 void SendVectorCalcDistance(VectorCalcDistanceOptions const &opt);
 void SendCalcDistance(CalcDistanceOptions const &opt);
-
 int64_t SendVectorCount(VectorCountOptions const &opt);
 void CountVectorTable(CountVectorTableOptions const &opt);
 
+// raw kv
 void SendKvGet(KvGetOptions const &opt, std::string &value);
 void SendKvBatchGet(KvBatchGetOptions const &opt);
-
-// int SendKvPut(int64_t region_id, const std::string &key, std::string value = "");
 int SendKvPut(KvPutOptions const &opt, std::string value = "");
 void SendKvBatchPut(KvBatchPutOptions const &opt);
 void SendKvPutIfAbsent(KvPutIfAbsentOptions const &opt);
@@ -961,6 +965,7 @@ void SendKvBatchCompareAndSet(KvBatchCompareAndSetOptions const &opt);
 void SendKvScanBeginV2(KvScanBeginV2Options const &opt);
 void SendKvScanContinueV2(KvScanContinueV2Options const &opt);
 void SendKvScanReleaseV2(KvScanReleaseV2Options const &opt);
+
 // Txn
 std::string OctalToHex(const std::string &str);
 std::string StringToHex(const std::string &key);
@@ -977,31 +982,19 @@ bool TxnGetRegion(int64_t region_id, dingodb::pb::common::Region &region);
 std::string GetServiceName(const dingodb::pb::common::Region &region);
 
 void SendTxnGet(TxnGetOptions const &opt);
-
 void SendTxnBatchGet(TxnBatchGetOptions const &opt);
 void SendTxnScan(TxnScanOptions const &opt);
-
 void SendTxnPessimisticLock(TxnPessimisticLockOptions const &opt);
-
 void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const &opt);
-
 void SendTxnPrewrite(TxnPrewriteOptions const &opt);
-
 void SendTxnCommit(TxnCommitOptions const &opt);
-
 void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const &opt);
-
 void SendTxnResolveLock(TxnResolveLockOptions const &opt);
-
 void SendTxnBatchRollback(TxnBatchRollbackOptions const &opt);
-
 void SendTxnScanLock(TxnScanLockOptions const &opt);
-
 void SendTxnHeartBeat(TxnHeartBeatOptions const &opt);
 void SendTxnGc(TxnGCOptions const &opt);
-
 void SendTxnDeleteRange(TxnDeleteRangeOptions const &opt);
-
 void SendTxnDump(TxnDumpOptions const &opt);
 
 void StoreSendTxnPrewrite(TxnPrewriteOptions const &opt, const dingodb::pb::common::Region &region);
@@ -1035,4 +1028,5 @@ void CheckTableDistribution(CheckTableDistributionOptions const &opt);
 void CheckIndexDistribution(CheckIndexDistributionOptions const &opt);
 
 }  // namespace client_v2
-#endif  // DINGODB_STORE_H
+
+#endif  // DINGODB_CLIENT_STORE_H_

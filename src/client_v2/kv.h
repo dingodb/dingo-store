@@ -13,6 +13,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifndef DINGODB_CLIENT_KV_H_
+#define DINGODB_CLIENT_KV_H_
+
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
@@ -30,9 +33,8 @@
 #include "coordinator/coordinator_interaction.h"
 #include "proto/coordinator.pb.h"
 
-#ifndef DINGODB_KV_H
-#define DINGODB_KV_H
 namespace client_v2 {
+
 void SetUpKVSubCommands(CLI::App &app);
 // coordinator kv
 struct KvHelloOptions {
@@ -156,4 +158,5 @@ void SetUpListLeases(CLI::App &app);
 void RunListLeases(ListLeasesOptions const &opt);
 
 }  // namespace client_v2
-#endif  // DINGODB_KV_H
+
+#endif  // DINGODB_CLIENT_KV_H_

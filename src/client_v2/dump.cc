@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "client_v2/dump.h"
+
 #include <any>
 #include <cstdint>
 #include <cstring>
@@ -25,8 +27,6 @@
 #include <vector>
 
 #include "client_v2/helper.h"
-// #include "client_v2/store_function.h"
-#include "client_v2/dump.h"
 #include "client_v2/store.h"
 #include "common/constant.h"
 #include "common/helper.h"
