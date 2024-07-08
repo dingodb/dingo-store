@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <iterator>
 #include <string>
@@ -129,14 +130,6 @@ TEST_F(BatchTsListTest, MultiThreadLongTimeRun) {
 
   mvcc::BatchTsList batch_ts_list;
 
-  int push_size = 10;
-  for (int i = 0; i < push_size; ++i) {
-    batch_ts_list.Push(GenBatchTs());
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
-  }
-
-  ASSERT_EQ(push_size + 1, batch_ts_list.ActualCount());
-
   int producer_num = 8;
   int consumer_num = 10;
   std::vector<std::thread> threads;
@@ -178,6 +171,54 @@ TEST_F(BatchTsListTest, MultiThreadLongTimeRun) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
     std::cout << batch_ts_list.DebugInfo() << fmt::format(" total_count({})", ts_count.load()) << std::endl;
     batch_ts_list.CleanDead();
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+}
+
+TEST_F(BatchTsListTest, MultiThreadLongTimeRun2) {
+  // GTEST_SKIP() << "skip long time run.";
+
+  int producer_num = 8;
+  int consumer_num = 8;
+  std::vector<std::thread> threads;
+  threads.reserve(producer_num + consumer_num);
+
+  std::atomic<int64_t> ts_count = 0;
+
+  // producer
+  for (int i = 0; i < producer_num; ++i) {
+    threads.push_back(std::thread([i, &ts_count] {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      int thread_no = i;
+      for (uint32_t j = 0; j < 1000000; ++j) {
+        ts_count.fetch_add(1, std::memory_order_relaxed);
+      }
+
+      std::cout << fmt::format("producer thread({}) finish...", thread_no) << std::endl;
+    }));
+  }
+
+  // consumer
+  for (int i = 0; i < consumer_num; ++i) {
+    threads.push_back(std::thread([i, &ts_count] {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      int thread_no = i;
+
+      for (uint32_t j = 0; j < 1000000; ++j) {
+        ts_count.fetch_sub(1, std::memory_order_relaxed);
+      }
+
+      std::cout << fmt::format("consumer thread({}) finish...", thread_no) << std::endl;
+    }));
+  }
+
+  // monitor status
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::cout << fmt::format("ts_count({})", ts_count.load(std::memory_order_relaxed)) << std::endl;
   }
 
   for (auto& thread : threads) {

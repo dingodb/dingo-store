@@ -695,6 +695,17 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         }
       }
     }
+  } else if (request->type() == pb::debug::DebugType::TS_PROVIDER_METRICS) {
+    auto ts_provider = Server::GetInstance().GetTsProvider();
+    auto* ts_provider_metrics = response->mutable_ts_provider_metrics();
+    ts_provider_metrics->set_get_ts_count(ts_provider->GetTsCount());
+    ts_provider_metrics->set_get_ts_fail_count(ts_provider->GetTsFailCount());
+    ts_provider_metrics->set_renew_epoch(ts_provider->RenewEpoch());
+    ts_provider_metrics->set_actual_active_count(ts_provider->ActiveCount());
+    ts_provider_metrics->set_active_count(ts_provider->ActiveCount());
+    ts_provider_metrics->set_actual_dead_count(ts_provider->ActualDeadCount());
+    ts_provider_metrics->set_dead_count(ts_provider->DeadCount());
+    ts_provider_metrics->set_last_physical(ts_provider->LastPhysical());
   }
 }
 
