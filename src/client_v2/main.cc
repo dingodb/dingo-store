@@ -91,8 +91,11 @@ int InteractiveCli(CLI::App& app) {
       argv.push_back(arg.data());
     }
     argv.push_back(nullptr);
-
-    CLI11_PARSE(app, argv.size() - 1, argv.data());
+    try {
+      app.parse(argv.size() - 1, argv.data());
+    } catch (const CLI::ParseError& e) {
+      std::cout << "Error: " << e.what() << std::endl;
+    }
   }
 
   return 0;
@@ -113,7 +116,7 @@ int main(int argc, char* argv[]) {
   google::InitGoogleLogging(argv[0]);
 
   CLI::App app{"dingo_client_v2"};
-  app.get_formatter()->column_width(40);  // 列的宽度
+  app.get_formatter()->column_width(40);
   client_v2::SetUpCoordinatorSubCommands(app);
   client_v2::SetUpKVSubCommands(app);
   client_v2::SetUpMetaSubCommands(app);

@@ -35,8 +35,6 @@ butil::Status CoorKvRange(dingodb::CoordinatorInteractionPtr coordinator_interac
   request.set_key(key);
   request.set_range_end(range_end);
   request.set_limit(limit);
-  // request.set_keys_only(FLAGS_keys_only);
-  // request.set_count_only(FLAGS_count_only);
 
   auto status = coordinator_interaction_version->SendRequest("KvRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -245,7 +243,8 @@ void RunKvHello(KvHelloOptions const& opt) {
   request.set_hello(0);
   request.set_get_memory_info(true);
 
-  auto status = coordinator_interaction_version->SendRequest("Hello", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("Hello", request, response);
   DINGO_LOG(INFO) << "SendRequest status: " << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -266,7 +265,8 @@ void RunGetRawKvIndex(GetRawKvIndexOptions const& opt) {
 
   request.set_key(opt.key);
 
-  auto status = coordinator_interaction_version->SendRequest("GetRawKvIndex", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRawKvIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -293,7 +293,8 @@ void RunGetRawKvRev(GetRawKvRevOptions const& opt) {
   request.mutable_revision()->set_main(opt.revision);
   request.mutable_revision()->set_sub(opt.sub_revision);
 
-  auto status = coordinator_interaction_version->SendRequest("GetRawKvRev", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRawKvRev", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -330,7 +331,8 @@ void RunCoorKvRange(CoorKvRangeOptions const& opt) {
   request.set_keys_only(opt.keys_only);
   request.set_count_only(opt.count_only);
 
-  auto status = coordinator_interaction_version->SendRequest("KvRange", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -371,7 +373,8 @@ void RunCoorKvPut(CoorKvPutOptions const& opt) {
   request.set_ignore_value(opt.ignore_value);
   request.set_need_prev_kv(opt.need_prev_kv);
 
-  auto status = coordinator_interaction_version->SendRequest("KvPut", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvPut", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -400,7 +403,8 @@ void RunCoorKvDeleteRange(CoorKvDeleteRangeOptions const& opt) {
   request.set_range_end(opt.range_end);
   request.set_need_prev_kv(opt.need_prev_kv);
 
-  auto status = coordinator_interaction_version->SendRequest("KvDeleteRange", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvDeleteRange", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -429,7 +433,8 @@ void RunCoorKvCompaction(CoorKvCompactionOptions const& opt) {
   request.set_range_end(opt.range_end);
   request.set_compact_revision(opt.revision);
 
-  auto status = coordinator_interaction_version->SendRequest("KvCompaction", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvCompaction", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -489,7 +494,8 @@ void RunOneTimeWatch(OneTimeWatchOptions const& opt) {
   for (uint32_t i = 0; i < opt.max_watch_count; i++) {
     // wait 600s for event
     DINGO_LOG(INFO) << "SendRequest watch_count=" << i;
-    auto status = coordinator_interaction_version->SendRequest("Watch", request, response, 600000);
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("Watch", request,
+                                                                                                response, 600000);
     DINGO_LOG(INFO) << "SendRequest status=" << status << ", watch_count=" << i;
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -520,18 +526,20 @@ void RunLock(LockOptions const& opt) {
   // create lease
   int64_t lease_id = 0;
   int64_t ttl = 3;
-  auto ret = CoorLeaseGrant(coordinator_interaction_version, lease_id, ttl);
+  auto ret = CoorLeaseGrant(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), lease_id, ttl);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "CoorLeaseGrant failed, ret=" << ret;
     return;
   }
 
   // renew lease in background
-  Bthread bt(nullptr, PeriodRenwLease, coordinator_interaction_version, lease_id);
+  Bthread bt(nullptr, PeriodRenwLease, CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(),
+             lease_id);
 
   // write lock key
   int64_t revision = 0;
-  ret = CoorKvPut(coordinator_interaction_version, lock_key, "1", lease_id, revision);
+  ret = CoorKvPut(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), lock_key, "1", lease_id,
+                  revision);
   if (!ret.ok()) {
     DINGO_LOG(WARNING) << "CoorKvPut failed, ret=" << ret;
     return;
@@ -542,7 +550,8 @@ void RunLock(LockOptions const& opt) {
     // check if lock success
     std::string watch_key;
     int64_t watch_revision = 0;
-    GetWatchKeyAndRevision(coordinator_interaction_version, lock_prefix, lock_key, watch_key, watch_revision);
+    GetWatchKeyAndRevision(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), lock_prefix,
+                           lock_key, watch_key, watch_revision);
 
     if (watch_key == lock_key) {
       DINGO_LOG(INFO) << "Get Lock success";
@@ -551,7 +560,8 @@ void RunLock(LockOptions const& opt) {
 
     DINGO_LOG(WARNING) << "Lock failed, watch for key=" << watch_key << ", watch_revision=" << watch_revision;
     std::vector<dingodb::pb::version::Event> events;
-    ret = CoorWatch(coordinator_interaction_version, watch_key, watch_revision, true, false, false, false, events);
+    ret = CoorWatch(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), watch_key, watch_revision,
+                    true, false, false, false, events);
     if (!ret.ok()) {
       DINGO_LOG(WARNING) << "CoorWatch failed, ret=" << ret;
       return;
@@ -597,7 +607,8 @@ void RunLeaseGrant(LeaseGrantOptions const& opt) {
   request.set_id(opt.id);
   request.set_ttl(opt.ttl);
 
-  auto status = coordinator_interaction_version->SendRequest("LeaseGrant", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseGrant", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -620,7 +631,8 @@ void RunLeaseRevoke(LeaseRevokeOptions const& opt) {
 
   request.set_id(opt.id);
 
-  auto status = coordinator_interaction_version->SendRequest("LeaseRevoke", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseRevoke", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -642,7 +654,8 @@ void RunLeaseRenew(LeaseRenewOptions const& opt) {
   dingodb::pb::version::LeaseRenewResponse response;
   request.set_id(opt.id);
 
-  auto status = coordinator_interaction_version->SendRequest("LeaseRenew", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseRenew", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -665,7 +678,8 @@ void RunLeaseQuery(LeaseQueryOptions const& opt) {
   request.set_id(opt.id);
   request.set_keys(true);
 
-  auto status = coordinator_interaction_version->SendRequest("LeaseQuery", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseQuery", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -685,7 +699,8 @@ void RunListLeases(ListLeasesOptions const& opt) {
   dingodb::pb::version::ListLeasesRequest request;
   dingodb::pb::version::ListLeasesResponse response;
 
-  auto status = coordinator_interaction_version->SendRequest("ListLeases", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ListLeases", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }

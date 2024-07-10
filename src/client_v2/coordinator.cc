@@ -76,7 +76,9 @@ void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
 
   request.set_epoch(1);
 
-  auto status = coordinator_interaction->SendRequest("GetRegionMap", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMap", request, response);
+
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Get region map failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -549,7 +551,8 @@ void RunHello(HelloOption const &opt) {
   request.set_hello(0);
   request.set_get_memory_info(true);
 
-  auto status = coordinator_interaction->SendRequest("Hello", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("Hello", request, response);
   DINGO_LOG(INFO) << "SendRequest status: " << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -566,9 +569,9 @@ void RunStoreHeartbeat(StoreHeartbeatOption const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  SendStoreHearbeatV2(coordinator_interaction, 100);
-  SendStoreHearbeatV2(coordinator_interaction, 200);
-  SendStoreHearbeatV2(coordinator_interaction, 300);
+  SendStoreHearbeatV2(CoordinatorInteraction::GetInstance().GetCoorinatorInteraction(), 100);
+  SendStoreHearbeatV2(CoordinatorInteraction::GetInstance().GetCoorinatorInteraction(), 200);
+  SendStoreHearbeatV2(CoordinatorInteraction::GetInstance().GetCoorinatorInteraction(), 300);
 }
 void SendStoreHearbeatV2(dingodb::CoordinatorInteractionPtr coordinator_interaction, int64_t store_id) {
   dingodb::pb::coordinator::StoreHeartbeatRequest request;
@@ -588,7 +591,8 @@ void SendStoreHearbeatV2(dingodb::CoordinatorInteractionPtr coordinator_interact
   raft_location->set_port(19192);
   store->set_resource_tag("DINGO_DEFAULT");
 
-  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
+  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -610,7 +614,8 @@ void RunCreateStore(CreateStoreOption const &opt) {
 
   request.set_cluster_id(1);
 
-  auto status = coordinator_interaction->SendRequest("CreateStore", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateStore", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -640,7 +645,8 @@ void RunDeleteStore(DeleteStoreOption const &opt) {
   auto *keyring = request.mutable_keyring();
   keyring->assign(opt.keyring);
 
-  auto status = coordinator_interaction->SendRequest("DeleteStore", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DeleteStore", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -679,7 +685,8 @@ void RunUpdateStore(UpdateStoreOption const &opt) {
     return;
   }
 
-  auto status = coordinator_interaction->SendRequest("UpdateStore", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateStore", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -711,7 +718,8 @@ void RunCreateExecutor(CreateExecutorOption const &opt) {
   request.mutable_executor()->mutable_executor_user()->set_keyring(opt.keyring);
   request.mutable_executor()->mutable_server_location()->set_host(opt.host);
   request.mutable_executor()->mutable_server_location()->set_port(opt.port);
-  auto status = coordinator_interaction->SendRequest("CreateExecutor", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateExecutor", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -741,7 +749,8 @@ void RunDeleteExecutor(DeleteExecutorOption const &opt) {
   request.mutable_executor()->mutable_executor_user()->set_user(opt.user);
   request.mutable_executor()->mutable_executor_user()->set_keyring(opt.keyring);
 
-  auto status = coordinator_interaction->SendRequest("CreateExecutor", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateExecutor", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -769,7 +778,8 @@ void RunCreateExecutorUser(CreateExecutorUserOption const &opt) {
   request.mutable_executor_user()->set_user(opt.user);
   request.mutable_executor_user()->set_keyring(opt.keyring);
 
-  auto status = coordinator_interaction->SendRequest("CreateExecutorUser", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateExecutorUser",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -801,7 +811,8 @@ void RunUpdateExecutorUser(UpdateExecutorUserOption const &opt) {
   request.mutable_executor_user()->set_keyring(opt.keyring);
   request.mutable_executor_user_update()->set_keyring(opt.new_keyring);
 
-  auto status = coordinator_interaction->SendRequest("UpdateExecutorUser", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateExecutorUser",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -828,7 +839,8 @@ void RunDeleteExecutorUser(DeleteExecutorUserOption const &opt) {
   request.mutable_executor_user()->set_user(opt.user);
   request.mutable_executor_user()->set_keyring(opt.keyring);
 
-  auto status = coordinator_interaction->SendRequest("DeleteExecutorUser", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DeleteExecutorUser",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -849,7 +861,8 @@ void RunGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
   dingodb::pb::coordinator::GetExecutorUserMapResponse response;
 
   request.set_cluster_id(1);
-  auto status = coordinator_interaction->SendRequest("GetExecutorUserMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetExecutorUserMap",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -888,7 +901,8 @@ void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
   auto *user = executor->mutable_executor_user();
   user->set_user(opt.user);
   user->set_keyring(opt.keyring);
-  auto status = coordinator_interaction->SendRequest("ExecutorHeartbeat", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ExecutorHeartbeat",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -915,7 +929,8 @@ void RunGetStoreMap(GetStoreMapOption const &opt) {
     request.add_filter_store_types(static_cast<dingodb::pb::common::StoreType>(opt.filter_store_type));
   }
 
-  auto status = coordinator_interaction->SendRequest("GetStoreMap", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMap", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Get store map failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -983,7 +998,8 @@ void RunGetExecutorMap(GetExecutorMapOption const &opt) {
 
   request.set_epoch(1);
 
-  auto status = coordinator_interaction->SendRequest("GetExecutorMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetExecutorMap", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1005,7 +1021,8 @@ void RunGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
 
   request.set_epoch(1);
 
-  auto status = coordinator_interaction->SendRequest("GetDeletedRegionMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetDeletedRegionMap",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &region : response.regionmap().regions()) {
@@ -1038,7 +1055,8 @@ void RunAddDeleteRegionMap(AddDeleteRegionMapOption const &opt) {
 
   request.set_region_id(std::stol(opt.id));
   request.set_force(opt.is_force);
-  auto status = coordinator_interaction->SendRequest("AddDeletedRegionMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("AddDeletedRegionMap",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
@@ -1060,7 +1078,8 @@ void RunCleanDeleteRegionMap(CleanDeleteRegionMapOption const &opt) {
   dingodb::pb::coordinator::CleanDeletedRegionMapResponse response;
 
   request.set_region_id(std::stol(opt.id));
-  auto status = coordinator_interaction->SendRequest("CleanDeletedRegionMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanDeletedRegionMap",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
@@ -1082,7 +1101,8 @@ void RunGetRegionCount(GetRegionCountOption const &opt) {
 
   request.set_epoch(1);
 
-  auto status = coordinator_interaction->SendRequest("GetRegionCount", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionCount", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   DINGO_LOG(INFO) << " region_count=" << response.region_count();
@@ -1107,7 +1127,8 @@ void RunGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
 
   request.set_get_coordinator_map(opt.get_coordinator_map);
 
-  auto status = coordinator_interaction->SendRequest("GetCoordinatorMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetCoordinatorMap",
+                                                                                              request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Get coordinator map failed, error: "
@@ -1159,7 +1180,8 @@ void RunCreateRegionId(CreateRegionIdOption const &opt) {
 
   request.set_count(opt.count);
 
-  auto status = coordinator_interaction->SendRequest("CreateRegionId", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateRegionId", request,
+                                                                                              response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "response=" << response.DebugString();
 }
@@ -1180,7 +1202,8 @@ void RunQueryRegion(QueryRegionOption const &opt) {
   dingodb::pb::coordinator::QueryRegionResponse response;
 
   request.set_region_id(opt.id);
-  auto status = coordinator_interaction->SendRequest("QueryRegion", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("QueryRegion", request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "query region " << opt.id << " failed, error: "
@@ -1490,7 +1513,8 @@ void RunCreateRegion(CreateRegionOption const &opt) {
 
   DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
 
-  auto status2 = coordinator_interaction->SendRequest("CreateRegion", request, response);
+  auto status2 =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateRegion", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status2;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1516,7 +1540,8 @@ void RunCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
 
   query_request.set_region_id(opt.id);
 
-  auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "QueryRegion", query_request, query_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << query_response.DebugString();
 
@@ -1552,7 +1577,8 @@ void RunCreateRegionForSplit(CreateRegionForSplitOption const &opt) {
 
   DINGO_LOG(INFO) << "Create region request: " << request.DebugString();
 
-  auto status2 = coordinator_interaction->SendRequest("CreateRegion", request, response);
+  auto status2 =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateRegion", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status2;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1575,7 +1601,8 @@ void RunDropRegion(DropRegionOption const &opt) {
 
   request.set_region_id(opt.id);
 
-  auto status = coordinator_interaction->SendRequest("DropRegion", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DropRegion", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1600,7 +1627,8 @@ void RunDropRegionPermanently(DropRegionPermanentlyOption const &opt) {
   dingodb::pb::coordinator::DropRegionPermanentlyResponse response;
 
   request.set_region_id(std::stoll(opt.id));
-  auto status = coordinator_interaction->SendRequest("DropRegionPermanently", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DropRegionPermanently",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1651,7 +1679,8 @@ void RunSplitRegion(SplitRegionOption const &opt) {
     dingodb::pb::coordinator::QueryRegionResponse query_response;
     query_request.set_region_id(opt.split_from_id);
 
-    auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+        "QueryRegion", query_request, query_response);
     if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
       std::cout << "query region failed, error: "
                 << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
@@ -1711,7 +1740,8 @@ void RunSplitRegion(SplitRegionOption const &opt) {
     request.mutable_split_request()->set_store_create_region(opt.store_create_region);
   }
 
-  auto status = coordinator_interaction->SendRequest("SplitRegion", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("SplitRegion", request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
@@ -1761,7 +1791,8 @@ void RunMergeRegion(MergeRegionOption const &opt) {
     return;
   }
 
-  auto status = coordinator_interaction->SendRequest("MergeRegion", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("MergeRegion", request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id
@@ -1793,7 +1824,8 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
 
   request.set_epoch(0);
 
-  auto status = coordinator_interaction->SendRequest("GetStoreMap", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMap", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get store map failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -1821,7 +1853,8 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
 
   query_request.set_region_id(opt.region_id);
 
-  auto status2 = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "QueryRegion", query_request, query_response);
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "query region failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
@@ -1851,7 +1884,8 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   auto *new_peer_to_add = new_definition->add_peers();
   *new_peer_to_add = new_peer;
 
-  auto status3 = coordinator_interaction->SendRequest("ChangePeerRegion", change_peer_request, change_peer_response);
+  auto status3 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "ChangePeerRegion", change_peer_request, change_peer_response);
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout
         << "change peer region failed, error: "
@@ -1882,7 +1916,8 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
 
   query_request.set_region_id(opt.region_id);
 
-  auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "QueryRegion", query_request, query_response);
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "query region failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
@@ -1925,7 +1960,8 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
 
   DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
 
-  auto status2 = coordinator_interaction->SendRequest("ChangePeerRegion", change_peer_request, change_peer_response);
+  auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "ChangePeerRegion", change_peer_request, change_peer_response);
 
   if (change_peer_response.has_error() && change_peer_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout
@@ -1963,7 +1999,8 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
 
   query_request.set_region_id(opt.region_id);
 
-  auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "QueryRegion", query_request, query_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   if (query_response.region().definition().peers_size() == 0) {
@@ -1994,8 +2031,8 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
 
   DINGO_LOG(INFO) << "transfer leader: region_id=" << opt.region_id << ", store_id=" << opt.store_id;
 
-  auto status2 =
-      coordinator_interaction->SendRequest("TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
+  auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status2;
   DINGO_LOG(INFO) << transfer_leader_response.DebugString();
 
@@ -2026,7 +2063,8 @@ void RunGetOrphanRegion(GetOrphanRegionOption const &opt) {
   dingodb::pb::coordinator::GetOrphanRegionResponse response;
   request.set_store_id(opt.store_id);
 
-  auto status = coordinator_interaction->SendRequest("GetOrphanRegion", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetOrphanRegion",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   DINGO_LOG(INFO) << "orphan_regions_size=" << response.orphan_regions_size();
@@ -2081,7 +2119,8 @@ void RunScanRegions(ScanRegionsOptions const &opt) {
 
   DINGO_LOG(INFO) << "ScanRegions request: " << request.DebugString();
 
-  auto status = coordinator_interaction->SendRequest("ScanRegions", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ScanRegions", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2102,7 +2141,8 @@ void RunGetRangeRegionMap(GetRangeRegionMapOption const &opt) {
 
   DINGO_LOG(INFO) << "GetRangeRegionMap request: " << request.DebugString();
 
-  auto status = coordinator_interaction->SendRequest("GetRangeRegionMap", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRangeRegionMap",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -2127,7 +2167,8 @@ void RunGetStoreOperation(GetStoreOperationOption const &opt) {
   dingodb::pb::coordinator::GetStoreOperationRequest request;
   dingodb::pb::coordinator::GetStoreOperationResponse response;
   request.set_store_id(opt.store_id);
-  auto status = coordinator_interaction->SendRequest("GetStoreOperation", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreOperation",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &it : response.store_operations()) {
@@ -2163,7 +2204,8 @@ void RunGetTaskList(GetTaskListOptions const &opt) {
   request.set_archive_limit(opt.limit);
   request.set_archive_start_id(opt.start_id);
 
-  auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetTaskList", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get task list failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -2194,7 +2236,8 @@ void RunCleanTaskList(CleanTaskListOption const &opt) {
 
   request.set_task_list_id(opt.id);
 
-  auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanTaskList", request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Clean task list failed , error:"
@@ -2239,7 +2282,8 @@ void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
   request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(opt.errcode));
   request.mutable_error()->set_errmsg(opt.errmsg);
 
-  auto status = coordinator_interaction->SendRequest("UpdateRegionCmdStatus", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateRegionCmdStatus",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2262,7 +2306,8 @@ void RunCleanStoreOperation(CleanStoreOperationOptions const &opt) {
 
   request.set_store_id(opt.id);
 
-  auto status = coordinator_interaction->SendRequest("CleanStoreOperation", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanStoreOperation",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2293,7 +2338,8 @@ void RunAddStoreOperation(AddStoreOperationOptions const &opt) {
   region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_NONE);
   region_cmd->set_create_timestamp(butil::gettimeofday_ms());
 
-  auto status = coordinator_interaction->SendRequest("AddStoreOperation", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("AddStoreOperation",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2321,7 +2367,8 @@ void RunRemoveStoreOperation(RemoveStoreOperationOptions const &opt) {
 
   request.set_store_id(opt.id);
   request.set_region_cmd_id(opt.region_cmd_id);
-  auto status = coordinator_interaction->SendRequest("RemoveStoreOperation", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("RemoveStoreOperation",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2355,7 +2402,8 @@ void RunGetRegionCmd(GetRegionCmdOptions const &opt) {
   request.set_start_region_cmd_id(opt.start_region_cmd_id);
   request.set_end_region_cmd_id(opt.end_region_cmd_id);
 
-  auto status = coordinator_interaction->SendRequest("GetRegionCmd", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionCmd", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2382,7 +2430,8 @@ void RunGetStoreMetrics(GetStoreMetricsOptions const &opt) {
 
   request.set_store_id(opt.id);
   request.set_region_id(opt.region_id);
-  auto status = coordinator_interaction->SendRequest("GetStoreMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMetrics",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   for (const auto &it : response.store_metrics()) {
     DINGO_LOG(INFO) << it.store_own_metrics().DebugString();
@@ -2419,7 +2468,8 @@ void RunDeleteStoreMetrics(DeleteStoreMetricsOptions const &opt) {
   dingodb::pb::coordinator::DeleteStoreMetricsResponse response;
 
   request.set_store_id(opt.id);
-  auto status = coordinator_interaction->SendRequest("DeleteStoreMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DeleteStoreMetrics",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2442,7 +2492,8 @@ void RunGetRegionMetrics(GetRegionMetricsOptions const &opt) {
   dingodb::pb::coordinator::GetRegionMetricsResponse response;
 
   request.set_region_id(opt.id);
-  auto status = coordinator_interaction->SendRequest("GetRegionMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMetrics",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   for (const auto &it : response.region_metrics()) {
     DINGO_LOG(INFO) << it.DebugString();
@@ -2467,7 +2518,8 @@ void RunDeleteRegionMetrics(DeleteRegionMetricsOptions const &opt) {
   dingodb::pb::coordinator::DeleteRegionMetricsResponse response;
 
   request.set_region_id(opt.id);
-  auto status = coordinator_interaction->SendRequest("DeleteRegionMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DeleteRegionMetrics",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2515,7 +2567,8 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
 
   DINGO_LOG(INFO) << "UpdateGCSafePoint request: " << request.DebugString();
 
-  auto status = coordinator_interaction->SendRequest("UpdateGCSafePoint", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateGCSafePoint",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2543,7 +2596,8 @@ void RunGetGCSafePoint(GetGCSafePointOptions const &opt) {
 
   request.set_get_all_tenant(opt.get_all_tenant);
 
-  auto status = coordinator_interaction->SendRequest("GetGCSafePoint", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetGCSafePoint", request,
+                                                                                              response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get gc safe point failed , error:"
@@ -2579,7 +2633,8 @@ void RunBalanceLeader(BalanceLeaderOptions const &opt) {
   request.set_dryrun(opt.dryrun);
   request.set_store_type(dingodb::pb::common::StoreType(opt.store_type));
 
-  auto status = coordinator_interaction->SendRequest("BalanceLeader", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("BalanceLeader", request, response);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "SendRequest status=" << status;
   } else {
@@ -2618,7 +2673,8 @@ void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt) {
   DINGO_LOG(INFO) << "Try to set_force_read_only to " << opt.force_read_only
                   << ", reason: " << opt.force_read_only_reason;
 
-  auto status = coordinator_interaction->SendRequest("ConfigCoordinator", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ConfigCoordinator",
+                                                                                              request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
