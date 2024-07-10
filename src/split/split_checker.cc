@@ -267,7 +267,7 @@ void SplitCheckTask::SplitCheck() {
 
   int64_t ts = 0;
   std::string plain_split_key;
-  if (!mvcc::Codec::DecodeKey(encode_split_key, plain_split_key, ts)) {
+  if (!encode_split_key.empty() && !mvcc::Codec::DecodeKey(encode_split_key, plain_split_key, ts)) {
     DINGO_LOG(FATAL) << fmt::format("Decode key fail, key: {}", Helper::StringToHex(encode_split_key));
   }
 
