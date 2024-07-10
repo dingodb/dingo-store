@@ -622,7 +622,7 @@ void RunGetTable(GetTableOptions const &opt) {
   std::cout << "\t parent_entity_id: " << response.table_definition_with_id().table_id().parent_entity_id()
             << std::endl;
 
-  std::cout << "\t entity_id: " << response.table_definition_with_id().table_id().entity_id() << " }" << std::endl;
+  std::cout << "\t entity_id: " << response.table_definition_with_id().table_id().entity_id() << std::endl;
   std::cout << "  }" << std::endl;
 
   std::cout << "  table_definition {" << std::endl;

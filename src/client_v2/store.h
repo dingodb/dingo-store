@@ -275,6 +275,7 @@ struct TxnPessimisticLockOptions {
   std::string key;
   std::string value;
   bool value_is_hex;
+  bool return_values;
 };
 void SetUpTxnPessimisticLock(CLI::App &app);
 void RunTxnPessimisticLock(TxnPessimisticLockOptions const &opt);

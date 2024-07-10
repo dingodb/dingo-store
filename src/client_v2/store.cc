@@ -52,6 +52,12 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpSnapshot(app);
   SetUpRegionMetrics(app);
   SetUpDumpRegion(app);
+  SetUpTxnPrewrite(app);
+  SetUpTxnCommit(app);
+  SetUpTxnPessimisticLock(app);
+  SetUpTxnScanLock(app);
+  SetUpTxnPessimisticRollback(app);
+  SetUpTxnBatchGet(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -571,6 +577,7 @@ void SetUpTxnPessimisticLock(CLI::App& app) {
   cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
   cmd->add_option("--value", opt->value, "Request parameter with_start")->required();
   cmd->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")->default_val(false);
+  cmd->add_flag("--return_values", opt->return_values, "Request parameter return_values")->default_val(false);
   cmd->callback([opt]() { RunTxnPessimisticLock(*opt); });
 }
 
@@ -583,7 +590,8 @@ void RunTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
 
 void SetUpTxnPessimisticRollback(CLI::App& app) {
   auto opt = std::make_shared<TxnPessimisticRollbackOptions>();
-  auto* cmd = app.add_subcommand("TxnPessimisticLock", "Txn pessimistic lock")->group("Store Manager Commands");
+  auto* cmd =
+      app.add_subcommand("TxnPessimisticLockRollback", "Txn pessimistic rollback")->group("Store Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
@@ -4930,7 +4938,7 @@ bool TxnGetRegion(int64_t region_id, dingodb::pb::common::Region& region) {
   DINGO_LOG(INFO) << query_response.DebugString();
 
   if (query_response.region().definition().peers_size() == 0) {
-    DINGO_LOG(ERROR) << "region not found";
+    std::cout << "region: " << region_id << "not found";
     return false;
   }
 
@@ -5081,7 +5089,7 @@ void SendTxnScan(TxnScanOptions const& opt) {
 void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
@@ -5097,9 +5105,11 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   } else {
     request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   }
-
+  if (opt.return_values) {
+    request.set_return_values(true);
+  }
   if (opt.primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
+    std::cout << "primary_lock is empty";
     return;
   } else {
     std::string key = opt.primary_lock;
@@ -5110,29 +5120,29 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    std::cout << "lock_ttl is empty";
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.for_update_ts == 0) {
-    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    std::cout << "for_update_ts is empty";
     return;
   }
   request.set_for_update_ts(opt.for_update_ts);
 
   if (opt.mutation_op.empty()) {
-    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [lock]";
+    std::cout << "mutation_op is empty, mutation MUST be one of [lock]";
     return;
   }
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
+    std::cout << "key is empty";
     return;
   }
   std::string target_key = opt.key;
@@ -5140,7 +5150,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     target_key = HexToString(opt.key);
   }
   if (opt.value.empty()) {
-    DINGO_LOG(ERROR) << "value is empty";
+    std::cout << "value is empty";
     return;
   }
   std::string target_value = opt.value;
@@ -5149,7 +5159,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
   if (opt.mutation_op == "lock") {
     if (opt.value.empty()) {
-      DINGO_LOG(ERROR) << "value is empty";
+      std::cout << "value is empty";
       return;
     }
     auto* mutation = request.add_mutations();
@@ -5157,37 +5167,61 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     mutation->set_key(target_key);
     mutation->set_value(target_value);
   } else {
-    DINGO_LOG(ERROR) << "mutation_op MUST be [lock]";
+    std::cout << "mutation_op MUST be [lock]";
     return;
   }
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnPessimisticLock", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn pessimistic lock failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "txn pessimistic lock success.\n";
+  if (response.txn_result_size() > 0) {
+    std::cout << "txn_result:{ \n";
+    for (auto const& txn_result : response.txn_result()) {
+      std::cout << "\t " << txn_result.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  } else if (opt.return_values) {
+    if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
+      std::cout << "KeyValue:{ \n";
+      for (auto const& kv : response.kvs()) {
+        std::cout << kv.DebugString() << "\n";
+      }
+      std::cout << "}\n";
+    } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
+               region.definition().index_parameter().has_vector_index_parameter()) {
+      std::cout << "VectorWithId:{ \n";
+      for (auto const& vector : response.vector()) {
+        std::cout << vector.DebugString() << "\n";
+      }
+      std::cout << "}\n";
+    } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+               region.definition().index_parameter().has_document_index_parameter()) {
+      std::cout << "DocumentWithId:{ \n";
+      for (auto const& document : response.documents()) {
+        std::cout << document.DebugString() << "\n";
+      }
+      std::cout << "}\n";
+    }
+  }
+  std::cout << std::endl;
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
-  std::string service_name;
-  if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
-    service_name = "StoreService";
-  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
-             region.definition().index_parameter().has_vector_index_parameter()) {
-    service_name = "IndexService";
-  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
-             region.definition().index_parameter().has_document_index_parameter()) {
-    service_name = "DocumentService";
-  } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
-    return;
-  }
+  std::string service_name = GetServiceName(region);
 
   dingodb::pb::store::TxnPessimisticRollbackRequest request;
   dingodb::pb::store::TxnPessimisticRollbackResponse response;
@@ -5201,19 +5235,19 @@ void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.for_update_ts == 0) {
-    DINGO_LOG(ERROR) << "for_update_ts is empty";
+    std::cout << "for_update_ts is empty";
     return;
   }
   request.set_for_update_ts(opt.for_update_ts);
 
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
+    std::cout << "key is empty";
     return;
   }
   std::string target_key = opt.key;
@@ -5225,13 +5259,27 @@ void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnPessimisticRollback", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn pessimistic rollback failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  if (response.txn_result_size() > 0) {
+    std::cout << "txn_result:{\n";
+    for (auto const& txn_result : response.txn_result()) {
+      std::cout << "\t " << txn_result.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  } else {
+    std::cout << "txn pessimistic rollback success.\n";
+  }
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 void SendTxnPrewrite(TxnPrewriteOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
@@ -5243,15 +5291,15 @@ void SendTxnPrewrite(TxnPrewriteOptions const& opt) {
   } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
              region.definition().index_parameter().has_document_index_parameter()) {
     DocumentSendTxnPrewrite(opt, region);
-
   } else {
     DINGO_LOG(ERROR) << "region_type is invalid";
   }
+  std::cout << std::endl;
 }
 void SendTxnCommit(TxnCommitOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
@@ -5269,19 +5317,19 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.commit_ts == 0) {
-    DINGO_LOG(ERROR) << "commit_ts is empty";
+    std::cout << "commit_ts is empty";
     return;
   }
   request.set_commit_ts(opt.commit_ts);
 
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
+    std::cout << "key is empty";
     return;
   }
   std::string target_key = opt.key;
@@ -5303,8 +5351,14 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnCommit", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn commit failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << "txn_result: " << response.txn_result().DebugString();
+    return;
+  }
+  std::cout << "txn commit success, txn_result: " << response.txn_result().DebugString()
+            << " commit_ts: " << response.commit_ts() << "\n";
 }
 
 void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
@@ -5417,7 +5471,7 @@ void SendTxnResolveLock(TxnResolveLockOptions const& opt) {
 void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
@@ -5435,11 +5489,11 @@ void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
   }
 
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
+    std::cout << "key is empty";
     return;
   }
   if (opt.key2.empty()) {
-    DINGO_LOG(ERROR) << "key2 is empty";
+    std::cout << "key2 is empty";
     return;
   }
   std::string target_key = opt.key;
@@ -5454,7 +5508,7 @@ void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
   request.add_keys()->assign(target_key2);
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
@@ -5466,6 +5520,34 @@ void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnBatchGet", request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn batch get failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "txn_result: " << response.txn_result().DebugString() << "\n";
+  if (region.region_type() == dingodb::pb::common::RegionType::STORE_REGION) {
+    std::cout << "KeyValue:{ \n";
+    for (auto const& kv : response.kvs()) {
+      std::cout << kv.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  } else if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
+             region.definition().index_parameter().has_vector_index_parameter()) {
+    std::cout << "VectorWithId:{ \n";
+    for (auto const& vector : response.vectors()) {
+      std::cout << vector.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+             region.definition().index_parameter().has_document_index_parameter()) {
+    std::cout << "DocumentWithId:{ \n";
+    for (auto const& document : response.documents()) {
+      std::cout << document.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  }
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
@@ -5523,7 +5605,7 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
 void SendTxnScanLock(TxnScanLockOptions const& opt) {
   dingodb::pb::common::Region region;
   if (!TxnGetRegion(opt.region_id, region)) {
-    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    std::cout << "TxnGetRegion failed";
     return;
   }
 
@@ -5541,13 +5623,13 @@ void SendTxnScanLock(TxnScanLockOptions const& opt) {
   }
 
   if (opt.max_ts == 0) {
-    DINGO_LOG(ERROR) << "max_ts is empty";
+    std::cout << "max_ts is empty";
     return;
   }
   request.set_max_ts(opt.max_ts);
 
   if (opt.start_key.empty()) {
-    DINGO_LOG(ERROR) << "start_key is empty";
+    std::cout << "start_key is empty";
     return;
   } else {
     std::string key = opt.start_key;
@@ -5558,7 +5640,7 @@ void SendTxnScanLock(TxnScanLockOptions const& opt) {
   }
 
   if (opt.end_key.empty()) {
-    DINGO_LOG(ERROR) << "end_key is empty";
+    std::cout << "end_key is empty";
     return;
   } else {
     std::string key = opt.end_key;
@@ -5569,7 +5651,7 @@ void SendTxnScanLock(TxnScanLockOptions const& opt) {
   }
 
   if (opt.limit == 0) {
-    DINGO_LOG(ERROR) << "limit is empty";
+    std::cout << "limit is empty";
     return;
   }
   request.set_limit(opt.limit);
@@ -5577,7 +5659,22 @@ void SendTxnScanLock(TxnScanLockOptions const& opt) {
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScanLock", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn scan lock failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "txn_result: " << response.txn_result().DebugString() << "\n";
+  if (response.locks_size() > 0) {
+    std::cout << "locks:{\n";
+    for (auto const& lock : response.locks()) {
+      std::cout << lock.DebugString() << "\n";
+    }
+    std::cout << "}\n";
+  }
+  std::cout << "has_more: " << response.has_more() << std::endl;
+  std::cout << "end_key: " << response.end_key() << std::endl;
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
@@ -5813,7 +5910,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   }
 
   if (opt.primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
+    std::cout << "primary_lock is empty";
     return;
   }
   if (opt.key_is_hex) {
@@ -5823,19 +5920,19 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   }
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    std::cout << "lock_ttl is empty";
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.txn_size == 0) {
-    DINGO_LOG(ERROR) << "txn_size is empty";
+    std::cout << "txn_size is empty";
     return;
   }
   request.set_txn_size(opt.txn_size);
@@ -5844,11 +5941,11 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   request.set_max_commit_ts(opt.max_commit_ts);
 
   if (opt.mutation_op.empty()) {
-    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
     return;
   }
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "key is empty";
+    std::cout << "key is empty";
     return;
   }
   std::string target_key = opt.key;
@@ -5859,7 +5956,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   }
   if (opt.mutation_op == "put") {
     if (opt.value.empty()) {
-      DINGO_LOG(ERROR) << "value is empty";
+      std::cout << "value is empty";
       return;
     }
     auto* mutation = request.add_mutations();
@@ -5909,7 +6006,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
     }
   } else if (opt.mutation_op == "insert") {
     if (opt.value.empty()) {
-      DINGO_LOG(ERROR) << "value is empty";
+      std::cout << "value is empty";
       return;
     }
     auto* mutation = request.add_mutations();
@@ -5934,7 +6031,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
       DINGO_LOG(INFO) << "key2: " << opt.key2 << ", value2: " << opt.value2;
     }
   } else {
-    DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op MUST be one of [put, delete, insert]";
     return;
   }
 
@@ -5962,7 +6059,24 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext("StoreService", "TxnPrewrite", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn prewrite failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "prewrite success.\n";
+  std::cout << "txn_result:{ \n";
+  for (auto const& txn_result : response.txn_result()) {
+    std::cout << "\t " << txn_result.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "keys_already_exist: {\n";
+  for (auto const& keys : response.keys_already_exist()) {
+    std::cout << "\t " << keys.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "one_pc_commit_ts: " << response.one_pc_commit_ts();
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
@@ -5979,25 +6093,25 @@ void IndexSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   }
 
   if (opt.primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
+    std::cout << "primary_lock is empty";
     return;
   }
   request.set_primary_lock(opt.primary_lock);
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    std::cout << "lock_ttl is empty";
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.txn_size == 0) {
-    DINGO_LOG(ERROR) << "txn_size is empty";
+    std::cout << "txn_size is empty";
     return;
   }
   request.set_txn_size(opt.txn_size);
@@ -6006,12 +6120,12 @@ void IndexSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   request.set_max_commit_ts(opt.max_commit_ts);
 
   if (opt.mutation_op.empty()) {
-    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
     return;
   }
 
   if (opt.vector_id == 0) {
-    DINGO_LOG(ERROR) << "vector_id is empty";
+    std::cout << "vector_id is empty";
     return;
   }
 
@@ -6030,7 +6144,7 @@ void IndexSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   } else if (para.vector_index_type() == dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
     dimension = para.diskann_parameter().dimension();
   } else {
-    DINGO_LOG(ERROR) << "vector_index_type is empty";
+    std::cout << "vector_index_type is empty";
     return;
   }
 
@@ -6079,7 +6193,7 @@ void IndexSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
     }
     *mutation->mutable_vector() = vector_with_id;
   } else {
-    DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op MUST be one of [put, delete, insert]";
     return;
   }
 
@@ -6107,7 +6221,24 @@ void IndexSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "TxnPrewrite", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn prewrite failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "prewrite success.\n";
+  std::cout << "txn_result:{ \n";
+  for (auto const& txn_result : response.txn_result()) {
+    std::cout << "\t " << txn_result.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "keys_already_exist: {\n";
+  for (auto const& keys : response.keys_already_exist()) {
+    std::cout << "\t " << keys.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "one_pc_commit_ts: " << response.one_pc_commit_ts();
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
@@ -6124,25 +6255,25 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
   }
 
   if (opt.primary_lock.empty()) {
-    DINGO_LOG(ERROR) << "primary_lock is empty";
+    std::cout << "primary_lock is empty";
     return;
   }
   request.set_primary_lock(opt.primary_lock);
 
   if (opt.start_ts == 0) {
-    DINGO_LOG(ERROR) << "start_ts is empty";
+    std::cout << "start_ts is empty";
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    DINGO_LOG(ERROR) << "lock_ttl is empty";
+    std::cout << "lock_ttl is empty";
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.txn_size == 0) {
-    DINGO_LOG(ERROR) << "txn_size is empty";
+    std::cout << "txn_size is empty";
     return;
   }
   request.set_txn_size(opt.txn_size);
@@ -6151,12 +6282,12 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
   request.set_max_commit_ts(opt.max_commit_ts);
 
   if (opt.mutation_op.empty()) {
-    DINGO_LOG(ERROR) << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op is empty, mutation MUST be one of [put, delete, insert]";
     return;
   }
 
   if (opt.document_id == 0) {
-    DINGO_LOG(ERROR) << "document_id is empty";
+    std::cout << "document_id is empty";
     return;
   }
 
@@ -6164,7 +6295,7 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
   int64_t dimension = 0;
 
   if (region.region_type() != dingodb::pb::common::RegionType::DOCUMENT_REGION) {
-    DINGO_LOG(ERROR) << "region_type is invalid, only document region can use this function";
+    std::cout << "region_type is invalid, only document region can use this function";
     return;
   }
 
@@ -6184,12 +6315,12 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
     auto* document_data = document_with_id.mutable_document()->mutable_document_data();
 
     if (opt.document_text1.empty()) {
-      DINGO_LOG(ERROR) << "document_text1 is empty";
+      std::cout << "document_text1 is empty";
       return;
     }
 
     if (opt.document_text2.empty()) {
-      DINGO_LOG(ERROR) << "document_text2 is empty";
+      std::cout << "document_text2 is empty";
       return;
     }
 
@@ -6248,12 +6379,12 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
     auto* document_data = document_with_id.mutable_document()->mutable_document_data();
 
     if (opt.document_text1.empty()) {
-      DINGO_LOG(ERROR) << "document_text1 is empty";
+      std::cout << "document_text1 is empty";
       return;
     }
 
     if (opt.document_text2.empty()) {
-      DINGO_LOG(ERROR) << "document_text2 is empty";
+      std::cout << "document_text2 is empty";
       return;
     }
 
@@ -6291,7 +6422,7 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
 
     *mutation->mutable_document() = document_with_id;
   } else {
-    DINGO_LOG(ERROR) << "mutation_op MUST be one of [put, delete, insert]";
+    std::cout << "mutation_op MUST be one of [put, delete, insert]";
     return;
   }
 
@@ -6319,7 +6450,24 @@ void DocumentSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::c
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "TxnPrewrite", request, response);
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn prewrite failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "prewrite success.\n";
+  std::cout << "txn_result:{ \n";
+  for (auto const& txn_result : response.txn_result()) {
+    std::cout << "\t " << txn_result.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "keys_already_exist: {\n";
+  for (auto const& keys : response.keys_already_exist()) {
+    std::cout << "\t " << keys.DebugString();
+  }
+  std::cout << " }\n";
+  std::cout << "one_pc_commit_ts: " << response.one_pc_commit_ts();
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
