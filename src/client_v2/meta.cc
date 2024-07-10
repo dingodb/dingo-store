@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <iostream>
 #include <limits>
+#include <ostream>
 
 #include "client_v2/helper.h"
 #include "common/helper.h"
@@ -56,7 +57,8 @@ void RunMetaHello(MetaHelloOptions const &opt) {
   request.set_hello(0);
   request.set_get_memory_info(true);
 
-  auto status = coordinator_interaction_meta->SendRequest("Hello", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("Hello", request, response);
   DINGO_LOG(INFO) << "SendRequest status: " << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -88,7 +90,8 @@ void RunGetSchema(GetSchemaOptions const &opt) {
   schema_id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(opt.schema_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetSchema", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchema", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -126,7 +129,8 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("GetSchemas", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -166,7 +170,8 @@ void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("GetSchemaByName", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemaByName",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -204,7 +209,8 @@ void RunGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   schema_id->set_entity_id(opt.schema_id);
-  auto status = coordinator_interaction_meta->SendRequest("GetTablesBySchema", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTablesBySchema",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &table_definition_with_id : response.table_definition_with_ids()) {
@@ -242,7 +248,8 @@ void RunGetTablesCount(GetTablesCountOptions const &opt) {
 
   schema_id->set_entity_id(opt.schema_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetTablesCount", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTablesCount",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "table_count=" << response.tables_count();
 }
@@ -287,7 +294,8 @@ void RunCreateTable(CreateTableOptions const &opt) {
     part_count = 1;
   }
   std::vector<int64_t> new_ids;
-  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     std::cout << "GetCreateTableIds failed";
@@ -388,7 +396,8 @@ void RunCreateTable(CreateTableOptions const &opt) {
 
   request.mutable_request_info()->set_request_id(1024);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateTable", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTable",
+                                                                                                  request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "create table failed, error: "
                      << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
@@ -428,7 +437,8 @@ void RunCreateTableIds(CreateTableIdsOptions const &opt) {
 
   request.set_count(opt.part_count);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateTableIds", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTableIds",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
   DINGO_LOG(INFO) << "count = " << response.table_ids_size();
@@ -453,7 +463,8 @@ void RunCreateTableId(CreateTableIdOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateTableId", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTableId",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -484,7 +495,8 @@ void RunDropTable(DropTableOptions const &opt) {
 
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropTable", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropTable", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
@@ -529,7 +541,8 @@ void RunCreateSchema(CreateSchemaOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateSchema", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateSchema",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -557,7 +570,8 @@ void RunDropSchema(DropSchemaOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(opt.schema_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropSchema", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropSchema", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -589,7 +603,8 @@ void RunGetTable(GetTableOptions const &opt) {
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   table_id->set_entity_id(opt.id);
-  auto status = coordinator_interaction_meta->SendRequest("GetTable", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTable", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get table failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -746,7 +761,8 @@ void RunGetTableByName(GetTableByNameOptions const &opt) {
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_entity_id(opt.schema_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetTableByName", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTableByName",
+                                                                                                  request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "get table by name failed, error: "
@@ -908,7 +924,8 @@ void RunGetTableRange(GetTableRangeOptions const &opt) {
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetTableRange", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTableRange",
+                                                                                                  request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get table failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -945,7 +962,8 @@ void RunGetTableMetrics(GetTableMetricsOptions const &opt) {
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetTableMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTableMetrics",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -981,7 +999,8 @@ void RunSwitchAutoSplit(SwitchAutoSplitOptions const &opt) {
 
   request.set_auto_split(opt.auto_split);
 
-  auto status = coordinator_interaction_meta->SendRequest("SwitchAutoSplit", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("SwitchAutoSplit",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -1007,7 +1026,8 @@ void RunGetDeletedTable(GetDeletedTableOptions const &opt) {
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetDeletedTable", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetDeletedTable",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &table : response.table_definition_with_ids()) {
@@ -1039,7 +1059,8 @@ void RunGetDeletedIndex(GetDeletedIndexOptions const &opt) {
   index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetDeletedIndex", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetDeletedIndex",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &index : response.table_definition_with_ids()) {
@@ -1071,7 +1092,8 @@ void RunCleanDeletedTable(CleanDeletedTableOptions const &opt) {
   table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   table_id->set_entity_id(opt.id);
-  auto status = coordinator_interaction_meta->SendRequest("CleanDeletedTable", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CleanDeletedTable",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -1097,7 +1119,8 @@ void RunCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
   index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   index_id->set_entity_id(opt.id);
-  auto status = coordinator_interaction_meta->SendRequest("CleanDeletedIndex", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CleanDeletedIndex",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -1127,7 +1150,8 @@ void RunCreateTenant(CreateTenantOptions const &opt) {
   request.mutable_tenant()->set_name(opt.name);
   request.mutable_tenant()->set_comment(opt.comment);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateTenant", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTenant",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1157,7 +1181,8 @@ void RunUpdateTenant(UpdateTenantOptions const &opt) {
   request.mutable_tenant()->set_name(opt.name);
   request.mutable_tenant()->set_comment(opt.comment);
 
-  auto status = coordinator_interaction_meta->SendRequest("UpdateTenant", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("UpdateTenant",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1182,7 +1207,8 @@ void RunDropTenant(DropTenantOptions const &opt) {
 
   request.set_tenant_id(opt.tenant_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropTenant", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropTenant", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1206,7 +1232,8 @@ void RunGetTenant(GetTenantOptions const &opt) {
   dingodb::pb::meta::GetTenantsResponse response;
 
   request.add_tenant_ids(opt.tenant_id);
-  auto status = coordinator_interaction_meta->SendRequest("GetTenants", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTenants", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1235,7 +1262,8 @@ void RunGetIndexes(GetIndexesOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   schema_id->set_entity_id(opt.schema_id);
-  auto status = coordinator_interaction_meta->SendRequest("GetIndexes", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndexes", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   // DINGO_LOG(INFO) << response.DebugString();
 
@@ -1274,7 +1302,8 @@ void RunGetIndexesCount(GetIndexesCountOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
 
   schema_id->set_entity_id(opt.schema_id);
-  auto status = coordinator_interaction_meta->SendRequest("GetIndexesCount", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndexesCount",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "index_count=" << response.indexes_count();
 }
@@ -1348,7 +1377,8 @@ void RunCreateIndex(CreateIndexOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -1573,7 +1603,8 @@ void RunCreateIndex(CreateIndexOptions const &opt) {
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateIndex", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateIndex",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
   if (response.error().errcode() == 0) {
@@ -1631,7 +1662,8 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -1724,7 +1756,8 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
 
   DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateIndex", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateIndex",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
   if (response.error().errcode() == 0) {
@@ -1751,7 +1784,8 @@ void RunCreateIndexId(CreateIndexIdOptions const &opt) {
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateIndexId", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateIndexId",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1784,7 +1818,8 @@ void RunUpdateIndex(UpdateIndexOptions const &opt) {
     return;
   }
 
-  auto status = coordinator_interaction_meta->SendRequest("GetIndex", get_request, get_response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest(
+      "GetIndex", get_request, get_response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << get_response.DebugString();
 
@@ -1819,7 +1854,8 @@ void RunUpdateIndex(UpdateIndexOptions const &opt) {
       ->mutable_hnsw_parameter()
       ->set_max_elements(opt.max_elements);
 
-  status = coordinator_interaction_meta->SendRequest("UpdateIndex", update_request, update_response);
+  status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest(
+      "UpdateIndex", update_request, update_response);
 
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << update_response.DebugString();
@@ -1846,7 +1882,8 @@ void RunDropIndex(DropIndexOptions const &opt) {
 
   index_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropIndex", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1872,7 +1909,8 @@ void RunGetIndex(GetIndexOptions const &opt) {
 
   index_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetIndex", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndex", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1898,7 +1936,8 @@ void RunGetIndexByName(GetIndexByNameOptions const &opt) {
   schema_id->set_entity_id(opt.schema_id);
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetIndexByName", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndexByName",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1924,7 +1963,8 @@ void RunGetIndexRange(GetIndexRangeOptions const &opt) {
 
   index_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetIndexRange", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndexRange",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -1956,7 +1996,8 @@ void RunGetIndexMetrics(GetIndexMetricsOptions const &opt) {
   index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   index_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetIndexMetrics", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetIndexMetrics",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -1994,7 +2035,8 @@ void RunGenerateTableIds(GenerateTableIdsOptions const &opt) {
     count->add_index_part_count(4);
   }
 
-  auto status = coordinator_interaction_meta->SendRequest("GenerateTableIds", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GenerateTableIds",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -2041,7 +2083,8 @@ void RunCreateTables(CreateTablesOptions const &opt) {
   uint32_t part_count = opt.part_count;
 
   std::vector<int64_t> new_ids;
-  int ret = client_v2::Helper::GetCreateTableIds(coordinator_interaction_meta, 1 + opt.part_count, new_ids);
+  int ret = client_v2::Helper::GetCreateTableIds(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                 1 + opt.part_count, new_ids);
   if (ret < 0) {
     DINGO_LOG(WARNING) << "GetCreateTableIds failed";
     return;
@@ -2127,7 +2170,8 @@ void RunCreateTables(CreateTablesOptions const &opt) {
     part->mutable_range()->set_end_key(client_v2::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateTables", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTables",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2178,7 +2222,8 @@ void RunUpdateTables(UpdateTablesOptions const &opt) {
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
     int64_t new_part_id = 0;
-    int ret = client_v2::Helper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
+    int ret = client_v2::Helper::GetCreateTableId(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                  new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
       return;
@@ -2256,7 +2301,8 @@ void RunUpdateTables(UpdateTablesOptions const &opt) {
     part->mutable_range()->set_end_key(client_v2::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
-  auto status = coordinator_interaction_meta->SendRequest("UpdateTables", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("UpdateTables",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2310,7 +2356,8 @@ void RunAddIndexOnTable(AddIndexOnTableOptions const &opt) {
   std::vector<int64_t> part_ids;
   for (int i = 0; i < part_count; i++) {
     int64_t new_part_id = 0;
-    int ret = client_v2::Helper::GetCreateTableId(coordinator_interaction_meta, new_part_id);
+    int ret = client_v2::Helper::GetCreateTableId(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                  new_part_id);
     if (ret != 0) {
       DINGO_LOG(WARNING) << "GetCreateTableId failed";
       return;
@@ -2393,7 +2440,8 @@ void RunAddIndexOnTable(AddIndexOnTableOptions const &opt) {
     part->mutable_range()->set_end_key(client_v2::Helper::EncodeRegionRange(part_ids[i] + 1));
   }
 
-  auto status = coordinator_interaction_meta->SendRequest("AddIndexOnTable", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("AddIndexOnTable",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2423,7 +2471,8 @@ void RunDropIndexOnTable(DropIndexOnTableOptions const &opt) {
   request.mutable_index_id()->set_entity_id(opt.index_id);
   request.mutable_index_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropIndexOnTable", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropIndexOnTable",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2450,7 +2499,8 @@ void RunGetTables(GetTablesOptions const &opt) {
 
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetTables", request, response);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTables", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -2479,7 +2529,8 @@ void RunDropTables(DropTablesOptions const &opt) {
   table_id->set_parent_entity_id(opt.schema_id);
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DropTables", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropTables", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -2499,7 +2550,8 @@ void RunGetAutoIncrements(GetAutoIncrementsOptions const &opt) {
   dingodb::pb::meta::GetAutoIncrementsRequest request;
   dingodb::pb::meta::GetAutoIncrementsResponse response;
 
-  auto status = coordinator_interaction_meta->SendRequest("GetAutoIncrements", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetAutoIncrements",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2524,7 +2576,8 @@ void RunGetAutoIncrement(GetAutoIncrementOptions const &opt) {
   table_id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("GetAutoIncrement", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetAutoIncrement",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2557,7 +2610,8 @@ void RunCreateAutoIncrement(CreateAutoIncrementOptions const &opt) {
 
   request.set_start_id(opt.incr_start_id);
 
-  auto status = coordinator_interaction_meta->SendRequest("CreateAutoIncrement", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateAutoIncrement",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2595,7 +2649,8 @@ void RunUpdateAutoIncrement(UpdateAutoIncrementOptions const &opt) {
   request.set_start_id(opt.incr_start_id);
   request.set_force(opt.force);
 
-  auto status = coordinator_interaction_meta->SendRequest("UpdateAutoIncrement", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("UpdateAutoIncrement",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2639,7 +2694,8 @@ void RunGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt) {
   request.set_auto_increment_increment(opt.auto_increment_increment);
   request.set_auto_increment_offset(opt.auto_increment_offset);
 
-  auto status = coordinator_interaction_meta->SendRequest("GenerateAutoIncrement", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest(
+      "GenerateAutoIncrement", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2667,7 +2723,8 @@ void RunDeleteAutoIncrement(DeleteAutoIncrementOptions const &opt) {
 
   table_id->set_entity_id(opt.id);
 
-  auto status = coordinator_interaction_meta->SendRequest("DeleteAutoIncrement", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DeleteAutoIncrement",
+                                                                                                  request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2694,7 +2751,8 @@ void RunListWatch(ListWatchOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest watch_id=" << opt.watch_id;
 
-  auto status = coordinator_interaction_meta->SendRequest("ListWatch", request, response, 600000);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("ListWatch", request,
+                                                                                                  response, 600000);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
@@ -2781,7 +2839,8 @@ void RunCreateWatch(CreateWatchOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("Watch", request, response, 600000);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("Watch", request,
+                                                                                                  response, 600000);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2812,7 +2871,8 @@ void RunCancelWatch(CancelWatchOptions const &opt) {
 
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
-  auto status = coordinator_interaction_meta->SendRequest("Watch", request, response, 600000);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("Watch", request,
+                                                                                                  response, 600000);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2840,7 +2900,8 @@ void RunProgressWatch(ProgressWatchOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
 
   for (uint64_t i = 0;; ++i) {
-    auto status = coordinator_interaction_meta->SendRequest("Watch", request, response, 600000);
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("Watch", request,
+                                                                                                    response, 600000);
     DINGO_LOG(INFO)
         << "SendRequest i: " << i << ", status=" << status
         << "========================================================================================================";
@@ -2870,7 +2931,8 @@ void RunGenTso(GenTsoOptions const &opt) {
   request.set_op_type(::dingodb::pb::meta::TsoOpType::OP_GEN_TSO);
   request.set_count(10);
 
-  auto status = coordinator_interaction_meta->SendRequest("TsoService", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("TsoService", request,
+                                                                                                  response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     DINGO_LOG(ERROR) << "gen tso failed, error: "
                      << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
@@ -2933,7 +2995,8 @@ void RunResetTso(ResetTsoOptions const &opt) {
   request.mutable_current_timestamp()->set_logical(opt.tso_new_logical);
   request.set_force(true);
 
-  auto status = coordinator_interaction_meta->SendRequest("TsoService", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("TsoService", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }
@@ -2978,7 +3041,8 @@ void RunUpdateTso(UpdateTsoOptions const &opt) {
   request.mutable_current_timestamp()->set_logical(opt.tso_new_logical);
   request.set_force(true);
 
-  auto status = coordinator_interaction_meta->SendRequest("TsoService", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("TsoService", request,
+                                                                                                  response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
 }

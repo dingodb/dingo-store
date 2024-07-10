@@ -44,10 +44,6 @@ const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
 const char kAlphabetV2[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
                             'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y'};
 
-static dingodb::CoordinatorInteractionPtr coordinator_interaction;
-static dingodb::CoordinatorInteractionPtr coordinator_interaction_meta;
-static dingodb::CoordinatorInteractionPtr coordinator_interaction_version;
-
 class Bthread {
  public:
   template <class Fn, class... Args>
@@ -80,6 +76,35 @@ class Bthread {
   bool joinable_ = false;
 };
 
+class CoordinatorInteraction {
+ private:
+  CoordinatorInteraction() = default;
+  ~CoordinatorInteraction() = default;
+
+  dingodb::CoordinatorInteractionPtr coordinator_interaction_;
+  dingodb::CoordinatorInteractionPtr coordinator_interaction_meta_;
+  dingodb::CoordinatorInteractionPtr coordinator_interaction_version_;
+
+ public:
+  static CoordinatorInteraction& GetInstance() {
+    static CoordinatorInteraction instance;
+    return instance;
+  }
+  CoordinatorInteraction(const CoordinatorInteraction&) = delete;
+  CoordinatorInteraction& operator=(const CoordinatorInteraction) = delete;
+  void SetCoorinatorInteraction(dingodb::CoordinatorInteractionPtr interaction) {
+    coordinator_interaction_ = interaction;
+  }
+  void SetCoorinatorInteractionMeta(dingodb::CoordinatorInteractionPtr interaction) {
+    coordinator_interaction_meta_ = interaction;
+  }
+  void SetCoorinatorInteractionVersion(dingodb::CoordinatorInteractionPtr interaction) {
+    coordinator_interaction_version_ = interaction;
+  }
+  dingodb::CoordinatorInteractionPtr GetCoorinatorInteraction() { return coordinator_interaction_; }
+  dingodb::CoordinatorInteractionPtr GetCoorinatorInteractionMeta() { return coordinator_interaction_meta_; }
+  dingodb::CoordinatorInteractionPtr GetCoorinatorInteractionVersion() { return coordinator_interaction_version_; }
+};
 class Helper {
  public:
   static std::string Ltrim(const std::string& s, const std::string& delete_str) {
@@ -351,6 +376,58 @@ class Helper {
     }
   }
 
+  static int SetUp(std::string url) {
+    if (url.empty()) {
+      url = "file://./coor_list";
+    }
+
+    if (!url.empty()) {
+      std::string path = url;
+      path = path.replace(path.find("file://"), 7, "");
+      auto addrs = Helper::GetAddrsFromFile(path);
+      if (addrs.empty()) {
+        std::cout << "coor_url not find addr, path=" << path << std::endl;
+        return -1;
+      }
+
+      auto coordinator_interaction = std::make_shared<ServerInteraction>();
+      if (!coordinator_interaction->Init(addrs)) {
+        std::cout << "Fail to init coordinator_interaction, please check parameter --url=" << url << std::endl;
+        return -1;
+      }
+
+      InteractionManager::GetInstance().SetCoorinatorInteraction(coordinator_interaction);
+    }
+
+    // this is for legacy coordinator_client use, will be removed in the future
+    if (!url.empty()) {
+      auto coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
+      if (!coordinator_interaction->InitByNameService(
+              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
+        std::cout << "Fail to init coordinator_interaction, please check parameter --coor_url=" << url << std::endl;
+        return -1;
+      }
+      CoordinatorInteraction::GetInstance().SetCoorinatorInteraction(coordinator_interaction);
+      auto coordinator_interaction_meta = std::make_shared<dingodb::CoordinatorInteraction>();
+      if (!coordinator_interaction_meta->InitByNameService(
+              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
+        std::cout << "Fail to init coordinator_interaction_meta, please check parameter --coor_url=" << url
+                  << std::endl;
+        return -1;
+      }
+      CoordinatorInteraction::GetInstance().SetCoorinatorInteractionMeta(coordinator_interaction_meta);
+      auto coordinator_interaction_version = std::make_shared<dingodb::CoordinatorInteraction>();
+      if (!coordinator_interaction_version->InitByNameService(
+              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeVersion)) {
+        std::cout << "Fail to init coordinator_interaction_version, please check parameter --coor_url=" << url
+                  << std::endl;
+        return -1;
+      }
+      CoordinatorInteraction::GetInstance().SetCoorinatorInteractionVersion(coordinator_interaction_version);
+    }
+    return 0;
+  }
+
   static dingodb::pb::common::RawEngine GetRawEngine(const std::string& engine_name) {
     if (engine_name == "rocksdb") {
       return dingodb::pb::common::RawEngine::RAW_ENG_ROCKSDB;
@@ -384,57 +461,6 @@ class Helper {
     } else {
       return -1;
     }
-  }
-
-  static int SetUp(std::string url) {
-    if (url.empty()) {
-      url = "file://./coor_list";
-    }
-
-    if (!url.empty()) {
-      std::string path = url;
-      path = path.replace(path.find("file://"), 7, "");
-      auto addrs = Helper::GetAddrsFromFile(path);
-      if (addrs.empty()) {
-        std::cout << "coor_url not find addr, path=" << path << std::endl;
-        return -1;
-      }
-
-      auto coordinator_interaction = std::make_shared<ServerInteraction>();
-      if (!coordinator_interaction->Init(addrs)) {
-        std::cout << "Fail to init coordinator_interaction, please check parameter --url=" << url << std::endl;
-        return -1;
-      }
-
-      InteractionManager::GetInstance().SetCoorinatorInteraction(coordinator_interaction);
-    }
-
-    // this is for legacy coordinator_client use, will be removed in the future
-    if (!url.empty()) {
-      coordinator_interaction = std::make_shared<dingodb::CoordinatorInteraction>();
-      if (!coordinator_interaction->InitByNameService(
-              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeCoordinator)) {
-        std::cout << "Fail to init coordinator_interaction, please check parameter --coor_url=" << url << std::endl;
-        return -1;
-      }
-
-      coordinator_interaction_meta = std::make_shared<dingodb::CoordinatorInteraction>();
-      if (!coordinator_interaction_meta->InitByNameService(
-              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeMeta)) {
-        std::cout << "Fail to init coordinator_interaction_meta, please check parameter --coor_url=" << url
-                  << std::endl;
-        return -1;
-      }
-
-      coordinator_interaction_version = std::make_shared<dingodb::CoordinatorInteraction>();
-      if (!coordinator_interaction_version->InitByNameService(
-              url, dingodb::pb::common::CoordinatorServiceType::ServiceTypeVersion)) {
-        std::cout << "Fail to init coordinator_interaction_version, please check parameter --coor_url=" << url
-                  << std::endl;
-        return -1;
-      }
-    }
-    return 0;
   }
 };
 
