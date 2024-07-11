@@ -116,6 +116,10 @@ int main(int argc, char* argv[]) {
     default_run_case += ":MvccIteratorTest.*";
     default_run_case += ":BatchTsListTest.*";
 
+    // txn
+    default_run_case += ":TxnGcTest.*";
+    default_run_case += ":TxnScanTest.*";
+    default_run_case += ":TxnPessimisticLockTest.*";
     testing::GTEST_FLAG(filter) = default_run_case;
   }
 

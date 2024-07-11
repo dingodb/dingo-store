@@ -8,6 +8,7 @@ add_subdirectory(mvcc)
 add_subdirectory(vector)
 add_subdirectory(misc)
 add_subdirectory(document)
+add_subdirectory(txn)
 
 SET(UNIT_TEST_BIN "dingodb_unit_test")
 
@@ -27,6 +28,7 @@ set(UNIT_TEST_LIBS
   $<TARGET_OBJECTS:UNIT_TEST_VECTOR_OBJS>
   $<TARGET_OBJECTS:UNIT_TEST_MISC_OBJS>
   $<TARGET_OBJECTS:UNIT_TEST_DOCUMENT_OBJS>
+  $<TARGET_OBJECTS:UNIT_TEST_TXN_OBJS>
 )
 
 set(UNIT_TEST_LIBS
