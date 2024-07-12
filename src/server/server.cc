@@ -959,6 +959,11 @@ std::shared_ptr<RaftStoreEngine> Server::GetRaftStoreEngine() {
   return std::dynamic_pointer_cast<RaftStoreEngine>(engine);
 }
 
+std::shared_ptr<MonoStoreEngine> Server::GetMonoStoreEngine() {
+  auto engine = GetEngine(pb::common::StorageEngine::STORE_ENG_MONO_STORE);
+  return std::dynamic_pointer_cast<MonoStoreEngine>(engine);
+}
+
 std::shared_ptr<MetaReader> Server::GetMetaReader() {
   CHECK(meta_reader_ != nullptr) << "meta reader is nullptr.";
   return meta_reader_;

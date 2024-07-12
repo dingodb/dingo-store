@@ -1382,37 +1382,28 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
                          "pessimistic lock mutations.size() > FLAGS_max_pessimistic_count");
   }
 
-  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                     << ", region is not found, region_id: " << ctx->RegionId();
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-  }
-
   std::vector<pb::common::KeyValue> kv_puts_lock;
   auto *response = dynamic_cast<pb::store::TxnPessimisticLockResponse *>(ctx->Response());
   if (response == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
                      << ", for_update_ts: " << for_update_ts << ", response is nullptr";
     return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
   }
 
   auto *error = response->mutable_error();
-
   TxnReader txn_reader(raw_engine);
   auto ret_init = txn_reader.Init();
   if (!ret_init.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
                      << ", init txn_reader failed, status: " << ret_init.error_str();
     return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
   }
 
   // for every mutation, check and do lock, if any one of the mutation is failed, the whole lock is failed
   // 1. check if a lock is exists:
-  // yjddebug 检查到任意锁冲突或者写冲突就应该直接跳出循环，返回错误了
   for (const auto &mutation : mutations) {
     if (mutation.op() != pb::store::Op::Lock) {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
                        << ", invalid mutation op, op: " << mutation.op();
       error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
       error->set_errmsg("invalid mutation op");
@@ -1425,7 +1416,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     auto ret = txn_reader.GetLockInfo(mutation.key(), lock_info);
     if (!ret.ok()) {
       // Now we need to fatal exit to prevent data inconsistency between raft peers
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(), start_ts)
                        << ", get lock info failed, key: " << Helper::StringToHex(mutation.key())
                        << ", status: " << ret.error_str();
 
@@ -1439,7 +1430,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     if (!lock_info.primary_lock().empty()) {
       if (lock_info.for_update_ts() == 0) {
         // this is a optimistic lock, return lock_info
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
                          << ", key: " << Helper::StringToHex(mutation.key())
                          << " is locked by optimistic lock, lock_info: " << lock_info.ShortDebugString();
         // return lock_info
@@ -1449,7 +1440,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         if (lock_info.for_update_ts() == for_update_ts) {
           // this is same pessimistic lock request, just do nothing.
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+              << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
               << ", key: " << Helper::StringToHex(mutation.key())
               << " is locked by self, lock_info: " << lock_info.ShortDebugString();
 
@@ -1458,7 +1449,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
             auto ret2 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
             if (!ret2.ok()) {
               // Now we need to fatal exit to prevent data inconsistency between raft peers
-              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
+                                              start_ts)
                                << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
                                << ", status: " << ret2.error_str();
 
@@ -1491,7 +1483,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
             auto ret3 = txn_reader.GetOldValue(mutation.key(), start_ts, false, write_info, kvs);
             if (!ret3.ok()) {
               // Now we need to fatal exit to prevent data inconsistency between raft peers
-              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+              DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
+                                              start_ts)
                                << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
                                << ", status: " << ret3.error_str();
 
@@ -1504,7 +1497,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
           }
         } else {
           // lock_info.for_update_ts() > for_update_ts, this is a illegal request, we return lock_info
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
                            << ", key: " << Helper::StringToHex(mutation.key())
                            << " is locked by pessimistic with larger for_update_ts, lock_info: "
                            << lock_info.ShortDebugString();
@@ -1516,7 +1509,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       } else {
         // this is a lock conflict, return lock_info
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
             << ", key: " << Helper::StringToHex(mutation.key())
             << " is locked conflict, lock_info: " << lock_info.ShortDebugString();
 
@@ -1525,7 +1518,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         *response->add_txn_result()->mutable_locked() = lock_info;
 
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
             << ", lock_conflict, key: " << Helper::StringToHex(mutation.key())
             << ", lock_info: " << lock_info.ShortDebugString();
 
@@ -1543,7 +1536,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
       auto ret4 = txn_reader.GetWriteInfo(min_commit_ts, Constant::kMaxVer, 0, mutation.key(), false, true, true,
                                           write_info, commit_ts);
       if (!ret4.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
                          << ", get write info failed, key: " << Helper::StringToHex(mutation.key())
                          << ", min_commit_ts: " << min_commit_ts << ", status: " << ret4.error_str();
         error->set_errcode(static_cast<pb::error::Errno>(ret4.error_code()));
@@ -1568,7 +1561,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
         write_conflict->set_primary_key(lock_info.primary_lock());
 
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+            << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
             << ", write_conflict, start_ts: " << start_ts << ", commit_ts: " << commit_ts
             << ", write_info: " << write_info.ShortDebugString();
 
@@ -1593,7 +1586,8 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
           auto ret5 = txn_reader.GetOldValue(mutation.key(), start_ts, true, write_info, kvs);
           if (!ret5.ok()) {
             // Now we need to fatal exit to prevent data inconsistency between raft peers
-            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", region->Id(), start_ts)
+            DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock, start_ts: {}", ctx->RegionId(),
+                                            start_ts)
                              << ", get old value failed, key: " << Helper::StringToHex(mutation.key())
                              << ", status: " << ret5.error_str();
 
@@ -1610,7 +1604,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
 
   if (response->txn_result_size() > 0) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] PessimisticLock return txn_result,", region->Id())
+        << fmt::format("[txn][region({})] PessimisticLock return txn_result,", ctx->RegionId())
         << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
         << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
@@ -1618,7 +1612,7 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
 
   if (kv_puts_lock.empty()) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", region->Id())
+        << fmt::format("[txn][region({})] PessimisticLock return empty kv_puts_lock,", ctx->RegionId())
         << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
         << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
@@ -1635,14 +1629,14 @@ butil::Status TxnEngineHelper::PessimisticLock(RawEnginePtr raw_engine, std::sha
     kv->set_value(kv_put.value());
 
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+        << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
         << ", add lock kv, key: " << Helper::StringToHex(kv_put.key())
         << ", value: " << Helper::StringToHex(kv_put.value());
   }
 
   auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
   if (ret.error_code() == EPERM) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", region->Id())
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticLock,", ctx->RegionId())
                      << ", write raft engine failed, status: " << ret.error_str();
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
   }

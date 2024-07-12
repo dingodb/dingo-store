@@ -1376,6 +1376,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
+    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
   } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
     // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
     InitBthreadWorkerThreadNum(config);
@@ -1530,6 +1532,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
+    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
   } else if (role == dingodb::pb::common::ClusterRole::DOCUMENT) {
     // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
     InitBthreadWorkerThreadNum(config);
@@ -1686,6 +1690,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
+    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
+    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
 
   } else {
     DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";

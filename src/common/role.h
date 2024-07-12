@@ -22,6 +22,9 @@ namespace dingodb {
 pb::common::ClusterRole GetRole();
 std::string& GetRoleName();
 
+// for unit test
+void SetRole(std::string role);
+
 }  // namespace dingodb
 
 #endif  // DINGODB_COMMON_ROLE_H_

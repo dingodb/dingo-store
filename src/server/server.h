@@ -32,6 +32,7 @@
 #include "document/document_index_manager.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
+#include "engine/mono_store_engine.h"
 #include "log/log_storage_manager.h"
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
@@ -143,6 +144,7 @@ class Server {
   std::shared_ptr<Engine> GetEngine(pb::common::StorageEngine store_engine_type);
 
   std::shared_ptr<RaftStoreEngine> GetRaftStoreEngine();
+  std::shared_ptr<MonoStoreEngine> GetMonoStoreEngine();
 
   std::shared_ptr<MetaReader> GetMetaReader();
   std::shared_ptr<MetaWriter> GetMetaWriter();
