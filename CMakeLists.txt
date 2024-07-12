@@ -220,6 +220,7 @@ include(protobuf)
 include(yaml-cpp)
 include(libunwind)
 include(libbacktrace)
+include(ftxui)
 include(hnswlib)
 include(rapidjson)
 include(leveldb)
@@ -308,6 +309,7 @@ include_directories(${LIBUNWIND_INCLUDE_DIR})
 include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${TANTIVY_SEARCH_INCLUDE_DIR})
+include_directories(${FTXUI_INCLUDE_DIR})
 
 # CAUTION: the order of the libraries is important, please do not change it.
 set(DYNAMIC_LIB
@@ -333,6 +335,9 @@ set(DYNAMIC_LIB
     ${ZLIB_LIBRARIES}
     ${BDB_LIBRARIES}
     ${TANTIVY_SEARCH_LIBRARIES}
+    ${FTXUI_COMPONENT_LIBRARY}
+    ${FTXUI_DOM_LIBRARY}
+    ${FTXUI_SCREEN_LIBRARY}
     )
 
 if (ENABLE_XDPROCKS)

@@ -13,12 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "coordinator.h"
+#include "client_v2/coordinator.h"
 
 #include <iostream>
 #include <ostream>
 
 #include "client_v2/helper.h"
+#include "client_v2/pretty.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -591,8 +592,7 @@ void SendStoreHearbeatV2(dingodb::CoordinatorInteractionPtr coordinator_interact
   raft_location->set_port(19192);
   store->set_resource_tag("DINGO_DEFAULT");
 
-  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request,
-                                                                                              response);
+  auto status = coordinator_interaction->SendRequest("StoreHeartbeat", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -931,54 +931,7 @@ void RunGetStoreMap(GetStoreMapOption const &opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMap", request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "Get store map failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg() << std::endl;
-    return;
-  }
-
-  std::map<std::string, dingodb::pb::common::Store> store_map_by_type_id;
-  for (const auto &store : response.storemap().stores()) {
-    store_map_by_type_id[std::to_string(store.store_type()) + "-" + std::to_string(store.id())] = store;
-  }
-
-  // print all store's id, state, in_state, create_timestamp, last_seen_timestamp
-  int32_t store_count_available = 0;
-  int32_t index_count_available = 0;
-  int32_t document_count_available = 0;
-
-  for (auto const &[first, store] : store_map_by_type_id) {
-    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
-        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
-      store_count_available++;
-    }
-    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
-        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
-      index_count_available++;
-    }
-    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
-        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT) {
-      document_count_available++;
-    }
-    std::cout << "store_id=" << store.id() << " type=" << dingodb::pb::common::StoreType_Name(store.store_type())
-              << " addr={" << store.server_location().ShortDebugString()
-              << "} state=" << dingodb::pb::common::StoreState_Name(store.state())
-              << " in_state=" << dingodb::pb::common::StoreInState_Name(store.in_state())
-              << " create_timestamp=" << store.create_timestamp()
-              << " last_seen_timestamp=" << store.last_seen_timestamp() << "\n";
-  }
-
-  // don't modify this log, it is used by sdk
-  if (store_count_available > 0) {
-    std::cout << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available << "\n";
-  }
-  if (index_count_available > 0) {
-    std::cout << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available << "\n";
-  }
-  if (document_count_available > 0) {
-    std::cout << "DINGODB_HAVE_DOCUMENT_AVAILABLE, document_count=" << document_count_available << "\n";
-  }
+  Pretty::Show(response);
 }
 
 void SetUpGetExecutorMap(CLI::App &app) {
@@ -1130,33 +1083,7 @@ void RunGetCoordinatorMap(GetCoordinatorMapOption const &opt) {
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetCoordinatorMap",
                                                                                               request, response);
 
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "Get coordinator map failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg() << std::endl;
-    return;
-  }
-
-  std::cout << "leader_location: { host=" << response.leader_location().host()
-            << ", port=" << response.leader_location().port() << " }" << std::endl;
-  std::cout << "kv_leader_location: { host=" << response.kv_leader_location().host()
-            << ", port=" << response.kv_leader_location().port() << " }" << std::endl;
-  std::cout << "tso_leader_location: { host=" << response.tso_leader_location().host()
-            << ", port=" << response.tso_leader_location().port() << " }" << std::endl;
-  std::cout << "auto_increment_leader_location: { host=" << response.auto_increment_leader_location().host()
-            << ", port=" << response.auto_increment_leader_location().port() << " }" << std::endl;
-  std::cout << "coordinator_locations: {" << std::endl;
-  for (const auto &coordinator : response.coordinator_locations()) {
-    std::cout << "\t { host=" << coordinator.host() << ", port=" << coordinator.port() << "}" << std::endl;
-  }
-  std::cout << "}" << std::endl;
-  std::cout << "coordinator_map:{" << std::endl;
-  for (const auto &coordinator : response.coordinator_map().coordinators()) {
-    std::cout << "\t coordinators{ state=" << dingodb::pb::common::CoordinatorState_Name(coordinator.state())
-              << " location {host=" << coordinator.location().host() << ", port=" << coordinator.location().port()
-              << " }}" << std::endl;
-  }
-  std::cout << "}" << std::endl;
+  Pretty::Show(response);
 }
 
 void SetUpCreateRegionId(CLI::App &app) {

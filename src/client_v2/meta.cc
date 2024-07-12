@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "meta.h"
+#include "client_v2/meta.h"
 
 #include <algorithm>
 #include <cstdint>
