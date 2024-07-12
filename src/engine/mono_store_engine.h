@@ -21,6 +21,8 @@
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "event/event.h"
+#include "meta/store_meta_manager.h"
+#include "metrics/store_metrics_manager.h"
 #include "mvcc/reader.h"
 #include "mvcc/ts_provider.h"
 
@@ -62,6 +64,11 @@ class MonoStoreEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
+
+  void SetStoreMetaManager(std::shared_ptr<StoreMetaManager> store_meta_manager);
+  void SetStoreMetricsManager(std::shared_ptr<StoreMetricsManager> store_metrics_manager);
+  std::shared_ptr<StoreMetaManager> GetStoreMetaManager();
+  std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager();
 
   class Reader : public Engine::Reader {
    public:
@@ -218,6 +225,9 @@ class MonoStoreEngine : public Engine {
   EventListenerCollectionPtr listeners_;
 
   mvcc::TsProviderPtr ts_provider_;
+
+  std::shared_ptr<StoreMetaManager> store_meta_manager_;
+  std::shared_ptr<StoreMetricsManager> store_metrics_manager_;
 };
 
 }  // namespace dingodb

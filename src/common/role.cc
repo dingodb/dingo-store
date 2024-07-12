@@ -42,4 +42,6 @@ pb::common::ClusterRole GetRole() {
 
 std::string& GetRoleName() { return FLAGS_role; }
 
+void SetRole(std::string role) { FLAGS_role = role; }
+
 }  // namespace dingodb

@@ -42,7 +42,14 @@ bool MonoStoreEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { re
 std::string MonoStoreEngine::GetName() {
   return pb::common::StorageEngine_Name(pb::common::StorageEngine::STORE_ENG_MONO_STORE);
 }
-
+void MonoStoreEngine::SetStoreMetaManager(std::shared_ptr<StoreMetaManager> store_meta_manager) {
+  store_meta_manager_ = store_meta_manager;
+}
+void MonoStoreEngine::SetStoreMetricsManager(std::shared_ptr<StoreMetricsManager> store_metrics_manager) {
+  store_metrics_manager_ = store_metrics_manager;
+}
+std::shared_ptr<StoreMetaManager> MonoStoreEngine::GetStoreMetaManager() { return store_meta_manager_; }
+std::shared_ptr<StoreMetricsManager> MonoStoreEngine::GetStoreMetricsManager() { return store_metrics_manager_; }
 MonoStoreEnginePtr MonoStoreEngine::GetSelfPtr() {
   return std::dynamic_pointer_cast<MonoStoreEngine>(shared_from_this());
 }
@@ -111,8 +118,7 @@ int MonoStoreEngine::DispatchEvent(dingodb::EventType event_type, std::shared_pt
 // todo
 butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data) {
   BvarLatencyGuard bvar_guard(&g_rocks_write_latency);
-  auto store_region_meta = GET_STORE_REGION_META;
-
+  auto store_region_meta = GetStoreMetaManager()->GetStoreRegionMeta();
   auto region = store_region_meta->GetRegion(ctx->RegionId());
   if (region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region {}", ctx->RegionId()));
@@ -121,8 +127,7 @@ butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
   if (ctx->Done()) {
     DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] sync mode cannot pass Done here.", ctx->RegionId());
   }
-
-  auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
+  auto store_region_metrics = GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto region_metrics = store_region_metrics->GetMetrics(region->Id());
   if (region_metrics == nullptr) {
     DINGO_LOG(WARNING) << fmt::format("[rock.engine][region({})] metrics not found.", region->Id());
