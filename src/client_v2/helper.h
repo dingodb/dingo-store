@@ -260,30 +260,98 @@ class Helper {
 
   // format and print
   static std::string FormatVectorData(const dingodb::pb::common::Vector& vector) {
-    std::string value_type = dingodb::pb::common::ValueType_Name(vector.value_type());
     if (vector.float_values_size() > 0) {
-      return fmt::format("{}/{}/[{} {}...]", vector.float_values_size(), value_type, vector.float_values().at(0),
+      return fmt::format("{}/[{} {}...]", vector.float_values_size(), vector.float_values().at(0),
                          vector.float_values().at(1));
     } else if (vector.binary_values_size() > 0) {
-      return fmt::format("{}/{}/[{} {}...]", vector.binary_values_size(), value_type, vector.binary_values().at(0),
+      return fmt::format("{}/[{} {}...]", vector.binary_values_size(), vector.binary_values().at(0),
                          vector.binary_values().at(1));
     } else {
       return "no data";
     }
   }
 
-  static std::string FormatVectorScalar(const dingodb::pb::common::VectorScalardata& scalar) {
-    std::string result;
+  static std::vector<std::string> FormatVectorScalar(const dingodb::pb::common::VectorScalardata& scalar) {
+    auto format_scalar_func = [](const dingodb::pb::common::ScalarValue& value) -> std::string {
+      std::string str = "[";
+      switch (value.field_type()) {
+        case dingodb::pb::common::ScalarFieldType::BOOL:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.bool_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::INT8:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.int_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::INT16:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.int_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::INT32:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.int_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::INT64:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.long_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::FLOAT32:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.float_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::DOUBLE:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.double_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::STRING:
+          for (const auto& field : value.fields()) {
+            str.append(fmt::format("{},", field.string_data()));
+          }
+          str.pop_back();
+          break;
+        case dingodb::pb::common::ScalarFieldType::BYTES:
+          for (const auto& field : value.fields()) {
+            str.append(field.bytes_data());
+            str.push_back(',');
+          }
+          str.pop_back();
+          break;
+        default:
+          break;
+      }
+
+      if (str.size() > 32) {
+        str = str.substr(0, 32);
+      }
+
+      str.push_back(']');
+      return str;
+    };
+
+    std::vector<std::string> result;
     for (const auto& [key, value] : scalar.scalar_data()) {
-      result += fmt::format("{}/{}", key, value.ShortDebugString());
-      result += ";";
+      result.push_back(fmt::format("{}: {}", key, format_scalar_func(value)));
     }
 
     return result;
   }
 
   static std::string FormatVectorTable(const dingodb::pb::common::VectorTableData& table) {
-    return fmt::format("{}/{}", dingodb::Helper::StringToHex(table.table_key()),
+    return fmt::format("{}:{}", dingodb::Helper::StringToHex(table.table_key()),
                        dingodb::Helper::StringToHex(table.table_value()));
   }
 
@@ -297,49 +365,6 @@ class Helper {
     return result;
   }
 
-  static void PrintRegionData(dingodb::pb::debug::DumpRegionResponse& response, bool show_detail) {
-    std::cout << "==================== show data ====================" << std::endl;
-    for (const auto& kv : response.data().kvs()) {
-      auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(kv.flag());
-      std::cout << fmt::format("key({}) ts({}) flag({}) ttl({}) value({})", dingodb::Helper::StringToHex(kv.key()),
-                               kv.ts(), flag, kv.ttl(), kv.value().substr(0, 32))
-                << std::endl;
-    }
-
-    for (const auto& vector : response.data().vectors()) {
-      auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(vector.flag());
-      if (show_detail) {
-        std::cout << fmt::format("vector_id({}) ts({}) flag({}) ttl({}) vector({}) scalar({}) table({})",
-                                 vector.vector_id(), vector.ts(), flag, vector.ttl(), FormatVectorData(vector.vector()),
-                                 FormatVectorScalar(vector.scalar_data()), FormatVectorTable(vector.table_data()))
-                  << std::endl;
-      } else {
-        std::cout << fmt::format("vector_id({}) ts({}) flag({}) ttl({}) vector({})", vector.vector_id(), vector.ts(),
-                                 flag, vector.ttl(), FormatVectorData(vector.vector()))
-                  << std::endl;
-      }
-    }
-
-    for (const auto& document : response.data().documents()) {
-      auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(document.flag());
-      std::cout << fmt::format("doc_id({}) ts({}) flag({}) ttl({}) data({})", document.document_id(), document.ts(),
-                               flag, document.ttl(), FormatDocument(document.document()))
-                << std::endl;
-    }
-
-    int size = std::max(response.data().kvs_size(), response.data().vectors_size());
-    size = std::max(size, response.data().documents_size());
-
-    std::cout << fmt::format("==================== size({}) ====================", size) << std::endl;
-  }
-
-  static void PrintVectorWithId(const dingodb::pb::common::VectorWithId& vector_with_id) {
-    std::cout << fmt::format("vector_id({}) vector({}) scalar({}) table({})", vector_with_id.id(),
-                             FormatVectorData(vector_with_id.vector()),
-                             FormatVectorScalar(vector_with_id.scalar_data()),
-                             FormatVectorTable(vector_with_id.table_data()))
-              << std::endl;
-  }
   static dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
     if (engine_name == "rocksdb") {
       return dingodb::pb::common::Engine::ENG_ROCKSDB;

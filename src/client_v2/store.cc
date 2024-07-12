@@ -13,7 +13,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "store.h"
+#include "client_v2/store.h"
 
 #include <cstdint>
 #include <iostream>
@@ -23,6 +23,7 @@
 #include "client_v2/dump.h"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
+#include "client_v2/pretty.h"
 #include "client_v2/router.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -1675,7 +1676,7 @@ void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, bool show_
   request.set_limit(limit);
 
   InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DumpRegion", request, response);
-  Helper::PrintRegionData(response, show_detail);
+  Pretty::Show(response);
 }
 
 void RunDumpRegion(DumpRegionOptions const& opt) {
