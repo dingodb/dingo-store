@@ -733,7 +733,7 @@ target_link_libraries(dingodb_client
 
 target_link_libraries(dingodb_client_v2
                       ${DYNAMIC_LIB}  CLI11::CLI11)
-                      
+
 if(BUILD_UNIT_TESTS)
     message(STATUS "Build unit test")
     add_subdirectory(test/unit_test)
