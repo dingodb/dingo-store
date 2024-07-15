@@ -30,9 +30,10 @@
 #include "coordinator/tso_control.h"
 #include "crontab/crontab.h"
 #include "document/document_index_manager.h"
+#include "engine/mono_store_engine.h"
 #include "engine/raw_engine.h"
 #include "engine/storage.h"
-#include "engine/mono_store_engine.h"
+#include "engine/rocks_raw_engine.h"
 #include "log/log_storage_manager.h"
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
@@ -62,6 +63,9 @@ class Server {
 
   // Init directory
   bool InitDirectory();
+
+  // Init RocksRawEngine
+  bool InitRocksRawEngine();
 
   // Init storage engines;
   bool InitEngine();
@@ -278,6 +282,7 @@ class Server {
 
   std::shared_ptr<Engine> mono_engine_;
 
+  std::shared_ptr<RocksRawEngine> rocks_raw_engine_;
   // Meta reader
   std::shared_ptr<MetaReader> meta_reader_;
   // Meta writer

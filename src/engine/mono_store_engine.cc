@@ -32,22 +32,21 @@
 namespace dingodb {
 
 MonoStoreEngine::MonoStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
-                                 EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider)
+                                 EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider,
+                                 std::shared_ptr<StoreMetaManager> store_meta_manager,
+                                 std::shared_ptr<StoreMetricsManager> store_metrics_manager)
     : rocks_raw_engine_(rocks_raw_engine),
       bdb_raw_engine_(bdb_raw_engine),
       listeners_(listeners),
-      ts_provider_(ts_provider) {}
+      ts_provider_(ts_provider),
+      store_meta_manager_(store_meta_manager),
+      store_metrics_manager_(store_metrics_manager) {}
 
 bool MonoStoreEngine::Init([[maybe_unused]] std::shared_ptr<Config> config) { return true; }
 std::string MonoStoreEngine::GetName() {
   return pb::common::StorageEngine_Name(pb::common::StorageEngine::STORE_ENG_MONO_STORE);
 }
-void MonoStoreEngine::SetStoreMetaManager(std::shared_ptr<StoreMetaManager> store_meta_manager) {
-  store_meta_manager_ = store_meta_manager;
-}
-void MonoStoreEngine::SetStoreMetricsManager(std::shared_ptr<StoreMetricsManager> store_metrics_manager) {
-  store_metrics_manager_ = store_metrics_manager;
-}
+
 std::shared_ptr<StoreMetaManager> MonoStoreEngine::GetStoreMetaManager() { return store_meta_manager_; }
 std::shared_ptr<StoreMetricsManager> MonoStoreEngine::GetStoreMetricsManager() { return store_metrics_manager_; }
 MonoStoreEnginePtr MonoStoreEngine::GetSelfPtr() {

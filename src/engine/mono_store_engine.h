@@ -34,7 +34,8 @@ using MonoStoreEnginePtr = std::shared_ptr<MonoStoreEngine>;
 class MonoStoreEngine : public Engine {
  public:
   MonoStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine, EventListenerCollectionPtr listeners,
-                  mvcc::TsProviderPtr ts_provider);
+                  mvcc::TsProviderPtr ts_provider, std::shared_ptr<StoreMetaManager> store_meta_manager, 
+                                std::shared_ptr<StoreMetricsManager> store_metrics_manager);
   ~MonoStoreEngine() override = default;
 
   MonoStoreEngine(const MonoStoreEngine& rhs) = delete;
@@ -45,8 +46,10 @@ class MonoStoreEngine : public Engine {
   MonoStoreEnginePtr GetSelfPtr();
 
   static MonoStoreEnginePtr New(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
-                                EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider) {
-    return std::make_shared<MonoStoreEngine>(rocks_raw_engine, bdb_raw_engine, listeners, ts_provider);
+                                EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider,
+                                std::shared_ptr<StoreMetaManager> store_meta_manager, 
+                                std::shared_ptr<StoreMetricsManager> store_metrics_manager) {
+    return std::make_shared<MonoStoreEngine>(rocks_raw_engine, bdb_raw_engine, listeners, ts_provider, store_meta_manager, store_metrics_manager);
   }
 
   bool Init(std::shared_ptr<Config> config) override;
@@ -65,8 +68,7 @@ class MonoStoreEngine : public Engine {
                            WriteCbFunc write_cb) override;
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
 
-  void SetStoreMetaManager(std::shared_ptr<StoreMetaManager> store_meta_manager);
-  void SetStoreMetricsManager(std::shared_ptr<StoreMetricsManager> store_metrics_manager);
+
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager();
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager();
 

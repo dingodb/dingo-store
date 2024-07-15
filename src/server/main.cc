@@ -1308,13 +1308,8 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
       return -1;
     }
-    if (!dingo_server.InitEngine()) {
-      DINGO_LOG(ERROR) << "InitEngine failed!";
-      return -1;
-    }
-
-    if (!dingo_server.InitStorage()) {
-      DINGO_LOG(ERROR) << "InitStorage failed!";
+    if (!dingo_server.InitRocksRawEngine()) {
+      DINGO_LOG(ERROR) << "InitMetaEngine failed!";
       return -1;
     }
     if (!dingo_server.InitStoreMetaManager()) {
@@ -1325,6 +1320,16 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
+    if (!dingo_server.InitRocksRawEngine()) {
+      DINGO_LOG(ERROR) << "InitRocksRawEngine failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitStorage()) {
+      DINGO_LOG(ERROR) << "InitStorage failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
@@ -1376,8 +1381,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
-    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
-    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
   } else if (role == dingodb::pb::common::ClusterRole::INDEX) {
     // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
     InitBthreadWorkerThreadNum(config);
@@ -1451,6 +1454,30 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
       return -1;
     }
+
+    if (!dingo_server.InitRocksRawEngine()) {
+      DINGO_LOG(ERROR) << "InitRocksRawEngine failed!";
+      return -1;
+    }
+
+    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
+    // workers to load index, so InitVectorIndexManager must be called before InitStoreMetaManager
+    if (!dingo_server.InitVectorIndexManager()) {
+      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
+      return -1;
+    }
+
+    index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
+    if (!dingo_server.InitStoreMetaManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitStoreMetricsManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitEngine()) {
       DINGO_LOG(ERROR) << "InitEngine failed!";
       return -1;
@@ -1460,33 +1487,22 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStorage failed!";
       return -1;
     }
-    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need vector index manager
-    // workers to load index, so InitVectorIndexManager must be called before InitStoreMetaManager
-    if (!dingo_server.InitVectorIndexManager()) {
-      DINGO_LOG(ERROR) << "InitVectorIndexManager failed!";
-      return -1;
-    }
-    index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
-    if (!dingo_server.InitStoreMetaManager()) {
-      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
-      return -1;
-    }
-    if (!dingo_server.InitStoreMetricsManager()) {
-      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
-      return -1;
-    }
+
     if (!dingo_server.InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
     }
+
     if (!dingo_server.InitRegionCommandManager()) {
       DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
       return -1;
     }
+
     if (!dingo_server.InitRegionController()) {
       DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
+
     if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
       return -1;
@@ -1532,8 +1548,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
-    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
-    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
   } else if (role == dingodb::pb::common::ClusterRole::DOCUMENT) {
     // setup bthread worker thread num into bthread::FLAGS_bthread_concurrency
     InitBthreadWorkerThreadNum(config);
@@ -1608,6 +1622,30 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
       return -1;
     }
+
+    if (!dingo_server.InitRocksRawEngine()) {
+      DINGO_LOG(ERROR) << "InitRocksRawEngine failed!";
+      return -1;
+    }
+
+    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
+    // workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
+    if (!dingo_server.InitDocumentIndexManager()) {
+      DINGO_LOG(ERROR) << "InitDocumentIndexManager failed!";
+      return -1;
+    }
+
+    document_service.SetDocumentIndexManager(dingo_server.GetDocumentIndexManager());
+    if (!dingo_server.InitStoreMetaManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitStoreMetricsManager()) {
+      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitEngine()) {
       DINGO_LOG(ERROR) << "InitEngine failed!";
       return -1;
@@ -1618,33 +1656,21 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
-    // workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
-    if (!dingo_server.InitDocumentIndexManager()) {
-      DINGO_LOG(ERROR) << "InitDocumentIndexManager failed!";
-      return -1;
-    }
-    document_service.SetDocumentIndexManager(dingo_server.GetDocumentIndexManager());
-    if (!dingo_server.InitStoreMetaManager()) {
-      DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
-      return -1;
-    }
-    if (!dingo_server.InitStoreMetricsManager()) {
-      DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
-      return -1;
-    }
     if (!dingo_server.InitStoreController()) {
       DINGO_LOG(ERROR) << "InitStoreController failed!";
       return -1;
     }
+
     if (!dingo_server.InitRegionCommandManager()) {
       DINGO_LOG(ERROR) << "InitRegionCommandManager failed!";
       return -1;
     }
+
     if (!dingo_server.InitRegionController()) {
       DINGO_LOG(ERROR) << "InitRegionController failed!";
       return -1;
     }
+
     if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
       return -1;
@@ -1690,8 +1716,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
     DINGO_LOG(INFO) << "Raft server is running on " << raft_server.listen_address();
-    dingo_server.GetMonoStoreEngine()->SetStoreMetaManager(dingo_server.GetStoreMetaManager());
-    dingo_server.GetMonoStoreEngine()->SetStoreMetricsManager(dingo_server.GetStoreMetricsManager());
 
   } else {
     DINGO_LOG(ERROR) << "Invalid server role[" + dingodb::GetRoleName() + "]";
@@ -1702,7 +1726,6 @@ int main(int argc, char *argv[]) {
     DINGO_LOG(ERROR) << "InitHeartbeat failed!";
     return -1;
   }
-
   if (!dingo_server.Recover()) {
     DINGO_LOG(ERROR) << "Recover failed!";
     return -1;
