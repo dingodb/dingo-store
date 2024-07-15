@@ -172,6 +172,7 @@ class TxnPessimisticLockTest : public testing::Test {
   static void PrepareDataAndLock(bool short_value, pb::store::Op write_op, bool include_lock, bool is_pissimistic_lock,
                                  std::unordered_map<std::string, std::string> &kvs,
                                  std::unordered_map<std::string, bool> &lock_keys);
+  static butil::Status GetAllLockInfo(std::vector<pb::store::LockInfo> &lock_infos);
 
   static inline std::shared_ptr<RocksRawEngine> engine;
   static inline std::shared_ptr<MonoStoreEngine> mono_engine;
@@ -186,6 +187,30 @@ class TxnPessimisticLockTest : public testing::Test {
 
 static int64_t Tso2Timestamp(pb::meta::TsoTimestamp tso) {
   return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
+}
+
+butil::Status TxnPessimisticLockTest::GetAllLockInfo(std::vector<pb::store::LockInfo> &lock_infos) {
+  std::string my_min_key(Helper::GenMinStartKey());
+  std::string my_max_key(Helper::GenMaxStartKey());
+
+  const std::string &start_key = my_min_key;
+  std::string end_key = Helper::PrefixNext(my_max_key);
+  std::vector<dingodb::pb::common::KeyValue> kvs;
+
+  auto reader = engine->Reader();
+
+  auto ok = reader->KvScan(Constant::kTxnLockCF, start_key, end_key, kvs);
+  EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+  for (auto const &kv : kvs) {
+    if (kv.value().empty()) {
+      continue;
+    }
+    pb::store::LockInfo lock_info;
+    auto ret = lock_info.ParseFromString(kv.value());
+    EXPECT_EQ(ok.error_code(), dingodb::pb::error::Errno::OK);
+    lock_infos.emplace_back(lock_info);
+  }
+  return butil::Status::OK();
 }
 
 void TxnPessimisticLockTest::SetKvFunction(bool short_value, pb::store::Op write_op, bool include_lock,
@@ -282,7 +307,9 @@ void TxnPessimisticLockTest::PrepareDataAndLock(bool short_value, pb::store::Op 
 
     SetKvFunction(short_value, write_op, include_lock, is_pissimistic_lock, key_value);
     kvs[key_value.key()] = key_value.value();
-    lock_keys[key_value.key()] = true;
+    if (include_lock) {
+      lock_keys[key_value.key()] = true;
+    }
   }
 
   // 2
@@ -314,7 +341,9 @@ void TxnPessimisticLockTest::PrepareDataAndLock(bool short_value, pb::store::Op 
 
     SetKvFunction(short_value, write_op, include_lock, is_pissimistic_lock, key_value);
     kvs[key_value.key()] = key_value.value();
-    lock_keys[key_value.key()] = true;
+    if (include_lock) {
+      lock_keys[key_value.key()] = true;
+    }
   }
 }
 void TxnPessimisticLockTest::InitRecord() {
@@ -459,7 +488,6 @@ TEST_F(TxnPessimisticLockTest, KvDeleteRangeBefore) { DeleteRange(); }
 
 // todo(yangjundong)
 TEST_F(TxnPessimisticLockTest, PessimisticLock) {
-  GTEST_SKIP() << "not impl PessimisticLock ";
   // create region for test
   auto region_id = 373;
   auto region = store::Region::New(region_id);
@@ -470,34 +498,336 @@ TEST_F(TxnPessimisticLockTest, PessimisticLock) {
   mono_engine->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
   // Normal
+  {
+    bool short_value = false;
+    bool include_lock = false;
+    bool is_pissimistic_lock = false;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = end_ts + 1;
+    int64_t target_for_update_ts = end_ts + 1;
+    int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Lock);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+    EXPECT_EQ(status.ok(), true);
+    DeleteRange();
+  }
 
   // Op not correct
+  {
+    bool short_value = false;
+    bool include_lock = false;
+    bool is_pissimistic_lock = false;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = end_ts + 1;
+    int64_t target_for_update_ts = end_ts + 1;
+    int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Put);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    EXPECT_EQ(status.error_str(), "invalid mutation op");
+    DeleteRange();
+  }
 
   // Lock confilict
+  {
+    bool short_value = false;
+    bool include_lock = true;
+    bool is_pissimistic_lock = true;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    EXPECT_NE(kvs.begin(), kvs.end());
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = end_ts + 1;
+    int64_t target_for_update_ts = end_ts + 1;
+    int64_t target_lock_ttl = lock_ttl;
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Lock);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+
+    EXPECT_EQ(status.ok(), true);
+    EXPECT_GT(response.txn_result_size(), 0);
+
+    for (auto const &txn_result : response.txn_result()) {
+      auto found = lock_keys.find(txn_result.locked().key());
+      EXPECT_NE(found, lock_keys.end());
+    }
+
+    DeleteRange();
+  }
 
   // Write confilct
+  {
+    bool short_value = false;
+    bool include_lock = false;
+    bool is_pissimistic_lock = false;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    EXPECT_NE(kvs.begin(), kvs.end());
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = start_ts;
+    int64_t target_for_update_ts = start_ts;
+    int64_t target_lock_ttl = lock_ttl;
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Lock);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+
+    EXPECT_EQ(status.ok(), true);
+    EXPECT_GT(response.txn_result_size(), 0);
+
+    for (auto const &txn_result : response.txn_result()) {
+      EXPECT_EQ(txn_result.write_conflict().reason(),
+                ::dingodb::pb::store::WriteConflict_Reason::WriteConflict_Reason_PessimisticRetry);
+    }
+    DeleteRange();
+  }
+
+  // Lock type not match
+  {
+    bool short_value = false;
+    bool include_lock = true;
+    bool is_pissimistic_lock = false;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    EXPECT_NE(kvs.begin(), kvs.end());
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = end_ts + 1;
+    int64_t target_for_update_ts = end_ts + 1;
+    int64_t target_lock_ttl = lock_ttl;
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Lock);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+
+    EXPECT_EQ(status.ok(), true);
+    EXPECT_GT(response.txn_result_size(), 0);
+
+    for (auto const &txn_result : response.txn_result()) {
+      auto found = lock_keys.find(txn_result.locked().key());
+      EXPECT_NE(found, lock_keys.end());
+    }
+    DeleteRange();
+  }
+
+  // Duplicated command
+  {
+    // prepare data
+    bool short_value = false;
+    bool include_lock = false;
+    bool is_pissimistic_lock = false;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    {
+      butil::Status ok;
+      pb::store::TxnPessimisticLockResponse response;
+      auto ctx = std::make_shared<Context>();
+      ctx->SetRegionId(region_id);
+      ctx->SetCfName(Constant::kStoreDataCF);
+      ctx->SetResponse(&response);
+      std::vector<pb::store::Mutation> mutations;
+      std::vector<pb::common::KeyValue> expected_kvs;
+      std::string primary_lock = kvs.begin()->first;
+      int64_t target_start_ts = end_ts + 1;
+      int64_t target_for_update_ts = end_ts + 10;
+      int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+      bool return_values = false;
+
+      for (auto const &kv : kvs) {
+        pb::store::Mutation mutation;
+        mutation.set_op(::dingodb::pb::store::Op::Lock);
+        mutation.set_key(kv.first);
+        mutations.emplace_back(mutation);
+      }
+
+      auto status =
+          TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                           target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+
+      EXPECT_EQ(status.ok(), true);
+    }
+
+    {
+      butil::Status ok;
+      pb::store::TxnPessimisticLockResponse response;
+      auto ctx = std::make_shared<Context>();
+      ctx->SetRegionId(region_id);
+      ctx->SetCfName(Constant::kStoreDataCF);
+      ctx->SetResponse(&response);
+      std::vector<pb::store::Mutation> mutations;
+      std::vector<pb::common::KeyValue> expected_kvs;
+      std::string primary_lock = kvs.begin()->first;
+      int64_t target_start_ts = end_ts + 1;
+      int64_t target_for_update_ts = end_ts + 10;
+      int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+      bool return_values = false;
+
+      for (auto const &kv : kvs) {
+        pb::store::Mutation mutation;
+        mutation.set_op(::dingodb::pb::store::Op::Lock);
+        mutation.set_key(kv.first);
+        mutations.emplace_back(mutation);
+      }
+
+      auto status =
+          TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                           target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+
+      EXPECT_EQ(status.ok(), true);
+    }
+
+    DeleteRange();
+  }
+
+  // Acquire lock when there is lock with different for_update_ts.
+  {
+    bool short_value = false;
+    bool include_lock = true;
+    bool is_pissimistic_lock = true;
+    std::unordered_map<std::string, std::string> kvs;
+    std::unordered_map<std::string, bool> lock_keys;
+    PrepareDataAndLock(short_value, ::dingodb::pb::store::Op::Put, include_lock, is_pissimistic_lock, kvs, lock_keys);
+
+    butil::Status ok;
+    pb::store::TxnPessimisticLockResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::vector<pb::common::KeyValue> expected_kvs;
+    std::string primary_lock = kvs.begin()->first;
+    int64_t target_start_ts = start_ts;
+    int64_t target_for_update_ts = end_ts + 10;
+    int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+    bool return_values = false;
+
+    for (auto const &kv : kvs) {
+      pb::store::Mutation mutation;
+      mutation.set_op(::dingodb::pb::store::Op::Lock);
+      mutation.set_key(kv.first);
+      mutations.emplace_back(mutation);
+    }
+    std::vector<pb::store::LockInfo> before_lock_infos;
+    GetAllLockInfo(before_lock_infos);
+    for (auto const &lock_info : before_lock_infos) {
+      EXPECT_EQ(lock_info.for_update_ts(), start_ts);
+    }
+    auto status = TxnEngineHelper::PessimisticLock(engine, mono_engine, ctx, mutations, primary_lock, target_start_ts,
+                                                   target_lock_ttl, target_for_update_ts, return_values, expected_kvs);
+    EXPECT_EQ(status.ok(), true);
+    std::vector<pb::store::LockInfo> lock_infos;
+    GetAllLockInfo(lock_infos);
+    for (auto const &lock_info : lock_infos) {
+      EXPECT_EQ(lock_info.for_update_ts(), target_for_update_ts);
+    }
+    DeleteRange();
+  }
+
+  // lock key is Deleted.
 
   // Rollback
-
-  // Duplicated
-
-  // Rollback
-
-  // LockTypeNotMatch
 
   // Acquire lock on a prewritten key should fail
 
   // Acquire lock on a committed key should fail.
 
   // Pessimistic prewrite on a committed key should fail.
-
-  // Acquire lock when there is lock with different for_update_ts.
-
-  // lock key is Deleted.
-
-  // Over write lock info(update lock info)
-
-  // Duplicated command
 }
 
 TEST_F(TxnPessimisticLockTest, PessimisticLockReturnValue) {
@@ -510,7 +840,7 @@ TEST_F(TxnPessimisticLockTest, PessimisticLockReturnValue) {
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
   mono_engine->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
-  // normal
+  // Normal
   {
     bool short_value = false;
     bool include_lock = false;
@@ -556,7 +886,7 @@ TEST_F(TxnPessimisticLockTest, PessimisticLockReturnValue) {
     DeleteRange();
   }
 
-  // short value
+  // Short value
   {
     bool short_value = true;
     bool include_lock = false;
@@ -633,7 +963,7 @@ TEST_F(TxnPessimisticLockTest, PessimisticLockReturnValue) {
     DeleteRange();
   }
 
-  // WriteConflict
+  // Write confilct
   {
     bool short_value = false;
     bool include_lock = false;
