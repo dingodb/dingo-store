@@ -619,7 +619,7 @@ void WhichRegion(WhichRegionOptions const& opt) {
   dingodb::pb::meta::TableDefinition table_definition;
   int64_t table_or_index_id = opt.table_id > 0 ? opt.table_id : opt.index_id;
   if (table_or_index_id == 0) {
-    DINGO_LOG(ERROR) << "table_id/index_id is invalid.";
+    std::cout << "table_id/index_id is invalid.\n";
     return;
   }
   table_definition = SendGetTable(table_or_index_id);
@@ -627,12 +627,12 @@ void WhichRegion(WhichRegionOptions const& opt) {
     table_definition = SendGetIndex(table_or_index_id);
   }
   if (table_definition.name().empty()) {
-    DINGO_LOG(ERROR) << "not found table/index definition.";
+    std::cout << "not found table/index definition.\n";
     return;
   }
 
   if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
-    DINGO_LOG(ERROR) << "not support find hash partition type table/idnex.";
+    std::cout << "not support find hash partition type table/idnex.\n";
     return;
   }
 
@@ -642,7 +642,7 @@ void WhichRegion(WhichRegionOptions const& opt) {
   if (table_range.range_distribution().empty()) {
     index_range = SendGetIndexRange(table_or_index_id);
     if (index_range.range_distribution().empty()) {
-      DINGO_LOG(ERROR) << "get table/index range failed.";
+      std::cout << "get table/index range failed.\n";
       return;
     }
   }
@@ -664,7 +664,7 @@ void WhichRegion(WhichRegionOptions const& opt) {
       std::vector<std::string> origin_keys;
       dingodb::Helper::SplitString(opt.key, ',', origin_keys);
       if (origin_keys.empty()) {
-        DINGO_LOG(ERROR) << fmt::format("split key is empty");
+        std::cout << fmt::format("split key is empty.\n");
         return;
       }
       record_encoder->EncodeKeyPrefix(dingodb::Helper::GetKeyPrefix(range.start_key()), origin_keys, encoded_key);

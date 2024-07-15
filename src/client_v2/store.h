@@ -909,6 +909,23 @@ struct RegionMetricsOptions {
 void SetUpRegionMetrics(CLI::App &app);
 void RunRegionMetrics(RegionMetricsOptions const &opt);
 
+struct QueryRegionStatusOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  std::vector<int64_t> region_ids;
+};
+void SetUpQueryRegionStatusMetrics(CLI::App &app);
+void RunQueryRegionStatus(QueryRegionStatusOptions const &opt);
+
+struct ModifyRegionMetaOptions {
+  std::string coor_url;
+  std::string store_addrs;
+  int64_t region_id;
+  int state;
+};
+void SetUpModifyRegionMeta(CLI::App &app);
+void RunModifyRegionMeta(ModifyRegionMetaOptions const &opt);
+
 // meta
 dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
 dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);

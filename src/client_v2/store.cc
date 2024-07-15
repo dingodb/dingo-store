@@ -59,6 +59,9 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpTxnScanLock(app);
   SetUpTxnPessimisticRollback(app);
   SetUpTxnBatchGet(app);
+  SetUpWhichRegion(app);
+  SetUpQueryRegionStatusMetrics(app);
+  SetUpModifyRegionMeta(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -1632,7 +1635,7 @@ void RunDumpDb(DumpDbOptions const& opt) {
 
 void SetUpWhichRegion(CLI::App& app) {
   auto opt = std::make_shared<WhichRegionOptions>();
-  auto* cmd = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("WhichRegion", "Which  region")->group("Store Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--table_id", opt->table_id, "Number of table_id");
   cmd->add_option("--index_id", opt->index_id, "Number of index_id");
@@ -1646,11 +1649,11 @@ void RunWhichRegion(WhichRegionOptions const& opt) {
   }
 
   if (opt.table_id == 0 && opt.index_id == 0) {
-    DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
+    std::cout << "Param table_id|index_id is error.\n";
     return;
   }
   if (opt.key.empty()) {
-    DINGO_LOG(ERROR) << "Param key is error.";
+    std::cout << "Param key is error.\n";
     return;
   }
   WhichRegion(opt);
@@ -1731,6 +1734,75 @@ void RunRegionMetrics(RegionMetricsOptions const& opt) {
       std::cout << it.DebugString() << std::endl;
     }
   }
+}
+
+void SetUpQueryRegionStatusMetrics(CLI::App& app) {
+  auto opt = std::make_shared<QueryRegionStatusOptions>();
+  auto* cmd = app.add_subcommand("QueryRegionStatus", "Query region status ")->group("Region Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--region_ids", opt->region_ids, "Request parameter, empty means query all regions");
+  cmd->callback([opt]() { RunQueryRegionStatus(*opt); });
+}
+
+void RunQueryRegionStatus(QueryRegionStatusOptions const& opt) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
+    exit(-1);
+  }
+  dingodb::pb::debug::DebugRequest request;
+  dingodb::pb::debug::DebugResponse response;
+
+  request.set_type(::dingodb::pb::debug::DebugType::STORE_REGION_META_DETAILS);
+
+  for (const int64_t& region_id : opt.region_ids) {
+    request.add_region_ids(region_id);
+  }
+
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Debug", request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region metrics  failed, error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  for (auto const& it : response.region_meta_details().regions()) {
+    std::cout << it.DebugString() << std::endl;
+  }
+}
+
+void SetUpModifyRegionMeta(CLI::App& app) {
+  auto opt = std::make_shared<ModifyRegionMetaOptions>();
+  auto* cmd = app.add_subcommand("ModifyRegionMeta", "Modify region meta ")->group("Region Manager Commands");
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->add_option("--region_id", opt->region_id, "Request parameter, empty means query all regions");
+  cmd->add_option("--state", opt->state,
+                  "Request parameter, 0:new, 1: normal, 2: standby, 3: splitting, 4: merge, 5: deleting, 6: deleted, "
+                  "7: orphan, 8: tombstone")
+      ->required()
+      ->check(CLI::Range(0, 8));
+  cmd->callback([opt]() { RunModifyRegionMeta(*opt); });
+}
+
+void RunModifyRegionMeta(ModifyRegionMetaOptions const& opt) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
+    exit(-1);
+  }
+  dingodb::pb::debug::ModifyRegionMetaRequest request;
+  dingodb::pb::debug::ModifyRegionMetaResponse response;
+
+  request.set_region_id(opt.region_id);
+  request.set_state(::dingodb::pb::common::StoreRegionState(opt.state));
+  request.add_fields("state");
+
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "ModifyRegionMeta", request,
+                                                                            response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region metrics  failed, error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "modify region: " << opt.region_id
+            << ", state: " << ::dingodb::pb::common::StoreRegionState_Name(opt.state) << " sucess.\n";
 }
 
 // store function
