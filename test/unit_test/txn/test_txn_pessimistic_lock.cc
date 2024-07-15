@@ -138,10 +138,6 @@ class TxnPessimisticLockTest : public testing::Test {
 
     ASSERT_TRUE(ts_provider->Init());
 
-    mono_engine = std::make_shared<MonoStoreEngine>(engine, raw_bdb_engine, listener_factory->Build(), ts_provider);
-    ASSERT_TRUE(mono_engine != nullptr);
-    ASSERT_TRUE(mono_engine->Init(config));
-
     auto meta_reader = std::make_shared<MetaReader>(engine);
     auto meta_writer = std::make_shared<MetaWriter>(engine);
     auto store_meta_manager = std::make_shared<StoreMetaManager>(meta_reader, meta_writer);
@@ -150,8 +146,10 @@ class TxnPessimisticLockTest : public testing::Test {
     auto store_metrics_manager = std::make_shared<StoreMetricsManager>(meta_reader, meta_writer);
     ASSERT_TRUE(store_metrics_manager->Init());
 
-    mono_engine->SetStoreMetaManager(store_meta_manager);
-    mono_engine->SetStoreMetricsManager(store_metrics_manager);
+    mono_engine = std::make_shared<MonoStoreEngine>(engine, raw_bdb_engine, listener_factory->Build(), ts_provider,
+                                                    store_meta_manager, store_metrics_manager);
+    ASSERT_TRUE(mono_engine != nullptr);
+    ASSERT_TRUE(mono_engine->Init(config));
 
     InitRecord();
   }

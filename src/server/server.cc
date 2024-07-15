@@ -250,27 +250,31 @@ bool Server::InitDirectory() {
   return true;
 }
 
-bool Server::InitEngine() {
+bool Server::InitRocksRawEngine() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
 
 #ifdef ENABLE_XDPROCKS
   // init xdprocks
-  auto rocks_raw_engine = std::make_shared<XDPRocksRawEngine>();
-  if (!rocks_raw_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  rocks_raw_engine_ = std::make_shared<XDPRocksRawEngine>();
+  if (!rocks_raw_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init XDPRocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 #else
   // init rocksdb
-  auto rocks_raw_engine = std::make_shared<RocksRawEngine>();
-  if (!rocks_raw_engine->Init(config, Helper::GetColumnFamilyNamesByRole())) {
+  rocks_raw_engine_ = std::make_shared<RocksRawEngine>();
+  if (!rocks_raw_engine_->Init(config, Helper::GetColumnFamilyNamesByRole())) {
     DINGO_LOG(ERROR) << "Init RocksRawEngine Failed with Config[" << config->ToString();
     return false;
   }
 #endif
 
-  meta_reader_ = std::make_shared<MetaReader>(rocks_raw_engine);
-  meta_writer_ = std::make_shared<MetaWriter>(rocks_raw_engine);
+  meta_reader_ = std::make_shared<MetaReader>(rocks_raw_engine_);
+  meta_writer_ = std::make_shared<MetaWriter>(rocks_raw_engine_);
+  return true;
+}
+bool Server::InitEngine() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
 
   // init bdb
   auto bdb_raw_engine = std::make_shared<BdbRawEngine>();
@@ -283,8 +287,8 @@ bool Server::InitEngine() {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     // 1.init CoordinatorController
     coordinator_control_ =
-        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(rocks_raw_engine),
-                                             std::make_shared<MetaWriter>(rocks_raw_engine), rocks_raw_engine);
+        std::make_shared<CoordinatorControl>(std::make_shared<MetaReader>(rocks_raw_engine_),
+                                             std::make_shared<MetaWriter>(rocks_raw_engine_), rocks_raw_engine_);
 
     if (!coordinator_control_->Recover()) {
       DINGO_LOG(ERROR) << "coordinator_control_->Recover Failed";
@@ -296,13 +300,13 @@ bool Server::InitEngine() {
     }
 
     // init raft_meta_engine
-    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, nullptr);
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine_, bdb_raw_engine, nullptr);
     // set raft_meta_engine to coordinator_control
     coordinator_control_->SetKvEngine(raft_engine_);
 
     // 2.init KvController
-    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(rocks_raw_engine),
-                                              std::make_shared<MetaWriter>(rocks_raw_engine), rocks_raw_engine);
+    kv_control_ = std::make_shared<KvControl>(std::make_shared<MetaReader>(rocks_raw_engine_),
+                                              std::make_shared<MetaWriter>(rocks_raw_engine_), rocks_raw_engine_);
 
     if (!kv_control_->Recover()) {
       DINGO_LOG(ERROR) << "kv_control_->Recover Failed";
@@ -346,14 +350,15 @@ bool Server::InitEngine() {
 
   } else {
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
-    mono_engine_ = MonoStoreEngine::New(rocks_raw_engine, bdb_raw_engine, listener_factory->Build(), GetTsProvider());
+    mono_engine_ = MonoStoreEngine::New(rocks_raw_engine_, bdb_raw_engine, listener_factory->Build(), GetTsProvider(),
+                                        store_meta_manager_, store_metrics_manager_);
     if (!mono_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RocksEngine failed with Config[" << config->ToString() << "]";
       return false;
     }
     DINGO_LOG(INFO) << "Init rocks_engine";
 
-    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine, bdb_raw_engine, GetTsProvider());
+    raft_engine_ = RaftStoreEngine::New(rocks_raw_engine_, bdb_raw_engine, GetTsProvider());
     DINGO_LOG(INFO) << "Init raft_store_engine";
     if (!raft_engine_->Init(config)) {
       DINGO_LOG(ERROR) << "Init RaftStoreEngine failed with Config[" << config->ToString() << "]";
