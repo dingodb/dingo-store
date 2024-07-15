@@ -1007,6 +1007,11 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
       return -1;
     }
+    if (!dingo_server.InitRocksRawEngine()) {
+      DINGO_LOG(ERROR) << "InitMetaEngine failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitEngine()) {
       DINGO_LOG(ERROR) << "InitEngine failed!";
       return -1;
@@ -1320,8 +1325,8 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitStoreMetricsManager failed!";
       return -1;
     }
-    if (!dingo_server.InitRocksRawEngine()) {
-      DINGO_LOG(ERROR) << "InitRocksRawEngine failed!";
+    if (!dingo_server.InitEngine()) {
+      DINGO_LOG(ERROR) << "InitEngine failed!";
       return -1;
     }
 
