@@ -388,6 +388,7 @@ set(DEPEND_LIBS
     rapidjson
     nlohmann-json
     tantivy-search
+    ftxui
     )
 
 if(WITH_MKL)
