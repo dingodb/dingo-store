@@ -26,12 +26,15 @@
 #include <utility>
 #include <vector>
 
+#include "butil/status.h"
 #include "client_v2/helper.h"
+#include "client_v2/pretty.h"
 #include "client_v2/store.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coprocessor/utils.h"
+#include "document/codec.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "mvcc/codec.h"
@@ -64,6 +67,9 @@ std::string FormatVector(const dingodb::pb::common::Vector& data, int num) {
   return result;
 }
 
+class RocksDBOperator;
+using RocksDBOperatorPtr = std::shared_ptr<RocksDBOperator>;
+
 class RocksDBOperator {
  public:
   RocksDBOperator(const std::string& db_path, const std::vector<std::string>& family_names)
@@ -74,6 +80,10 @@ class RocksDBOperator {
     }
 
     db_->Close();
+  }
+
+  static RocksDBOperatorPtr New(const std::string& db_path, const std::vector<std::string>& family_names) {
+    return std::make_shared<RocksDBOperator>(db_path, family_names);
   }
 
   bool Init() {
@@ -117,24 +127,51 @@ class RocksDBOperator {
       read_option.iterate_upper_bound = &end_key_slice;
     }
 
-    int count = 0;
     std::string_view end_key_view(end_key);
     rocksdb::Iterator* it = db_->NewIterator(read_option, GetFamilyHandle(cf_name));
     for (it->Seek(begin_key); it->Valid(); it->Next()) {
       if (--offset >= 0) {
         continue;
       }
-      ++count;
-      // DINGO_LOG(INFO) << fmt::format("key: {} value: {}", it->key().ToString(true), it->value().ToString(true));
+
       handler(it->key().ToString(), it->value().ToString());
       if (--limit <= 0) {
         break;
       }
     }
 
-    std::cout << fmt::format("Total row count: {}", count) << std::endl;
+    delete it;
+  }
+
+  std::vector<dingodb::pb::common::KeyValue> Scan(const std::string& cf_name, const std::string& begin_key,
+                                                  const std::string& end_key, int32_t offset, int32_t limit) {
+    rocksdb::ReadOptions read_option;
+    read_option.auto_prefix_mode = true;
+    rocksdb::Slice end_key_slice(end_key);
+    if (!end_key.empty()) {
+      read_option.iterate_upper_bound = &end_key_slice;
+    }
+
+    rocksdb::Iterator* it = db_->NewIterator(read_option, GetFamilyHandle(cf_name));
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    for (it->Seek(begin_key); it->Valid(); it->Next()) {
+      if (--offset >= 0) {
+        continue;
+      }
+
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key(it->key().ToString());
+      kv.set_value(it->value().ToString());
+      kvs.push_back(kv);
+
+      if (--limit <= 0) {
+        break;
+      }
+    }
 
     delete it;
+
+    return kvs;
   }
 
  private:
@@ -145,553 +182,301 @@ class RocksDBOperator {
   std::map<std::string, rocksdb::ColumnFamilyHandle*> family_handles_;
 };
 
-using RocksDBOperatorPtr = std::shared_ptr<RocksDBOperator>;
-
-void PrintValues(const dingodb::pb::meta::TableDefinition& table_definition, const std::vector<std::any>& values,
-                 int32_t print_column_width, int64_t ts = 0) {  // NOLINT
-  std::vector<std::string> str_values;
-  if (ts > 0) {
-    str_values.push_back(std::to_string(ts));
-  }
-  for (int i = 0; i < values.size(); ++i) {
-    const auto& column_definition = table_definition.columns().at(i);
-
-    std::string str = dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]);
-    if (str.size() >= print_column_width) {
-      str = str.substr(0, print_column_width - 3) + "...";
-    }
-    str_values.push_back(str);
-  }
-
-  std::cout << fmt::format("{}", fmt::join(str_values, " | ")) << std::endl;
-}
-
-void PrintValuesPretty(const dingodb::pb::meta::TableDefinition& table_definition, const std::vector<std::any>& values,
-                       int32_t print_column_width, int64_t ts = 0) {  // NOLINT
-
-  std::cout << "****************************************************************" << std::endl;
-  if (ts > 0) {
-    std::cout << fmt::format("{:>32}: {:<64}", "TS", ts) << std::endl;
-  }
-  for (int i = 0; i < values.size(); ++i) {
-    const auto& column_definition = table_definition.columns().at(i);
-
-    std::string str = dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]);
-    if (str.size() >= print_column_width) {
-      str = str.substr(0, print_column_width - 3) + "...";
-    }
-
-    std::cout << fmt::format("{:>32}: {:<64}", column_definition.name(), str) << std::endl;
-  }
-}
-
-std::string RecordToString(const dingodb::pb::meta::TableDefinition& table_definition,
-                           const std::vector<std::any>& values) {
-  std::vector<std::string> result;
-  for (int i = 0; i < values.size(); ++i) {
-    if (strcmp(values[i].type().name(), "v") == 0) {
-      continue;
-    }
-    const auto& column_definition = table_definition.columns().at(i);
-
-    result.push_back(dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]));
-  }
-
-  return dingodb::Helper::VectorToString(result);
-}
-
-std::vector<int> GemSelectionColumnIndex(
-    std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> serial_schemas) {
-  std::vector<int> column_indexes;
-  column_indexes.resize(serial_schemas->size(), -1);
-  int i = 0;
-  for (const auto& schema : *serial_schemas) {
-    int index = schema->GetIndex();
-    DINGO_LOG(DEBUG) << index << "," << i;
-    column_indexes[index] = i;
-    i++;
-  }
-
-  std::vector<int> selection_column_indexes;
-  selection_column_indexes.reserve(column_indexes.size());
-  for (auto index : column_indexes) {
-    selection_column_indexes.push_back(index);
-  }
-
-  return selection_column_indexes;
-}
-
-void DumpExcutorRaw(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition,
-                    const dingodb::pb::meta::Partition& partition) {
-  auto db = std::make_shared<RocksDBOperator>(opt.db_path, std::vector<std::string>{dingodb::Constant::kStoreDataCF});
-  if (!db->Init()) {
-    return;
-  }
-
-  auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
-  auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition.id().entity_id());
-  auto record_decoder = std::make_shared<dingodb::RecordDecoder>(1, serial_schema, partition.id().entity_id());
-
-  std::string begin_key, end_key;
-  record_encoder->EncodeMinKeyPrefix(dingodb::Constant::kExecutorRaw, begin_key);
-  record_encoder->EncodeMaxKeyPrefix(dingodb::Constant::kExecutorRaw, end_key);
-
-  auto row_handler = [&](const std::string& key, const std::string& value) {
-    std::vector<std::any> record;
-    int ret = record_decoder->Decode(key, value, record);
-    if (ret != 0) {
-      LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
-    }
-
-    if (opt.show_pretty) {
-      PrintValuesPretty(table_definition, record, opt.print_column_width);
-    } else {
-      PrintValues(table_definition, record, opt.print_column_width);
-    }
-  };
-
-  db->Scan(dingodb::Constant::kTxnDataCF, begin_key, end_key, opt.offset, opt.limit, row_handler);
-}
-void DumpExcutorTxn(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition,
-                    const dingodb::pb::meta::Partition& partition) {
+static dingodb::pb::debug::DumpRegionResponse::Data DumpTxn(DumpDbOptions const& opt,
+                                                            dingodb::pb::meta::TableDefinition& table_definition) {
   auto db = std::make_shared<RocksDBOperator>(
       opt.db_path, std::vector<std::string>{dingodb::Constant::kStoreDataCF, dingodb::Constant::kTxnDataCF,
                                             dingodb::Constant::kTxnLockCF, dingodb::Constant::kTxnWriteCF});
   if (!db->Init()) {
-    return;
+    return {};
   }
 
-  auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
-  auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition.id().entity_id());
-  auto record_decoder = std::make_shared<dingodb::RecordDecoder>(1, serial_schema, partition.id().entity_id());
+  dingodb::pb::debug::DumpRegionResponse::Data data;
+  auto* txn = data.mutable_txn();
 
-  std::string begin_key, end_key;
-  record_encoder->EncodeMinKeyPrefix(dingodb::Constant::kExecutorTxn, begin_key);
-  record_encoder->EncodeMaxKeyPrefix(dingodb::Constant::kExecutorTxn, end_key);
-  std::string encode_begin_key = dingodb::mvcc::Codec::EncodeKey(begin_key, 0);
-  std::string encode_end_key = dingodb::mvcc::Codec::EncodeKey(end_key, 0);
+  for (const auto& partition : table_definition.table_partition().partitions()) {
+    dingodb::pb::common::Range range;
+    range.set_start_key(dingodb::mvcc::Codec::EncodeBytes(partition.range().start_key()));
+    range.set_end_key(dingodb::mvcc::Codec::EncodeBytes(partition.range().end_key()));
 
-  auto lock_handler = [&](const std::string& key, const std::string& value) {
-    std::string origin_key;
-    int64_t ts;
-    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
-    if (!ret) {
-      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
-      return;
-    }
+    // data
+    {
+      auto kvs = db->Scan(dingodb::Constant::kTxnDataCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      DINGO_LOG(INFO) << "data column family kv num: " << kvs.size();
+      for (auto& kv : kvs) {
+        auto* data = txn->add_datas();
 
-    std::vector<std::any> record;
-    ret = record_decoder->DecodeKey(origin_key, record);
-    if (ret != 0) {
-      LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
-    }
+        std::string decode_key;
+        int64_t ts;
+        dingodb::mvcc::Codec::DecodeKey(kv.key(), decode_key, ts);
+        data->set_key(decode_key);
+        data->set_ts(ts);
 
-    dingodb::pb::store::LockInfo lock_info;
-    if (!lock_info.ParseFromString(value)) {
-      LOG(ERROR) << "parse pb string failed.";
-      return;
-    }
-
-    std::cout << fmt::format("lock key({}) ts({}) value({})", RecordToString(table_definition, record), ts,
-                             lock_info.ShortDebugString());
-  };
-
-  std::map<std::string, int64_t> last_datas;
-  auto write_handler = [&](const std::string& key, const std::string& value) {
-    std::string origin_key;
-    int64_t ts;
-    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
-    if (!ret) {
-      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
-      return;
-    }
-
-    std::vector<std::any> record;
-    ret = record_decoder->DecodeKey(origin_key, record);
-    if (ret != 0) {
-      LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
-    }
-
-    dingodb::pb::store::WriteInfo write_info;
-    if (!write_info.ParseFromString(value)) {
-      LOG(ERROR) << "parse pb string failed.";
-      return;
-    }
-
-    last_datas.insert(std::make_pair(origin_key, write_info.start_ts()));
-
-    // parse short_value
-    std::string decode_short_value;
-    if (!write_info.short_value().empty()) {
-      std::vector<std::any> record;
-      int ret = record_decoder->Decode(origin_key, write_info.short_value(), record);
-      if (ret != 0) {
-        LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
+        data->set_value(std::string(kv.value()));
+        data->set_partition_id(partition.id().entity_id());
       }
-      decode_short_value = RecordToString(table_definition, record);
     }
 
-    std::cout << fmt::format("write key({}) ts({}) value({} {} {})", RecordToString(table_definition, record), ts,
-                             write_info.start_ts(), dingodb::pb::store::Op_Name(write_info.op()), decode_short_value)
-              << std::endl;
-  };
+    // lock
+    {
+      auto kvs = db->Scan(dingodb::Constant::kTxnLockCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      DINGO_LOG(INFO) << "lock column family kv num: " << kvs.size();
+      for (const auto& kv : kvs) {
+        auto* lock = txn->add_locks();
 
-  auto data_handler = [&](const std::string& key, const std::string& value) {
-    std::string origin_key;
-    int64_t ts;
-    auto ret = dingodb::mvcc::Codec::DecodeKey(key, origin_key, ts);
-    if (!ret) {
-      LOG(INFO) << "decoce txn key failed, key: " << dingodb::Helper::StringToHex(key);
-      return;
+        std::string plain_key;
+        int64_t ts = 0;
+        dingodb::mvcc::Codec::DecodeKey(kv.key(), plain_key, ts);
+
+        lock->set_key(plain_key);
+        lock->mutable_lock_info()->ParseFromString(kv.value());
+
+        lock->set_partition_id(partition.id().entity_id());
+      }
     }
 
-    if (opt.show_last_data) {
-      // filter not last ts data
-      auto it = last_datas.find(origin_key);
-      if (it != last_datas.end()) {
-        int64_t last_ts = it->second;
-        if (ts != last_ts) {
-          return;
+    // write
+    {
+      auto kvs = db->Scan(dingodb::Constant::kTxnWriteCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      DINGO_LOG(INFO) << "write column family kv num: " << kvs.size();
+      for (const auto& kv : kvs) {
+        auto* write = txn->add_writes();
+
+        std::string plain_key;
+        int64_t ts = 0;
+        dingodb::mvcc::Codec::DecodeKey(kv.key(), plain_key, ts);
+
+        write->set_key(plain_key);
+        write->set_ts(ts);
+
+        write->mutable_write_info()->ParseFromString(kv.value());
+
+        write->set_partition_id(partition.id().entity_id());
+      }
+    }
+  }
+
+  return data;
+}
+
+dingodb::pb::debug::DumpRegionResponse::Data DumpRawKv(DumpDbOptions const& opt,
+                                                       dingodb::pb::meta::TableDefinition& table_definition) {
+  auto db = std::make_shared<RocksDBOperator>(opt.db_path, std::vector<std::string>{dingodb::Constant::kStoreDataCF});
+  if (!db->Init()) {
+    return {};
+  }
+
+  dingodb::pb::debug::DumpRegionResponse::Data data;
+  auto* kvs = data.mutable_kvs();
+
+  for (const auto& partition : table_definition.table_partition().partitions()) {
+    auto row_handler = [&kvs](const std::string& encode_key, const std::string& pkg_value) {
+      std::string decode_key;
+      int64_t ts;
+      dingodb::mvcc::Codec::DecodeKey(encode_key, decode_key, ts);
+      dingodb::pb::debug::DumpRegionResponse::KV kv;
+      kv.set_key(decode_key);
+      kv.set_ts(ts);
+
+      dingodb::mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = dingodb::mvcc::Codec::UnPackageValue(pkg_value, flag, ttl);
+
+      kv.set_flag(static_cast<dingodb::pb::debug::DumpRegionResponse::ValueFlag>(flag));
+      kv.set_ttl(ttl);
+      kv.set_value(std::string(value));
+
+      kvs->Add()->Swap(&kv);
+    };
+
+    std::string begin_key = dingodb::mvcc::Codec::EncodeBytes(partition.range().start_key());
+    std::string end_key = dingodb::mvcc::Codec::EncodeBytes(partition.range().end_key());
+
+    db->Scan(dingodb::Constant::kStoreDataCF, begin_key, end_key, opt.offset, opt.limit, row_handler);
+  }
+
+  return std::move(data);
+}
+
+dingodb::pb::debug::DumpRegionResponse::Data DumpRawVectorIndex(DumpDbOptions const& opt,
+                                                                dingodb::pb::meta::TableDefinition& table_definition) {
+  // Read data from db
+  auto db = std::make_shared<RocksDBOperator>(
+      opt.db_path, std::vector<std::string>{dingodb::Constant::kVectorDataCF, dingodb::Constant::kVectorScalarCF,
+                                            dingodb::Constant::kVectorTableCF});
+  if (!db->Init()) {
+    return {};
+  }
+
+  dingodb::pb::debug::DumpRegionResponse::Data data;
+  auto* vectors = data.mutable_vectors();
+  for (const auto& partition : table_definition.table_partition().partitions()) {
+    dingodb::pb::common::Range range;
+    range.set_start_key(dingodb::mvcc::Codec::EncodeKey(partition.range().start_key(), 0));
+    range.set_end_key(dingodb::mvcc::Codec::EncodeKey(partition.range().end_key(), 0));
+
+    std::vector<dingodb::pb::debug::DumpRegionResponse::Vector> part_vectors;
+
+    // vector data
+    {
+      auto kvs = db->Scan(dingodb::Constant::kVectorDataCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      for (const auto& kv : kvs) {
+        const auto& encode_key = std::string(kv.key());
+        dingodb::pb::debug::DumpRegionResponse::Vector vector;
+        vector.set_key(encode_key);
+
+        int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
+        std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
+        vector.set_vector_id(dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts));
+        vector.set_ts(ts);
+
+        dingodb::mvcc::ValueFlag flag;
+        int64_t ttl;
+        auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+
+        vector.set_flag(static_cast<dingodb::pb::debug::DumpRegionResponse::ValueFlag>(flag));
+        vector.set_ttl(ttl);
+
+        if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+          if (!vector.mutable_vector()->ParseFromArray(value.data(), value.size())) {
+            DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
+          }
+        }
+
+        part_vectors.push_back(vector);
+      }
+    }
+
+    // scalar data
+    {
+      auto kvs =
+          db->Scan(dingodb::Constant::kVectorScalarCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      uint32_t count = 0;
+      for (const auto& kv : kvs) {
+        auto& vector = part_vectors.at(count++);
+        CHECK(kv.key() == vector.key()) << "Not match key.";
+
+        dingodb::mvcc::ValueFlag flag;
+        int64_t ttl;
+        auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+        if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+          if (!vector.mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
+            DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
+          }
         }
       }
     }
 
-    std::vector<std::any> record;
-    ret = record_decoder->Decode(origin_key, value, record);
-    if (ret != 0) {
-      LOG(INFO) << fmt::format("Decode failed, ret: {} record size: {}", ret, record.size());
+    // table data
+    {
+      auto kvs = db->Scan(dingodb::Constant::kVectorTableCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
+      uint32_t count = 0;
+      for (const auto& kv : kvs) {
+        auto& vector = part_vectors.at(count++);
+        CHECK(kv.key() == vector.key()) << "Not match key.";
+
+        dingodb::mvcc::ValueFlag flag;
+        int64_t ttl;
+        auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+        if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+          if (!vector.mutable_table_data()->ParseFromArray(value.data(), value.size())) {
+            DINGO_LOG(FATAL) << fmt::format("Parse vector table proto failed, value size: {}.", value.size());
+          }
+        }
+      }
     }
-    if (opt.show_pretty) {
-      PrintValuesPretty(table_definition, record, ts);
-    } else {
-      PrintValues(table_definition, record, ts);
+
+    for (auto& vector : part_vectors) {
+      *vectors->Add() = vector;
     }
-  };
-
-  std::cout << fmt::format("table_id({}) partition_id({}) range[{}, {})", partition.id().parent_entity_id(),
-                           partition.id().entity_id(), dingodb::Helper::StringToHex(begin_key),
-                           dingodb::Helper::StringToHex(end_key))
-            << std::endl;
-
-  if (opt.show_lock) {
-    std::cout << fmt::format("=================== lock ====================") << std::endl;
-    db->Scan(dingodb::Constant::kTxnLockCF, encode_begin_key, encode_end_key, opt.offset, opt.limit, lock_handler);
   }
 
-  if (opt.show_write) {
-    std::cout << fmt::format("=================== write ====================") << std::endl;
-    db->Scan(dingodb::Constant::kTxnWriteCF, encode_begin_key, encode_end_key, opt.offset, opt.limit, write_handler);
-  }
-
-  if (opt.show_all_data || opt.show_last_data) {
-    std::cout << fmt::format("=================== data ====================") << std::endl;
-    db->Scan(dingodb::Constant::kTxnDataCF, encode_begin_key, encode_end_key, opt.offset, opt.limit, data_handler);
-  }
+  return std::move(data);
 }
 
-void DumpClientRaw(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition,
-                   const dingodb::pb::meta::Partition& partition) {
+dingodb::pb::debug::DumpRegionResponse::Data DumpRawDocumentIndex(
+    DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition) {
+  // Read data from db
   auto db = std::make_shared<RocksDBOperator>(opt.db_path, std::vector<std::string>{dingodb::Constant::kStoreDataCF});
   if (!db->Init()) {
-    return;
+    return {};
   }
 
-  std::string begin_key = partition.range().start_key();
-  std::string end_key = partition.range().end_key();
-
-  auto row_handler = [&](const std::string& key, const std::string& value) {
-    LOG(INFO) << fmt::format("key: {} value: {}", dingodb::Helper::StringToHex(key),
-                             dingodb::Helper::StringToHex(value));
-  };
-
-  db->Scan(dingodb::Constant::kTxnDataCF, begin_key, end_key, opt.offset, opt.limit, row_handler);
-}
-
-void DumpClientTxn(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition,
-                   const dingodb::pb::meta::Partition& partition) {
-  auto db = std::make_shared<RocksDBOperator>(
-      opt.db_path, std::vector<std::string>{dingodb::Constant::kStoreDataCF, dingodb::Constant::kTxnDataCF,
-                                            dingodb::Constant::kTxnLockCF, dingodb::Constant::kTxnWriteCF});
-  if (!db->Init()) {
-    return;
-  }
-
-  auto encode_range = dingodb::mvcc::Codec::EncodeRange(partition.range());
-
-  auto row_handler = [&](const std::string& key, const std::string& value) {
-    LOG(INFO) << fmt::format("key: {} value: {}", dingodb::Helper::StringToHex(key),
-                             dingodb::Helper::StringToHex(value));
-  };
-
-  db->Scan(dingodb::Constant::kTxnDataCF, encode_range.start_key(), encode_range.end_key(), opt.offset, opt.limit,
-           row_handler);
-}
-
-void DumpVectorIndexRaw(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition) {
-  auto vector_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::Vector data;
-      data.ParseFromString(value);
-      int dimension = data.float_values_size() > 0 ? data.float_values_size() : data.binary_values_size();
-      std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
-                               dingodb::VectorCodec::UnPackageVectorId(key), dimension, FormatVector(data, 10))
-                << std::endl;
-    }
-  };
-
-  auto scalar_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::VectorScalardata data;
-      data.ParseFromString(value);
-      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::UnPackageVectorId(key),
-                               data.ShortDebugString())
-                << std::endl;
-    }
-  };
-
-  auto table_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::VectorTableData data;
-      data.ParseFromString(value);
-      std::cout << fmt::format("[table data] vector_id({}) table_key: {} table_value: {}",
-                               dingodb::VectorCodec::UnPackageVectorId(key),
-                               dingodb::Helper::StringToHex(data.table_key()),
-                               dingodb::Helper::StringToHex(data.table_value()))
-                << std::endl;
-    }
-  };
-
-  // Read data from db
-  auto db = std::make_shared<RocksDBOperator>(opt.db_path, std::vector<std::string>{dingodb::Constant::kVectorDataCF});
-  if (!db->Init()) {
-    return;
-  }
-
+  dingodb::pb::debug::DumpRegionResponse::Data data;
+  auto* documents = data.mutable_documents();
   for (const auto& partition : table_definition.table_partition().partitions()) {
-    int64_t partition_id = partition.id().entity_id();
+    dingodb::pb::common::Range range;
+    range.set_start_key(dingodb::mvcc::Codec::EncodeKey(partition.range().start_key(), 0));
+    range.set_end_key(dingodb::mvcc::Codec::EncodeKey(partition.range().end_key(), 0));
 
-    char prefix = dingodb::Helper::GetKeyPrefix(partition.range().start_key());
-    std::string begin_key = dingodb::VectorCodec::EncodeVectorKey(prefix, partition_id, 0);
-    std::string end_key = dingodb::VectorCodec::EncodeVectorKey(prefix, partition_id, INT64_MAX);
+    auto kvs = db->Scan(dingodb::Constant::kStoreDataCF, range.start_key(), range.end_key(), opt.offset, opt.limit);
 
-    std::cout << fmt::format("=================== vector data partition({}) ====================", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorDataCF, begin_key, end_key, opt.offset, opt.limit, vector_data_handler);
+    for (const auto& kv : kvs) {
+      std::string plain_key;
+      int64_t partition_id;
+      int64_t document_id;
+      dingodb::DocumentCodec::DecodeFromEncodeKeyWithTs(kv.key(), partition_id, document_id);
 
-    std::cout << fmt::format("=================== vector scalar data partition_id({}) ==========", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorScalarCF, begin_key, end_key, opt.offset, opt.limit, scalar_data_handler);
+      dingodb::pb::debug::DumpRegionResponse::Document document;
+      document.set_document_id(document_id);
+      document.set_ts(dingodb::DocumentCodec::TruncateKeyForTs(kv.key()));
 
-    std::cout << fmt::format("=================== vector table data partition_id({}) ============", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorTableCF, begin_key, end_key, opt.offset, opt.limit, table_data_handler);
+      dingodb::mvcc::ValueFlag flag;
+      int64_t ttl;
+      auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+
+      document.set_flag(static_cast<dingodb::pb::debug::DumpRegionResponse::ValueFlag>(flag));
+      document.set_ttl(ttl);
+
+      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+        if (!document.mutable_document()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
+        }
+      }
+
+      documents->Add()->Swap(&document);
+    }
   }
+
+  return std::move(data);
 }
 
-void DumpVectorIndexTxn(DumpDbOptions const& opt, dingodb::pb::meta::TableDefinition& table_definition) {
-  auto vector_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::Vector data;
-      data.ParseFromString(value);
-      int dimension = data.float_values_size() > 0 ? data.float_values_size() : data.binary_values_size();
-      std::cout << fmt::format("[vector data] vector_id({}) value: dimension({}) {}",
-                               dingodb::VectorCodec::UnPackageVectorId(key), dimension, FormatVector(data, 10))
-                << std::endl;
-    }
-  };
-
-  auto scalar_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::VectorScalardata data;
-      data.ParseFromString(value);
-      std::cout << fmt::format("[scalar data] vector_id({}) value: {}", dingodb::VectorCodec::UnPackageVectorId(key),
-                               data.ShortDebugString())
-                << std::endl;
-    }
-  };
-
-  auto table_data_handler = [&](const std::string& key, const std::string& value) {
-    if (opt.show_vector) {
-      dingodb::pb::common::VectorTableData data;
-      data.ParseFromString(value);
-      std::cout << fmt::format("[table data] vector_id({}) table_key: {} table_value: {}",
-                               dingodb::VectorCodec::UnPackageVectorId(key),
-                               dingodb::Helper::StringToHex(data.table_key()),
-                               dingodb::Helper::StringToHex(data.table_value()))
-                << std::endl;
-    }
-  };
-
-  // Read data from db
-  auto db = std::make_shared<RocksDBOperator>(opt.db_path, std::vector<std::string>{dingodb::Constant::kVectorDataCF});
-  if (!db->Init()) {
-    return;
-  }
-
-  for (const auto& partition : table_definition.table_partition().partitions()) {
-    int64_t partition_id = partition.id().entity_id();
-
-    char prefix = dingodb::Helper::GetKeyPrefix(partition.range().start_key());
-    std::string begin_key = dingodb::VectorCodec::EncodeVectorKey(prefix, partition_id, 0);
-    std::string end_key = dingodb::VectorCodec::EncodeVectorKey(prefix, partition_id, INT64_MAX);
-
-    std::cout << fmt::format("=================== vector data partition({}) ====================", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorDataCF, begin_key, end_key, opt.offset, opt.limit, vector_data_handler);
-
-    std::cout << fmt::format("=================== vector scalar data partition_id({}) ==========", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorScalarCF, begin_key, end_key, opt.offset, opt.limit, scalar_data_handler);
-
-    std::cout << fmt::format("=================== vector table data partition_id({}) ============", partition_id)
-              << std::endl;
-    db->Scan(dingodb::Constant::kVectorTableCF, begin_key, end_key, opt.offset, opt.limit, table_data_handler);
-  }
-}
-
-void DumpDb(DumpDbOptions const& opt) {
+butil::Status DumpDb(DumpDbOptions const& opt) {
   dingodb::pb::meta::TableDefinition table_definition;
-  int64_t table_or_index_id = opt.table_id > 0 ? opt.table_id : opt.index_id;
-  if (table_or_index_id == 0) {
-    DINGO_LOG(ERROR) << "table_id/index_id is invalid.";
-    return;
+  if (opt.id == 0) {
+    return butil::Status(1, "table_id/index_id is invalid");
   }
-  table_definition = SendGetTable(table_or_index_id);
+
+  table_definition = SendGetTable(opt.id);
   if (table_definition.name().empty()) {
-    table_definition = SendGetIndex(table_or_index_id);
-  }
-  if (table_definition.name().empty()) {
-    DINGO_LOG(ERROR) << "not found table/index definition.";
-    return;
-  }
-
-  std::cout << fmt::format("=========== Table/Index {} schema ===========", table_definition.name()) << std::endl;
-  for (const auto& column : table_definition.columns()) {
-    std::cout << "column: " << column.ShortDebugString() << std::endl;
-  }
-  std::cout << fmt::format("=========== Table/Index {} schema ===========", table_definition.name()) << std::endl;
-
-  for (const auto& partition : table_definition.table_partition().partitions()) {
-    auto index_type = table_definition.index_parameter().index_type();
-    DINGO_LOG(INFO) << fmt::format("key prefix: {} index_type: {}",
-                                   dingodb::Helper::GetKeyPrefix(partition.range().start_key()),
-                                   dingodb::pb::common::IndexType_Name(index_type));
-
-    if (dingodb::Helper::IsExecutorRaw(partition.range().start_key())) {
-      if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
-        DumpExcutorRaw(opt, table_definition, partition);
-      } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
-        DumpVectorIndexRaw(opt, table_definition);
-      } else {
-        DINGO_LOG(ERROR) << "not support index type.";
-      }
-
-    } else if (dingodb::Helper::IsExecutorTxn(partition.range().start_key())) {
-      if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
-        DumpExcutorTxn(opt, table_definition, partition);
-      } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
-        DumpVectorIndexTxn(opt, table_definition);
-      } else {
-        DINGO_LOG(ERROR) << "not support index type.";
-      }
-
-    } else if (dingodb::Helper::IsClientTxn(partition.range().start_key())) {
-      DumpClientTxn(opt, table_definition, partition);
-
-    } else if (dingodb::Helper::IsClientRaw(partition.range().start_key())) {
-      if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
-        DumpClientRaw(opt, table_definition, partition);
-      } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
-        DumpVectorIndexRaw(opt, table_definition);
-      } else {
-        DINGO_LOG(ERROR) << "not support index type.";
-      }
-
-    } else {
-      DINGO_LOG(ERROR) << "unknown partition type, range is invalid.";
-    }
-  }
-}
-
-// void DumpMeta(std::shared_ptr<Context> ctx) {}
-
-void WhichRegion(WhichRegionOptions const& opt) {
-  dingodb::pb::meta::TableDefinition table_definition;
-  int64_t table_or_index_id = opt.table_id > 0 ? opt.table_id : opt.index_id;
-  if (table_or_index_id == 0) {
-    std::cout << "table_id/index_id is invalid.\n";
-    return;
-  }
-  table_definition = SendGetTable(table_or_index_id);
-  if (table_definition.name().empty()) {
-    table_definition = SendGetIndex(table_or_index_id);
+    table_definition = SendGetIndex(opt.id);
   }
   if (table_definition.name().empty()) {
-    std::cout << "not found table/index definition.\n";
-    return;
+    return butil::Status(1, "Not found table/index");
   }
 
-  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
-    std::cout << "not support find hash partition type table/idnex.\n";
-    return;
-  }
+  auto index_type = table_definition.index_parameter().index_type();
+  const auto& partition = table_definition.table_partition().partitions().at(0);
+  const auto& range = partition.range();
 
-  // get region range
-  dingodb::pb::meta::IndexRange index_range;
-  dingodb::pb::meta::TableRange table_range = SendGetTableRange(table_or_index_id);
-  if (table_range.range_distribution().empty()) {
-    index_range = SendGetIndexRange(table_or_index_id);
-    if (index_range.range_distribution().empty()) {
-      std::cout << "get table/index range failed.\n";
-      return;
+  dingodb::pb::debug::DumpRegionResponse::Data data;
+  if (dingodb::Helper::IsClientTxn(range.start_key()) || dingodb::Helper::IsExecutorTxn(range.start_key())) {
+    data = DumpTxn(opt, table_definition);
+  } else {
+    if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      data = DumpRawKv(opt, table_definition);
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      data = DumpRawVectorIndex(opt, table_definition);
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      data = DumpRawDocumentIndex(opt, table_definition);
     }
   }
 
-  auto range_distribution =
-      !table_range.range_distribution().empty() ? table_range.range_distribution() : index_range.range_distribution();
+  std::vector<std::string> exclude_columns;
+  dingodb::Helper::SplitString(opt.exclude_columns, ',', exclude_columns);
+  Pretty::Show(data, table_definition, exclude_columns);
 
-  for (int i = range_distribution.size() - 1; i >= 0; --i) {
-    const auto& distribution = range_distribution.at(i);
-    int64_t partition_id = distribution.id().parent_entity_id();
-    const auto& range = distribution.range();
-
-    std::string encoded_key;
-    if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_NONE ||
-        table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_SCALAR) {
-      auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
-      auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
-
-      std::vector<std::string> origin_keys;
-      dingodb::Helper::SplitString(opt.key, ',', origin_keys);
-      if (origin_keys.empty()) {
-        std::cout << fmt::format("split key is empty.\n");
-        return;
-      }
-      record_encoder->EncodeKeyPrefix(dingodb::Helper::GetKeyPrefix(range.start_key()), origin_keys, encoded_key);
-
-      if (encoded_key >= range.start_key()) {
-        std::cout << fmt::format("Key locate region({}) range.", distribution.id().entity_id()) << std::endl;
-        break;
-      }
-
-    } else if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
-      int64_t vector_id = dingodb::Helper::StringToInt64(opt.key);
-
-      dingodb::VectorCodec::EncodeVectorKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id, vector_id,
-                                            encoded_key);
-
-    } else if (table_definition.index_parameter().index_type() == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
-      int64_t vector_id = dingodb::Helper::StringToInt64(opt.key);
-
-      dingodb::DocumentCodec::EncodeDocumentKey(dingodb::Helper::GetKeyPrefix(range.start_key()), partition_id,
-                                                vector_id, encoded_key);
-    }
-
-    if (encoded_key >= range.start_key()) {
-      std::cout << fmt::format("Key locate region({}) range.", distribution.id().entity_id()) << std::endl;
-      break;
-    }
-  }
+  return butil::Status();
 }
 
 }  // namespace client_v2

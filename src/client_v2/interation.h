@@ -141,11 +141,10 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
         NextLeader(response.error().leader_location());
 
       } else {
-        if (!kLogEachRequest) {
-          DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
-                                          dingodb::pb::error::Errno_Name(response.error().errcode()),
-                                          response.error().errmsg());
-        }
+        DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
+                                        dingodb::pb::error::Errno_Name(response.error().errcode()),
+                                        response.error().errmsg());
+
         latency_ = cntl.latency_us();
         return butil::Status(response.error().errcode(), response.error().errmsg());
       }

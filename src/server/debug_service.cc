@@ -1085,6 +1085,100 @@ std::vector<pb::debug::DumpRegionResponse::Document> DumpRawDucmentRegion(RawEng
   return std::move(documents);
 }
 
+pb::debug::DumpRegionResponse::Txn DumpTxn(RawEnginePtr raw_engine, int64_t partition_id,
+                                           const pb::common::Range& range, int64_t offset, int64_t limit) {
+  auto reader = raw_engine->Reader();
+
+  pb::debug::DumpRegionResponse::Txn txn;
+  // data
+  {
+    int64_t curr_offset = 0;
+    dingodb::IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = reader->NewIterator(Constant::kTxnDataCF, options);
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+      if (curr_offset < offset) {
+        continue;
+      }
+      if (curr_offset >= offset + limit) {
+        break;
+      }
+
+      auto* data = txn.add_datas();
+
+      std::string decode_key;
+      int64_t ts;
+      dingodb::mvcc::Codec::DecodeKey(iter->Key(), decode_key, ts);
+      data->set_key(decode_key);
+      data->set_ts(ts);
+
+      data->set_value(std::string(iter->Value()));
+      data->set_partition_id(partition_id);
+    }
+    DINGO_LOG(INFO) << "data column family kv num: " << txn.datas_size();
+  }
+
+  // lock
+  {
+    int64_t curr_offset = 0;
+    dingodb::IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = reader->NewIterator(Constant::kTxnLockCF, options);
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+      if (curr_offset < offset) {
+        continue;
+      }
+      if (curr_offset >= offset + limit) {
+        break;
+      }
+
+      auto* lock = txn.add_locks();
+
+      std::string plain_key;
+      int64_t ts = 0;
+      dingodb::mvcc::Codec::DecodeKey(iter->Key(), plain_key, ts);
+
+      lock->set_key(plain_key);
+      lock->mutable_lock_info()->ParseFromString(std::string(iter->Value()));
+
+      lock->set_partition_id(partition_id);
+    }
+    DINGO_LOG(INFO) << "lock column family kv num: " << txn.locks_size();
+  }
+
+  // write
+  {
+    int64_t curr_offset = 0;
+    dingodb::IteratorOptions options;
+    options.upper_bound = range.end_key();
+    auto iter = reader->NewIterator(Constant::kTxnWriteCF, options);
+    for (iter->Seek(range.start_key()); iter->Valid(); iter->Next(), ++curr_offset) {
+      if (curr_offset < offset) {
+        continue;
+      }
+      if (curr_offset >= offset + limit) {
+        break;
+      }
+
+      auto* write = txn.add_writes();
+
+      std::string plain_key;
+      int64_t ts = 0;
+      dingodb::mvcc::Codec::DecodeKey(iter->Key(), plain_key, ts);
+
+      write->set_key(plain_key);
+      write->set_ts(ts);
+
+      write->mutable_write_info()->ParseFromString(std::string(iter->Value()));
+
+      write->set_partition_id(partition_id);
+    }
+    DINGO_LOG(INFO) << "write column family kv num: " << txn.writes_size();
+  }
+
+  return txn;
+}
+
 void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
                                   const pb::debug::DumpRegionRequest* request, pb::debug::DumpRegionResponse* response,
                                   ::google::protobuf::Closure* done) {
@@ -1103,24 +1197,29 @@ void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (region->IsTxn()) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::ENOT_SUPPORT, "Not support dump txn");
-    return;
-  }
-
+  auto definition = region->Definition();
+  response->set_table_id(definition.table_id() != 0 ? definition.table_id() : definition.index_id());
   DINGO_LOG(INFO) << fmt::format("region({}) range{} offset({}) limit({})", request->region_id(),
                                  region->RangeToString(), request->offset(), request->limit());
 
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
-  if (region->Type() == pb::common::RegionType::STORE_REGION) {
-    auto kvs = DumpRawKvRegion(raw_engine, region->Range(true), request->offset(), request->limit());
-    Helper::VectorToPbRepeated(kvs, response->mutable_data()->mutable_kvs());
-  } else if (region->Type() == pb::common::RegionType::INDEX_REGION) {
-    auto vectors = DumpRawVectorRegion(raw_engine, region->Range(true), request->offset(), request->limit());
-    Helper::VectorToPbRepeated(vectors, response->mutable_data()->mutable_vectors());
+  if (region->IsTxn()) {
+    auto txn = DumpTxn(raw_engine, region->PartitionId(), region->Range(true), request->offset(), request->limit());
+    response->mutable_data()->mutable_txn()->Swap(&txn);
+
   } else {
-    auto documents = DumpRawDucmentRegion(raw_engine, region->Range(true), request->offset(), request->limit());
-    Helper::VectorToPbRepeated(documents, response->mutable_data()->mutable_documents());
+    if (region->Type() == pb::common::RegionType::STORE_REGION) {
+      auto kvs = DumpRawKvRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+      Helper::VectorToPbRepeated(kvs, response->mutable_data()->mutable_kvs());
+
+    } else if (region->Type() == pb::common::RegionType::INDEX_REGION) {
+      auto vectors = DumpRawVectorRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+      Helper::VectorToPbRepeated(vectors, response->mutable_data()->mutable_vectors());
+
+    } else {
+      auto documents = DumpRawDucmentRegion(raw_engine, region->Range(true), request->offset(), request->limit());
+      Helper::VectorToPbRepeated(documents, response->mutable_data()->mutable_documents());
+    }
   }
 }
 

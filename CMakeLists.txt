@@ -690,7 +690,7 @@ add_executable(dingodb_client
                 src/document/codec.cc
                 ${SERIAL_SRCS}
                 ${VERSION_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(dingodb_client_v2
+add_executable(dingodb_cli
                 ${CLIENT_V2_SRCS}
                 src/coordinator/coordinator_interaction.cc
                 src/common/role.cc
@@ -707,7 +707,7 @@ add_executable(dingodb_client_v2
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client ${DEPEND_LIBS})
-add_dependencies(dingodb_client_v2 ${DEPEND_LIBS})
+add_dependencies(dingodb_cli ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
     message(STATUS "Build DingoDB with static libraries linking")
@@ -737,13 +737,10 @@ target_link_libraries(dingodb_server
 target_link_libraries(dingodb_client
                       ${DYNAMIC_LIB})
 
-target_link_libraries(dingodb_client_v2
+target_link_libraries(dingodb_cli
                       ${DYNAMIC_LIB}  CLI11::CLI11)
 
 if(BUILD_UNIT_TESTS)
     message(STATUS "Build unit test")
     add_subdirectory(test/unit_test)
 endif()
-
-#add_subdirectory(contrib/cli11)
-#target_link_libraries(dingodb_client_v2 PRIVATE CLI11::CLI11)

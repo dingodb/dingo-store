@@ -24,6 +24,7 @@
 #include <ostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "CLI/CLI.hpp"
 #include "client_v2/helper.h"
@@ -865,26 +866,18 @@ void RunCheckIndexDistribution(CheckIndexDistributionOptions const &opt);
 
 struct DumpDbOptions {
   std::string coor_url;
-  int64_t table_id;
-  int64_t index_id;
+  int64_t id;
   std::string db_path;
   int32_t offset;
   int64_t limit;
-  bool show_vector;
-  bool show_lock;
-  bool show_write;
-  bool show_last_data;
-  bool show_all_data;
-  bool show_pretty;
-  int32_t print_column_width;
+  std::string exclude_columns;
 };
 void SetUpDumpDb(CLI::App &app);
 void RunDumpDb(DumpDbOptions const &opt);
 
 struct WhichRegionOptions {
   std::string coor_url;
-  int64_t table_id;
-  int64_t index_id;
+  int64_t id;
   std::string key;
 };
 void SetUpWhichRegion(CLI::App &app);
@@ -895,7 +888,7 @@ struct DumpRegionOptions {
   int64_t region_id;
   int32_t offset;
   int32_t limit;
-  bool show_detail;
+  std::string exclude_columns;
 };
 void SetUpDumpRegion(CLI::App &app);
 void RunDumpRegion(DumpRegionOptions const &opt);

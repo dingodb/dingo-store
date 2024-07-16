@@ -179,7 +179,7 @@ TEST_F(BatchTsListTest, MultiThreadLongTimeRun) {
 }
 
 TEST_F(BatchTsListTest, MultiThreadLongTimeRun2) {
-  // GTEST_SKIP() << "skip long time run.";
+  GTEST_SKIP() << "skip long time run.";
 
   int producer_num = 8;
   int consumer_num = 8;

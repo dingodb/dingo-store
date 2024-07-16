@@ -26,6 +26,7 @@
 #include "butil/endpoint.h"
 #include "butil/strings/string_split.h"
 #include "client_v2/interation.h"
+#include "client_v2/router.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -355,11 +356,36 @@ class Helper {
                        dingodb::Helper::StringToHex(table.table_value()));
   }
 
-  static std::string FormatDocument(const dingodb::pb::common::Document& document) {
-    std::string result;
+  static std::vector<std::string> FormatDocument(const dingodb::pb::common::Document& document) {
+    auto format_scalar_func = [](const dingodb::pb::common::DocumentValue& value) -> std::string {
+      switch (value.field_type()) {
+        case dingodb::pb::common::ScalarFieldType::BOOL:
+          return fmt::format("{}", value.field_value().bool_data());
+        case dingodb::pb::common::ScalarFieldType::INT8:
+          return fmt::format("{}", value.field_value().int_data());
+        case dingodb::pb::common::ScalarFieldType::INT16:
+          return fmt::format("{}", value.field_value().int_data());
+        case dingodb::pb::common::ScalarFieldType::INT32:
+          return fmt::format("{}", value.field_value().int_data());
+        case dingodb::pb::common::ScalarFieldType::INT64:
+          return fmt::format("{}", value.field_value().long_data());
+        case dingodb::pb::common::ScalarFieldType::FLOAT32:
+          return fmt::format("{}", value.field_value().float_data());
+        case dingodb::pb::common::ScalarFieldType::DOUBLE:
+          return fmt::format("{}", value.field_value().double_data());
+        case dingodb::pb::common::ScalarFieldType::STRING:
+          return fmt::format("{}", value.field_value().string_data());
+        case dingodb::pb::common::ScalarFieldType::BYTES:
+          return fmt::format("{}", value.field_value().bytes_data());
+        default:
+          return "Unknown Type";
+      }
+      return "";
+    };
+
+    std::vector<std::string> result;
     for (const auto& [key, value] : document.document_data()) {
-      result += fmt::format("{}/{}", key, value.ShortDebugString());
-      result += ";";
+      result.push_back(fmt::format("{}: {}", key, format_scalar_func(value)));
     }
 
     return result;

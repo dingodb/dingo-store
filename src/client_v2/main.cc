@@ -41,7 +41,8 @@
 #include "glog/logging.h"
 #include "proto/common.pb.h"
 
-bvar::LatencyRecorder g_latency_recorder("dingo-store");
+const std::string kProgramName = "dingodb_cli";
+const std::string kProgramDesc = "dingo-store client tool.";
 
 void PrintSubcommandHelp(const CLI::App& app, const std::string& subcommand_name) {
   CLI::App* subcommand = app.get_subcommand(subcommand_name);
@@ -101,21 +102,31 @@ int InteractiveCli(CLI::App& app) {
   return 0;
 }
 
-int main(int argc, char* argv[]) {
-  FLAGS_minloglevel = google::GLOG_INFO;
-  FLAGS_logtostdout = false;
-  FLAGS_logtostderr = false;
-  FLAGS_colorlogtostdout = true;
-  FLAGS_logbufsecs = 0;
-  FLAGS_log_dir = "./client_v2_log";
-
-  if (!dingodb::Helper::IsExistPath(FLAGS_log_dir)) {
-    dingodb::Helper::CreateDirectories(FLAGS_log_dir);
+void InitLog(const std::string& log_dir) {
+  if (!dingodb::Helper::IsExistPath(log_dir)) {
+    dingodb::Helper::CreateDirectories(log_dir);
   }
 
-  google::InitGoogleLogging(argv[0]);
+  FLAGS_logbufsecs = 0;
+  FLAGS_stop_logging_if_full_disk = true;
+  FLAGS_minloglevel = google::GLOG_INFO;
+  FLAGS_logbuflevel = google::GLOG_INFO;
+  FLAGS_logtostdout = false;
+  FLAGS_logtostderr = false;
+  FLAGS_alsologtostderr = false;
 
-  CLI::App app{"dingo_client_v2"};
+  google::InitGoogleLogging(kProgramName.c_str());
+  google::SetLogDestination(google::GLOG_INFO, fmt::format("{}/{}.info.log.", log_dir, kProgramName).c_str());
+  google::SetLogDestination(google::GLOG_WARNING, fmt::format("{}/{}.warn.log.", log_dir, kProgramName).c_str());
+  google::SetLogDestination(google::GLOG_ERROR, fmt::format("{}/{}.error.log.", log_dir, kProgramName).c_str());
+  google::SetLogDestination(google::GLOG_FATAL, fmt::format("{}/{}.fatal.log.", log_dir, kProgramName).c_str());
+  google::SetStderrLogging(google::GLOG_FATAL);
+}
+
+int main(int argc, char* argv[]) {
+  InitLog("./log");
+
+  CLI::App app{kProgramDesc, kProgramName};
   app.get_formatter()->column_width(40);
   client_v2::SetUpCoordinatorSubCommands(app);
   client_v2::SetUpKVSubCommands(app);
