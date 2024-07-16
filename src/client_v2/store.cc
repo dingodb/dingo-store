@@ -29,6 +29,7 @@
 #include "common/logging.h"
 #include "common/serial_helper.h"
 #include "common/version.h"
+#include "coprocessor/utils.h"
 #include "document/codec.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
@@ -39,6 +40,8 @@
 #include "proto/store.pb.h"
 #include "proto/version.pb.h"
 #include "serial/buf.h"
+#include "serial/record_decoder.h"
+#include "serial/record_encoder.h"
 #include "serial/schema/long_schema.h"
 #include "vector/codec.h"
 
@@ -53,6 +56,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpSnapshot(app);
   SetUpRegionMetrics(app);
   SetUpDumpRegion(app);
+  SetUpDumpDb(app);
   SetUpTxnPrewrite(app);
   SetUpTxnCommit(app);
   SetUpTxnPessimisticLock(app);
@@ -1609,19 +1613,12 @@ void SetUpDumpDb(CLI::App& app) {
   auto opt = std::make_shared<DumpDbOptions>();
   auto* cmd = app.add_subcommand("DumpDb", "Dump rocksdb")->group("Store Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--table_id", opt->table_id, "Number of table_id");
-  cmd->add_option("--index_id", opt->index_id, "Number of index_id");
-  cmd->add_option("--db_path", opt->db_path, "rocksdb path");
-  cmd->add_option("--offset", opt->offset, "Number of offset, must greatern than 0");
-  cmd->add_option("--limit", opt->limit, "Number of limit")->default_val(50);
-  cmd->add_flag("--show_vector", opt->show_vector, "show vector data")->default_val(false);
+  cmd->add_option("--id", opt->id, "Number of table_id/index_id")->required();
+  cmd->add_option("--db_path", opt->db_path, "rocksdb path")->required();
+  cmd->add_option("--offset", opt->offset, "Number of offset, must greatern than 0")->default_val(0);
+  cmd->add_option("--limit", opt->limit, "Number of limit")->default_val(20);
+  cmd->add_option("--exclude_columns", opt->exclude_columns, "Exclude columns, e.g. col1,col2");
 
-  cmd->add_flag("--show_lock", opt->show_lock, "show lock")->default_val(false);
-  cmd->add_flag("--show_write", opt->show_write, "show write")->default_val(false);
-  cmd->add_flag("--show_last_data", opt->show_last_data, "show last data")->default_val(true);
-  cmd->add_flag("--show_all_data", opt->show_all_data, "show all data")->default_val(false);
-  cmd->add_flag("--show_pretty", opt->show_pretty, "show  pretty")->default_val(false);
-  cmd->add_option("--print_column_width", opt->print_column_width, "print column width")->default_val(24);
   cmd->callback([opt]() { RunDumpDb(*opt); });
 }
 
@@ -1630,17 +1627,94 @@ void RunDumpDb(DumpDbOptions const& opt) {
     exit(-1);
   }
 
-  client_v2::DumpDb(opt);
+  auto status = client_v2::DumpDb(opt);
+  if (!status.ok()) {
+    std::cout << fmt::format("Error: {} {}", status.error_code(), status.error_str()) << std::endl;
+  }
 }
 
 void SetUpWhichRegion(CLI::App& app) {
   auto opt = std::make_shared<WhichRegionOptions>();
-  auto* cmd = app.add_subcommand("WhichRegion", "Which  region")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("WhichRegion", "Which region")->group("Store Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--table_id", opt->table_id, "Number of table_id");
-  cmd->add_option("--index_id", opt->index_id, "Number of index_id");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--id", opt->id, "Number of table_id/index_id")->required();
+  cmd->add_option("--key", opt->key, "Param key, e.g. primary key")->required();
   cmd->callback([opt]() { RunWhichRegion(*opt); });
+}
+
+butil::Status WhichRegion(WhichRegionOptions const& opt) {
+  if (opt.id <= 0) {
+    return butil::Status(-1, "Param id is error");
+  }
+  if (opt.key.empty()) {
+    return butil::Status(-1, "Param key is empty");
+  }
+
+  dingodb::pb::meta::TableDefinition table_definition;
+  table_definition = SendGetTable(opt.id);
+  if (table_definition.name().empty()) {
+    table_definition = SendGetIndex(opt.id);
+  }
+  if (table_definition.name().empty()) {
+    return butil::Status(-1, "Not found table/index");
+  }
+
+  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
+    return butil::Status(-1, "Not support hash partition table/index");
+  }
+
+  // get region range
+  dingodb::pb::meta::IndexRange index_range;
+  dingodb::pb::meta::TableRange table_range = SendGetTableRange(opt.id);
+  if (table_range.range_distribution().empty()) {
+    index_range = SendGetIndexRange(opt.id);
+  }
+  auto range_distribution =
+      !table_range.range_distribution().empty() ? table_range.range_distribution() : index_range.range_distribution();
+  if (range_distribution.empty()) {
+    return butil::Status(-1, "Not found table/index range distribution");
+  }
+
+  const auto index_type = table_definition.index_parameter().index_type();
+
+  for (int i = range_distribution.size() - 1; i >= 0; --i) {
+    const auto& distribution = range_distribution.at(i);
+    int64_t partition_id = distribution.id().parent_entity_id();
+    const auto& range = distribution.range();
+    const char perfix = dingodb::Helper::GetKeyPrefix(range.start_key());
+
+    std::string plain_key;
+    if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
+      auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
+
+      std::vector<std::string> origin_keys;
+      dingodb::Helper::SplitString(opt.key, ',', origin_keys);
+      record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      int64_t vector_id = dingodb::Helper::StringToInt64(opt.key);
+
+      plain_key = dingodb::VectorCodec::PackageVectorKey(perfix, partition_id, vector_id);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      int64_t document_id = dingodb::Helper::StringToInt64(opt.key);
+
+      plain_key = dingodb::DocumentCodec::PackageDocumentKey(perfix, partition_id, document_id);
+    }
+
+    DINGO_LOG(INFO) << fmt::format("key: {} region: {} range: {}", dingodb::Helper::StringToHex(plain_key),
+                                   distribution.id().entity_id(), dingodb::Helper::RangeToString(range));
+
+    if (plain_key >= range.start_key() && plain_key < range.end_key()) {
+      std::cout << fmt::format("key({}) in region({}).", opt.key, distribution.id().entity_id()) << std::endl;
+      return butil::Status::OK();
+    }
+  }
+
+  std::cout << "Not found key in any region." << std::endl;
+
+  return butil::Status::OK();
 }
 
 void RunWhichRegion(WhichRegionOptions const& opt) {
@@ -1648,15 +1722,11 @@ void RunWhichRegion(WhichRegionOptions const& opt) {
     exit(-1);
   }
 
-  if (opt.table_id == 0 && opt.index_id == 0) {
-    std::cout << "Param table_id|index_id is error.\n";
+  auto status = WhichRegion(opt);
+  if (!status.ok()) {
+    std::cout << fmt::format("Error: {} {}", status.error_code(), status.error_str()) << std::endl;
     return;
   }
-  if (opt.key.empty()) {
-    std::cout << "Param key is error.\n";
-    return;
-  }
-  WhichRegion(opt);
 }
 
 void SetUpDumpRegion(CLI::App& app) {
@@ -1666,11 +1736,11 @@ void SetUpDumpRegion(CLI::App& app) {
   cmd->add_option("--region_id", opt->region_id, "Number of region_id")->required();
   cmd->add_option("--offset", opt->offset, "Request parameter offset")->default_val(0);
   cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(10);
-  cmd->add_option("--show_detail", opt->show_detail, "Request parameter show_detail")->default_val(false);
+  cmd->add_option("--exclude_columns", opt->exclude_columns, "Exclude columns, e.g. col1,col2");
   cmd->callback([opt]() { RunDumpRegion(*opt); });
 }
 
-void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, bool show_detail) {
+void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, std::vector<std::string> exclude_columns) {
   dingodb::pb::debug::DumpRegionRequest request;
   dingodb::pb::debug::DumpRegionResponse response;
 
@@ -1679,7 +1749,17 @@ void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, bool show_
   request.set_limit(limit);
 
   InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DumpRegion", request, response);
-  Pretty::Show(response);
+  if (Pretty::ShowError(response.error())) {
+    return;
+  }
+
+  // get table definition
+  dingodb::pb::meta::TableDefinition table_definition = SendGetTable(response.table_id());
+  if (table_definition.name().empty()) {
+    table_definition = SendGetIndex(response.table_id());
+  }
+
+  Pretty::Show(response.data(), table_definition, exclude_columns);
 }
 
 void RunDumpRegion(DumpRegionOptions const& opt) {
@@ -1687,7 +1767,10 @@ void RunDumpRegion(DumpRegionOptions const& opt) {
     exit(-1);
   }
 
-  SendDumpRegion(opt.region_id, opt.offset, opt.limit, opt.show_detail);
+  std::vector<std::string> exclude_columns;
+  dingodb::Helper::SplitString(opt.exclude_columns, ',', exclude_columns);
+
+  SendDumpRegion(opt.region_id, opt.offset, opt.limit, exclude_columns);
 }
 
 void SetUpRegionMetrics(CLI::App& app) {
@@ -2002,25 +2085,28 @@ dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id) {
   mut_table_id->set_entity_id(index_id);
 
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
+  if (response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << fmt::format("GetTables failed, error: {} {}",
+                                    dingodb::pb::error::Errno_Name(response.error().errcode()),
+                                    response.error().errmsg());
+    return {};
+  }
 
   return response.table_definition_with_ids()[0].table_definition();
 }
 
 dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
-  dingodb::pb::meta::GetTablesRequest request;
-  dingodb::pb::meta::GetTablesResponse response;
+  dingodb::pb::meta::GetTableRequest request;
+  dingodb::pb::meta::GetTableResponse response;
 
   auto* mut_table_id = request.mutable_table_id();
   mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
   mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
   mut_table_id->set_entity_id(table_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTable", request, response);
 
-  if (response.table_definition_with_ids().empty()) {
-    return dingodb::pb::meta::TableDefinition();
-  }
-  return response.table_definition_with_ids()[0].table_definition();
+  return response.table_definition_with_id().table_definition();
 }
 
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id) {

@@ -27,7 +27,6 @@
 #include "client/client_interation.h"
 #include "client/coordinator_client_function.h"
 #include "client/store_client_function.h"
-#include "client/store_tool_dump.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -561,61 +560,15 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       ctx->table_id = FLAGS_table_id;
       client::CheckIndexDistribution(ctx);
     } else if (method == "DumpRegion") {
-      ctx->region_id = FLAGS_region_id;
-      ctx->offset = FLAGS_offset;
-      ctx->limit = FLAGS_limit;
-      if (ctx->region_id <= 0) {
-        DINGO_LOG(ERROR) << "Param region_id is error.";
-        return;
-      }
-      if (ctx->offset < 0) {
-        DINGO_LOG(ERROR) << "Param offset is error.";
-        return;
-      }
-      if (ctx->limit <= 0) {
-        DINGO_LOG(ERROR) << "Param limit is error.";
-        return;
-      }
-
-      DumpRegion(ctx);
+      std::cout << "Please use dingo_client_v2 command." << std::endl;
+      return;
 
     } else if (method == "DumpDb") {
-      ctx->table_id = FLAGS_table_id;
-      ctx->index_id = FLAGS_index_id;
-      ctx->db_path = FLAGS_db_path;
-      ctx->offset = FLAGS_offset;
-      ctx->limit = FLAGS_limit;
-      ctx->show_vector = FLAGS_show_vector;
-      if (ctx->table_id == 0 && ctx->index_id == 0) {
-        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
-        return;
-      }
-      if (ctx->db_path.empty()) {
-        DINGO_LOG(ERROR) << "Param db_path is error.";
-        return;
-      }
-      if (ctx->offset < 0) {
-        DINGO_LOG(ERROR) << "Param offset is error.";
-        return;
-      }
-      if (ctx->limit < 0) {
-        DINGO_LOG(ERROR) << "Param limit is error.";
-        return;
-      }
-      client::DumpDb(ctx);
+      std::cout << "Please use dingo_client_v2 command." << std::endl;
+      return;
     } else if (method == "WhichRegion") {
-      ctx->table_id = FLAGS_table_id;
-      ctx->index_id = FLAGS_index_id;
-      ctx->key = FLAGS_key;
-      if (ctx->table_id == 0 && ctx->index_id == 0) {
-        DINGO_LOG(ERROR) << "Param table_id|index_id is error.";
-        return;
-      }
-      if (ctx->key.empty()) {
-        DINGO_LOG(ERROR) << "Param key is error.";
-        return;
-      }
-      WhichRegion(ctx);
+      std::cout << "Please use dingo_client_v2 command." << std::endl;
+      return;
 
       // illegal method
     } else {

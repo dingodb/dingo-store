@@ -19,8 +19,7 @@
 
 namespace client_v2 {
 
-void DumpDb(DumpDbOptions const& opt);
-void WhichRegion(WhichRegionOptions const& opt);
+butil::Status DumpDb(DumpDbOptions const& opt);
 
 }  // namespace client_v2
 

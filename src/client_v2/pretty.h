@@ -20,14 +20,20 @@
 
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
+#include "proto/meta.pb.h"
 
 namespace client_v2 {
 
 class Pretty {
  public:
+  static bool ShowError(const dingodb::pb::error::Error &error);
+
   static void Show(dingodb::pb::coordinator::GetCoordinatorMapResponse &response);
   static void Show(dingodb::pb::coordinator::GetStoreMapResponse &response);
 
+  static void Show(const dingodb::pb::debug::DumpRegionResponse::Data &data,
+                   const dingodb::pb::meta::TableDefinition &table_definition = {},
+                   const std::vector<std::string> &exclude_columns = {});
   static void Show(dingodb::pb::debug::DumpRegionResponse &response);
 };
 
