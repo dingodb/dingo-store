@@ -605,11 +605,11 @@ butil::Status RaftStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(
-    std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations, const std::string& primary_lock,
-    int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
-    const std::vector<int64_t>& pessimistic_checks, const std::map<int64_t, int64_t>& for_update_ts_checks,
-    const std::map<int64_t, std::string>& lock_extra_datas) {
-  return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, raft_engine_, ctx, mutations, primary_lock, start_ts,
+    std::shared_ptr<Context> ctx, store::RegionPtr region, const std::vector<pb::store::Mutation>& mutations,
+    const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
+    int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
+    const std::map<int64_t, int64_t>& for_update_ts_checks, const std::map<int64_t, std::string>& lock_extra_datas) {
+  return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, raft_engine_, ctx, region, mutations, primary_lock, start_ts,
                                    lock_ttl, txn_size, try_one_pc, max_commit_ts, pessimistic_checks,
                                    for_update_ts_checks, lock_extra_datas);
 }

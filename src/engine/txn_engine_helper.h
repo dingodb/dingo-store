@@ -170,9 +170,10 @@ class TxnEngineHelper {
                                            const std::vector<std::string> &keys);
 
   static butil::Status Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
-                                const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
-                                bool try_one_pc, int64_t max_commit_ts, const std::vector<int64_t> &pessimistic_checks,
+                                std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock,
+                                int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
+                                int64_t max_commit_ts, const std::vector<int64_t> &pessimistic_checks,
                                 const std::map<int64_t, int64_t> &for_update_ts_checks,
                                 const std::map<int64_t, std::string> &lock_extra_datas);
 
@@ -227,6 +228,32 @@ class TxnEngineHelper {
 
   static void RegularUpdateSafePointTsHandler(void *arg);
   static void RegularDoGcHandler(void *arg);
+
+  static void GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t start_ts, int64_t for_update_ts,
+                                    int64_t lock_min_commit_ts, int64_t max_commit_ts, int64_t &final_min_commit_ts);
+
+  static butil::Status GenPrewriteDataAndLock(
+      int64_t region_id, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
+      const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
+      int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t max_commit_ts,
+      bool need_check_pessimistic_lock, bool &try_one_pc, std::vector<pb::common::KeyValue> &kv_puts_data,
+      std::vector<pb::common::KeyValue> &kv_puts_lock,
+      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+      int64_t &final_min_commit_ts);
+
+  static void FallbackTo1PCLocks(
+      std::vector<pb::common::KeyValue> &kv_puts_lock,
+      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc);
+
+  static butil::Status OnePCommit(
+      std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+      int64_t final_commit_ts,
+      std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+      std::vector<pb::common::KeyValue> &kv_puts_data);
+  static butil::Status DoPreWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, int64_t region_id,
+                                  int64_t start_ts, int64_t mutation_size,
+                                  std::vector<pb::common::KeyValue> &kv_puts_data,
+                                  std::vector<pb::common::KeyValue> &kv_puts_lock);
 };
 
 }  // namespace dingodb

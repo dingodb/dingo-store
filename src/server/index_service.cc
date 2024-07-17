@@ -1710,9 +1710,9 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
     pessimistic_checks.push_back(pessimistic_check);
   }
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnPrewrite(ctx, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                                request->txn_size(), request->try_one_pc(), request->max_commit_ts(),
-                                pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
+                                request->lock_ttl(), request->txn_size(), request->try_one_pc(),
+                                request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

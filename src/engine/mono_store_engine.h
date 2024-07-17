@@ -34,8 +34,8 @@ using MonoStoreEnginePtr = std::shared_ptr<MonoStoreEngine>;
 class MonoStoreEngine : public Engine {
  public:
   MonoStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine, EventListenerCollectionPtr listeners,
-                  mvcc::TsProviderPtr ts_provider, std::shared_ptr<StoreMetaManager> store_meta_manager, 
-                                std::shared_ptr<StoreMetricsManager> store_metrics_manager);
+                  mvcc::TsProviderPtr ts_provider, std::shared_ptr<StoreMetaManager> store_meta_manager,
+                  std::shared_ptr<StoreMetricsManager> store_metrics_manager);
   ~MonoStoreEngine() override = default;
 
   MonoStoreEngine(const MonoStoreEngine& rhs) = delete;
@@ -47,9 +47,10 @@ class MonoStoreEngine : public Engine {
 
   static MonoStoreEnginePtr New(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
                                 EventListenerCollectionPtr listeners, mvcc::TsProviderPtr ts_provider,
-                                std::shared_ptr<StoreMetaManager> store_meta_manager, 
+                                std::shared_ptr<StoreMetaManager> store_meta_manager,
                                 std::shared_ptr<StoreMetricsManager> store_metrics_manager) {
-    return std::make_shared<MonoStoreEngine>(rocks_raw_engine, bdb_raw_engine, listeners, ts_provider, store_meta_manager, store_metrics_manager);
+    return std::make_shared<MonoStoreEngine>(rocks_raw_engine, bdb_raw_engine, listeners, ts_provider,
+                                             store_meta_manager, store_metrics_manager);
   }
 
   bool Init(std::shared_ptr<Config> config) override;
@@ -67,7 +68,6 @@ class MonoStoreEngine : public Engine {
   butil::Status AsyncWrite(std::shared_ptr<Context> ctx, std::shared_ptr<WriteData> write_data,
                            WriteCbFunc write_cb) override;
   int DispatchEvent(dingodb::EventType, std::shared_ptr<dingodb::Event> event);
-
 
   std::shared_ptr<StoreMetaManager> GetStoreMetaManager();
   std::shared_ptr<StoreMetricsManager> GetStoreMetricsManager();
@@ -189,9 +189,10 @@ class MonoStoreEngine : public Engine {
                                      std::vector<pb::common::KeyValue>& kvs) override;
     butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
                                          const std::vector<std::string>& keys) override;
-    butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
-                              const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size,
-                              bool try_one_pc, int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
+    butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                              const std::vector<pb::store::Mutation>& mutations, const std::string& primary_lock,
+                              int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
+                              int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
                               const std::map<int64_t, int64_t>& for_update_ts_checks,
                               const std::map<int64_t, std::string>& lock_extra_datas) override;
     butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,

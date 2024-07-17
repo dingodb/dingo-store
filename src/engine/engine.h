@@ -252,7 +252,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                              std::vector<pb::common::KeyValue>& kvs) = 0;
     virtual butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
                                                  const std::vector<std::string>& keys) = 0;
-    virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation>& mutations,
+    virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                      const std::vector<pb::store::Mutation>& mutations,
                                       const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                       int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
                                       const std::vector<int64_t>& pessimistic_checks,
