@@ -1862,8 +1862,443 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
 bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
 
+void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t start_ts, int64_t for_update_ts,
+                                          int64_t lock_min_commit_ts, int64_t max_commit_ts,
+                                          int64_t &final_min_commit_ts) {
+  int64_t min_commit_ts = std::max(start_ts, for_update_ts) + 1;
+  final_min_commit_ts = std::max(min_commit_ts, lock_min_commit_ts);
+  if (max_commit_ts != 0 && final_min_commit_ts > max_commit_ts) {
+    DINGO_LOG(WARNING) << fmt::format(
+                              "[txn][region({})] Prewrite 1pc commit_ts({}) is too large, fallback to normal 2PC",
+                              region_id, final_min_commit_ts)
+                       << ", key: " << key << ", start_ts: " << start_ts << " , for_update_ts: " << for_update_ts
+                       << " , lock_min_commit_ts: " << lock_min_commit_ts << " , max_commit_ts: " << max_commit_ts;
+    final_min_commit_ts = 0;
+  }
+}
+
+butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
+    int64_t region_id, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
+    const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
+    int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t max_commit_ts,
+    bool need_check_pessimistic_lock, bool &try_one_pc, std::vector<pb::common::KeyValue> &kv_puts_data,
+    std::vector<pb::common::KeyValue> &kv_puts_lock,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+    int64_t &final_min_commit_ts) {
+  // do Put/Delete/PutIfAbsent
+  if (mutation.op() == pb::store::Op::Put) {
+    // put data
+    if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
+      pb::common::KeyValue kv;
+      std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
+      kv.set_key(data_key);
+      kv.set_value(mutation.value());
+
+      kv_puts_data.push_back(kv);
+    }
+
+    // put lock
+    {
+      pb::store::LockInfo lock_info = prev_lock_info;
+      lock_info.set_primary_lock(primary_lock);
+      lock_info.set_lock_ts(start_ts);
+      lock_info.set_key(mutation.key());
+      lock_info.set_lock_ttl(lock_ttl);
+      lock_info.set_txn_size(txn_size);
+      lock_info.set_lock_type(pb::store::Op::Put);
+      if (BAIDU_UNLIKELY(mutation.value().empty())) {
+        return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
+      }
+      if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
+        lock_info.set_short_value(mutation.value());
+      }
+      if (!lock_extra_data.empty()) {
+        lock_info.set_extra_data(lock_extra_data);
+      }
+
+      if (try_one_pc) {
+        GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
+                            max_commit_ts, final_min_commit_ts);
+        if (final_min_commit_ts == 0) {
+          // fallback_to_2PC
+          try_one_pc = false;
+        }
+      }
+
+      if (try_one_pc) {
+        locks_for_1pc.push_back(
+            std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+      } else {
+        pb::common::KeyValue kv;
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+        kv.set_value(lock_info.SerializeAsString());
+        kv_puts_lock.push_back(kv);
+      }
+    }
+  } else if (mutation.op() == pb::store::PutIfAbsent) {
+    if (write_info.op() == pb::store::Op::Put) {
+      // this mutation is success with key_exist, go to next mutation
+      // put lock with op=PutIfAbsent
+      // CAUTION: we do nothing in commit if lock.lock_type is PutIfAbsent, this is just a placeholder of a lock
+      // with nothing to do
+      {
+        pb::store::LockInfo lock_info = prev_lock_info;
+        lock_info.set_primary_lock(primary_lock);
+        lock_info.set_lock_ts(start_ts);
+        lock_info.set_key(mutation.key());
+        lock_info.set_lock_ttl(lock_ttl);
+        lock_info.set_txn_size(txn_size);
+        lock_info.set_lock_type(pb::store::Op::PutIfAbsent);
+        if (!lock_extra_data.empty()) {
+          lock_info.set_extra_data(lock_extra_data);
+        }
+
+        if (try_one_pc) {
+          GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
+                              max_commit_ts, final_min_commit_ts);
+          if (final_min_commit_ts == 0) {
+            // fallback_to_2PC
+            try_one_pc = false;
+          }
+        }
+
+        if (try_one_pc) {
+          locks_for_1pc.push_back(
+              std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+        } else {
+          pb::common::KeyValue kv;
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+          kv.set_value(lock_info.SerializeAsString());
+          kv_puts_lock.push_back(kv);
+        }
+      }
+    } else {
+      // put data
+      if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
+        pb::common::KeyValue kv;
+        std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
+        kv.set_key(data_key);
+        kv.set_value(mutation.value());
+
+        kv_puts_data.push_back(kv);
+      }
+
+      // put lock
+      {
+        pb::store::LockInfo lock_info = prev_lock_info;
+        lock_info.set_primary_lock(primary_lock);
+        lock_info.set_lock_ts(start_ts);
+        lock_info.set_key(mutation.key());
+        lock_info.set_lock_ttl(lock_ttl);
+        lock_info.set_txn_size(txn_size);
+        lock_info.set_lock_type(pb::store::Op::Put);
+        if (BAIDU_UNLIKELY(mutation.value().empty())) {
+          return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
+        }
+        if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
+          lock_info.set_short_value(mutation.value());
+        }
+        if (!lock_extra_data.empty()) {
+          lock_info.set_extra_data(lock_extra_data);
+        }
+        if (try_one_pc) {
+          GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
+                              max_commit_ts, final_min_commit_ts);
+          if (final_min_commit_ts == 0) {
+            // fallback_to_2PC
+            try_one_pc = false;
+          }
+        }
+        if (try_one_pc) {
+          locks_for_1pc.push_back(
+              std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+        } else {
+          pb::common::KeyValue kv;
+          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+          kv.set_value(lock_info.SerializeAsString());
+          kv_puts_lock.push_back(kv);
+        }
+      }
+    }
+  } else if (mutation.op() == pb::store::CheckNotExists) {
+    // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
+    // exist. So it is more likely to be a get op in prewrite.
+    // do nothing;
+    if (try_one_pc) {
+      final_min_commit_ts = start_ts + 1;
+    }
+  } else if (mutation.op() == pb::store::Op::Delete) {
+    // put data
+    // for delete, we don't write anything to kTxnDataCf.
+    // when doing commit, we read op from lock_info, and write op to kTxnWriteCf with write_info.
+
+    // put lock
+    {
+      pb::store::LockInfo lock_info = prev_lock_info;
+      lock_info.set_primary_lock(primary_lock);
+      lock_info.set_lock_ts(start_ts);
+      lock_info.set_key(mutation.key());
+      lock_info.set_lock_ttl(lock_ttl);
+      lock_info.set_txn_size(txn_size);
+      lock_info.set_lock_type(pb::store::Op::Delete);
+      if (!lock_extra_data.empty()) {
+        lock_info.set_extra_data(lock_extra_data);
+      }
+      if (try_one_pc) {
+        GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
+                            max_commit_ts, final_min_commit_ts);
+        if (final_min_commit_ts == 0) {
+          // fallback_to_2PC
+          try_one_pc = false;
+        }
+      }
+
+      if (try_one_pc) {
+        locks_for_1pc.push_back(
+            std::make_tuple(mutation.key(), mutation.value(), lock_info, need_check_pessimistic_lock));
+      } else {
+        pb::common::KeyValue kv;
+        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
+        kv.set_value(lock_info.SerializeAsString());
+        kv_puts_lock.push_back(kv);
+      }
+    }
+  } else {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite,", region_id)
+                     << ", invalid op, key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
+                     << ", op: " << mutation.op();
+    return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
+  }
+  return butil::Status::OK();
+}
+
+void TxnEngineHelper::FallbackTo1PCLocks(
+    std::vector<pb::common::KeyValue> &kv_puts_lock,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc) {
+  for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
+    // pessimistic and optimistic lock all need to record
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+    kv.set_value(lock_info.SerializeAsString());
+    kv_puts_lock.push_back(kv);
+  }
+}
+
+// Commit and delete all 1pc locks in txn.
+butil::Status TxnEngineHelper::OnePCommit(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+    int64_t final_commit_ts,
+    std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
+    std::vector<pb::common::KeyValue> &kv_puts_data) {
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+  // for vector index region, commit to vector index
+  auto *vector_add = cf_put_delete->mutable_vector_add();
+  auto *vector_del = cf_put_delete->mutable_vector_del();
+
+  // for document index region, commit to document index
+  auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
+
+  for (auto const &[key, data_value, lock_info, is_pessimistic_lock] : locks_for_1pc) {
+    if (is_pessimistic_lock) {
+      kv_deletes_lock.push_back(mvcc::Codec::EncodeKey(key, Constant::kLockVer));
+    }
+    if (lock_info.lock_type() == pb::store::Op::PutIfAbsent) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
+                         final_commit_ts)
+          << ", lock_type is PutIfAbsent, skip it, lock_info: " << lock_info.ShortDebugString();
+      continue;
+    }
+
+    pb::common::KeyValue kv;
+    std::string write_key = mvcc::Codec::EncodeKey(key, final_commit_ts);
+    kv.set_key(write_key);
+
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(lock_info.lock_type());
+    if (!lock_info.short_value().empty()) {
+      write_info.set_short_value(data_value);
+    }
+    kv.set_value(write_info.SerializeAsString());
+
+    kv_puts_write.push_back(kv);
+
+    if (region->Type() == pb::common::INDEX_REGION &&
+        region->Definition().index_parameter().has_vector_index_parameter()) {
+      if (lock_info.lock_type() == pb::store::Op::Put) {
+        pb::common::VectorWithId vector_with_id;
+        auto ret = vector_with_id.ParseFromString(data_value);
+        if (!ret) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", parse vector_with_id failed, key: " << Helper::StringToHex(key)
+                           << ", data_value: " << Helper::StringToHex(data_value)
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
+        }
+
+        *(vector_add->add_vectors()) = vector_with_id;
+      } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+        auto vector_id = VectorCodec::UnPackageVectorId(lock_info.key());
+        if (vector_id == 0) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", decode vector_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+
+        vector_del->add_ids(vector_id);
+      } else {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                        start_ts, final_commit_ts)
+                         << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                         << ", lock_info: " << lock_info.ShortDebugString();
+      }
+    }
+
+    if (region->Type() == pb::common::DOCUMENT_REGION &&
+        region->Definition().index_parameter().has_document_index_parameter()) {
+      if (lock_info.lock_type() == pb::store::Op::Put) {
+        pb::common::DocumentWithId document_with_id;
+        auto ret = document_with_id.ParseFromString(data_value);
+        if (!ret) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", parse document_with_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", data_value: " << Helper::StringToHex(data_value)
+                           << ", lock_info: " << lock_info.ShortDebugString();
+          return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+        }
+
+        *(document_add->add_documents()) = document_with_id;
+      } else if (lock_info.lock_type() == pb::store::Op::Delete) {
+        auto document_id = DocumentCodec::UnPackageDocumentId(lock_info.key());
+        if (document_id == 0) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                          start_ts, final_commit_ts)
+                           << ", decode document_id failed, key: " << Helper::StringToHex(lock_info.key())
+                           << ", lock_info: " << lock_info.ShortDebugString();
+        }
+
+        document_del->add_ids(document_id);
+      } else {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(),
+                                        start_ts, final_commit_ts)
+                         << ", invalid lock_type, key: " << Helper::StringToHex(lock_info.key())
+                         << ", lock_info: " << lock_info.ShortDebugString();
+      }
+    }
+  }
+  if (kv_puts_data.empty() && kv_puts_write.empty() && kv_deletes_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] OnePCCommit, start_ts: {} commit_ts: {}", region->Id(), start_ts,
+                       final_commit_ts)
+        << ", kv_puts_data is empty and kv_puts_write is empty and kv_deletes_lock is empty";
+    return butil::Status::OK();
+  }
+
+  if (!kv_puts_data.empty()) {
+    auto *data_puts = cf_put_delete->add_puts_with_cf();
+    data_puts->set_cf_name(Constant::kTxnDataCF);
+    for (auto &kv_put : kv_puts_data) {
+      auto *kv = data_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_puts_write.empty()) {
+    auto *write_puts = cf_put_delete->add_puts_with_cf();
+    write_puts->set_cf_name(Constant::kTxnWriteCF);
+    for (auto &kv_put : kv_puts_write) {
+      auto *kv = write_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_deletes_lock.empty()) {
+    auto *lock_dels = cf_put_delete->add_deletes_with_cf();
+    lock_dels->set_cf_name(Constant::kTxnLockCF);
+    for (auto &kv_del : kv_deletes_lock) {
+      lock_dels->add_keys(kv_del);
+    }
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] OnePCCommit", region->Id()) << ", kv_puts_data_size: " << kv_puts_data.size()
+      << ", kv_puts_write_size: " << kv_puts_write.size() << ", kv_deletes_lock_size: " << kv_deletes_lock.size()
+      << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+  return ret;
+}
+
+butil::Status TxnEngineHelper::DoPreWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                          int64_t region_id, int64_t start_ts, int64_t mutation_size,
+                                          std::vector<pb::common::KeyValue> &kv_puts_data,
+                                          std::vector<pb::common::KeyValue> &kv_puts_lock) {
+  if (kv_puts_data.empty() && kv_puts_lock.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,", region_id)
+        << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
+        << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
+        << ", mutations_size: " << mutation_size;
+    return butil::Status::OK();
+  }
+
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  if (!kv_puts_data.empty()) {
+    auto *data_puts = cf_put_delete->add_puts_with_cf();
+    data_puts->set_cf_name(Constant::kTxnDataCF);
+    for (auto &kv_put : kv_puts_data) {
+      auto *kv = data_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  if (!kv_puts_lock.empty()) {
+    auto *lock_puts = cf_put_delete->add_puts_with_cf();
+    lock_puts->set_cf_name(Constant::kTxnLockCF);
+    for (auto &kv_put : kv_puts_lock) {
+      auto *kv = lock_puts->add_kvs();
+      kv->set_key(kv_put.key());
+      kv->set_value(kv_put.value());
+    }
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] Prewrite", region_id) << ", kv_puts_data_size: " << kv_puts_data.size()
+      << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutation_size;
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region_id)
+                     << ", write raft engine failed, status: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
 butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                        std::shared_ptr<Context> ctx, const std::vector<pb::store::Mutation> &mutations,
+                                        std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                        const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
                                         int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
                                         const std::vector<int64_t> &pessimistic_checks,
@@ -1905,17 +2340,15 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     }
   }
 
-  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                     << ", region is not found, region_id: " << ctx->RegionId();
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-  }
-
   std::vector<pb::common::KeyValue> kv_puts_data;
   std::vector<pb::common::KeyValue> kv_puts_lock;
   std::vector<std::string> kv_dels_lock;  // for PutIfAbsent on pessimistic lock, if key is exists, no put will be
                                           // done, need to delete the lock in prewrite
+  int64_t final_min_commit_ts = 0;
+  // When 1PC is enabled, locks will be collected here and put into
+  // `writes`, so it can be further processed. The elements are map representing
+  // ((key, value, lock_info, is_pessimistic_lock))
+  std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> locks_for_1pc;
 
   auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
   if (response == nullptr) {
@@ -2156,147 +2589,12 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       return butil::Status::OK();
     }
 
-    // 3.do Put/Delete/PutIfAbsent
-    if (mutation.op() == pb::store::Op::Put) {
-      if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] Prewrite,", region->Id())
-            << ", key: " << Helper::StringToHex(mutation.key())
-            << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-            << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
-        continue;
-      }
-
-      // put data
-      if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
-        pb::common::KeyValue kv;
-        std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
-        kv.set_key(data_key);
-        kv.set_value(mutation.value());
-
-        kv_puts_data.push_back(kv);
-      }
-
-      // put lock
-      {
-        pb::common::KeyValue kv;
-        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-
-        pb::store::LockInfo lock_info = prev_lock_info;
-        lock_info.set_primary_lock(primary_lock);
-        lock_info.set_lock_ts(start_ts);
-        lock_info.set_key(mutation.key());
-        lock_info.set_lock_ttl(lock_ttl);
-        lock_info.set_txn_size(txn_size);
-        lock_info.set_lock_type(pb::store::Op::Put);
-        if (BAIDU_UNLIKELY(mutation.value().empty())) {
-          error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
-          error->set_errmsg("value is empty");
-          return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
-        }
-        if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
-          lock_info.set_short_value(mutation.value());
-        }
-        if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
-          lock_info.set_extra_data(lock_extra_datas.at(i));
-        }
-        kv.set_value(lock_info.SerializeAsString());
-
-        kv_puts_lock.push_back(kv);
-      }
-    } else if (mutation.op() == pb::store::Op::PutIfAbsent) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
-          << " is PutIfAbsent, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-          << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
-
+    // 3.check special mutation op.
+    if (mutation.op() == pb::store::Op::PutIfAbsent) {
       // check if key is exist
       if (write_info.op() == pb::store::Op::Put) {
         response->add_keys_already_exist()->set_key(mutation.key());
-
-        if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Prewrite,", region->Id())
-              << ", key: " << Helper::StringToHex(mutation.key())
-              << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-              << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
-          continue;
-        }
-
-        // this mutation is success with key_exist, go to next mutation
-        // put lock with op=PutIfAbsent
-        // CAUTION: we do nothing in commit if lock.lock_type is PutIfAbsent, this is just a placeholder of a lock
-        // with nothing to do
-        {
-          pb::common::KeyValue kv;
-          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-
-          pb::store::LockInfo lock_info = prev_lock_info;
-          lock_info.set_primary_lock(primary_lock);
-          lock_info.set_lock_ts(start_ts);
-          lock_info.set_key(mutation.key());
-          lock_info.set_lock_ttl(lock_ttl);
-          lock_info.set_txn_size(txn_size);
-          lock_info.set_lock_type(pb::store::Op::PutIfAbsent);
-          if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
-            lock_info.set_extra_data(lock_extra_datas.at(i));
-          }
-          kv.set_value(lock_info.SerializeAsString());
-
-          kv_puts_lock.push_back(kv);
-        }
-
-        continue;
-
-      } else {
-        if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << fmt::format("[txn][region({})] Prewrite,", region->Id())
-              << ", key: " << Helper::StringToHex(mutation.key())
-              << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-              << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
-          continue;
-        }
-
-        // put data
-        if (mutation.value().length() > FLAGS_max_short_value_in_write_cf) {
-          pb::common::KeyValue kv;
-          std::string data_key = mvcc::Codec::EncodeKey(mutation.key(), start_ts);
-          kv.set_key(data_key);
-          kv.set_value(mutation.value());
-
-          kv_puts_data.push_back(kv);
-        }
-
-        // put lock
-        {
-          pb::common::KeyValue kv;
-          kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-
-          pb::store::LockInfo lock_info = prev_lock_info;
-          lock_info.set_primary_lock(primary_lock);
-          lock_info.set_lock_ts(start_ts);
-          lock_info.set_key(mutation.key());
-          lock_info.set_lock_ttl(lock_ttl);
-          lock_info.set_txn_size(txn_size);
-          lock_info.set_lock_type(pb::store::Op::Put);
-          if (BAIDU_UNLIKELY(mutation.value().empty())) {
-            error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
-            error->set_errmsg("value is empty");
-            return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
-          }
-          if (mutation.value().length() <= FLAGS_max_short_value_in_write_cf) {
-            lock_info.set_short_value(mutation.value());
-          }
-          if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
-            lock_info.set_extra_data(lock_extra_datas.at(i));
-          }
-          kv.set_value(lock_info.SerializeAsString());
-
-          kv_puts_lock.push_back(kv);
-        }
       }
-
     } else if (mutation.op() == pb::store::Op::CheckNotExists) {
       // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key
       // is exist. So it is more likely to be a get op in prewrite.
@@ -2305,7 +2603,6 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", key: " << Helper::StringToHex(mutation.key())
           << " is CheckNotExists, start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
           << ", mutations_size: " << mutations.size() << ", prev_write_info is: " << write_info.ShortDebugString();
-
       // CheckNotExists should not appear in a pessimistic prewrite, so check this here
       if (need_check_pessimistic_lock) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
@@ -2323,97 +2620,56 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       if (write_info.op() == pb::store::Op::Put) {
         response->add_keys_already_exist()->set_key(mutation.key());
       }
+    }
 
-      // CheckNotExists only do check and return keys_already_exists, nothing to write.
+    if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+          << fmt::format("[txn][region({})] Prewrite,", region->Id())
+          << ", key: " << Helper::StringToHex(mutation.key())
+          << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
+          << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
+      // if enable 1pc need to fallback to 2pc
+      try_one_pc = false;
       continue;
+    }
 
-    } else if (mutation.op() == pb::store::Op::Delete) {
-      if (BAIDU_UNLIKELY(is_repeated_prewrite)) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-            << fmt::format("[txn][region({})] Prewrite,", region->Id())
-            << ", key: " << Helper::StringToHex(mutation.key())
-            << " is locked by same start_ts, this is a repeated prewrite, skip it, lock_info: "
-            << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
-        continue;
+    std::string lock_extra_data;
+    if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
+      lock_extra_data = lock_extra_datas.at(i);
+    }
+    int64_t min_commit_ts;
+    // 3.1 write data and lock
+    auto ret3 = GenPrewriteDataAndLock(region->Id(), mutation, prev_lock_info, write_info, primary_lock, start_ts,
+                                       for_update_ts_checks.at(i), lock_ttl, txn_size, lock_extra_data, max_commit_ts,
+                                       need_check_pessimistic_lock, try_one_pc, kv_puts_data, kv_puts_lock,
+                                       locks_for_1pc, min_commit_ts);
+    if (!ret3.ok()) {
+      if (ret3.error_code() == pb::error::Errno::EVALUE_EMPTY) {
+        error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
+        error->set_errmsg("value is empty");
+        return ret3;
       }
-
-      // put data
-      // for delete, we don't write anything to kTxnDataCf.
-      // when doing commit, we read op from lock_info, and write op to kTxnWriteCf with write_info.
-
-      // put lock
-      {
-        pb::common::KeyValue kv;
-        kv.set_key(mvcc::Codec::EncodeKey(mutation.key(), Constant::kLockVer));
-
-        pb::store::LockInfo lock_info = prev_lock_info;
-        lock_info.set_primary_lock(primary_lock);
-        lock_info.set_lock_ts(start_ts);
-        lock_info.set_key(mutation.key());
-        lock_info.set_lock_ttl(lock_ttl);
-        lock_info.set_txn_size(txn_size);
-        lock_info.set_lock_type(pb::store::Op::Delete);
-        if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
-          lock_info.set_extra_data(lock_extra_datas.at(i));
-        }
-        kv.set_value(lock_info.SerializeAsString());
-
-        kv_puts_lock.push_back(kv);
+      return ret3;
+    }
+    if (try_one_pc) {
+      if (final_min_commit_ts < min_commit_ts) {
+        final_min_commit_ts = min_commit_ts;
       }
     } else {
-      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite,", region->Id())
-                       << ", invalid op, key: " << Helper::StringToHex(mutation.key()) << ", start_ts: " << start_ts
-                       << ", op: " << mutation.op();
-      return butil::Status(pb::error::Errno::EINTERNAL, "invalid op");
+      final_min_commit_ts = 0;
     }
   }
 
-  if (kv_puts_data.empty() && kv_puts_lock.empty()) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << fmt::format("[txn][region({})] Prewrite return empty kv_puts_data and kv_puts_lock,", region->Id())
-        << ", kv_puts_data_size: " << kv_puts_data.size() << ", kv_puts_lock_size: " << kv_puts_lock.size()
-        << ", start_ts: " << start_ts << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString()
-        << ", mutations_size: " << mutations.size();
-    return butil::Status::OK();
-  }
-
-  // after all mutations is processed, write into raft engine
-  pb::raft::TxnRaftRequest txn_raft_request;
-  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
-
-  if (!kv_puts_data.empty()) {
-    auto *data_puts = cf_put_delete->add_puts_with_cf();
-    data_puts->set_cf_name(Constant::kTxnDataCF);
-    for (auto &kv_put : kv_puts_data) {
-      auto *kv = data_puts->add_kvs();
-      kv->set_key(kv_put.key());
-      kv->set_value(kv_put.value());
+  if (try_one_pc) {
+    auto ret4 = OnePCommit(raft_engine, ctx, region, start_ts, final_min_commit_ts, locks_for_1pc, kv_puts_data);
+    if (!ret4.ok()) {
+      return ret4;
     }
+    response->set_one_pc_commit_ts(final_min_commit_ts);
+    return ret4;
   }
-
-  if (!kv_puts_lock.empty()) {
-    auto *lock_puts = cf_put_delete->add_puts_with_cf();
-    lock_puts->set_cf_name(Constant::kTxnLockCF);
-    for (auto &kv_put : kv_puts_lock) {
-      auto *kv = lock_puts->add_kvs();
-      kv->set_key(kv_put.key());
-      kv->set_value(kv_put.value());
-    }
-  }
-
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-      << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", kv_puts_data_size: " << kv_puts_data.size()
-      << ", kv_puts_lock_size: " << kv_puts_lock.size() << ", start_ts: " << start_ts
-      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-
-  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
-  if (ret.error_code() == EPERM) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite", region->Id())
-                     << ", write raft engine failed, status: " << ret.error_str();
-    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-  }
-
-  return ret;
+  FallbackTo1PCLocks(kv_puts_lock, locks_for_1pc);
+  return DoPreWrite(raft_engine, ctx, region->Id(), start_ts, mutations.size(), kv_puts_data, kv_puts_lock);
 }
 
 bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
