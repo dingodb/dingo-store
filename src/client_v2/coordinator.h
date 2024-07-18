@@ -205,6 +205,7 @@ struct ExecutorHeartbeatOption {
   int port;
   std::string user;
   std::string id;
+  std::string cluster_name;
 };
 void SetUpExecutorHeartbeat(CLI::App &app);
 void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt);
@@ -219,6 +220,7 @@ void RunGetStoreMap(GetStoreMapOption const &opt);
 
 struct GetExecutorMapOption {
   std::string coor_url;
+  std::string cluster_name;
 };
 void SetUpGetExecutorMap(CLI::App &app);
 void RunGetExecutorMap(GetExecutorMapOption const &opt);
