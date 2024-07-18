@@ -18,6 +18,7 @@
 #include <serial/schema/base_schema.h>
 
 #include <any>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -39,6 +40,9 @@ namespace dingodb {
 
 #undef ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
 
+class CoprocessorV2;
+using CoprocessorV2Ptr = std::shared_ptr<CoprocessorV2>;
+
 class CoprocessorV2 : public RawCoprocessor {
  public:
   CoprocessorV2(char prefix);
@@ -49,15 +53,17 @@ class CoprocessorV2 : public RawCoprocessor {
   CoprocessorV2(CoprocessorV2&& rhs) = delete;
   CoprocessorV2& operator=(CoprocessorV2&& rhs) = delete;
 
+  static CoprocessorV2Ptr New(char prefix) { return std::make_shared<CoprocessorV2>(prefix); }
+
   // coprocessor = CoprocessorPbWrapper
   butil::Status Open(const std::any& coprocessor) override;
 
   butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                         std::vector<pb::common::KeyValue>* kvs, bool& has_more) override;
 
-  butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
-                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,  // NOLINT
-                        bool& has_more, std::string& end_key) override;                                     // NOLINT
+  butil::Status Execute(TxnIteratorPtr iter, bool key_only, bool is_reverse, StopChecker& stop_checker,
+                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                        bool& has_more) override;
 
   butil::Status Filter(const std::string& key, const std::string& value, bool& is_reserved) override;  // NOLINT
 
@@ -73,8 +79,7 @@ class CoprocessorV2 : public RawCoprocessor {
                               std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr);  // NOLINT
   butil::Status DoRelExprCoreWrapper(const std::string& key, const std::string& value,
                                      std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr);  // NOLINT
-  butil::Status GetKvFromExprEndOfFinish(bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
-                                         std::vector<pb::common::KeyValue>* kvs);
+  butil::Status GetKvFromExprEndOfFinish(std::vector<pb::common::KeyValue>* kvs);
   butil::Status GetKvFromExpr(const std::vector<std::any>& record, bool* has_result_kv,
                               pb::common::KeyValue* result_kv);
 

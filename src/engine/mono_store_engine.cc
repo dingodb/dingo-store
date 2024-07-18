@@ -556,17 +556,17 @@ butil::Status MonoStoreEngine::TxnReader::TxnScan(
     bool is_reverse, const std::set<int64_t>& resolved_locks, bool disable_coprocessor,
     const pb::common::CoprocessorV2& coprocessor, pb::store::TxnResultInfo& txn_result_info,
     std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_scan_key) {
-  return TxnEngineHelper::Scan(txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, range, limit, key_only,
-                               is_reverse, resolved_locks, disable_coprocessor, coprocessor, txn_result_info, kvs,
-                               has_more, end_scan_key);
+  return TxnEngineHelper::Scan(ctx->Stream(), txn_reader_raw_engine_, ctx->IsolationLevel(), start_ts, range, limit,
+                               key_only, is_reverse, resolved_locks, disable_coprocessor, coprocessor, txn_result_info,
+                               kvs, has_more, end_scan_key);
 }
 
-butil::Status MonoStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> /*ctx*/, int64_t min_lock_ts,
+butil::Status MonoStoreEngine::TxnReader::TxnScanLock(std::shared_ptr<Context> ctx, int64_t min_lock_ts,
                                                       int64_t max_lock_ts, const pb::common::Range& range,
                                                       int64_t limit, std::vector<pb::store::LockInfo>& lock_infos,
                                                       bool& has_more, std::string& end_scan_key) {
-  return TxnEngineHelper::ScanLockInfo(txn_reader_raw_engine_, min_lock_ts, max_lock_ts, range, limit, lock_infos,
-                                       has_more, end_scan_key);
+  return TxnEngineHelper::ScanLockInfo(ctx->Stream(), txn_reader_raw_engine_, min_lock_ts, max_lock_ts, range, limit,
+                                       lock_infos, has_more, end_scan_key);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Context> ctx,

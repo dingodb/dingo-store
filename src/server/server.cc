@@ -41,6 +41,7 @@
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
 #endif
+#include "common/stream.h"
 #include "coordinator/balance_leader.h"
 #include "engine/mono_store_engine.h"
 #include "engine/txn_engine_helper.h"
@@ -104,6 +105,8 @@ DEFINE_bool(enable_balance_leader, true, "enable balance leader");
 
 DEFINE_bool(enable_timing_get_tso, false, "enable get tso");
 DEFINE_int32(get_tso_interval_ms, 1000, "get tso interval");
+
+DEFINE_int32(recycle_stream_interval_s, 10, "recycle stream interval seconds");
 
 extern "C" {
 extern void omp_set_num_threads(int) noexcept;  // NOLINT
@@ -757,6 +760,19 @@ bool Server::InitCrontabManager() {
     });
   }
 
+  FLAGS_recycle_stream_interval_s =
+      GetInterval(config, "server.recycle_stream_interval_s", FLAGS_recycle_stream_interval_s);
+  crontab_configs_.push_back({
+      "STREAM",
+      {pb::common::STORE, pb::common::INDEX, pb::common::DOCUMENT},
+      FLAGS_recycle_stream_interval_s * 1000,
+      true,
+      [](void*) {
+        auto stream_manager = Server::GetInstance().GetStreamManager();
+        stream_manager->RecycleExpireStream();
+      },
+  });
+
   crontab_manager_->AddCrontab(crontab_configs_);
 
   return true;
@@ -814,6 +830,11 @@ bool Server::InitPreSplitChecker() {
 bool Server::InitTsProvider() {
   ts_provider_ = mvcc::TsProvider::New(GetCoordinatorInteraction());
   return ts_provider_->Init();
+}
+
+bool Server::InitStreamManager() {
+  stream_manager_ = StreamManager::New();
+  return true;
 }
 
 bool Server::Recover() {
@@ -1245,6 +1266,12 @@ mvcc::TsProviderPtr Server::GetTsProvider() {
   CHECK(ts_provider_ != nullptr) << "ts_provider is nullptr.";
 
   return ts_provider_;
+}
+
+StreamManagerPtr Server::GetStreamManager() {
+  CHECK(stream_manager_ != nullptr) << "stream_manager is nullptr.";
+
+  return stream_manager_;
 }
 
 std::shared_ptr<pb::common::RegionDefinition> Server::CreateCoordinatorRegion(const std::shared_ptr<Config>& /*config*/,

@@ -37,9 +37,6 @@
 
 namespace dingodb {
 
-DECLARE_int64(max_scan_memory_size);
-DECLARE_int64(max_scan_line_limit);
-
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_running_num("dingo_coprocessor_v2_object_running_num");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_total_num("dingo_coprocessor_v2_object_total_num");
 bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_latency("dingo_coprocessor_v2_latency");
@@ -308,16 +305,16 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
 #endif
   }
 
-  status = GetKvFromExprEndOfFinish(key_only, max_fetch_cnt, max_bytes_rpc, kvs);
+  status = GetKvFromExprEndOfFinish(kvs);
 
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute IteratorPtr Leave");
 
   return status;
 }
 
-butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool /*is_reverse*/,
+butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*is_reverse*/, StopChecker& stop_checker,
                                      pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                                     bool& has_more, std::string& end_key) {
+                                     bool& has_more) {
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
@@ -333,9 +330,7 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool ke
 
   butil::Status status;
 
-  ScanFilter scan_filter =
-      ScanFilter(false, std::min(limit, FLAGS_max_scan_line_limit), std::numeric_limits<int64_t>::max());
-
+  size_t bytes = 0;
   while (iter->Valid(txn_result_info)) {
     pb::common::KeyValue kv;
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
@@ -352,31 +347,25 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool ke
     }
 #endif
     bool has_result_kv = false;
-    pb::common::KeyValue result_key_value;
+    pb::common::KeyValue result_kv;
     DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
-    status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_key_value);
+    status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_kv);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
       return status;
     }
 
-    end_key = iter->Key();
-
     if (has_result_kv) {
       if (key_only) {
-        result_key_value.set_value("");
+        result_kv.set_value("");
       }
 
-      kvs.emplace_back(std::move(result_key_value));
+      bytes += result_kv.ByteSizeLong();
+      kvs.emplace_back(std::move(result_kv));
     }
 
-    if (scan_filter.UptoLimit(kv)) {
+    if (stop_checker(kvs.size(), bytes)) {
       has_more = true;
-      DINGO_LOG(WARNING) << fmt::format(
-          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
-          "cur_bytes_rpc : {}",
-          key_only, std::min(limit, FLAGS_max_scan_line_limit), std::numeric_limits<int64_t>::max(),
-          scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
       {
         auto next_start = lambda_time_now_function();
@@ -405,7 +394,7 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, int64_t limit, bool ke
 #endif
   }
 
-  status = GetKvFromExprEndOfFinish(key_only, limit, FLAGS_max_scan_memory_size, &kvs);
+  status = GetKvFromExprEndOfFinish(&kvs);
 
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute TxnIteratorPtr Leave");
 
@@ -610,9 +599,7 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
   return DoRelExprCore(original_record, result_operand_ptr);
 }
 
-butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(bool /*key_only*/, size_t /*max_fetch_cnt*/,
-                                                      int64_t /*max_bytes_rpc*/,
-                                                      std::vector<pb::common::KeyValue>* kvs) {
+butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::KeyValue>* kvs) {
   butil::Status status;
 
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)

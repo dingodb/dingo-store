@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstddef>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -30,9 +31,11 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/stream.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "document/codec.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
@@ -47,9 +50,6 @@ namespace dingodb {
 DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
 DEFINE_int64(max_batch_get_count, 4096, "max batch get count");
 DEFINE_int64(max_batch_get_memory_size, 60 * 1024 * 1024, "max batch get memory size");
-DEFINE_int64(max_scan_memory_size, 60 * 1024 * 1024, "max scan memory size");
-DEFINE_int64(max_scan_line_limit, 40960, "max scan line limit");
-DEFINE_int64(max_scan_lock_limit, 40960, "Max scan lock limit");
 DEFINE_int64(max_prewrite_count, 4096, "max prewrite count");
 DEFINE_int64(max_commit_count, 4096, "max commit count");
 DEFINE_int64(max_rollback_count, 4096, "max rollback count");
@@ -58,6 +58,9 @@ DEFINE_int64(max_pessimistic_count, 4096, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
 DEFINE_bool(dingo_log_switch_txn_detail, true, "txn detail log");
+
+DECLARE_int64(stream_message_max_bytes);
+DECLARE_int64(stream_message_max_limit_size);
 
 butil::Status TxnReader::Init() {
   if (is_initialized_) {
@@ -947,93 +950,93 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
 
 bvar::LatencyRecorder g_txn_scan_lock_latency("dingo_txn_scan_lock");
 
-butil::Status TxnEngineHelper::ScanLockInfo(RawEnginePtr engine, int64_t min_lock_ts, int64_t max_lock_ts,
-                                            const pb::common::Range &range, int64_t limit,
+class TxnScanLockStreamState;
+using TxnScanLockStreamStatePtr = std::shared_ptr<TxnScanLockStreamState>;
+
+class TxnScanLockStreamState : public StreamState {
+ public:
+  TxnScanLockStreamState(IteratorPtr iter) : iter(iter) {}
+  ~TxnScanLockStreamState() override = default;
+
+  static TxnScanLockStreamStatePtr New(RawEnginePtr engine, const pb::common::Range &range) {
+    IteratorOptions iter_options;
+    iter_options.lower_bound = mvcc::Codec::EncodeKey(range.start_key(), Constant::kLockVer);
+    iter_options.upper_bound = mvcc::Codec::EncodeKey(range.end_key(), Constant::kLockVer);
+
+    auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
+    CHECK(iter != nullptr) << "[txn]GetLockInfo NewIterator failed, range: " << Helper::RangeToString(range);
+    iter->Seek(iter_options.lower_bound);
+    return std::make_shared<TxnScanLockStreamState>(iter);
+  }
+
+  IteratorPtr iter;
+};
+
+butil::Status TxnEngineHelper::ScanLockInfo(StreamPtr stream, RawEnginePtr engine, int64_t min_lock_ts,
+                                            int64_t max_lock_ts, const pb::common::Range &range, int64_t limit,
                                             std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
                                             std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_lock_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-      << "[txn]ScanLockInfo min_lock_ts: " << min_lock_ts << ", max_lock_ts: " << max_lock_ts
-      << ", range: " << Helper::RangeToString(range) << ", limit: " << limit;
+      << fmt::format("[txn][{}] ScanLockInfo lock_ts: [{},{}] range: {} limit: {}.", stream->StreamId(), min_lock_ts,
+                     max_lock_ts, Helper::RangeToString(range), limit);
 
-  if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_lock_limit)) {
-    DINGO_LOG(ERROR) << "[txn]ScanLockInfo limit: " << limit
-                     << " is too large, max_scan_lock_limit: " << FLAGS_max_scan_lock_limit;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scan lock limit is too large");
-  }
+  auto stream_state = std::dynamic_pointer_cast<TxnScanLockStreamState>(
+      stream->GetOrNewStreamState([&]() -> StreamStatePtr { return TxnScanLockStreamState::New(engine, range); }));
+  IteratorPtr iter = stream_state->iter;
+  CHECK(iter != nullptr) << fmt::format("[txn][{}] Scan stream_state->iter is nullptr.", stream->StreamId());
 
-  if (has_more || !end_scan_key.empty()) {
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_scan_key is not empty");
-  }
-
-  IteratorOptions iter_options;
-  iter_options.lower_bound = mvcc::Codec::EncodeKey(range.start_key(), Constant::kLockVer);
-  iter_options.upper_bound = mvcc::Codec::EncodeKey(range.end_key(), Constant::kLockVer);
-
-  auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
-  if (iter == nullptr) {
-    DINGO_LOG(FATAL) << "[txn]GetLockInfo NewIterator failed, range: " << Helper::RangeToString(range);
-  }
-
-  int64_t response_memory_size = 0;
-  iter->Seek(iter_options.lower_bound);
-
+  auto stop_checker = [&stream](size_t size, size_t bytes) -> bool { return stream->Check(size, bytes); };
+  size_t bytes = 0;
   while (iter->Valid()) {
     auto lock_value = iter->Value();
-    if (lock_value.length() <= 8) {
-      DINGO_LOG(FATAL) << "invalid lock_value, key: " << Helper::StringToHex(iter->Key())
-                       << ", min_lock_ts: " << min_lock_ts
-                       << ", lock_value is less than 8 bytes: " << Helper::StringToHex(lock_value);
-    }
+    CHECK(lock_value.length() > 8) << fmt::format(
+        "[txn][{}] invalid lock_value, key: {} min_lock_ts: {} lock_value is less than 8 bytes: {}.",
+        stream->StreamId(), Helper::StringToHex(iter->Key()), min_lock_ts, Helper::StringToHex(lock_value));
 
     pb::store::LockInfo lock_info;
     auto ret = lock_info.ParseFromArray(lock_value.data(), lock_value.size());
-    if (!ret) {
-      DINGO_LOG(FATAL)
-      "parse lock info failed, key: " << Helper::StringToHex(iter->Key())
-                                      << ", lock_value(hex): " << Helper::StringToHex(lock_value);
-    }
+    CHECK(ret) << fmt::format("[txn][{}] parse lock info failed, key: {} lock_value(hex): {}.", stream->StreamId(),
+                              Helper::StringToHex(iter->Key()), Helper::StringToHex(lock_value));
 
     end_scan_key = lock_info.key();
 
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "get lock_info lock_ts: " << lock_info.lock_ts() << ", lock_info: " << lock_info.ShortDebugString()
-        << ", iter->key: " << Helper::StringToHex(iter->Key())
-        << ", lock_key: " << Helper::StringToHex(lock_info.key());
+        << fmt::format("[txn][{}] get lock_info lock_ts: {} lock_info: {} iter->key: {} lock_key: {}.",
+                       stream->StreamId(), lock_info.lock_ts(), lock_info.ShortDebugString(),
+                       Helper::StringToHex(iter->Key()), Helper::StringToHex(lock_info.key()));
 
     // if lock is not exist, nothing to do
     if (lock_info.lock_ts() == 0) {
-      DINGO_LOG(WARNING) << "txn_not_found with lock_info empty, iter->key: " << Helper::StringToHex(iter->Key());
-
-      // auto *txn_not_found = txn_result->mutable_txn_not_found();
-      // txn_not_found->set_start_ts(start_ts);
+      DINGO_LOG(WARNING) << fmt::format("[txn][{}] txn_not_found with lock_info empty, iter->key: {}.",
+                                        stream->StreamId(), Helper::StringToHex(iter->Key()));
       iter->Next();
       continue;
     }
 
     if (lock_info.lock_ts() < min_lock_ts || lock_info.lock_ts() >= max_lock_ts) {
-      DINGO_LOG(WARNING) << "txn_not_found with lock_info.lock_ts not in range, iter->key: "
-                         << Helper::StringToHex(iter->Key()) << ", min_lock_ts: " << min_lock_ts
-                         << ", max_lock_ts: " << max_lock_ts << ", lock_info: " << lock_info.ShortDebugString();
+      DINGO_LOG(WARNING) << fmt::format(
+          "[txn][{}] txn_not_found with lock_info.lock_ts not in range, iter->key:  lock_ts: [{},{}] lock_info: {}.",
+          stream->StreamId(), Helper::StringToHex(iter->Key()), min_lock_ts, max_lock_ts, lock_info.ShortDebugString());
       iter->Next();
       continue;
     }
 
-    lock_infos.push_back(lock_info);
-    response_memory_size += lock_info.ByteSizeLong();
-
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn] ScanLock push_back lock_info: " << lock_info.ShortDebugString();
+        << fmt::format("[txn][{}] ScanLock push_back lock_info: {}.", stream->StreamId(), lock_info.ShortDebugString());
 
-    if ((limit > 0 && lock_infos.size() >= limit) || lock_infos.size() > FLAGS_max_scan_lock_limit ||
-        response_memory_size > FLAGS_max_scan_memory_size) {
+    bytes += lock_info.ByteSizeLong();
+    lock_infos.push_back(std::move(lock_info));
+
+    if (stop_checker(lock_infos.size(), bytes)) {
       has_more = true;
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << "[txn]ScanLockInfo has_more: " << has_more << ", lock_infos size: " << lock_infos.size()
-          << ", limit: " << limit << ", max_scan_lock_limit: " << FLAGS_max_scan_lock_limit
-          << ", response_memory_size: " << response_memory_size
-          << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
+
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+          "[txn][{}] ScanLockInfo has_more: {} lock_infos size: {} limit: {} max_scan_lock_limit: {} "
+          "max_scan_memory_size: {}.",
+          stream->StreamId(), has_more, lock_infos.size(), limit, FLAGS_stream_message_max_limit_size, bytes,
+          FLAGS_stream_message_max_bytes);
       break;
     }
 
@@ -1243,38 +1246,38 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
 
 bvar::LatencyRecorder g_txn_scan_latency("dingo_txn_scan");
 
-butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
-                                    int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
-                                    bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
+class TxnScanStreamState;
+using TxnScanStreamStatePtr = std::shared_ptr<TxnScanStreamState>;
+
+class TxnScanStreamState : public StreamState {
+ public:
+  TxnScanStreamState(TxnIteratorPtr iter) : iter(iter) {}
+  ~TxnScanStreamState() override = default;
+
+  static TxnScanStreamStatePtr New(TxnIteratorPtr iter) { return std::make_shared<TxnScanStreamState>(iter); }
+
+  TxnIteratorPtr iter;
+};
+
+butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
+                                    const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
+                                    const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
+                                    const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                                     const pb::common::CoprocessorV2 &coprocessor,
                                     pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs,
                                     bool &has_more, std::string &end_scan_key) {
   BvarLatencyGuard bvar_guard(&g_txn_scan_latency);
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-      << "[txn]Scan start_ts: " << start_ts << ", range: " << Helper::RangeToString(range)
-      << ", isolation_level: " << pb::store::IsolationLevel_Name(isolation_level) << ", start_ts: " << start_ts
-      << ", limit: " << limit << ", key_only: " << key_only << ", is_reverse: " << is_reverse
-      << ", resolved_locks size: " << resolved_locks.size() << ", disable_coprocessor: " << disable_coprocessor
-      << ", coprocessor: " << coprocessor.ShortDebugString()
-      << ", txn_result_info: " << txn_result_info.ShortDebugString();
-
-  if (BAIDU_UNLIKELY(limit > FLAGS_max_scan_line_limit)) {
-    DINGO_LOG(ERROR) << "[txn]Scan limit: " << limit
-                     << " is too large, max_scan_line_limit: " << FLAGS_max_scan_line_limit;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "scan limit is too large");
-  }
-
-  if (raw_engine == nullptr) {
-    DINGO_LOG(FATAL) << "[txn]Scan engine is null";
-  }
-
-  if (limit == 0) {
-    return butil::Status::OK();
-  }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+      "[txn][{}] Scan start_ts: {} range: {} isolation_level: {} start_ts: {} limit: {} key_only: {} is_reverse: {} "
+      "resolved_locks size: {} disable_coprocessor: {} coprocessor: {} txn_result_info: {}.",
+      stream->StreamId(), start_ts, Helper::RangeToString(range), pb::store::IsolationLevel_Name(isolation_level),
+      start_ts, limit, key_only, is_reverse, resolved_locks.size(), disable_coprocessor, coprocessor.ShortDebugString(),
+      txn_result_info.ShortDebugString());
 
   if (isolation_level != pb::store::SnapshotIsolation && isolation_level != pb::store::ReadCommitted) {
-    DINGO_LOG(ERROR) << "[txn]TxnScan invalid isolation_level: " << isolation_level;
+    DINGO_LOG(ERROR) << fmt::format("[txn][{}] TxnScan invalid isolation_level: {}.", stream->StreamId(),
+                                    pb::store::IsolationLevel_Name(isolation_level));
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "invalid isolation_level");
   }
 
@@ -1282,74 +1285,70 @@ butil::Status TxnEngineHelper::Scan(RawEnginePtr raw_engine, const pb::store::Is
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
 
-  if (has_more || !end_scan_key.empty()) {
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "has_more or end_scan_key is not empty");
-  }
+  auto stream_state =
+      std::dynamic_pointer_cast<TxnScanStreamState>(stream->GetOrNewStreamState([&]() -> StreamStatePtr {
+        auto iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
+        auto ret = iter->Init();
+        CHECK(ret.ok()) << fmt::format("[txn][{}] Scan init txn_iter failed, start_ts: {} range: {}  status: {}.",
+                                       stream->StreamId(), start_ts, Helper::RangeToString(range), ret.error_str());
+        return TxnScanStreamState::New(iter);
+      }));
+  TxnIteratorPtr iter = stream_state->iter;
+  CHECK(iter != nullptr) << fmt::format("[txn][{}] Scan stream_state->iter is nullptr.", stream->StreamId());
 
-  std::shared_ptr<TxnIterator> txn_iter =
-      std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
-  auto ret = txn_iter->Init();
-  if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "[txn]Scan init txn_iter failed, start_ts: " << start_ts
-                     << ", range: " << Helper::RangeToString(range) << ", status: " << ret.error_str();
-    return ret;
-  }
+  iter->Seek(range.start_key());
 
-  int64_t response_memory_size = 0;
-  txn_iter->Seek(range.start_key());
+  RawCoprocessor::StopChecker stop_checker = [&stream](size_t size, size_t bytes) -> bool {
+    return stream->Check(size, bytes);
+  };
 
   if (!disable_coprocessor) {
-    std::shared_ptr<RawCoprocessor> txn_coprocessor =
-        std::make_shared<CoprocessorV2>(Helper::GetKeyPrefix(range.start_key()));
-    butil::Status status;
-    status = txn_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
+    RawCoprocessorPtr txn_coprocessor = CoprocessorV2::New(Helper::GetKeyPrefix(range.start_key()));
+    butil::Status status = txn_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "[txn]Scan coprocessor::Open failed " << status.error_cstr();
+      DINGO_LOG(ERROR) << fmt::format("[txn][{}] Scan coprocessor::Open failed, error: {}.", stream->StreamId(),
+                                      status.error_cstr());
       return status;
     }
 
-    status =
-        txn_coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_scan_key);
+    status = txn_coprocessor->Execute(iter, key_only, is_reverse, stop_checker, txn_result_info, kvs, has_more);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "[txn]Scan coprocessor::Execute failed " << status.error_cstr();
+      DINGO_LOG(ERROR) << fmt::format("[txn][{}] Scan coprocessor::Execute failed, error: {}.", stream->StreamId(),
+                                      status.error_cstr());
       return status;
     }
+
+    end_scan_key = !kvs.empty() ? kvs.back().key() : "";
 
     txn_coprocessor->Close();
     txn_coprocessor.reset();
 
-    return butil::Status::OK();
-  }
+  } else {
+    size_t bytes = 0;
+    while (iter->Valid(txn_result_info)) {
+      auto key = iter->Key();
+      auto value = iter->Value();
 
-  while (txn_iter->Valid(txn_result_info)) {
-    auto key = txn_iter->Key();
-    auto value = txn_iter->Value();
-
-    if (key_only) {
       pb::common::KeyValue kv;
       kv.set_key(key);
-      kvs.push_back(kv);
-      response_memory_size += kv.ByteSizeLong();
-    } else {
-      pb::common::KeyValue kv;
-      kv.set_key(key);
-      kv.set_value(value);
-      kvs.push_back(kv);
-      response_memory_size += kv.ByteSizeLong();
-    }
+      if (!key_only) kv.set_value(value);
+      bytes += kv.ByteSizeLong();
+      kvs.push_back(std::move(kv));
 
-    end_scan_key = key;
+      iter->Next();
 
-    txn_iter->Next();
+      if (stop_checker(kvs.size(), bytes)) {
+        end_scan_key = iter->Key();
+        has_more = true;
 
-    if ((limit > 0 && kvs.size() >= limit) || kvs.size() >= FLAGS_max_scan_line_limit ||
-        response_memory_size >= FLAGS_max_scan_memory_size) {
-      has_more = true;
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << "[txn]Scan kvs.size: " << kvs.size() << ", response_memory_size: " << response_memory_size
-          << ", max_scan_line_limit: " << FLAGS_max_scan_line_limit
-          << ", max_scan_memory_size: " << FLAGS_max_scan_memory_size;
-      break;
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+            "[txn][{}] ScanLockInfo has_more: {} kv size: {} limit: {} max_scan_lock_limit: {} response_memory_size: "
+            "{} max_scan_memory_size: {}.",
+            stream->StreamId(), has_more, kvs.size(), limit, FLAGS_stream_message_max_limit_size, bytes,
+            FLAGS_stream_message_max_bytes);
+
+        break;
+      }
     }
   }
 
@@ -3636,11 +3635,12 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   }
   // scan for keys to rollback
   else {
+    auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
     std::vector<pb::store::LockInfo> tmp_lock_infos;
     bool has_more = false;
     std::string end_key{};
-    auto ret =
-        ScanLockInfo(raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos, has_more, end_key);
+    auto ret = ScanLockInfo(stream, raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos,
+                            has_more, end_key);
     if (!ret.ok()) {
       DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
                        << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();

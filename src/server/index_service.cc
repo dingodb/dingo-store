@@ -57,7 +57,7 @@ DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation"
 static void IndexRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 DECLARE_int64(max_prewrite_count);
-DECLARE_int64(max_scan_lock_limit);
+DECLARE_int64(stream_message_max_limit_size);
 DECLARE_int64(vector_max_background_task_count);
 
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
@@ -1282,9 +1282,16 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
 
 static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest* request, store::RegionPtr region,
                                                  const pb::common::Range& req_range) {
-  // check if limit is valid
-  if (request->limit() > FLAGS_vector_max_batch_count) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is exceed vector max batch count");
+  if (request->limit() <= 0 && request->stream_meta().limit() <= 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit is invalid");
+  }
+  if (request->limit() > FLAGS_stream_message_max_limit_size ||
+      request->stream_meta().limit() > FLAGS_stream_message_max_limit_size) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit beyond max limit");
+  }
+
+  if (request->start_ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param start_ts is invalid");
   }
 
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
@@ -1336,6 +1343,10 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
     return;
   }
 
+  auto stream_meta = request->stream_meta();
+  if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -1344,6 +1355,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetStream(stream);
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1388,6 +1400,14 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   }
   response->set_end_key(end_key);
   response->set_has_more(has_more);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_next(has_more);
+
+  if (!has_more) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+  }
 }
 
 void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
@@ -2274,12 +2294,12 @@ static butil::Status ValidateTxnScanLockRequest(const pb::store::TxnScanLockRequ
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_ts is 0");
   }
 
-  if (request->limit() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is 0");
+  if (request->limit() <= 0 && request->stream_meta().limit() <= 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit is invalid");
   }
-
-  if (request->limit() > FLAGS_max_scan_lock_limit) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is too large, max=1024");
+  if (request->limit() > FLAGS_stream_message_max_limit_size ||
+      request->stream_meta().limit() > FLAGS_stream_message_max_limit_size) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit beyond max limit");
   }
 
   if (request->start_key().empty()) {

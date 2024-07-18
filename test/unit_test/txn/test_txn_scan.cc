@@ -766,9 +766,10 @@ TEST_F(TxnScanTest, Scan) {
   std::set<int64_t> resolved_locks = {};
   size_t cnt = 0;
 
-  ok =
-      TxnEngineHelper::Scan(engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit, key_only,
-                            is_reverse, resolved_locks, false, pb_coprocessor, txn_result_info, kvs, has_more, end_key);
+  auto stream = Stream::New(10000000);
+  ok = TxnEngineHelper::Scan(stream, engine, pb::store::IsolationLevel::SnapshotIsolation, ++end_ts, range, limit,
+                             key_only, is_reverse, resolved_locks, false, pb_coprocessor, txn_result_info, kvs,
+                             has_more, end_key);
 
   cnt = kvs.size();
 

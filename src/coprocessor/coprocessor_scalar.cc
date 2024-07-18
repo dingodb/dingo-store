@@ -72,11 +72,11 @@ butil::Status CoprocessorScalar::Execute(IteratorPtr iter, bool key_only, size_t
   return CoprocessorV2::RawCoprocessor::Execute(iter, key_only, max_fetch_cnt, max_bytes_rpc, kvs, has_more);  // NOLINT
 }
 
-butil::Status CoprocessorScalar::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
+butil::Status CoprocessorScalar::Execute(TxnIteratorPtr iter, bool key_only, bool is_reverse, StopChecker& stop_checker,
                                          pb::store::TxnResultInfo& txn_result_info,
-                                         std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_key) {
-  return CoprocessorV2::RawCoprocessor::Execute(iter, limit, key_only, is_reverse, txn_result_info, kvs,  // NOLINT
-                                                has_more, end_key);
+                                         std::vector<pb::common::KeyValue>& kvs, bool& has_more) {
+  return CoprocessorV2::RawCoprocessor::Execute(iter, key_only, is_reverse, stop_checker, txn_result_info, kvs,
+                                                has_more);
 }
 
 butil::Status CoprocessorScalar::Filter(const std::string& key, const std::string& value, bool& is_reserved) {

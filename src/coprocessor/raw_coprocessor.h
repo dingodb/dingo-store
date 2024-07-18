@@ -38,6 +38,8 @@ class RawCoprocessor {
   RawCoprocessor();
   virtual ~RawCoprocessor();
 
+  using StopChecker = std::function<bool(size_t size, size_t bytes)>;
+
   RawCoprocessor(const RawCoprocessor& rhs) = delete;
   RawCoprocessor& operator=(const RawCoprocessor& rhs) = delete;
   RawCoprocessor(RawCoprocessor&& rhs) = delete;
@@ -49,10 +51,9 @@ class RawCoprocessor {
   virtual butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                 std::vector<pb::common::KeyValue>* kvs, bool& has_more);
 
-  virtual butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
-                                pb::store::TxnResultInfo& txn_result_info,
-                                std::vector<pb::common::KeyValue>& kvs,  // NOLINT
-                                bool& has_more, std::string& end_key);   // NOLINT
+  virtual butil::Status Execute(TxnIteratorPtr iter, bool key_only, bool is_reverse, StopChecker& stop_checker,
+                                pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                                bool& has_more);
 
   virtual butil::Status Filter(const std::string& key, const std::string& value, bool& is_reserved);  // NOLINT
 
@@ -60,6 +61,7 @@ class RawCoprocessor {
 
   virtual void Close();
 };
+using RawCoprocessorPtr = std::shared_ptr<RawCoprocessor>;
 
 }  // namespace dingodb
 
