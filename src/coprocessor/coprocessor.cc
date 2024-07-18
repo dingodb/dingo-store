@@ -274,10 +274,10 @@ butil::Status Coprocessor::Execute(IteratorPtr iter, bool key_only, size_t max_f
   return status;
 }
 
-butil::Status Coprocessor::Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
+butil::Status Coprocessor::Execute(TxnIteratorPtr iter, bool key_only, bool is_reverse, StopChecker& stop_checker,
                                    pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                                   bool& has_more, std::string& end_key) {
-  return RawCoprocessor::Execute(iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+                                   bool& has_more) {
+  return RawCoprocessor::Execute(iter, key_only, is_reverse, stop_checker, txn_result_info, kvs, has_more);
 }
 
 butil::Status Coprocessor::Filter(const std::string& key, const std::string& value, bool& is_reserved) {

@@ -1304,6 +1304,11 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
+    if (!dingo_server.InitStreamManager()) {
+      DINGO_LOG(ERROR) << "InitStreamManager failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitTsProvider()) {
       DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
@@ -1450,6 +1455,12 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
       return -1;
     }
+
+    if (!dingo_server.InitStreamManager()) {
+      DINGO_LOG(ERROR) << "InitStreamManager failed!";
+      return -1;
+    }
+
     if (!dingo_server.InitTsProvider()) {
       DINGO_LOG(ERROR) << "InitTsProvider failed!";
       return -1;
@@ -1615,6 +1626,11 @@ int main(int argc, char *argv[]) {
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitStreamManager()) {
+      DINGO_LOG(ERROR) << "InitStreamManager failed!";
       return -1;
     }
 

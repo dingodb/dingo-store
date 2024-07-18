@@ -123,6 +123,7 @@ class TxnIterator {
   // If the lock is resolved, there will not be a conflict for provided resolved_locks.
   std::set<int64_t> resolved_locks_;
 };
+using TxnIteratorPtr = std::shared_ptr<TxnIterator>;
 
 class TxnEngineHelper {
  public:
@@ -130,7 +131,7 @@ class TxnEngineHelper {
                                 int64_t start_ts, const std::set<int64_t> &resolved_locks,
                                 pb::store::TxnResultInfo &txn_result_info);
 
-  static butil::Status ScanLockInfo(RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
+  static butil::Status ScanLockInfo(StreamPtr stream, RawEnginePtr raw_engine, int64_t min_lock_ts, int64_t max_lock_ts,
                                     const pb::common::Range &range, int64_t limit,
                                     std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
                                     std::string &end_scan_key);
@@ -140,9 +141,9 @@ class TxnEngineHelper {
                                 const std::set<int64_t> &resolved_locks, pb::store::TxnResultInfo &txn_result_info,
                                 std::vector<pb::common::KeyValue> &kvs);
 
-  static butil::Status Scan(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
-                            const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
-                            const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
+  static butil::Status Scan(StreamPtr stream, RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
+                            int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
+                            bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                             const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
                             std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_scan_key);
 

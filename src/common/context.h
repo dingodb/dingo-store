@@ -20,6 +20,7 @@
 #include <string>
 
 #include "brpc/controller.h"
+#include "common/stream.h"
 #include "common/synchronization.h"
 #include "common/tracker.h"
 #include "proto/common.pb.h"
@@ -129,6 +130,9 @@ class Context {
   WriteCbFunc WriteCb() { return write_cb_; }
   void SetWriteCb(WriteCbFunc write_cb) { write_cb_ = write_cb; }
 
+  StreamPtr Stream() { return stream_; }
+  void SetStream(StreamPtr stream) { stream_ = stream; }
+
  private:
   // brpc framework free resource
   brpc::Controller* cntl_{nullptr};
@@ -161,6 +165,8 @@ class Context {
   butil::Status status_{};
 
   WriteCbFunc write_cb_{};
+
+  StreamPtr stream_;
 
   TrackerPtr tracker_;
 };

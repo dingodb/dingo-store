@@ -975,9 +975,11 @@ TEST_F(CoprocessorTestV2, ExecuteTxn) {
 
   size_t cnt = 0;
 
+  RawCoprocessor::StopChecker stop_checker = [&](size_t size, size_t) -> bool { return (limit <= size); };
+
   while (true) {
     bool has_more = false;
-    ok = coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    ok = coprocessor->Execute(txn_iter, key_only, is_reverse, stop_checker, txn_result_info, kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (!has_more) {
@@ -1869,9 +1871,11 @@ TEST_F(CoprocessorTestV2, ExecuteTxnDisorder) {
 
   size_t cnt = 0;
 
+  RawCoprocessor::StopChecker stop_checker = [&](size_t size, size_t) -> bool { return (limit <= size); };
+
   while (true) {
     bool has_more = false;
-    ok = coprocessor->Execute(txn_iter, limit, key_only, is_reverse, txn_result_info, kvs, has_more, end_key);
+    ok = coprocessor->Execute(txn_iter, key_only, is_reverse, stop_checker, txn_result_info, kvs, has_more);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
     cnt += kvs.size();
     if (!has_more) {

@@ -30,6 +30,9 @@
 
 namespace dingodb {
 
+class Coprocessor;
+using CoprocessorPtr = std::shared_ptr<Coprocessor>;
+
 class Coprocessor : public RawCoprocessor {
  public:
   Coprocessor(char prefix);
@@ -40,15 +43,17 @@ class Coprocessor : public RawCoprocessor {
   Coprocessor(Coprocessor&& rhs) = delete;
   Coprocessor& operator=(Coprocessor&& rhs) = delete;
 
+  static CoprocessorPtr New(char prefix) { return std::make_shared<Coprocessor>(prefix); }
+
   // coprocessor = CoprocessorPbWrapper
   butil::Status Open(const std::any& coprocessor) override;
 
   butil::Status Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                         std::vector<pb::common::KeyValue>* kvs, bool& has_more) override;
 
-  butil::Status Execute(TxnIteratorPtr iter, int64_t limit, bool key_only, bool is_reverse,
-                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,  // NOLINT
-                        bool& has_more, std::string& end_key) override;                                     // NOLINT
+  butil::Status Execute(TxnIteratorPtr iter, bool key_only, bool is_reverse, StopChecker& stop_checker,
+                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
+                        bool& has_more) override;
 
   butil::Status Filter(const std::string& key, const std::string& value, bool& is_reserved) override;  // NOLINT
 

@@ -46,7 +46,7 @@ namespace dingodb {
 
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
 DEFINE_bool(enable_async_store_operation, true, "enable async store operation");
-DECLARE_int64(max_scan_lock_limit);
+DECLARE_int64(stream_message_max_limit_size);
 DECLARE_int64(max_prewrite_count);
 
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
@@ -1775,6 +1775,17 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
 
 static butil::Status ValidateTxnScanRequest(const pb::store::TxnScanRequest* request, store::RegionPtr region,
                                             const pb::common::Range& req_range) {
+  if (request->limit() <= 0 && request->stream_meta().limit() <= 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit is invalid");
+  }
+  if (request->limit() > FLAGS_stream_message_max_limit_size ||
+      request->stream_meta().limit() > FLAGS_stream_message_max_limit_size) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit beyond max limit");
+  }
+
+  if (request->start_ts() < 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param start_ts is invalid");
+  }
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!status.ok()) {
     return status;
@@ -1819,6 +1830,10 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
+  auto stream_meta = request->stream_meta();
+  if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -1827,6 +1842,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetStream(stream);
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1857,6 +1873,14 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   }
   response->set_end_key(end_key);
   response->set_has_more(has_more);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_next(has_more);
+
+  if (!has_more) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+  }
 }
 
 void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
@@ -2881,12 +2905,12 @@ static butil::Status ValidateTxnScanLockRequest(const dingodb::pb::store::TxnSca
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "max_ts is 0");
   }
 
-  if (request->limit() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is 0");
+  if (request->limit() <= 0 && request->stream_meta().limit() <= 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit is invalid");
   }
-
-  if (request->limit() > FLAGS_max_scan_lock_limit) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "limit is too large, max=1024");
+  if (request->limit() > FLAGS_stream_message_max_limit_size ||
+      request->stream_meta().limit() > FLAGS_stream_message_max_limit_size) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit beyond max limit");
   }
 
   if (request->start_key().empty()) {
@@ -2931,6 +2955,10 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
+  auto stream_meta = request->stream_meta();
+  if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -2939,6 +2967,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
+  ctx->SetStream(stream);
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::LockInfo> locks;
@@ -2960,11 +2989,16 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   for (const auto& lock : locks) {
     *response->add_locks() = lock;
   }
-  if (has_more) {
-    response->set_has_more(has_more);
-  }
-  if (!end_key.empty()) {
-    response->set_end_key(end_key);
+
+  response->set_has_more(has_more);
+  response->set_end_key(end_key);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_next(has_more);
+
+  if (!has_more) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
 }
 

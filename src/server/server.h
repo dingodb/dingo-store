@@ -22,6 +22,7 @@
 
 #include "bthread/types.h"
 #include "common/safe_map.h"
+#include "common/stream.h"
 #include "common/threadpool.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
@@ -32,8 +33,8 @@
 #include "document/document_index_manager.h"
 #include "engine/mono_store_engine.h"
 #include "engine/raw_engine.h"
-#include "engine/storage.h"
 #include "engine/rocks_raw_engine.h"
+#include "engine/storage.h"
 #include "log/log_storage_manager.h"
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
@@ -113,6 +114,9 @@ class Server {
 
   // Init TsProvider
   bool InitTsProvider();
+
+  // Init StreamManager
+  bool InitStreamManager();
 
   butil::Status StartMetaRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
   butil::Status StartKvRegion(const std::shared_ptr<Config>& config, std::shared_ptr<Engine>& kv_engine);
@@ -229,6 +233,8 @@ class Server {
   ThreadPoolPtr GetVectorIndexThreadPool();
 
   mvcc::TsProviderPtr GetTsProvider();
+
+  StreamManagerPtr GetStreamManager();
 
   Server(const Server&) = delete;
   const Server& operator=(const Server&) = delete;
@@ -367,6 +373,9 @@ class Server {
 
   // ts provider
   mvcc::TsProviderPtr ts_provider_{nullptr};
+
+  // stream manager
+  StreamManagerPtr stream_manager_;
 };
 
 // Shortcut

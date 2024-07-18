@@ -36,10 +36,9 @@ butil::Status RawCoprocessor::Execute(IteratorPtr /*iter*/, bool /*key_only*/, s
   return status;
 }
 
-butil::Status RawCoprocessor::Execute(TxnIteratorPtr /*iter*/, int64_t /*limit*/, bool /*key_only*/,
-                                      bool /*is_reverse*/, pb::store::TxnResultInfo& /*txn_result_info*/,
-                                      std::vector<pb::common::KeyValue>& /*kvs*/, bool& /*has_more*/,
-                                      std::string& /*end_key*/) {
+butil::Status RawCoprocessor::Execute(TxnIteratorPtr /*iter*/, bool /*key_only*/, bool /*is_reverse*/, StopChecker&,
+                                      pb::store::TxnResultInfo& /*txn_result_info*/,
+                                      std::vector<pb::common::KeyValue>& /*kvs*/, bool& /*has_more*/) {
   butil::Status status(pb::error::ENOT_SUPPORT, "Not Support");
 
   return status;
