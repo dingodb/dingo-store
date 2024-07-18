@@ -41,6 +41,11 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpSplitRegion(app);
   SetUpMergeRegion(app);
   SetUpQueryRegion(app);
+
+  // executor
+  SetUpCreateExecutor(app);
+  SetUpExecutorHeartbeat(app);
+  SetUpGetExecutorMap(app);
 }
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
@@ -693,15 +698,12 @@ void RunUpdateStore(UpdateStoreOption const &opt) {
 
 void SetUpCreateExecutor(CLI::App &app) {
   auto opt = std::make_shared<CreateExecutorOption>();
-  auto *cmd = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--user", opt->user, "Request parameter user")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateExecutor", "Create executor")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")->required();
+  cmd->add_option("--host", opt->host, "host")->required();
+  cmd->add_option("--port", opt->port, "port")->required();
+  cmd->add_option("--user", opt->user, "Request parameter user")->required();
 
   cmd->callback([opt]() { RunCreateExecutor(*opt); });
 }
@@ -720,8 +722,14 @@ void RunCreateExecutor(CreateExecutorOption const &opt) {
   request.mutable_executor()->mutable_server_location()->set_port(opt.port);
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateExecutor", request,
                                                                                               response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Create executor  failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Create executor success." << std::endl;
+  std::cout << "executors: " << response.executor().DebugString() << std::endl;
 }
 
 void SetUpDeleteExecutor(CLI::App &app) {
@@ -870,17 +878,13 @@ void RunGetExecutorUserMap(GetExecutorUserMapOption const &opt) {
 void SetUpExecutorHeartbeat(CLI::App &app) {
   auto opt = std::make_shared<ExecutorHeartbeatOption>();
   auto *cmd = app.add_subcommand("ExecutorHeartbeat", "Executor Heart beat ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")
-      ->default_val("TO_BE_CONTINUED")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--host", opt->host, "host")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--port", opt->port, "host")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter executor id")->group("Coordinator Manager Commands");
-  cmd->add_option("--user", opt->user, "Request parameter user")
-      ->default_val("administrator")
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")->default_val("TO_BE_CONTINUED");
+  cmd->add_option("--host", opt->host, "host")->required();
+  cmd->add_option("--port", opt->port, "host")->required();
+  cmd->add_option("--id", opt->id, "Request parameter executor id");
+  cmd->add_option("--user", opt->user, "Request parameter user")->default_val("administrator");
+  cmd->add_option("--cluster_name", opt->cluster_name, "Request parameter cluster_name");
   cmd->callback([opt]() { RunExecutorHeartbeat(*opt); });
 }
 
@@ -898,13 +902,24 @@ void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
   executor->mutable_server_location()->set_host(opt.host);
   executor->mutable_server_location()->set_port(opt.port);
   executor->set_state(::dingodb::pb::common::ExecutorState::EXECUTOR_NORMAL);
+  executor->set_cluster_name(opt.cluster_name);
+
   auto *user = executor->mutable_executor_user();
   user->set_user(opt.user);
   user->set_keyring(opt.keyring);
+
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ExecutorHeartbeat",
                                                                                               request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Executor Heartbeat table error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Executor Heartbeat success." << std::endl;
+  for (auto const &executor : response.executormap().executors()) {
+    std::cout << "executor: " << executor.DebugString() << std::endl;
+  }
 }
 
 void SetUpGetStoreMap(CLI::App &app) {
@@ -936,8 +951,10 @@ void RunGetStoreMap(GetStoreMapOption const &opt) {
 
 void SetUpGetExecutorMap(CLI::App &app) {
   auto opt = std::make_shared<GetExecutorMapOption>();
-  auto *cmd = app.add_subcommand("GetStoreMap", "Get store map")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetExecutorMap", "Get executor map")->group("Coordinator Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
+      ->group("Coordinator Manager Commands");
+  cmd->add_option("--cluster_name", opt->cluster_name, "if cluster_name is empty, return all executors")
       ->group("Coordinator Manager Commands");
   cmd->callback([opt]() { RunGetExecutorMap(*opt); });
 }
@@ -950,11 +967,19 @@ void RunGetExecutorMap(GetExecutorMapOption const &opt) {
   dingodb::pb::coordinator::GetExecutorMapResponse response;
 
   request.set_epoch(1);
-
+  request.set_cluster_name(opt.cluster_name);
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetExecutorMap", request,
                                                                                               response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get executor map  failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Get executor map success." << std::endl;
+  for (auto const &executor : response.executormap().executors()) {
+    std::cout << "executor: " << executor.DebugString() << std::endl;
+  }
 }
 
 void SetUpGetDeleteRegionMap(CLI::App &app) {
