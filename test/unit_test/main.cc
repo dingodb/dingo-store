@@ -120,6 +120,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":TxnGcTest.*";
     default_run_case += ":TxnScanTest.*";
     default_run_case += ":TxnPessimisticLockTest.*";
+    default_run_case += ":TxnPreWriteTest.*";
     testing::GTEST_FLAG(filter) = default_run_case;
   }
 
