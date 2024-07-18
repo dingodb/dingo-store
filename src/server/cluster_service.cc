@@ -164,7 +164,9 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
   std::vector<std::vector<std::string>> table_urls;
 
   pb::common::ExecutorMap executor_map;
-  coordinator_controller_->GetExecutorMap(executor_map);
+  // means all executors
+  std::string cluster_name = "";  
+  coordinator_controller_->GetExecutorMap(executor_map, cluster_name);
 
   for (const auto& executor : executor_map.executors()) {
     std::vector<std::string> line;

@@ -3775,15 +3775,22 @@ butil::Status CoordinatorControl::AddStoreOperation(const pb::coordinator::Store
   return butil::Status::OK();
 }
 
-void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map) {
+void CoordinatorControl::GetExecutorMap(pb::common::ExecutorMap& executor_map, const std::string& filter_name) {
   int64_t executor_map_epoch = GetPresentId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR);
   executor_map.set_epoch(executor_map_epoch);
   {
     std::map<std::string, pb::common::Executor> executor_map_copy;
     executor_map_.GetRawMapCopy(executor_map_copy);
     for (auto& element : executor_map_copy) {
-      auto* tmp_region = executor_map.add_executors();
-      *tmp_region = element.second;
+      if (filter_name.empty()) {
+        auto* tmp_region = executor_map.add_executors();
+        *tmp_region = element.second;
+      } else {
+        if (element.second.cluster_name() == filter_name) {
+          auto* tmp_region = executor_map.add_executors();
+          *tmp_region = element.second;
+        }
+      }
     }
   }
 }
@@ -4021,6 +4028,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
         // and update the executor's server_location
         // and update the executor's raft_location
         // and update the executor's last_seen_timestamp
+        // add update the executor's cluster_name
         DINGO_LOG(INFO) << "executor STATUS CHANGE executor_id = " << executor.id()
                         << " old status = " << executor_to_update.state() << " new status = " << executor.state();
 
@@ -4040,6 +4048,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
         executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
         executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
         executor_increment_executor->set_create_timestamp(butil::gettimeofday_ms());
+        executor_increment_executor->set_cluster_name(executor.cluster_name());
       } else {
         // this is normall heartbeat,
         // so only need to update state & last_seen_timestamp, no need to
@@ -4062,6 +4071,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
         *executor_to_update.mutable_resource_tag() = executor.resource_tag();
         executor_to_update.set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
         executor_to_update.set_last_seen_timestamp(butil::gettimeofday_ms());
+        executor_to_update.set_cluster_name(executor.cluster_name());
         executor_map_.Put(executor.id(), executor_to_update);
       }
     } else {
@@ -4083,6 +4093,9 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
 
       // setup create_timestamp
       executor_increment_executor->set_create_timestamp(butil::gettimeofday_ms());
+
+      // setup cluster_name
+      executor_increment_executor->set_cluster_name(executor.cluster_name());
     }
   }
 

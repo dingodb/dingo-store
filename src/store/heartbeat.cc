@@ -393,7 +393,9 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
 
   // update executor_state by last_seen_timestamp
   pb::common::ExecutorMap executor_map_temp;
-  coordinator_control->GetExecutorMap(executor_map_temp);
+  // means all executors
+  std::string cluster_name = "";
+  coordinator_control->GetExecutorMap(executor_map_temp, cluster_name);
   for (const auto& it : executor_map_temp.executors()) {
     if (it.state() == pb::common::ExecutorState::EXECUTOR_NORMAL) {
       if (it.last_seen_timestamp() + (FLAGS_executor_heartbeat_timeout * 1000) < butil::gettimeofday_ms()) {

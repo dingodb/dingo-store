@@ -617,6 +617,10 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
   // update executor map
   int const new_executormap_epoch = coordinator_control->UpdateExecutorMap(executor, meta_increment);
 
+  auto *new_executormap = response->mutable_executormap();
+  coordinator_control->GetExecutorMap(*new_executormap, executor.cluster_name());
+  response->set_executormap_epoch(new_executormap_epoch);
+
   // if no need to update meta, just return
   if (meta_increment.ByteSizeLong() == 0) {
     DINGO_LOG(DEBUG) << "ExecutorHeartbeat no need to update meta, store_id=" << request->executor().id();
@@ -634,10 +638,6 @@ void DoExecutorHeartbeat(google::protobuf::RpcController * /*controller*/,
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     return;
   }
-
-  auto *new_executormap = response->mutable_executormap();
-  coordinator_control->GetExecutorMap(*new_executormap);
-  response->set_executormap_epoch(new_executormap_epoch);
 }
 
 void DoStoreHeartbeat(google::protobuf::RpcController * /*controller*/,
@@ -885,9 +885,8 @@ void DoGetExecutorMap(google::protobuf::RpcController * /*controller*/,
     coordinator_control->RedirectResponse(response);
     return;
   }
-
   pb::common::ExecutorMap executormap;
-  coordinator_control->GetExecutorMap(executormap);
+  coordinator_control->GetExecutorMap(executormap, request->cluster_name());
   *(response->mutable_executormap()) = executormap;
   response->set_epoch(executormap.epoch());
 }

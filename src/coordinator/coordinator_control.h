@@ -565,7 +565,7 @@ class CoordinatorControl : public MetaControl {
                                         pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // get executormap
-  void GetExecutorMap(pb::common::ExecutorMap &executor_map);
+  void GetExecutorMap(pb::common::ExecutorMap &executor_map, const std::string &filter_name);
 
   // update region map with new Region info
   // return new epoch
