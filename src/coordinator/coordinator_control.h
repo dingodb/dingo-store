@@ -604,7 +604,7 @@ class CoordinatorControl : public MetaControl {
                                                 const pb::coordinator_internal::RegionInternal &region_internal);
   static pb::common::RegionStatus GenRegionStatus(const pb::common::RegionMetrics &region_metrics);
 
-  void GetRegionMap(pb::common::RegionMap &region_map);
+  void GetRegionMap(pb::common::RegionMap &region_map, int64_t tenant_id);
   void GetRegionMapFull(pb::common::RegionMap &region_map);
   void GetRegionMapFull(pb::common::RegionMap &region_map, pb::common::RegionType region_type);
   void GetDeletedRegionMap(pb::common::RegionMap &region_map);

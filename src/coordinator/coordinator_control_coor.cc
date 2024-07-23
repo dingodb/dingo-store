@@ -711,6 +711,7 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
   *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
+  region.mutable_definition()->set_tenant_id(region_internal.definition().tenant_id());
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
   region.set_region_type(region_internal.region_type());
@@ -907,7 +908,7 @@ void CoordinatorControl::GetRegionLeaderAndStatus(int64_t region_id, pb::common:
   region_status = region_metrics.region_status();
 }
 
-void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
+void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map, int64_t tenant_id) {
   region_map.set_epoch(GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION));
   {
     // BAIDU_SCOPED_LOCK(region_map_mutex_);
@@ -916,8 +917,10 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map) {
     region_map_.GetRawMapCopy(region_internal_map_copy);
 
     for (auto& element : region_internal_map_copy) {
-      auto* tmp_region = region_map.add_regions();
-      GenRegionSlim(element.second, *tmp_region);
+      if (tenant_id == element.second.definition().tenant_id()) {
+        auto* tmp_region = region_map.add_regions();
+        GenRegionSlim(element.second, *tmp_region);
+      }
     }
   }
 }
