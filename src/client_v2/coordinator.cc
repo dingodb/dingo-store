@@ -69,6 +69,7 @@ void SetUpGetRegionMap(CLI::App &app) {
   auto opt = std::make_shared<GetRegionMapCommandOptions>();
   auto *cmd = app.add_subcommand("GetRegionMap", "Get region map")->group("Coordinator Manager Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--tenant_id", opt->tenant_id, "Get all the region maps belonging to this tenant_id")->default_val(0);
   cmd->callback([opt]() { RunGetRegionMap(*opt); });
 }
 
@@ -81,7 +82,7 @@ void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
   dingodb::pb::coordinator::GetRegionMapResponse response;
 
   request.set_epoch(1);
-
+  request.set_tenant_id(opt.tenant_id);
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMap", request, response);
 

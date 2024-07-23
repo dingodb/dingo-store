@@ -1850,6 +1850,16 @@ void RunQueryRegionStatus(QueryRegionStatusOptions const& opt) {
   for (auto const& it : response.region_meta_details().regions()) {
     std::cout << it.DebugString() << std::endl;
   }
+  if (response.region_meta_details().regions_size() == 0) {
+    std::string region_ids;
+    for (size_t i = 0; i < opt.region_ids.size(); ++i) {
+      region_ids += std::to_string(opt.region_ids[i]);
+      if (i != opt.region_ids.size() - 1) {
+        region_ids += ", ";
+      }
+    }
+    std::cout << "Region: " << region_ids << " not exist." << std::endl;
+  }
 }
 
 void SetUpModifyRegionMeta(CLI::App& app) {

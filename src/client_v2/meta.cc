@@ -35,6 +35,19 @@ void SetUpMetaSubCommands(CLI::App &app) {
   SetUpGetTableRange(app);
   SetUpGetTableByName(app);
   SetUpGenTso(app);
+
+  SetUpGetSchemas(app);
+  SetUpGetSchema(app);
+  SetUpGetSchemaByName(app);
+  SetUpGetTablesBySchema(app);
+  SetUpCreateSchema(app);
+  SetUpDropSchema(app);
+
+  // tenant
+  SetUpCreateTenant(app);
+  SetUpUpdateTenant(app);
+  SetUpDropTenant(app);
+  SetUpGetTenant(app);
 }
 
 void SetUpMetaHello(CLI::App &app) {
@@ -66,14 +79,9 @@ void RunMetaHello(MetaHelloOptions const &opt) {
 void SetUpGetSchema(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaOptions>();
   auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunGetSchema(*opt); });
 }
 
@@ -92,29 +100,30 @@ void RunGetSchema(GetSchemaOptions const &opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchema", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get schema failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
-                  << "child_table_count=" << response.schema().table_ids_size();
+  std::cout << "tenant_id=[" << response.schema().tenant_id() << "]"
+            << "schema_id=[" << response.schema().id().entity_id() << "]"
+            << "schema_name=[" << response.schema().name() << "]"
+            << "child_table_count=" << response.schema().table_ids_size() << std::endl;
   for (const auto &child_table_id : response.schema().table_ids()) {
-    DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+    std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
   }
   for (const auto &child_table_id : response.schema().index_ids()) {
-    DINGO_LOG(INFO) << "child index_id=[" << child_table_id.entity_id() << "]";
+    std::cout << "child index_id=[" << child_table_id.entity_id() << "]" << std::endl;
   }
 }
 
 void SetUpGetSchemas(CLI::App &app) {
   auto opt = std::make_shared<GetSchemasOptions>();
-  auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetSchemas", "Get schemas")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunGetSchemas(*opt); });
 }
 
@@ -127,19 +136,20 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
 
   request.set_tenant_id(opt.tenant_id);
 
-  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
-
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas", request,
                                                                                                   response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
-
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get schemas failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
   for (const auto &schema : response.schemas()) {
-    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
-                    << "schema_name=[" << schema.name() << "]"
-                    << "child_table_count=" << schema.table_ids_size();
+    std::cout << "schema_id=[" << schema.id().entity_id() << "]"
+              << "schema_name=[" << schema.name() << "]"
+              << "child_table_count=" << schema.table_ids_size() << std::endl;
     for (const auto &child_table_id : schema.table_ids()) {
-      DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+      std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
     }
   }
 }
@@ -147,14 +157,9 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
 void SetUpGetSchemaByName(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaByNameOptions>();
   auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter schema name")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
+  cmd->add_option("--name", opt->name, "Request parameter schema name")->required();
   cmd->callback([opt]() { RunGetSchemaByName(*opt); });
 }
 
@@ -168,30 +173,29 @@ void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
   request.set_schema_name(opt.name);
   request.set_tenant_id(opt.tenant_id);
 
-  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
-
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemaByName",
                                                                                                   request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get schema by name failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
-                  << "child_table_count=" << response.schema().table_ids_size();
+  std::cout << "tenant_id=[" << response.schema().tenant_id() << "]"
+            << "schema_id=[" << response.schema().id().entity_id() << "]"
+            << "schema_name=[" << response.schema().name() << "]"
+            << "child_table_count=" << response.schema().table_ids_size() << std::endl;
   for (const auto &child_table_id : response.schema().table_ids()) {
-    DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
+    std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
   }
 }
 
 void SetUpGetTablesBySchema(CLI::App &app) {
   auto opt = std::make_shared<GetTablesBySchemaOptions>();
-  auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTablesBySchema", "Get tables by schema id")->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
 
   cmd->callback([opt]() { RunGetTablesBySchema(*opt); });
 }
@@ -207,19 +211,26 @@ void RunGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
   schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
   schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
   schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-
-  schema_id->set_entity_id(opt.schema_id);
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTablesBySchema",
-                                                                                                  request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-
-  for (const auto &table_definition_with_id : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-                    << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
-                    << table_definition_with_id.table_definition().columns_size() << "]";
+  if (opt.schema_id != 0) {
+    schema_id->set_entity_id(opt.schema_id);
   }
 
-  DINGO_LOG(INFO) << "table_count=" << response.table_definition_with_ids_size();
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTablesBySchema",
+                                                                                                  request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get tables by schema, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+
+  for (const auto &table_definition_with_id : response.table_definition_with_ids()) {
+    std::cout << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
+              << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
+              << table_definition_with_id.table_definition().columns_size() << "]" << std::endl;
+  }
+
+  std::cout << "table_count=" << response.table_definition_with_ids_size() << std::endl;
 }
 
 void SetUpGetTablesCount(CLI::App &app) {
@@ -512,14 +523,9 @@ void RunDropTable(DropTableOptions const &opt) {
 void SetUpCreateSchema(CLI::App &app) {
   auto opt = std::make_shared<CreateSchemaOptions>();
   auto *cmd = app.add_subcommand("CreateSchema", "Create schema")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter schema name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter schema name")->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunCreateSchema(*opt); });
 }
 
@@ -539,22 +545,23 @@ void RunCreateSchema(CreateSchemaOptions const &opt) {
 
   request.set_schema_name(opt.name);
 
-  DINGO_LOG(INFO) << "SendRequest: " << request.DebugString();
-
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateSchema",
                                                                                                   request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "create schema failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Create schema success." << std::endl;
+  std::cout << "Schema: " << response.schema().DebugString() << std::endl;
 }
 
 void SetUpDropSchema(CLI::App &app) {
   auto opt = std::make_shared<DropSchemaOptions>();
   auto *cmd = app.add_subcommand("DropSchema", "Drop schema")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunDropSchema(*opt); });
 }
 
@@ -572,8 +579,13 @@ void RunDropSchema(DropSchemaOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropSchema", request,
                                                                                                   response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "drop schema failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Drop schema_id: " << opt.schema_id << " success." << std::endl;
 }
 
 void SetUpGetTable(CLI::App &app) {
@@ -1128,15 +1140,10 @@ void RunCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
 void SetUpCreateTenant(CLI::App &app) {
   auto opt = std::make_shared<CreateTenantOptions>();
   auto *cmd = app.add_subcommand("CreateTenant", "Create tenant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter name")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--comment", opt->comment, "Request parameter comment")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter name")->required();
+  cmd->add_option("--comment", opt->comment, "Request parameter comment")->required();
+  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunCreateTenant(*opt); });
 }
 
@@ -1152,22 +1159,22 @@ void RunCreateTenant(CreateTenantOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTenant",
                                                                                                   request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "create tenant failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Create tenant: " << opt.tenant_id << " , success." << std::endl;
 }
 
 void SetUpUpdateTenant(CLI::App &app) {
   auto opt = std::make_shared<UpdateTenantOptions>();
   auto *cmd = app.add_subcommand("UpdateTenant", "Update tenant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter name")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--comment", opt->comment, "Request parameter comment")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter name")->required();
+  cmd->add_option("--comment", opt->comment, "Request parameter comment")->required();
+  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunUpdateTenant(*opt); });
 }
 
@@ -1183,18 +1190,20 @@ void RunUpdateTenant(UpdateTenantOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("UpdateTenant",
                                                                                                   request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "update tenant failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Update tenant: " << opt.tenant_id << " , success." << std::endl;
 }
 
 void SetUpDropTenant(CLI::App &app) {
   auto opt = std::make_shared<DropTenantOptions>();
   auto *cmd = app.add_subcommand("DropTenant", "Drop tenant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunDropTenant(*opt); });
 }
 
@@ -1209,18 +1218,20 @@ void RunDropTenant(DropTenantOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("DropTenant", request,
                                                                                                   response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "drop tanent failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "Drop tenant: " << opt.tenant_id << " , success." << std::endl;
 }
 
 void SetUpGetTenant(CLI::App &app) {
   auto opt = std::make_shared<GetTenantOptions>();
   auto *cmd = app.add_subcommand("GetTenant", "Get tenant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunGetTenant(*opt); });
 }
 
@@ -1234,8 +1245,20 @@ void RunGetTenant(GetTenantOptions const &opt) {
   request.add_tenant_ids(opt.tenant_id);
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTenants", request,
                                                                                                   response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "get tanent failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  if (response.tenants_size() == 0) {
+    std::cout << "tenant: " << opt.tenant_id << "not exist." << std::endl;
+    return;
+  }
+
+  for (auto const &tenant : response.tenants()) {
+    std::cout << "tenant: " << tenant.DebugString() << std::endl;
+  }
 }
 
 void SetUpGetIndexes(CLI::App &app) {
