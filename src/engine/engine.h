@@ -250,7 +250,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                              const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl,
                                              int64_t for_update_ts, bool return_values,
                                              std::vector<pb::common::KeyValue>& kvs) = 0;
-    virtual butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
+    virtual butil::Status TxnPessimisticRollback(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                 int64_t start_ts, int64_t for_update_ts,
                                                  const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                       const std::vector<pb::store::Mutation>& mutations,
@@ -259,8 +260,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                       const std::vector<int64_t>& pessimistic_checks,
                                       const std::map<int64_t, int64_t>& for_update_ts_checks,
                                       const std::map<int64_t, std::string>& lock_extra_datas) = 0;
-    virtual butil::Status TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                    const std::vector<std::string>& keys) = 0;
+    virtual butil::Status TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                    int64_t commit_ts, const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key,
                                             int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) = 0;
     virtual butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,

@@ -166,8 +166,8 @@ class TxnEngineHelper {
                                        std::vector<pb::common::KeyValue> &kvs);
 
   static butil::Status PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                           std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
-                                           const std::vector<std::string> &keys);
+                                           std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                           int64_t for_update_ts, const std::vector<std::string> &keys);
 
   static butil::Status Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                 std::shared_ptr<Context> ctx, store::RegionPtr region,
@@ -178,7 +178,8 @@ class TxnEngineHelper {
                                 const std::map<int64_t, std::string> &lock_extra_datas);
 
   static butil::Status Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine, std::shared_ptr<Context> ctx,
-                              int64_t start_ts, int64_t commit_ts, const std::vector<std::string> &keys);
+                              store::RegionPtr region, int64_t start_ts, int64_t commit_ts,
+                              const std::vector<std::string> &keys);
 
   static butil::Status BatchRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                      std::shared_ptr<Context> ctx, int64_t start_ts,
