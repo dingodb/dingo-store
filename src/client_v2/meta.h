@@ -195,7 +195,7 @@ struct CleanDeletedIndexOptions {
 void SetUpCleanDeletedIndex(CLI::App &app);
 void RunCleanDeletedIndex(CleanDeletedIndexOptions const &opt);
 
-// // tenant
+// tenant
 struct CreateTenantOptions {
   std::string coor_url;
   std::string name;

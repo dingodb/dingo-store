@@ -49,6 +49,7 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt);
 
 struct GetRegionMapCommandOptions {
   std::string coor_url;
+  int64_t tenant_id;
 };
 
 void SetUpGetRegionMap(CLI::App &app);
