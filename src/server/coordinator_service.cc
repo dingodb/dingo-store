@@ -909,7 +909,7 @@ void DoGetRegionMap(google::protobuf::RpcController * /*controller*/,
   }
 
   pb::common::RegionMap regionmap;
-  coordinator_control->GetRegionMap(regionmap);
+  coordinator_control->GetRegionMap(regionmap, request->tenant_id());
 
   *(response->mutable_regionmap()) = regionmap;
   response->set_epoch(regionmap.epoch());

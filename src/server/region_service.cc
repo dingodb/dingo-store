@@ -282,6 +282,7 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("START_KEY");
   table_header.push_back("END_KEY");
   table_header.push_back("SCHEMA_ID");
+  table_header.push_back("TENANT_ID");
   table_header.push_back("TABLE_ID");
   table_header.push_back("INDEX_ID");
   table_header.push_back("PART_ID");
@@ -331,6 +332,7 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(20);  // START_KEY
   min_widths.push_back(20);  // END_KEY
   min_widths.push_back(10);  // SCHEMA_ID
+  min_widths.push_back(10);  // TENANT_ID
   min_widths.push_back(10);  // TABLE_ID
   min_widths.push_back(10);  // INDEX_ID
   min_widths.push_back(10);  // PART_ID
@@ -423,6 +425,9 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     url_line.push_back(std::string());
 
     line.push_back(std::to_string(region.definition().schema_id()));  // SCHEMA_ID
+    url_line.push_back(std::string());
+
+    line.push_back(std::to_string(region.definition().tenant_id()));  // TENANT_ID
     url_line.push_back(std::string());
 
     line.push_back(std::to_string(region.definition().table_id()));  // TABLE_ID
