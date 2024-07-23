@@ -36,11 +36,32 @@ namespace client_v2 {
 
 void SetUpMetaSubCommands(CLI::App &app);
 
+dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
+dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);
+dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
+dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id);
+
+int GetCreateTableId(int64_t &table_id);
+int64_t SendCreateTable(const std::string &table_name, int partition_num);
+void SendDropTable(int64_t table_id);
+int64_t SendGetTableByName(const std::string &table_name);
+int64_t SendGetTableByName(const std::string &table_name);
+std::vector<int64_t> SendGetTablesBySchema();
+
+butil::Status GetSqlTableOrIndexMeta(int64_t table_id, dingodb::pb::meta::TableDefinitionWithId &table_definition);
+butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinition &table_definition);
+
 struct MetaHelloOptions {
   std::string coor_url;
 };
 void SetUpMetaHello(CLI::App &app);
 void RunMetaHello(MetaHelloOptions const &opt);
+
+struct GetTenantOptions {
+  std::string coor_url;
+};
+void SetUpGetTenant(CLI::App &app);
+void RunGetTenant(GetTenantOptions const &opt);
 
 struct GetSchemasOptions {
   std::string coor_url;
@@ -220,13 +241,6 @@ struct DropTenantOptions {
 };
 void SetUpDropTenant(CLI::App &app);
 void RunDropTenant(DropTenantOptions const &opt);
-
-struct GetTenantOptions {
-  std::string coor_url;
-  int64_t tenant_id;
-};
-void SetUpGetTenant(CLI::App &app);
-void RunGetTenant(GetTenantOptions const &opt);
 
 // indexs
 struct GetIndexesOptions {

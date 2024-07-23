@@ -28,6 +28,7 @@
 
 #include "butil/status.h"
 #include "client_v2/helper.h"
+#include "client_v2/meta.h"
 #include "client_v2/pretty.h"
 #include "client_v2/store.h"
 #include "common/constant.h"
@@ -442,14 +443,14 @@ dingodb::pb::debug::DumpRegionResponse::Data DumpRawDocumentIndex(
 }
 
 butil::Status DumpDb(DumpDbOptions const& opt) {
-  dingodb::pb::meta::TableDefinition table_definition;
   if (opt.id == 0) {
     return butil::Status(1, "table_id/index_id is invalid");
   }
 
-  table_definition = SendGetTable(opt.id);
-  if (table_definition.name().empty()) {
-    table_definition = SendGetIndex(opt.id);
+  dingodb::pb::meta::TableDefinition table_definition;
+  auto status = GetTableOrIndexDefinition(opt.id, table_definition);
+  if (!status.ok()) {
+    return status;
   }
   if (table_definition.name().empty()) {
     return butil::Status(1, "Not found table/index");

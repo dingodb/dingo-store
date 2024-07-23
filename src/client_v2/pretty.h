@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "butil/status.h"
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
 #include "proto/meta.pb.h"
@@ -26,6 +27,15 @@ namespace client_v2 {
 
 class Pretty {
  public:
+  struct TenantInfo {
+    int64_t id;
+    std::string name;
+    std::string comment;
+    int64_t create_time;
+    int64_t update_time;
+  };
+
+  static bool ShowError(const butil::Status &status);
   static bool ShowError(const dingodb::pb::error::Error &error);
 
   static void Show(dingodb::pb::coordinator::GetCoordinatorMapResponse &response);
@@ -35,6 +45,8 @@ class Pretty {
                    const dingodb::pb::meta::TableDefinition &table_definition = {},
                    const std::vector<std::string> &exclude_columns = {});
   static void Show(dingodb::pb::debug::DumpRegionResponse &response);
+
+  static void Show(std::vector<TenantInfo> tenants);
 };
 
 }  // namespace client_v2
