@@ -1039,9 +1039,9 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
   return butil::Status::OK();
 }
 
-butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t for_update_ts,
-                                              const std::vector<std::string>& keys) {
-  auto status = ValidateLeader(ctx->RegionId());
+butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                              int64_t for_update_ts, const std::vector<std::string>& keys) {
+  auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
   }
@@ -1051,7 +1051,7 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int6
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnPessimisticRollback(ctx, start_ts, for_update_ts, keys);
+  status = writer->TxnPessimisticRollback(ctx, region, start_ts, for_update_ts, keys);
   if (!status.ok()) {
     return status;
   }
@@ -1077,8 +1077,8 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, max_commit_ts,
-                               pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status = writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc,
+                               max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
   if (!status.ok()) {
     return status;
   }
@@ -1086,9 +1086,9 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
   return butil::Status();
 }
 
-butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                 const std::vector<std::string>& keys) {
-  auto status = ValidateLeader(ctx->RegionId());
+butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                 int64_t commit_ts, const std::vector<std::string>& keys) {
+  auto status = ValidateLeader(region);
   if (!status.ok()) {
     return status;
   }
@@ -1098,7 +1098,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts,
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnCommit(ctx, start_ts, commit_ts, keys);
+  status = writer->TxnCommit(ctx, region, start_ts, commit_ts, keys);
   if (!status.ok()) {
     return status;
   }

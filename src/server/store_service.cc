@@ -2109,7 +2109,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  status = storage->TxnPessimisticRollback(ctx, request->start_ts(), request->for_update_ts(),
+  status = storage->TxnPessimisticRollback(ctx, region, request->start_ts(), request->for_update_ts(),
                                            Helper::PbRepeatedToVector(request->keys()));
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2380,7 +2380,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   }
 
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnCommit(ctx, request->start_ts(), request->commit_ts(), keys);
+  status = storage->TxnCommit(ctx, region, request->start_ts(), request->commit_ts(), keys);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

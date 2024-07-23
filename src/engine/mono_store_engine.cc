@@ -579,10 +579,11 @@ butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticLock(std::shared_ptr<Con
                                           lock_ttl, for_update_ts, return_values, kvs);
 }
 
-butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                                 int64_t for_update_ts,
+butil::Status MonoStoreEngine::TxnWriter::TxnPessimisticRollback(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                                 int64_t start_ts, int64_t for_update_ts,
                                                                  const std::vector<std::string>& keys) {
-  return TxnEngineHelper::PessimisticRollback(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, for_update_ts, keys);
+  return TxnEngineHelper::PessimisticRollback(txn_writer_raw_engine_, mono_engine_, ctx, region, start_ts,
+                                              for_update_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnPrewrite(
@@ -595,9 +596,10 @@ butil::Status MonoStoreEngine::TxnWriter::TxnPrewrite(
                                    for_update_ts_checks, lock_extra_datas);
 }
 
-butil::Status MonoStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
+butil::Status MonoStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                    int64_t start_ts, int64_t commit_ts,
                                                     const std::vector<std::string>& keys) {
-  return TxnEngineHelper::Commit(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, commit_ts, keys);
+  return TxnEngineHelper::Commit(txn_writer_raw_engine_, mono_engine_, ctx, region, start_ts, commit_ts, keys);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,

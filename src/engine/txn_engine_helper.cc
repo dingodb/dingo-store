@@ -57,7 +57,7 @@ DEFINE_int64(max_resolve_count, 4096, "max rollback count");
 DEFINE_int64(max_pessimistic_count, 4096, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
-DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
+DEFINE_bool(dingo_log_switch_txn_detail, true, "txn detail log");
 
 butil::Status TxnReader::Init() {
   if (is_initialized_) {
@@ -1709,8 +1709,9 @@ butil::Status TxnEngineHelper::DoUpdateLock(std::shared_ptr<Engine> raft_engine,
 bvar::LatencyRecorder g_txn_pessimistic_rollback_latency("dingo_txn_pessimistic_rollback");
 
 butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                                   std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                   int64_t for_update_ts, const std::vector<std::string> &keys) {
+                                                   std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                   int64_t start_ts, int64_t for_update_ts,
+                                                   const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_pessimistic_rollback_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -1725,13 +1726,6 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
                      << ", keys.size() > FLAGS_max_pessimistic_count";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                          "pessimistic rollback keys.size() > FLAGS_max_pessimistic_count");
-  }
-
-  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] PessimisticRollback", region->Id())
-                     << ", region is not found, region_id: " << ctx->RegionId();
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   std::vector<std::string> kv_dels_lock;
@@ -2675,8 +2669,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 bvar::LatencyRecorder g_txn_commit_latency("dingo_txn_commit");
 
 butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                      std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                      const std::vector<std::string> &keys) {
+                                      std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                      int64_t commit_ts, const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_commit_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -2697,13 +2691,6 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
                      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", commit_ts: " << commit_ts
                      << ", keys_size: " << keys.size() << ", keys.size() > FLAGS_max_commit_count";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit keys.size() > FLAGS_max_commit_count");
-  }
-
-  auto region = Server::GetInstance().GetRegion(ctx->RegionId());
-  if (region == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit", region->Id())
-                     << ", region is not found, region_id: " << ctx->RegionId();
-    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
   }
 
   if (commit_ts <= start_ts) {
