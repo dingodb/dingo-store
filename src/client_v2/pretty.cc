@@ -43,6 +43,16 @@
 
 namespace client_v2 {
 
+bool Pretty::ShowError(const butil::Status& status) {
+  if (status.error_code() != dingodb::pb::error::Errno::OK) {
+    std::cout << fmt::format("Error: {} {}", dingodb::pb::error::Errno_Name(status.error_code()), status.error_str())
+              << std::endl;
+    return true;
+  }
+
+  return false;
+}
+
 bool Pretty::ShowError(const dingodb::pb::error::Error& error) {
   if (error.errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << fmt::format("Error: {} {}", dingodb::pb::error::Errno_Name(error.errcode()), error.errmsg())
@@ -604,6 +614,11 @@ void ShowTxnDocumentIndexWrite(const dingodb::pb::debug::DumpRegionResponse::Txn
 void ShowTxnTable(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
                   const dingodb::pb::meta::TableDefinition& table_definition,
                   const std::vector<std::string>& exclude_columns) {
+  if (table_definition.name().empty()) {
+    std::cout << "Error: Missing table definition." << std::endl;
+    return;
+  }
+
   auto index_type = table_definition.index_parameter().index_type();
   if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
     ShowTxnTableData(txn, table_definition, exclude_columns);
@@ -717,6 +732,19 @@ void Pretty::Show(dingodb::pb::debug::DumpRegionResponse& response) {
   }
 
   Show(response.data());
+}
+
+void Pretty::Show(std::vector<TenantInfo> tenants) {
+  std::vector<std::vector<std::string>> rows;
+  rows = {{"ID", "Name", "CreateTime", "UpdateTime", "Comment"}};
+
+  for (auto& tenant : tenants) {
+    rows.push_back({std::to_string(tenant.id), tenant.name,
+                    dingodb::Helper::FormatTime(tenant.create_time, "%Y-%m-%d %H:%M:%s"),
+                    dingodb::Helper::FormatTime(tenant.update_time, "%Y-%m-%d %H:%M:%s"), tenant.comment});
+  }
+
+  PrintTable(rows);
 }
 
 }  // namespace client_v2

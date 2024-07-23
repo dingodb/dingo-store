@@ -20,16 +20,25 @@
 #include <iostream>
 #include <limits>
 #include <ostream>
+#include <vector>
 
+#include "butil/status.h"
+#include "client_v2/coordinator.h"
 #include "client_v2/helper.h"
+#include "client_v2/pretty.h"
+#include "client_v2/store.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "coordinator/tso_control.h"
+#include "fmt/core.h"
+#include "nlohmann/json.hpp"
+#include "proto/meta.pb.h"
 
 namespace client_v2 {
 
 void SetUpMetaSubCommands(CLI::App &app) {
+  SetUpGetTenant(app);
   SetUpCreateTable(app);
   SetUpGetTable(app);
   SetUpGetTableRange(app);
@@ -50,11 +59,352 @@ void SetUpMetaSubCommands(CLI::App &app) {
   SetUpGetTenant(app);
 }
 
+dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id) {
+  dingodb::pb::meta::GetTablesRequest request;
+  dingodb::pb::meta::GetTablesResponse response;
+
+  auto *mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(index_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTables", request, response);
+  if (response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << fmt::format("GetTables failed, error: {} {}",
+                                    dingodb::pb::error::Errno_Name(response.error().errcode()),
+                                    response.error().errmsg());
+    return {};
+  }
+
+  return response.table_definition_with_ids()[0].table_definition();
+}
+
+dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
+  dingodb::pb::meta::GetTableRequest request;
+  dingodb::pb::meta::GetTableResponse response;
+
+  auto *mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTable", request, response);
+
+  return response.table_definition_with_id().table_definition();
+}
+
+dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id) {
+  dingodb::pb::meta::GetTableRangeRequest request;
+  dingodb::pb::meta::GetTableRangeResponse response;
+
+  auto *mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableRange", request, response);
+
+  return response.table_range();
+}
+
+dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id) {
+  dingodb::pb::meta::GetIndexRangeRequest request;
+  dingodb::pb::meta::GetIndexRangeResponse response;
+
+  auto *mut_index_id = request.mutable_index_id();
+  mut_index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_index_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_index_id->set_entity_id(table_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetIndexRange", request, response);
+
+  return response.index_range();
+}
+
+int GetCreateTableId(int64_t &table_id) {
+  dingodb::pb::meta::CreateTableIdRequest request;
+  dingodb::pb::meta::CreateTableIdResponse response;
+
+  auto *schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  auto status =
+      InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "CreateTableId", request, response);
+  DINGO_LOG(INFO) << "SendRequestWithoutContext status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+
+  if (response.has_table_id()) {
+    table_id = response.table_id().entity_id();
+    return 0;
+  } else {
+    return -1;
+  }
+}
+
+dingodb::pb::meta::CreateTableRequest BuildCreateTableRequest(const std::string &table_name, int partition_num) {
+  dingodb::pb::meta::CreateTableRequest request;
+
+  int64_t new_table_id = 0;
+  int ret = GetCreateTableId(new_table_id);
+  if (ret != 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableId failed";
+    return request;
+  }
+
+  uint32_t part_count = partition_num;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = 0;
+    int ret = GetCreateTableId(new_part_id);
+    if (ret != 0) {
+      DINGO_LOG(WARNING) << "GetCreateTableId failed";
+      return request;
+    }
+    part_ids.push_back(new_part_id);
+  }
+
+  auto *schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  // setup table_id
+  auto *table_id = request.mutable_table_id();
+  table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  table_id->set_parent_entity_id(schema_id->entity_id());
+  table_id->set_entity_id(new_table_id);
+
+  // string name = 1;
+  auto *table_definition = request.mutable_table_definition();
+  table_definition->set_name(table_name);
+
+  // repeated ColumnDefinition columns = 2;
+  for (int i = 0; i < 3; i++) {
+    auto *column = table_definition->add_columns();
+    std::string column_name("test_columen_");
+    column_name.append(std::to_string(i));
+    column->set_name(column_name);
+    column->set_sql_type("INT");
+    column->set_element_type("INT");
+    column->set_precision(100);
+    column->set_nullable(false);
+    column->set_indexofkey(7);
+    column->set_has_default_val(false);
+    column->set_default_val("0");
+  }
+
+  table_definition->set_version(1);
+  table_definition->set_ttl(0);
+  table_definition->set_engine(::dingodb::pb::common::Engine::ENG_ROCKSDB);
+  auto *prop = table_definition->mutable_properties();
+  (*prop)["test property"] = "test_property_value";
+
+  auto *partition_rule = table_definition->mutable_table_partition();
+  auto *part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+
+  for (int i = 0; i < partition_num; i++) {
+    auto *part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_table_id);
+    part->mutable_range()->set_start_key(client_v2::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client_v2::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  return request;
+}
+
+int64_t SendCreateTable(const std::string &table_name, int partition_num) {
+  auto request = BuildCreateTableRequest(table_name, partition_num);
+  if (request.table_id().entity_id() == 0) {
+    DINGO_LOG(WARNING) << "BuildCreateTableRequest failed";
+    return 0;
+  }
+
+  dingodb::pb::meta::CreateTableResponse response;
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "CreateTable", request, response);
+
+  DINGO_LOG(INFO) << "response=" << response.DebugString();
+  return response.table_id().entity_id();
+}
+
+void SendDropTable(int64_t table_id) {
+  dingodb::pb::meta::DropTableRequest request;
+  dingodb::pb::meta::DropTableResponse response;
+
+  auto *mut_table_id = request.mutable_table_id();
+  mut_table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+  mut_table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  mut_table_id->set_entity_id(table_id);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "DropTable", request, response);
+}
+
+int64_t SendGetTableByName(const std::string &table_name) {
+  dingodb::pb::meta::GetTableByNameRequest request;
+  dingodb::pb::meta::GetTableByNameResponse response;
+
+  auto *schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  request.set_table_name(table_name);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableByName", request, response);
+
+  return response.table_definition_with_id().table_id().entity_id();
+}
+
+std::vector<int64_t> SendGetTablesBySchema() {
+  dingodb::pb::meta::GetTablesBySchemaRequest request;
+  dingodb::pb::meta::GetTablesBySchemaResponse response;
+
+  auto *schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+
+  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTablesBySchema", request, response);
+
+  std::vector<int64_t> table_ids;
+  for (const auto &id : response.table_definition_with_ids()) {
+    table_ids.push_back(id.table_id().entity_id());
+  }
+
+  return table_ids;
+}
+
+// 740000000000000000+m+tenants|tenant:{tenantId}|schema:{schemaId}|table:{tableId}+h+tenant:{tenantId}|schema:{schemaIdId}|table:{tableId}|index:{indexId}
+void ParseKey(const std::string &key, std::string &type, int64_t &parent_id, int64_t &entity_id) {
+  // 740000000000000000+m
+  int start_pos = 10;
+  int ret;
+  {
+    std::string output;
+    ret = Helper::DecodeBytes(key.substr(start_pos, key.size()), output);
+    CHECK(ret != -1) << fmt::format("decode key({}) failed.", dingodb::Helper::StringToHex(key));
+    std::vector<std::string> results;
+    dingodb::Helper::SplitString(output, ':', results);
+    CHECK((results.size() == 1 || results.size() == 2)) << "split string size wrong, output: " << output;
+    parent_id = (results.size() == 2) ? std::stoll(results[1]) : 0;
+  }
+
+  {
+    start_pos += ret + 1 + 8;
+    std::string output;
+    ret = Helper::DecodeBytes(key.substr(start_pos, key.size()), output);
+    CHECK(ret != -1) << fmt::format("decode key({}) failed.", dingodb::Helper::StringToHex(key));
+    std::vector<std::string> results;
+    dingodb::Helper::SplitString(output, ':', results);
+    CHECK(results.size() == 2) << "split string size wrong, output: " << output;
+    type = results[0];
+    entity_id = std::stoll(results[1]);
+  }
+}
+
+struct MetaItem {
+  std::string type;
+  int64_t parent_id;
+  int64_t entity_id;
+  std::string value;
+};
+
+// get excutor table meta from store
+// get meta region
+// scan region
+// decode key and value
+butil::Status GetSqlMeta(std::vector<MetaItem> &metas) {
+  // get meta region
+  dingodb::pb::coordinator::ScanRegionsRequest request;
+  dingodb::pb::coordinator::ScanRegionsResponse response;
+
+  request.set_key(dingodb::Helper::HexToString("740000000000000000"));
+  request.set_range_end(dingodb::Helper::HexToString("740000000000000001"));
+
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ScanRegions", request, response);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  // scan region
+  std::vector<dingodb::pb::common::KeyValue> kvs;
+  for (const auto &region_info : response.regions()) {
+    dingodb::pb::common::Region region = SendQueryRegion(region_info.region_id());
+    if (region.id() == 0) {
+      DINGO_LOG(ERROR) << "GetRegion failed." << std::endl;
+      continue;
+    }
+
+    auto response = SendTxnScanImpl(region, region_info.range(), 1000, INT64_MAX, 0, false, false);
+    for (const auto &kv : response.kvs()) {
+      kvs.push_back(kv);
+    }
+  }
+
+  // decode key and value
+  for (const auto &kv : kvs) {
+    // decode key
+    MetaItem meta;
+    ParseKey(kv.key(), meta.type, meta.parent_id, meta.entity_id);
+    meta.value = kv.value();
+    metas.push_back(meta);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status GetSqlTableOrIndexMeta(int64_t table_id, dingodb::pb::meta::TableDefinitionWithId &table_definition) {
+  std::vector<MetaItem> metas;
+  butil::Status status = GetSqlMeta(metas);
+  if (!status.ok()) {
+    return status;
+  }
+
+  for (auto &meta : metas) {
+    if ((meta.type == "Table" || meta.type == "Index") && meta.entity_id == table_id) {
+      bool ret = table_definition.ParseFromArray(meta.value.data(), meta.value.size());
+      CHECK(ret) << "parse table definition failed.";
+      break;
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinition &table_definition) {
+  dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
+  auto status = GetSqlTableOrIndexMeta(id, table_definition_with_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (table_definition_with_id.table_id().entity_id() > 0) {
+    table_definition = table_definition_with_id.table_definition();
+    return butil::Status::OK();
+  }
+
+  table_definition = SendGetTable(id);
+  if (table_definition.name().empty()) {
+    table_definition = SendGetIndex(id);
+  }
+
+  return butil::Status::OK();
+}
+
 void SetUpMetaHello(CLI::App &app) {
   auto opt = std::make_shared<MetaHelloOptions>();
-  auto *cmd = app.add_subcommand("MetaHello", "Meta hello")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("MetaHello", "Meta hello")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunMetaHello(*opt); });
 }
 
@@ -76,9 +426,45 @@ void RunMetaHello(MetaHelloOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
+void SetUpGetTenant(CLI::App &app) {
+  auto opt = std::make_shared<GetTenantOptions>();
+  auto *cmd = app.add_subcommand("GetTenant", "Get tenant")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->callback([opt]() { RunGetTenant(*opt); });
+}
+
+void RunGetTenant(GetTenantOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+
+  std::vector<MetaItem> metas;
+  auto status = GetSqlMeta(metas);
+  if (!status.ok()) {
+    Pretty::ShowError(status);
+    return;
+  }
+
+  std::vector<Pretty::TenantInfo> tenants;
+  for (const auto &meta : metas) {
+    if (meta.type == "tenant") {
+      // {"id":0,"name":"root","comment":null,"createTimestamp":0,"updateTimestamp":0}
+      auto tenant_json = nlohmann::json::parse(meta.value);
+      auto comment = tenant_json["comment"].is_null() ? "" : tenant_json["comment"].get<std::string>();
+      tenants.push_back({tenant_json["id"].get<int64_t>(), tenant_json["name"].get<std::string>(), comment,
+                         tenant_json["createTimestamp"].get<int64_t>(), tenant_json["updateTimestamp"].get<int64_t>()});
+    } else if (meta.type == "DB") {
+      // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
+      auto schema_json = nlohmann::json::parse(meta.value);
+    }
+  }
+
+  Pretty::Show(tenants);
+}
+
 void SetUpGetSchema(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaOptions>();
-  auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
@@ -121,7 +507,7 @@ void RunGetSchema(GetSchemaOptions const &opt) {
 
 void SetUpGetSchemas(CLI::App &app) {
   auto opt = std::make_shared<GetSchemasOptions>();
-  auto *cmd = app.add_subcommand("GetSchemas", "Get schemas")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunGetSchemas(*opt); });
@@ -156,7 +542,7 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
 
 void SetUpGetSchemaByName(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaByNameOptions>();
-  auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->add_option("--name", opt->name, "Request parameter schema name")->required();
@@ -193,7 +579,7 @@ void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
 
 void SetUpGetTablesBySchema(CLI::App &app) {
   auto opt = std::make_shared<GetTablesBySchemaOptions>();
-  auto *cmd = app.add_subcommand("GetTablesBySchema", "Get tables by schema id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
 
@@ -235,12 +621,9 @@ void RunGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
 
 void SetUpGetTablesCount(CLI::App &app) {
   auto opt = std::make_shared<GetTablesCountOptions>();
-  auto *cmd = app.add_subcommand("GetTablesCount", "Get tables count")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTablesCount", "Get tables count")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
 
   cmd->callback([opt]() { RunGetTablesCount(*opt); });
 }
@@ -267,7 +650,7 @@ void RunGetTablesCount(GetTablesCountOptions const &opt) {
 
 void SetUpCreateTable(CLI::App &app) {
   auto opt = std::make_shared<CreateTableOptions>();
-  auto *cmd = app.add_subcommand("CreateTable", "Create table")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateTable", "Create table")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--name", opt->name, "Request parameter table name")->required();
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id");
@@ -423,13 +806,9 @@ void RunCreateTable(CreateTableOptions const &opt) {
 
 void SetUpCreateTableIds(CLI::App &app) {
   auto opt = std::make_shared<CreateTableIdsOptions>();
-  auto *cmd = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
 
   cmd->callback([opt]() { RunCreateTableIds(*opt); });
 }
@@ -457,9 +836,8 @@ void RunCreateTableIds(CreateTableIdsOptions const &opt) {
 
 void SetUpCreateTableId(CLI::App &app) {
   auto opt = std::make_shared<CreateTableIdOptions>();
-  auto *cmd = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateTableIds", "Create tableIds")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunCreateTableId(*opt); });
 }
 
@@ -482,7 +860,7 @@ void RunCreateTableId(CreateTableIdOptions const &opt) {
 
 void SetUpDropTable(CLI::App &app) {
   auto opt = std::make_shared<DropTableOptions>();
-  auto *cmd = app.add_subcommand("DropTable", "Drop Table")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropTable", "Drop Table")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
@@ -522,7 +900,7 @@ void RunDropTable(DropTableOptions const &opt) {
 
 void SetUpCreateSchema(CLI::App &app) {
   auto opt = std::make_shared<CreateSchemaOptions>();
-  auto *cmd = app.add_subcommand("CreateSchema", "Create schema")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateSchema", "Create schema")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--name", opt->name, "Request parameter schema name")->required();
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
@@ -559,7 +937,7 @@ void RunCreateSchema(CreateSchemaOptions const &opt) {
 
 void SetUpDropSchema(CLI::App &app) {
   auto opt = std::make_shared<DropSchemaOptions>();
-  auto *cmd = app.add_subcommand("DropSchema", "Drop schema")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropSchema", "Drop schema")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunDropSchema(*opt); });
@@ -590,12 +968,12 @@ void RunDropSchema(DropSchemaOptions const &opt) {
 
 void SetUpGetTable(CLI::App &app) {
   auto opt = std::make_shared<GetTableOptions>();
-  auto *cmd = app.add_subcommand("GetTable", "Get table")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTable", "Get table")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_flag("--is_index", opt->is_index, "Request parameter is_index");
   cmd->add_option("--id", opt->id, "Request parameter table id")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
+  cmd->add_flag("--is_index", opt->is_index, "Request parameter is_index");
   cmd->callback([opt]() { RunGetTable(*opt); });
 }
 
@@ -754,7 +1132,7 @@ void RunGetTable(GetTableOptions const &opt) {
 
 void SetUpGetTableByName(CLI::App &app) {
   auto opt = std::make_shared<GetTableByNameOptions>();
-  auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema_id")->required();
   cmd->add_option("--name", opt->name, "Request parameter name")->required();
@@ -917,9 +1295,8 @@ void RunGetTableByName(GetTableByNameOptions const &opt) {
 
 void SetUpGetTableRange(CLI::App &app) {
   auto opt = std::make_shared<GetTableRangeOptions>();
-  auto *cmd = app.add_subcommand("GetTableRange", "Get table range")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTableRange", "Get table range")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetTableRange(*opt); });
 }
@@ -955,10 +1332,9 @@ void RunGetTableRange(GetTableRangeOptions const &opt) {
 
 void SetUpGetTableMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetTableMetricsOptions>();
-  auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetTableMetrics(*opt); });
 }
 
@@ -982,16 +1358,11 @@ void RunGetTableMetrics(GetTableMetricsOptions const &opt) {
 
 void SetUpSwitchAutoSplit(CLI::App &app) {
   auto opt = std::make_shared<SwitchAutoSplitOptions>();
-  auto *cmd = app.add_subcommand("SwitchAutoSplit", "Switch auto split")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--auto_split", opt->auto_split, "Request parameter auto_split")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("SwitchAutoSplit", "Switch auto split")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
+  cmd->add_flag("--auto_split", opt->auto_split, "Request parameter auto_split")->required();
   cmd->callback([opt]() { RunSwitchAutoSplit(*opt); });
 }
 
@@ -1019,10 +1390,9 @@ void RunSwitchAutoSplit(SwitchAutoSplitOptions const &opt) {
 
 void SetUpGetDeletedTable(CLI::App &app) {
   auto opt = std::make_shared<GetDeletedTableOptions>();
-  auto *cmd = app.add_subcommand("GetDeletedTable", "Get deleted table")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetDeletedTable", "Get deleted table")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetDeletedTable(*opt); });
 }
 
@@ -1052,10 +1422,9 @@ void RunGetDeletedTable(GetDeletedTableOptions const &opt) {
 
 void SetUpGetDeletedIndex(CLI::App &app) {
   auto opt = std::make_shared<GetDeletedIndexOptions>();
-  auto *cmd = app.add_subcommand("GetDeletedIndex", "Get deleted index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetDeletedIndex", "Get deleted index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetDeletedIndex(*opt); });
 }
 
@@ -1085,10 +1454,9 @@ void RunGetDeletedIndex(GetDeletedIndexOptions const &opt) {
 
 void SetUpCleanDeletedTable(CLI::App &app) {
   auto opt = std::make_shared<CleanDeletedTableOptions>();
-  auto *cmd = app.add_subcommand("CleanDeletedTable", "Clean deleted table")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CleanDeletedTable", "Clean deleted table")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunCleanDeletedTable(*opt); });
 }
 
@@ -1112,10 +1480,9 @@ void RunCleanDeletedTable(CleanDeletedTableOptions const &opt) {
 
 void SetUpCleanDeletedIndex(CLI::App &app) {
   auto opt = std::make_shared<CleanDeletedIndexOptions>();
-  auto *cmd = app.add_subcommand("CleanDeletedIndex", "Clean deleted index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CleanDeletedIndex", "Clean deleted index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id")->required();
   cmd->callback([opt]() { RunCleanDeletedIndex(*opt); });
 }
 
@@ -1139,7 +1506,7 @@ void RunCleanDeletedIndex(CleanDeletedIndexOptions const &opt) {
 
 void SetUpCreateTenant(CLI::App &app) {
   auto opt = std::make_shared<CreateTenantOptions>();
-  auto *cmd = app.add_subcommand("CreateTenant", "Create tenant")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateTenant", "Create tenant")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--name", opt->name, "Request parameter name")->required();
   cmd->add_option("--comment", opt->comment, "Request parameter comment")->required();
@@ -1170,7 +1537,7 @@ void RunCreateTenant(CreateTenantOptions const &opt) {
 
 void SetUpUpdateTenant(CLI::App &app) {
   auto opt = std::make_shared<UpdateTenantOptions>();
-  auto *cmd = app.add_subcommand("UpdateTenant", "Update tenant")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("UpdateTenant", "Update tenant")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--name", opt->name, "Request parameter name")->required();
   cmd->add_option("--comment", opt->comment, "Request parameter comment")->required();
@@ -1201,7 +1568,7 @@ void RunUpdateTenant(UpdateTenantOptions const &opt) {
 
 void SetUpDropTenant(CLI::App &app) {
   auto opt = std::make_shared<DropTenantOptions>();
-  auto *cmd = app.add_subcommand("DropTenant", "Drop tenant")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropTenant", "Drop tenant")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunDropTenant(*opt); });
@@ -1227,48 +1594,11 @@ void RunDropTenant(DropTenantOptions const &opt) {
   std::cout << "Drop tenant: " << opt.tenant_id << " , success." << std::endl;
 }
 
-void SetUpGetTenant(CLI::App &app) {
-  auto opt = std::make_shared<GetTenantOptions>();
-  auto *cmd = app.add_subcommand("GetTenant", "Get tenant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--id", opt->tenant_id, "Request parameter tenant id")->required();
-  cmd->callback([opt]() { RunGetTenant(*opt); });
-}
-
-void RunGetTenant(GetTenantOptions const &opt) {
-  if (Helper::SetUp(opt.coor_url) < 0) {
-    exit(-1);
-  }
-  dingodb::pb::meta::GetTenantsRequest request;
-  dingodb::pb::meta::GetTenantsResponse response;
-
-  request.add_tenant_ids(opt.tenant_id);
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTenants", request,
-                                                                                                  response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get tanent failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg() << std::endl;
-    return;
-  }
-  if (response.tenants_size() == 0) {
-    std::cout << "tenant: " << opt.tenant_id << "not exist." << std::endl;
-    return;
-  }
-
-  for (auto const &tenant : response.tenants()) {
-    std::cout << "tenant: " << tenant.DebugString() << std::endl;
-  }
-}
-
 void SetUpGetIndexes(CLI::App &app) {
   auto opt = std::make_shared<GetIndexesOptions>();
-  auto *cmd = app.add_subcommand("GetIndexs", "Get index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndexs", "Get index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunGetIndexes(*opt); });
 }
 
@@ -1303,12 +1633,9 @@ void RunGetIndexes(GetIndexesOptions const &opt) {
 
 void SetUpGetIndexesCount(CLI::App &app) {
   auto opt = std::make_shared<GetIndexesCountOptions>();
-  auto *cmd = app.add_subcommand("GetIndexesCount", "Get index count")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndexesCount", "Get index count")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunGetIndexesCount(*opt); });
 }
 
@@ -1333,53 +1660,34 @@ void RunGetIndexesCount(GetIndexesCountOptions const &opt) {
 
 void SetUpCreateIndex(CLI::App &app) {
   auto opt = std::make_shared<CreateIndexOptions>();
-  auto *cmd = app.add_subcommand("CreateIndex", "Create index ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter region name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateIndex", "Create index ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter region name")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
   cmd->add_flag("--with_auto_increment", opt->with_auto_increment, "Request parameter with_auto_increment")
       ->default_val(true)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_flag("--with_scalar_schema", opt->with_scalar_schema, "Request parameter with_scalar_schema")
       ->default_val(true)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
       ->default_val(3)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_option("--vector_index_type", opt->vector_index_type,
-                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->group("Coordinator Manager Commands");
-  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")
-      ->ignore_case()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks")->group("Coordinator Manager Commands");
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq");
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")->ignore_case();
+  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
+  cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction");
+  cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks");
   cmd->add_option("--ncentroids", opt->ncentroids, "Request parameter ncentroids, ncentroids default 10")
-      ->default_val(10)
-      ->group("Coordinator Manager Commands");
+      ->default_val(10);
   cmd->add_option("--nsubvector", opt->nsubvector, "Request parameter nsubvector, ivf pq default subvector nums 8")
-      ->default_val(8)
-      ->group("Coordinator Manager Commands");
+      ->default_val(8);
   cmd->add_option("--nbits_per_idx", opt->nbits_per_idx,
                   "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
-      ->default_val(8)
-      ->group("Coordinator Manager Commands");
+      ->default_val(8);
   cmd->callback([opt]() { RunCreateIndex(*opt); });
 }
 
@@ -1637,32 +1945,20 @@ void RunCreateIndex(CreateIndexOptions const &opt) {
 
 void SetUpCreateDocumentIndex(CLI::App &app) {
   auto opt = std::make_shared<CreateDocumentIndexOptions>();
-  auto *cmd =
-      app.add_subcommand("CreateDocumentIndex", "Create document index ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter region name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateDocumentIndex", "Create document index ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter region name")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
   cmd->add_flag("--with_auto_increment", opt->with_auto_increment, "Request parameter with_auto_increment")
       ->default_val(true)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_flag("--use_json_parameter", opt->use_json_parameter, "Request parameter use_json_parameter")
       ->default_val(true)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
       ->default_val(3)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
 
   cmd->callback([opt]() { RunCreateDocumentIndex(*opt); });
 }
@@ -1790,9 +2086,8 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt) {
 
 void SetUpCreateIndexId(CLI::App &app) {
   auto opt = std::make_shared<CreateIndexIdOptions>();
-  auto *cmd = app.add_subcommand("CreateIndexId", "Create index id ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateIndexId", "Create index id ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunCreateIndexId(*opt); });
 }
 void RunCreateIndexId(CreateIndexIdOptions const &opt) {
@@ -1815,12 +2110,10 @@ void RunCreateIndexId(CreateIndexIdOptions const &opt) {
 
 void SetUpUpdateIndex(CLI::App &app) {
   auto opt = std::make_shared<UpdateIndexOptions>();
-  auto *cmd = app.add_subcommand("UpdateIndex", "Update Index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
-  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("UpdateIndex", "Update Index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id");
+  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
   cmd->callback([opt]() { RunUpdateIndex(*opt); });
 }
 void RunUpdateIndex(UpdateIndexOptions const &opt) {
@@ -1886,10 +2179,9 @@ void RunUpdateIndex(UpdateIndexOptions const &opt) {
 
 void SetUpDropIndex(CLI::App &app) {
   auto opt = std::make_shared<DropIndexOptions>();
-  auto *cmd = app.add_subcommand("DropIndex", "Drop Index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropIndex", "Drop Index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id");
   cmd->callback([opt]() { RunDropIndex(*opt); });
 }
 void RunDropIndex(DropIndexOptions const &opt) {
@@ -1913,10 +2205,9 @@ void RunDropIndex(DropIndexOptions const &opt) {
 
 void SetUpGetIndex(CLI::App &app) {
   auto opt = std::make_shared<GetIndexOptions>();
-  auto *cmd = app.add_subcommand("GetIndex", "Get Index")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndex", "Get Index")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id");
   cmd->callback([opt]() { RunGetIndex(*opt); });
 }
 void RunGetIndex(GetIndexOptions const &opt) {
@@ -1940,11 +2231,10 @@ void RunGetIndex(GetIndexOptions const &opt) {
 
 void SetUpGetIndexByName(CLI::App &app) {
   auto opt = std::make_shared<GetIndexByNameOptions>();
-  auto *cmd = app.add_subcommand("GetIndexByName", "Get index by name")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter index name")->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndexByName", "Get index by name")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter index name");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id");
   cmd->callback([opt]() { RunGetIndexByName(*opt); });
 }
 void RunGetIndexByName(GetIndexByNameOptions const &opt) {
@@ -1967,10 +2257,9 @@ void RunGetIndexByName(GetIndexByNameOptions const &opt) {
 
 void SetUpGetIndexRange(CLI::App &app) {
   auto opt = std::make_shared<GetIndexRangeOptions>();
-  auto *cmd = app.add_subcommand("GetIndexRange", "Get index range ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndexRange", "Get index range ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id");
   cmd->callback([opt]() { RunGetIndexRange(*opt); });
 }
 void RunGetIndexRange(GetIndexRangeOptions const &opt) {
@@ -2001,10 +2290,9 @@ void RunGetIndexRange(GetIndexRangeOptions const &opt) {
 
 void SetUpGetIndexMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetIndexMetricsOptions>();
-  auto *cmd = app.add_subcommand("GetIndexMetrics", "Get index metrics")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter index id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetIndexMetrics", "Get index metrics")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter index id");
   cmd->callback([opt]() { RunGetIndexMetrics(*opt); });
 }
 void RunGetIndexMetrics(GetIndexMetricsOptions const &opt) {
@@ -2027,10 +2315,9 @@ void RunGetIndexMetrics(GetIndexMetricsOptions const &opt) {
 
 void SetUpGenerateTableIds(CLI::App &app) {
   auto opt = std::make_shared<GenerateTableIdsOptions>();
-  auto *cmd = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id");
   cmd->callback([opt]() { RunGenerateTableIds(*opt); });
 }
 void RunGenerateTableIds(GenerateTableIdsOptions const &opt) {
@@ -2066,22 +2353,13 @@ void RunGenerateTableIds(GenerateTableIdsOptions const &opt) {
 
 void SetUpCreateTables(CLI::App &app) {
   auto opt = std::make_shared<CreateTablesOptions>();
-  auto *cmd = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter name")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--replica", opt->replica, "Request parameter replica")
-      ->default_val(3)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GenerateTableIds", "Generate table ids ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id");
+  cmd->add_option("--name", opt->name, "Request parameter name")->required();
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
+  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")->required();
+  cmd->add_option("--replica", opt->replica, "Request parameter replica")->default_val(3)->required();
   cmd->callback([opt]() { RunCreateTables(*opt); });
 }
 void RunCreateTables(CreateTablesOptions const &opt) {
@@ -2201,33 +2479,19 @@ void RunCreateTables(CreateTablesOptions const &opt) {
 
 void SetUpUpdateTables(CLI::App &app) {
   auto opt = std::make_shared<UpdateTablesOptions>();
-  auto *cmd = app.add_subcommand("UpdateTables", "Update tables ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter table name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--def_version", opt->def_version, "Request parameter version")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("UpdateTables", "Update tables ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")->required();
+  cmd->add_option("--name", opt->name, "Request parameter table name")->required();
+  cmd->add_option("--def_version", opt->def_version, "Request parameter version")->required();
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
       ->default_val(3)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_flag("--is_updating_index", opt->is_updating_index, "Request parameter replica num, must greater than 0")
       ->default_val(false)
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
+  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")->required();
 
   cmd->callback([opt]() { RunUpdateTables(*opt); });
 }
@@ -2332,36 +2596,20 @@ void RunUpdateTables(UpdateTablesOptions const &opt) {
 
 void SetUpAddIndexOnTable(CLI::App &app) {
   auto opt = std::make_shared<AddIndexOnTableOptions>();
-  auto *cmd = app.add_subcommand("AddIndexOnTable", "Add index on table")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--index_id", opt->index_id, "Request parameter index id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--name", opt->name, "Request parameter table name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--def_version", opt->def_version, "Request parameter version")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("AddIndexOnTable", "Add index on table")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")->required();
+  cmd->add_option("--index_id", opt->index_id, "Request parameter index id")->required();
+  cmd->add_option("--name", opt->name, "Request parameter table name")->required();
+  cmd->add_option("--def_version", opt->def_version, "Request parameter version")->required();
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1)->required();
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")
       ->default_val(3)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_flag("--is_updating_index", opt->is_updating_index, "Request parameter replica num, must greater than 0")
       ->default_val(false)
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
+  cmd->add_option("--engine", opt->engine, "Request parameter engine, Must be rocksdb|bdb")->required();
 
   cmd->callback([opt]() { RunAddIndexOnTable(*opt); });
 }
@@ -2471,15 +2719,10 @@ void RunAddIndexOnTable(AddIndexOnTableOptions const &opt) {
 
 void SetUpDropIndexOnTable(CLI::App &app) {
   auto opt = std::make_shared<DropIndexOnTableOptions>();
-  auto *cmd = app.add_subcommand("DropIndexOnTable", "Drop index on table")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--index_id", opt->index_id, "Request parameter index id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropIndexOnTable", "Drop index on table")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")->required();
+  cmd->add_option("--index_id", opt->index_id, "Request parameter index id")->required();
   cmd->callback([opt]() { RunDropIndexOnTable(*opt); });
 }
 void RunDropIndexOnTable(DropIndexOnTableOptions const &opt) {
@@ -2502,10 +2745,9 @@ void RunDropIndexOnTable(DropIndexOnTableOptions const &opt) {
 
 void SetUpGetTables(CLI::App &app) {
   auto opt = std::make_shared<GetTablesOptions>();
-  auto *cmd = app.add_subcommand("GetTables", "Get tables")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetTables", "Get tables")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetTables(*opt); });
 }
 
@@ -2530,13 +2772,10 @@ void RunGetTables(GetTablesOptions const &opt) {
 
 void SetUpDropTables(CLI::App &app) {
   auto opt = std::make_shared<DropTablesOptions>();
-  auto *cmd = app.add_subcommand("DropTables", "drop tables")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("DropTables", "drop tables")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunDropTables(*opt); });
 }
 
@@ -2560,9 +2799,8 @@ void RunDropTables(DropTablesOptions const &opt) {
 
 void SetUpGetAutoIncrements(CLI::App &app) {
   auto opt = std::make_shared<GetAutoIncrementsOptions>();
-  auto *cmd = app.add_subcommand("GetAutoIncrements", "Get auto increments ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetAutoIncrements", "Get auto increments ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunGetAutoIncrements(*opt); });
 }
 
@@ -2581,10 +2819,9 @@ void RunGetAutoIncrements(GetAutoIncrementsOptions const &opt) {
 
 void SetUpGetAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<GetAutoIncrementOptions>();
-  auto *cmd = app.add_subcommand("GetAutoIncrement", "Get auto increment ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GetAutoIncrement", "Get auto increment ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetAutoIncrement(*opt); });
 }
 
@@ -2607,15 +2844,10 @@ void RunGetAutoIncrement(GetAutoIncrementOptions const &opt) {
 
 void SetUpCreateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<CreateAutoIncrementOptions>();
-  auto *cmd =
-      app.add_subcommand("CreateAutoIncrement", "Create auto increment ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--incr_start_id", opt->incr_start_id, "Request parameter incr start id")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateAutoIncrement", "Create auto increment ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
+  cmd->add_option("--incr_start_id", opt->incr_start_id, "Request parameter incr start id")->default_val(1)->required();
   cmd->callback([opt]() { RunCreateAutoIncrement(*opt); });
 }
 
@@ -2641,19 +2873,11 @@ void RunCreateAutoIncrement(CreateAutoIncrementOptions const &opt) {
 
 void SetUpUpdateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<UpdateAutoIncrementOptions>();
-  auto *cmd =
-      app.add_subcommand("UpdateAutoIncrement", "Update auto increment ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--incr_start_id", opt->incr_start_id, "Request parameter incr start id")
-      ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--force", opt->force, "Request parameter force")
-      ->default_val(true)
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("UpdateAutoIncrement", "Update auto increment ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
+  cmd->add_option("--incr_start_id", opt->incr_start_id, "Request parameter incr start id")->default_val(1)->required();
+  cmd->add_flag("--force", opt->force, "Request parameter force")->default_val(true)->required();
   cmd->callback([opt]() { RunUpdateAutoIncrement(*opt); });
 }
 
@@ -2680,24 +2904,19 @@ void RunUpdateAutoIncrement(UpdateAutoIncrementOptions const &opt) {
 
 void SetUpGenerateAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<GenerateAutoIncrementOptions>();
-  auto *cmd = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")
-                  ->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->add_option("--generate_count", opt->generate_count, "Generate auto increment id count")
       ->default_val(10000)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_option("--auto_increment_offset", opt->auto_increment_offset, "Request parameter auto increment offset")
       ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->add_option("--auto_increment_increment", opt->auto_increment_increment,
                   "Request parameter auto increment increment")
       ->default_val(1)
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->callback([opt]() { RunGenerateAutoIncrement(*opt); });
 }
 
@@ -2725,11 +2944,9 @@ void RunGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt) {
 
 void SetUpDeleteAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<DeleteAutoIncrementOptions>();
-  auto *cmd = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")
-                  ->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter table id")->required()->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter table id")->required();
 
   cmd->callback([opt]() { RunDeleteAutoIncrement(*opt); });
 }
@@ -2754,12 +2971,9 @@ void RunDeleteAutoIncrement(DeleteAutoIncrementOptions const &opt) {
 
 void SetUpListWatch(CLI::App &app) {
   auto opt = std::make_shared<ListWatchOptions>();
-  auto *cmd = app.add_subcommand("ListWatch", "List watch")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("ListWatch", "List watch")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")->required();
 
   cmd->callback([opt]() { RunListWatch(*opt); });
 }
@@ -2788,19 +3002,13 @@ void RunListWatch(ListWatchOptions const &opt) {
 
 void SetUpCreateWatch(CLI::App &app) {
   auto opt = std::make_shared<CreateWatchOptions>();
-  auto *cmd = app.add_subcommand("CreateWatch", "Create watch")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--start_revision", opt->start_revision, "Request parameter start revision")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CreateWatch", "Create watch")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")->required();
+  cmd->add_option("--start_revision", opt->start_revision, "Request parameter start revision")->required();
   cmd->add_option("--watch_type", opt->watch_type,
                   "Request parameter watch type must be all|region|table|index|schema|table_index")
-      ->required()
-      ->group("Coordinator Manager Commands");
+      ->required();
   cmd->callback([opt]() { RunCreateWatch(*opt); });
 }
 
@@ -2870,15 +3078,10 @@ void RunCreateWatch(CreateWatchOptions const &opt) {
 
 void SetUpCancelWatch(CLI::App &app) {
   auto opt = std::make_shared<CancelWatchOptions>();
-  auto *cmd = app.add_subcommand("CancelWatch", "Cancel watch")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--start_revision", opt->start_revision, "Request parameter start revision")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("CancelWatch", "Cancel watch")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")->required();
+  cmd->add_option("--start_revision", opt->start_revision, "Request parameter start revision")->required();
   cmd->callback([opt]() { RunCancelWatch(*opt); });
 }
 
@@ -2902,12 +3105,9 @@ void RunCancelWatch(CancelWatchOptions const &opt) {
 
 void SetUpProgressWatch(CLI::App &app) {
   auto opt = std::make_shared<ProgressWatchOptions>();
-  auto *cmd = app.add_subcommand("ProgressWatch", "Progress watch")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("ProgressWatch", "Progress watch")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->watch_id, "Request parameter watch id")->required();
   cmd->callback([opt]() { RunProgressWatch(*opt); });
 }
 
@@ -2939,7 +3139,7 @@ void RunProgressWatch(ProgressWatchOptions const &opt) {
 
 void SetUpGenTso(CLI::App &app) {
   auto opt = std::make_shared<GenTsoOptions>();
-  auto *cmd = app.add_subcommand("GenTso", "Generate tso ")->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("GenTso", "Generate tso ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunGenTso(*opt); });
 }
@@ -2956,15 +3156,11 @@ void RunGenTso(GenTsoOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("TsoService", request,
                                                                                                   response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "gen tso failed, error: "
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-    std::cout << "gen tso failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+  if (response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    Pretty::ShowError(response.error());
     return;
   }
+
   auto lambda_tso_2_timestamp_function = [](const ::dingodb::pb::meta::TsoTimestamp &tso) {
     return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
   };
@@ -2974,24 +3170,17 @@ void RunGenTso(GenTsoOptions const &opt) {
     tso.set_physical(response.start_timestamp().physical());
     tso.set_logical(response.start_timestamp().logical() + i);
     int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
-    std::cout << "time_safe_ts: " << time_safe_ts << std::endl;
+    std::cout << "ts: " << time_safe_ts << std::endl;
   }
 }
 
 void SetUpResetTso(CLI::App &app) {
   auto opt = std::make_shared<ResetTsoOptions>();
-  auto *cmd = app.add_subcommand("ResetTso", "Reset tso ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->tso_new_physical, "Request parameter tso_new_physical")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tso_save_physical", opt->tso_save_physical, "Request parameter watch id")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->tso_new_logical, "Request parameter watch id")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("ResetTso", "Reset tso ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->tso_new_physical, "Request parameter tso_new_physical")->required();
+  cmd->add_option("--tso_save_physical", opt->tso_save_physical, "Request parameter watch id")->default_val(0);
+  cmd->add_option("--watch_id", opt->tso_new_logical, "Request parameter watch id")->default_val(0);
 
   cmd->callback([opt]() { RunResetTso(*opt); });
 }
@@ -3026,18 +3215,11 @@ void RunResetTso(ResetTsoOptions const &opt) {
 
 void SetUpUpdateTso(CLI::App &app) {
   auto opt = std::make_shared<UpdateTsoOptions>();
-  auto *cmd = app.add_subcommand("ResetTso", "Reset tso ")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->tso_new_physical, "Request parameter tso_new_physical")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--tso_save_physical", opt->tso_save_physical, "Request parameter watch id")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--watch_id", opt->tso_new_logical, "Request parameter watch id")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
+  auto *cmd = app.add_subcommand("ResetTso", "Reset tso ")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--watch_id", opt->tso_new_physical, "Request parameter tso_new_physical")->required();
+  cmd->add_option("--tso_save_physical", opt->tso_save_physical, "Request parameter watch id")->default_val(0);
+  cmd->add_option("--watch_id", opt->tso_new_logical, "Request parameter watch id")->default_val(0);
 
   cmd->callback([opt]() { RunUpdateTso(*opt); });
 }

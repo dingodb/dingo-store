@@ -38,6 +38,15 @@ void SetUpCoordinatorSubCommands(CLI::App &app);
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel);
 
+dingodb::pb::common::Region SendQueryRegion(int64_t region_id);
+void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id);
+void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id);
+void SendMergeRegionToCoor(int64_t source_id, int64_t target_id);
+uint32_t SendGetTaskList();
+dingodb::pb::common::StoreMap SendGetStoreMap();
+void SendChangePeer(const dingodb::pb::common::RegionDefinition &region_definition);
+void SendSplitRegion(const dingodb::pb::common::RegionDefinition &region_definition);
+
 struct RaftAddPeerCommandOptions {
   std::string coordinator_addr;
   std::string peer;

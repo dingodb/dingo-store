@@ -45,6 +45,10 @@ const char kAlphabet[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
 const char kAlphabetV2[] = {'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
                             'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y'};
 
+const int kGroupSize = 8;
+const int kPadGroupSize = 9;
+const uint8_t kMarker = 255;
+
 class Bthread {
  public:
   template <class Fn, class... Args>
@@ -106,6 +110,7 @@ class CoordinatorInteraction {
   dingodb::CoordinatorInteractionPtr GetCoorinatorInteractionMeta() { return coordinator_interaction_meta_; }
   dingodb::CoordinatorInteractionPtr GetCoorinatorInteractionVersion() { return coordinator_interaction_version_; }
 };
+
 class Helper {
  public:
   static std::string Ltrim(const std::string& s, const std::string& delete_str) {
@@ -511,6 +516,41 @@ class Helper {
       return 0;
     } else {
       return -1;
+    }
+  }
+
+  static int DecodeBytes(const std::string_view& encode_key, std::string& output) {
+    output.reserve(256);
+
+    const auto* data = encode_key.data();
+    for (int i = 0; i < encode_key.size(); i++) {
+      uint8_t marker = encode_key.at(i + 8);
+
+      int pad_count = kMarker - marker;
+      for (int j = 0; j < kGroupSize - pad_count; ++j) {
+        output.push_back(encode_key.at(i++));
+      }
+
+      if (pad_count != 0) {
+        for (int j = 0; j < pad_count; ++j) {
+          if (encode_key.at(i++) != 0) {
+            return -1;
+          }
+        }
+
+        return i;
+      }
+    }
+
+    return -1;
+  }
+
+  static void PrintIndexRange(dingodb::pb::meta::IndexRange& index_range) {  // NOLINT
+    DINGO_LOG(INFO) << "refresh route...";
+    for (const auto& item : index_range.range_distribution()) {
+      DINGO_LOG(INFO) << fmt::format("region {} range [{}-{})", item.id().entity_id(),
+                                     dingodb::Helper::StringToHex(item.range().start_key()),
+                                     dingodb::Helper::StringToHex(item.range().end_key()));
     }
   }
 };
