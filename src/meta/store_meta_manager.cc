@@ -835,13 +835,14 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       }
       break;
     case pb::common::StoreRegionState::STANDBY:
-      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::ORPHAN) {
+      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::TOMBSTONE ||
+          new_state == pb::common::StoreRegionState::ORPHAN) {
         region->SetState(new_state);
         successed = true;
       }
       break;
     case pb::common::StoreRegionState::SPLITTING:
-      if (new_state == pb::common::StoreRegionState::NORMAL) {
+      if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::TOMBSTONE) {
         region->SetState(new_state);
         successed = true;
       }
@@ -853,7 +854,7 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       }
       break;
     case pb::common::StoreRegionState::DELETING:
-      if (new_state == pb::common::StoreRegionState::DELETED) {
+      if (new_state == pb::common::StoreRegionState::DELETED || new_state == pb::common::StoreRegionState::TOMBSTONE) {
         region->SetState(new_state);
         successed = true;
       }
