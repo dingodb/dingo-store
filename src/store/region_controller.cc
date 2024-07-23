@@ -383,7 +383,20 @@ void DeleteRegionTask::Run() {
 butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::RegionCmd& command) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
-  return ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request(), command.job_id());
+  auto status =
+      ValidateSplitRegion(store_meta_manager->GetStoreRegionMeta(), command.split_request(), command.job_id());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[control.region][split.spliting][job_id({}).region({}->{})] Split failed, error: {}", command.job_id(),
+        command.split_request().split_from_region_id(), command.split_request().split_to_region_id(),
+        Helper::PrintStatus(status));
+
+    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
+      return butil::Status(pb::error::EREGION_SPLITING, status.error_str());
+    }
+  }
+
+  return status;
 }
 
 butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMeta> store_region_meta,
@@ -542,6 +555,9 @@ void SplitRegionTask::Run() {
         region_cmd_->split_request().split_from_region_id(), region_cmd_->split_request().split_to_region_id(),
         Helper::PrintStatus(status));
 
+    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
+      status = butil::Status(pb::error::EREGION_SPLITING, status.error_str());
+    }
     NotifyRegionCmdStatus(region_cmd_, status);
   } else {
     DINGO_LOG(INFO) << fmt::format(
@@ -576,6 +592,9 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
     DINGO_LOG(INFO) << fmt::format(
         "[control.region][merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}", command.job_id(),
         merge_request.source_region_id(), merge_request.target_region_id(), status.error_code(), status.error_str());
+    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
+      return butil::Status(pb::error::EREGION_MERGEING, status.error_str());
+    }
   }
 
   return status;
@@ -643,6 +662,13 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
 
   if (target_region->TemporaryDisableChange()) {
     return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Temporary disable target region change.");
+  }
+
+  if (source_region->State() != pb::common::NORMAL) {
+    return butil::Status(pb::error::EREGION_STATE, "Source region state is NORMAL, not allow merge.");
+  }
+  if (target_region->State() != pb::common::NORMAL) {
+    return butil::Status(pb::error::EREGION_STATE, "Target region state is NORMAL, not allow merge.");
   }
 
   // Check region adjoin
@@ -844,7 +870,9 @@ void MergeRegionTask::Run() {
     DINGO_LOG(ERROR) << fmt::format("[control.region][merge.merging][job_id({}).region({}/{})] Merge failed, error: {}",
                                     region_cmd_->job_id(), region_cmd_->merge_request().source_region_id(),
                                     region_cmd_->merge_request().target_region_id(), Helper::PrintStatus(status));
-
+    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
+      status = butil::Status(pb::error::EREGION_MERGEING, status.error_str());
+    }
     NotifyRegionCmdStatus(region_cmd_, status);
   } else {
     DINGO_LOG(INFO) << fmt::format(
