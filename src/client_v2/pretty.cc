@@ -231,7 +231,7 @@ void ShowTxnTableData(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
     rows.push_back(row);
   }
 
-  std::cout << "Column Family[data]" << std::endl;
+  std::cout << "Column Family[data]:" << std::endl;
   PrintTable(rows);
 }
 
