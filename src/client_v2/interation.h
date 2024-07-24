@@ -187,6 +187,8 @@ class InteractionManager {
   bool CreateStoreInteraction(std::vector<std::string> addrs);
   butil::Status CreateStoreInteraction(int64_t region_id);
 
+  void ResetStoreInteraction() { store_interaction_.reset(); }
+
   int64_t GetLatency() const;
 
   template <typename Request, typename Response>

@@ -38,7 +38,6 @@
 namespace client_v2 {
 
 void SetUpMetaSubCommands(CLI::App &app) {
-  SetUpGetTenant(app);
   SetUpCreateTable(app);
   SetUpGetTable(app);
   SetUpGetTableRange(app);
@@ -507,7 +506,7 @@ void RunGetSchema(GetSchemaOptions const &opt) {
 
 void SetUpGetSchemas(CLI::App &app) {
   auto opt = std::make_shared<GetSchemasOptions>();
-  auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Meta Command");
+  auto *cmd = app.add_subcommand("GetSchemas", "Get schema ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
   cmd->callback([opt]() { RunGetSchemas(*opt); });
@@ -579,7 +578,7 @@ void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
 
 void SetUpGetTablesBySchema(CLI::App &app) {
   auto opt = std::make_shared<GetTablesBySchemaOptions>();
-  auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Meta Command");
+  auto *cmd = app.add_subcommand("GetTablesBySchema", "Get schema by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
 

@@ -87,6 +87,8 @@ class StreamSet {
   StreamSet();
   ~StreamSet();
 
+  static StreamSetPtr New() { return std::make_shared<StreamSet>(); }
+
   bool AddStream(StreamPtr stream);
   bool RemoveStream(StreamPtr stream);
   StreamPtr GetStream(std::string stream_id);
@@ -102,7 +104,9 @@ class StreamSet {
 class StreamManager {
  public:
   StreamManager()
-      : total_stream_count_("dingo_total_stream_count"), release_stream_count_("dingo_release_stream_count") {}
+      : stream_set_(StreamSet::New()),
+        total_stream_count_("dingo_stream_total_count"),
+        release_stream_count_("dingo_stream_release_count") {}
 
   ~StreamManager() = default;
 

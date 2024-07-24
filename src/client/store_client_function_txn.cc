@@ -848,6 +848,8 @@ void SendTxnScan(int64_t region_id) {
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScan", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
+
+  DINGO_LOG(INFO) << "end_key hex: " << dingodb::Helper::StringToHex(response.end_key());
 }
 
 void SendTxnPessimisticLock(int64_t region_id) {

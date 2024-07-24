@@ -1198,7 +1198,7 @@ void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
   }
 
   auto definition = region->Definition();
-  response->set_table_id(definition.table_id() != 0 ? definition.table_id() : definition.index_id());
+  response->set_table_id(definition.index_id() == 0 ? definition.table_id() : definition.index_id());
   DINGO_LOG(INFO) << fmt::format("region({}) range{} offset({}) limit({})", request->region_id(),
                                  region->RangeToString(), request->offset(), request->limit());
 

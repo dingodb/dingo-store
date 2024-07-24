@@ -80,6 +80,7 @@ static bool SetUpStore(const std::string& url, const std::vector<std::string>& a
   if (Helper::SetUp(url) < 0) {
     exit(-1);
   }
+
   if (!addrs.empty()) {
     return client_v2::InteractionManager::GetInstance().CreateStoreInteraction(addrs);
   } else {
@@ -143,6 +144,8 @@ dingodb::pb::store::TxnScanResponse SendTxnScanImpl(dingodb::pb::common::Region 
   request.set_is_reverse(is_reverse);
   request.set_key_only(key_only);
 
+  // maybe current store interaction is not store node, so need reset.
+  InteractionManager::GetInstance().ResetStoreInteraction();
   auto status =
       InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScan", request, response);
   if (!status.ok()) {

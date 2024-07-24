@@ -86,7 +86,7 @@ int64_t StreamSet::GetStreamCount() {
 
 void StreamManager::AddStream(StreamPtr stream) {
   bool ret = stream_set_->AddStream(stream);
-  CHECK(ret == 0) << fmt::format("add stream({}) failed.", stream->StreamId());
+  CHECK(ret) << fmt::format("add stream({}) failed.", stream->StreamId());
   total_stream_count_ << 1;
 }
 
