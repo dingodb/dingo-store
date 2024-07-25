@@ -344,7 +344,7 @@ butil::Status GetSqlMeta(std::vector<MetaItem> &metas) {
       continue;
     }
 
-    auto response = SendTxnScanImpl(region, region_info.range(), 1000, INT64_MAX, 0, false, false);
+    auto response = SendTxnScanByStreamMode(region, region_info.range(), 1000, INT64_MAX, 0, false, false);
     for (const auto &kv : response.kvs()) {
       kvs.push_back(kv);
     }

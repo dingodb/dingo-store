@@ -238,7 +238,7 @@ struct TxnGetOptions {
   int64_t region_id;
   bool rc;
   std::string key;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
   int64_t resolve_locks;
 };
@@ -247,7 +247,7 @@ void RunTxnGet(TxnGetOptions const &opt);
 
 struct TxnScanOptions {
   std::string coor_url;
-  int64_t region_id;
+  int64_t id;
   bool rc;
   std::string start_key;
   std::string end_key;
@@ -256,19 +256,30 @@ struct TxnScanOptions {
   bool is_reverse;
   bool key_only;
   int64_t resolve_locks;
-  bool key_is_hex;
-  bool with_start;
-  bool with_end;
+  bool is_hex;
 };
 void SetUpTxnScan(CLI::App &app);
 void RunTxnScan(TxnScanOptions const &opt);
+
+struct TxnScanLockOptions {
+  std::string coor_url;
+  int64_t id;
+  bool rc;
+  int64_t max_ts;
+  std::string start_key;
+  std::string end_key;
+  bool is_hex;
+  int64_t limit;
+};
+void SetUpTxnScanLock(CLI::App &app);
+void RunTxnScanLock(TxnScanLockOptions const &opt);
 
 struct TxnPessimisticLockOptions {
   std::string coor_url;
   int64_t region_id;
   bool rc;
   std::string primary_lock;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
   int64_t lock_ttl;
   int64_t for_update_ts;
@@ -288,7 +299,7 @@ struct TxnPessimisticRollbackOptions {
   int64_t start_ts;
   int64_t for_update_ts;
   std::string key;
-  bool key_is_hex;
+  bool is_hex;
 };
 void SetUpTxnPessimisticRollback(CLI::App &app);
 void RunTxnPessimisticRollback(TxnPessimisticRollbackOptions const &opt);
@@ -298,7 +309,7 @@ struct TxnPrewriteOptions {
   int64_t region_id;
   bool rc;
   std::string primary_lock;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
   int64_t lock_ttl;
   int64_t txn_size;
@@ -329,7 +340,7 @@ struct TxnCommitOptions {
   int64_t commit_ts;
   std::string key;
   std::string key2;
-  bool key_is_hex;
+  bool is_hex;
 };
 void SetUpTxnCommit(CLI::App &app);
 void RunTxnCommit(TxnCommitOptions const &opt);
@@ -339,7 +350,7 @@ struct TxnCheckTxnStatusOptions {
   int64_t region_id;
   bool rc;
   std::string primary_key;
-  bool key_is_hex;
+  bool is_hex;
   int64_t lock_ts;
   int64_t caller_start_ts;
   int64_t current_ts;
@@ -354,7 +365,7 @@ struct TxnResolveLockOptions {
   int64_t start_ts;
   int64_t commit_ts;
   std::string key;
-  bool key_is_hex;
+  bool is_hex;
 };
 void SetUpTxnResolveLock(CLI::App &app);
 void RunTxnResolveLock(TxnResolveLockOptions const &opt);
@@ -365,7 +376,7 @@ struct TxnBatchGetOptions {
   bool rc;
   std::string key;
   std::string key2;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
   int64_t resolve_locks;
 };
@@ -378,24 +389,11 @@ struct TxnBatchRollbackOptions {
   bool rc;
   std::string key;
   std::string key2;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
 };
 void SetUpTxnBatchRollback(CLI::App &app);
 void RunTxnBatchRollback(TxnBatchRollbackOptions const &opt);
-
-struct TxnScanLockOptions {
-  std::string coor_url;
-  int64_t region_id;
-  bool rc;
-  int64_t max_ts;
-  std::string start_key;
-  std::string end_key;
-  bool key_is_hex;
-  int64_t limit;
-};
-void SetUpTxnScanLock(CLI::App &app);
-void RunTxnScanLock(TxnScanLockOptions const &opt);
 
 struct TxnHeartBeatOptions {
   std::string coor_url;
@@ -404,7 +402,7 @@ struct TxnHeartBeatOptions {
   std::string primary_lock;
   int64_t start_ts;
   int64_t advise_lock_ttl;
-  bool key_is_hex;
+  bool is_hex;
 };
 void SetUpTxnHeartBeat(CLI::App &app);
 void RunTxnHeartBeat(TxnHeartBeatOptions const &opt);
@@ -424,7 +422,7 @@ struct TxnDeleteRangeOptions {
   bool rc;
   std::string start_key;
   std::string end_key;
-  bool key_is_hex;
+  bool is_hex;
 };
 void SetUpTxnDeleteRange(CLI::App &app);
 void RunTxnDeleteRange(TxnDeleteRangeOptions const &opt);
@@ -435,7 +433,7 @@ struct TxnDumpOptions {
   bool rc;
   std::string start_key;
   std::string end_key;
-  bool key_is_hex;
+  bool is_hex;
   int64_t start_ts;
   int64_t end_ts;
 };
@@ -639,10 +637,10 @@ void SendCompact(const std::string &cf_name);
 void GetMemoryStats();
 void ReleaseFreeMemory(ReleaseFreeMemoryOptions const &opt);
 
-dingodb::pb::store::TxnScanResponse SendTxnScanImpl(dingodb::pb::common::Region region,
-                                                    const dingodb::pb::common::Range &range, size_t limit,
-                                                    int64_t start_ts, int64_t resolve_locks = 0, bool key_only = false,
-                                                    bool is_reverse = false);
+dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common::Region region,
+                                                            const dingodb::pb::common::Range &range, size_t limit,
+                                                            int64_t start_ts, int64_t resolve_locks = 0,
+                                                            bool key_only = false, bool is_reverse = false);
 
 }  // namespace client_v2
 

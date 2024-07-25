@@ -60,17 +60,23 @@ namespace client_v2 {
 void SetUpStoreSubCommands(CLI::App& app) {
   SetUpKvGet(app);
   SetUpKvPut(app);
-  SetUpTxnDump(app);
+
   SetUpSnapshot(app);
   SetUpRegionMetrics(app);
+
   SetUpDumpRegion(app);
   SetUpDumpDb(app);
+
+  // txn
+  SetUpTxnScan(app);
+  SetUpTxnScanLock(app);
   SetUpTxnPrewrite(app);
   SetUpTxnCommit(app);
   SetUpTxnPessimisticLock(app);
-  SetUpTxnScanLock(app);
   SetUpTxnPessimisticRollback(app);
   SetUpTxnBatchGet(app);
+  SetUpTxnDump(app);
+
   SetUpWhichRegion(app);
   SetUpQueryRegionStatusMetrics(app);
   SetUpModifyRegionMeta(app);
@@ -119,10 +125,10 @@ bool IsSamePartition(dingodb::pb::common::Range source_range, dingodb::pb::commo
          dingodb::VectorCodec::UnPackagePartitionId(target_range.start_key());
 }
 
-dingodb::pb::store::TxnScanResponse SendTxnScanImpl(dingodb::pb::common::Region region,
-                                                    const dingodb::pb::common::Range& range, size_t limit,
-                                                    int64_t start_ts, int64_t resolve_locks, bool key_only,
-                                                    bool is_reverse) {
+dingodb::pb::store::TxnScanResponse SendTxnScanByNormalMode(dingodb::pb::common::Region region,
+                                                            const dingodb::pb::common::Range& range, size_t limit,
+                                                            int64_t start_ts, int64_t resolve_locks, bool key_only,
+                                                            bool is_reverse) {
   dingodb::pb::store::TxnScanRequest request;
   dingodb::pb::store::TxnScanResponse response;
 
@@ -144,12 +150,172 @@ dingodb::pb::store::TxnScanResponse SendTxnScanImpl(dingodb::pb::common::Region 
   request.set_is_reverse(is_reverse);
   request.set_key_only(key_only);
 
-  // maybe current store interaction is not store node, so need reset.
-  InteractionManager::GetInstance().ResetStoreInteraction();
-  auto status =
-      InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScan", request, response);
-  if (!status.ok()) {
-    Pretty::ShowError(status);
+  for (;;) {
+    dingodb::pb::store::TxnScanResponse sub_response;
+
+    // maybe current store interaction is not store node, so need reset.
+    InteractionManager::GetInstance().ResetStoreInteraction();
+    auto status = InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScan", request,
+                                                                           sub_response);
+    if (!status.ok()) {
+      response.mutable_error()->set_errcode(dingodb::pb::error::Errno(status.error_code()));
+      response.mutable_error()->set_errmsg(status.error_str());
+      break;
+    }
+    if (sub_response.error().errcode() != dingodb::pb::error::OK) {
+      *response.mutable_error() = sub_response.error();
+      break;
+    }
+
+    // adjust range
+    dingodb::pb::common::Range new_range;
+    new_range.set_start_key(sub_response.end_key());
+    new_range.set_end_key(range.end_key());
+
+    dingodb::pb::common::RangeWithOptions range_with_option;
+    *range_with_option.mutable_range() = new_range;
+    range_with_option.set_with_start(true);
+    range_with_option.set_with_end(false);
+
+    request.mutable_range()->Swap(&range_with_option);
+
+    // copy data
+    for (int i = 0; i < sub_response.kvs_size(); ++i) {
+      response.add_kvs()->Swap(&response.mutable_kvs()->at(i));
+    }
+
+    for (int i = 0; i < sub_response.vectors_size(); ++i) {
+      response.add_vectors()->Swap(&response.mutable_vectors()->at(i));
+    }
+
+    for (int i = 0; i < sub_response.documents_size(); ++i) {
+      response.add_documents()->Swap(&response.mutable_documents()->at(i));
+    }
+
+    if (!sub_response.has_more()) {
+      break;
+    }
+  }
+
+  return response;
+}
+
+dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common::Region region,
+                                                            const dingodb::pb::common::Range& range, size_t limit,
+                                                            int64_t start_ts, int64_t resolve_locks, bool key_only,
+                                                            bool is_reverse) {
+  dingodb::pb::store::TxnScanResponse response;
+  dingodb::pb::store::TxnScanRequest request;
+  request.mutable_context()->set_region_id(region.id());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  request.mutable_context()->add_resolved_locks(resolve_locks);
+
+  dingodb::pb::common::RangeWithOptions range_with_option;
+  *range_with_option.mutable_range() = range;
+  range_with_option.set_with_start(true);
+  range_with_option.set_with_end(false);
+
+  request.mutable_range()->Swap(&range_with_option);
+
+  request.set_start_ts(start_ts);
+
+  request.set_is_reverse(is_reverse);
+  request.set_key_only(key_only);
+  request.mutable_stream_meta()->set_limit(limit);
+
+  for (;;) {
+    dingodb::pb::store::TxnScanResponse sub_response;
+
+    // maybe current store interaction is not store node, so need reset.
+    InteractionManager::GetInstance().ResetStoreInteraction();
+    auto status = InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScan", request,
+                                                                           sub_response);
+    if (!status.ok()) {
+      response.mutable_error()->set_errcode(dingodb::pb::error::Errno(status.error_code()));
+      response.mutable_error()->set_errmsg(status.error_str());
+      break;
+    }
+    if (sub_response.error().errcode() != dingodb::pb::error::OK) {
+      *response.mutable_error() = sub_response.error();
+      break;
+    }
+
+    // set request stream id
+    if (!response.stream_meta().stream_id().empty()) {
+      request.mutable_stream_meta()->set_stream_id(sub_response.stream_meta().stream_id());
+    }
+
+    // copy data
+    for (int i = 0; i < sub_response.kvs_size(); ++i) {
+      response.add_kvs()->Swap(&response.mutable_kvs()->at(i));
+    }
+
+    for (int i = 0; i < sub_response.vectors_size(); ++i) {
+      response.add_vectors()->Swap(&response.mutable_vectors()->at(i));
+    }
+
+    for (int i = 0; i < sub_response.documents_size(); ++i) {
+      response.add_documents()->Swap(&response.mutable_documents()->at(i));
+    }
+
+    if (!sub_response.stream_meta().has_next()) {
+      break;
+    }
+  }
+
+  return response;
+}
+
+dingodb::pb::store::TxnScanLockResponse SendTxnScanLockByStreamMode(const dingodb::pb::common::Region& region,
+                                                                    const dingodb::pb::common::Range& range, bool is_rc,
+                                                                    int64_t ts, size_t limit) {
+  dingodb::pb::store::TxnScanLockRequest request;
+  dingodb::pb::store::TxnScanLockResponse response;
+
+  request.mutable_context()->set_region_id(region.id());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (is_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  request.set_max_ts(ts);
+
+  request.set_start_key(range.start_key());
+  request.set_end_key(range.end_key());
+
+  request.mutable_stream_meta()->set_limit(limit);
+
+  for (;;) {
+    dingodb::pb::store::TxnScanLockResponse sub_response;
+
+    auto status = InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScanLock",
+                                                                           request, sub_response);
+    if (!status.ok()) {
+      response.mutable_error()->set_errcode(dingodb::pb::error::Errno(status.error_code()));
+      response.mutable_error()->set_errmsg(status.error_str());
+      break;
+    }
+    if (sub_response.error().errcode() != dingodb::pb::error::OK) {
+      *response.mutable_error() = sub_response.error();
+      break;
+    }
+
+    // set request stream id
+    if (!response.stream_meta().stream_id().empty()) {
+      request.mutable_stream_meta()->set_stream_id(sub_response.stream_meta().stream_id());
+    }
+
+    // copy data
+    for (int i = 0; i < sub_response.locks_size(); ++i) {
+      response.add_locks()->Swap(&response.mutable_locks()->at(i));
+    }
+
+    if (!sub_response.stream_meta().has_next()) {
+      break;
+    }
   }
 
   return response;
@@ -601,7 +767,7 @@ void SetUpTxnGet(CLI::App& app) {
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "key is hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "key is hex")->default_val(false);
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
   cmd->callback([opt]() { RunTxnGet(*opt); });
@@ -618,26 +784,71 @@ void SetUpTxnScan(CLI::App& app) {
   auto opt = std::make_shared<TxnScanOptions>();
   auto* cmd = app.add_subcommand("TxnGet", "Txn scan")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--id", opt->id, "Request parameter region id")->required();
   cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
   cmd->add_option("--end_key", opt->end_key, "Request parameter start_key")->required();
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
-  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(20);
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
   cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse ")->default_val(false);
   cmd->add_flag("--key_only", opt->key_only, "Request parameter key_only")->default_val(false);
   cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
-  cmd->add_flag("--with_start", opt->with_start, "Request parameter with_start")->default_val(true);
-  cmd->add_flag("--with_end", opt->with_end, "Request parameter with_end")->default_val(true);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true);
+
   cmd->callback([opt]() { RunTxnScan(*opt); });
 }
 
 void RunTxnScan(TxnScanOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.id)) {
     exit(-1);
   }
-  client_v2::SendTxnScan(opt);
+
+  dingodb::pb::common::Region region = SendQueryRegion(opt.id);
+  if (region.id() == 0) {
+    std::cout << "Get region failed." << std::endl;
+    return;
+  }
+
+  dingodb::pb::common::Range range;
+  range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
+  range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+
+  auto response =
+      SendTxnScanByStreamMode(region, range, opt.limit, opt.start_ts, opt.resolve_locks, opt.key_only, opt.is_reverse);
+  Pretty::Show(response);
+}
+
+void SetUpTxnScanLock(CLI::App& app) {
+  auto opt = std::make_shared<TxnScanLockOptions>();
+  auto* cmd = app.add_subcommand("TxnScanLock", "Txn scan lock ")->group("Store Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter region id")->required();
+  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--max_ts", opt->max_ts, "Request parameter max_ts")->required();
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true);
+  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(20);
+  cmd->callback([opt]() { RunTxnScanLock(*opt); });
+}
+
+void RunTxnScanLock(TxnScanLockOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, opt.id)) {
+    exit(-1);
+  }
+
+  dingodb::pb::common::Region region = SendQueryRegion(opt.id);
+  if (region.id() == 0) {
+    std::cout << "Get region failed." << std::endl;
+    return;
+  }
+
+  dingodb::pb::common::Range range;
+  range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
+  range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+
+  auto response = SendTxnScanLockByStreamMode(region, range, opt.rc, opt.max_ts, opt.limit);
+  Pretty::Show(response);
 }
 
 void SetUpTxnPessimisticLock(CLI::App& app) {
@@ -652,7 +863,7 @@ void SetUpTxnPessimisticLock(CLI::App& app) {
   cmd->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")->required();
   cmd->add_option("--mutation_op", opt->mutation_op, "Request parameter mutation_op must be one of [lock]")->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->add_option("--value", opt->value, "Request parameter with_start")->required();
   cmd->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")->default_val(false);
   cmd->add_flag("--return_values", opt->return_values, "Request parameter return_values")->default_val(false);
@@ -675,7 +886,7 @@ void SetUpTxnPessimisticRollback(CLI::App& app) {
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--for_update_ts", opt->for_update_ts, "Request parameter for_update_ts ")->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnPessimisticRollback(*opt); });
 }
 
@@ -703,7 +914,7 @@ void SetUpTxnPrewrite(CLI::App& app) {
       ->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--key2", opt->key2, "Request parameter key2");
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->add_option("--value", opt->value, "Request parameter value2");
   cmd->add_option("--value2", opt->value2, "Request parameter value2");
   cmd->add_flag("--value_is_hex", opt->value_is_hex, "Request parameter value_is_hex")->default_val(false);
@@ -734,7 +945,7 @@ void SetUpTxnCommit(CLI::App& app) {
   cmd->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts")->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--key2", opt->key2, "Request parameter key2");
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnCommit(*opt); });
 }
 
@@ -755,7 +966,7 @@ void SetUpTxnCheckTxnStatus(CLI::App& app) {
   cmd->add_option("--lock_ts", opt->lock_ts, "Request parameter lock_ts")->required();
   cmd->add_option("--caller_start_ts", opt->caller_start_ts, "Request parameter caller_start_ts")->required();
   cmd->add_option("--current_ts", opt->current_ts, "Request parameter current_ts")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnCheckTxnStatus(*opt); });
 }
 
@@ -777,7 +988,7 @@ void SetUpTxnResolveLock(CLI::App& app) {
       ->required();
   cmd->add_option("--key", opt->key,
                   "Request parameter key, if key is empty, will do resolve lock for all keys of this transaction");
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnResolveLock(*opt); });
 }
 
@@ -798,7 +1009,7 @@ void SetUpTxnBatchGet(CLI::App& app) {
   cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--key2", opt->key2, "Request parameter key2")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
 
   cmd->callback([opt]() { RunTxnBatchGet(*opt); });
 }
@@ -819,7 +1030,7 @@ void SetUpTxnBatchRollback(CLI::App& app) {
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--key2", opt->key2, "Request parameter key2");
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnBatchRollback(*opt); });
 }
 
@@ -828,27 +1039,6 @@ void RunTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
     exit(-1);
   }
   client_v2::SendTxnBatchRollback(opt);
-}
-
-void SetUpTxnScanLock(CLI::App& app) {
-  auto opt = std::make_shared<TxnScanLockOptions>();
-  auto* cmd = app.add_subcommand("TxnScanLock", "Txn scan lock ")->group("Store Command");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
-  cmd->add_option("--max_ts", opt->max_ts, "Request parameter max_ts")->required();
-  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
-  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
-  cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
-  cmd->callback([opt]() { RunTxnScanLock(*opt); });
-}
-
-void RunTxnScanLock(TxnScanLockOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
-    exit(-1);
-  }
-  client_v2::SendTxnScanLock(opt);
 }
 
 void SetUpTxnHeartBeat(CLI::App& app) {
@@ -860,7 +1050,7 @@ void SetUpTxnHeartBeat(CLI::App& app) {
   cmd->add_option("--primary_lock", opt->primary_lock, "Request parameter primary_lock")->required();
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--advise_lock_ttl", opt->advise_lock_ttl, "Request parameter advise_lock_ttl")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnHeartBeat(*opt); });
 }
 
@@ -896,7 +1086,7 @@ void SetUpTxnDeleteRange(CLI::App& app) {
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
   cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
   cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->callback([opt]() { RunTxnDeleteRange(*opt); });
 }
 
@@ -915,7 +1105,7 @@ void SetUpTxnDump(CLI::App& app) {
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
   cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
   cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex")->default_val(false);
+  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--end_ts", opt->end_ts, "Request parameter end_ts")->required();
   cmd->callback([opt]() { RunTxnDump(*opt); });
@@ -2179,7 +2369,7 @@ void SendTxnGet(TxnGetOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   request.set_key(target_key);
@@ -2199,24 +2389,6 @@ void SendTxnGet(TxnGetOptions const& opt) {
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnGet", request, response);
 
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-
-void SendTxnScan(TxnScanOptions const& opt) {
-  dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
-  if (region.id() == 0) {
-    DINGO_LOG(ERROR) << "GetRegion failed";
-    return;
-  }
-
-  dingodb::pb::common::Range range;
-  range.set_start_key(opt.key_is_hex ? HexToString(opt.start_key) : opt.start_key);
-  range.set_end_key(opt.key_is_hex ? HexToString(opt.end_key) : opt.end_key);
-
-  auto response =
-      SendTxnScanImpl(region, range, opt.limit, opt.start_ts, opt.resolve_locks, opt.key_only, opt.is_reverse);
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    Pretty::ShowError(response.error());
-  }
 }
 
 void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
@@ -2246,7 +2418,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     return;
   } else {
     std::string key = opt.primary_lock;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       key = HexToString(opt.primary_lock);
     }
     request.set_primary_lock(key);
@@ -2279,7 +2451,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   if (opt.value.empty()) {
@@ -2384,7 +2556,7 @@ void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   *request.add_keys() = target_key;
@@ -2466,7 +2638,7 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   request.add_keys()->assign(target_key);
@@ -2474,7 +2646,7 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
 
   if (!opt.key2.empty()) {
     std::string target_key2 = opt.key2;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       target_key2 = HexToString(opt.key2);
     }
     request.add_keys()->assign(target_key2);
@@ -2519,7 +2691,7 @@ void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
     return;
   } else {
     std::string key = opt.primary_key;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       key = HexToString(opt.primary_key);
     }
     request.set_primary_key(key);
@@ -2587,7 +2759,7 @@ void SendTxnResolveLock(TxnResolveLockOptions const& opt) {
     DINGO_LOG(INFO) << "key is empty, will do resolve lock for all keys of this transaction";
   } else {
     std::string target_key = opt.key;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       target_key = HexToString(opt.key);
     }
     request.add_keys()->assign(target_key);
@@ -2630,11 +2802,11 @@ void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   std::string target_key2 = opt.key2;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key2 = HexToString(opt.key2);
   }
   request.add_keys()->assign(target_key);
@@ -2710,14 +2882,14 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
     return;
   }
   std::string target_key = opt.key;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
   }
   request.add_keys()->assign(target_key);
 
   if (!opt.key2.empty()) {
     std::string target_key2 = opt.key2;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       target_key2 = HexToString(opt.key2);
     }
     request.add_keys()->assign(target_key2);
@@ -2733,81 +2905,6 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnBatchRollback", request, response);
 
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
-}
-void SendTxnScanLock(TxnScanLockOptions const& opt) {
-  dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
-  if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
-    return;
-  }
-
-  std::string service_name = GetServiceName(region);
-
-  dingodb::pb::store::TxnScanLockRequest request;
-  dingodb::pb::store::TxnScanLockResponse response;
-
-  request.mutable_context()->set_region_id(opt.region_id);
-  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
-  if (opt.rc) {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
-  } else {
-    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
-  }
-
-  if (opt.max_ts == 0) {
-    std::cout << "max_ts is empty";
-    return;
-  }
-  request.set_max_ts(opt.max_ts);
-
-  if (opt.start_key.empty()) {
-    std::cout << "start_key is empty";
-    return;
-  } else {
-    std::string key = opt.start_key;
-    if (opt.key_is_hex) {
-      key = HexToString(opt.start_key);
-    }
-    request.set_start_key(key);
-  }
-
-  if (opt.end_key.empty()) {
-    std::cout << "end_key is empty";
-    return;
-  } else {
-    std::string key = opt.end_key;
-    if (opt.key_is_hex) {
-      key = HexToString(opt.end_key);
-    }
-    request.set_end_key(key);
-  }
-
-  if (opt.limit == 0) {
-    std::cout << "limit is empty";
-    return;
-  }
-  request.set_limit(opt.limit);
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
-  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScanLock", request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "txn scan lock failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-  std::cout << "txn_result: " << response.txn_result().DebugString() << "\n";
-  if (response.locks_size() > 0) {
-    std::cout << "locks:{\n";
-    for (auto const& lock : response.locks()) {
-      std::cout << lock.DebugString() << "\n";
-    }
-    std::cout << "}\n";
-  }
-  std::cout << "has_more: " << response.has_more() << std::endl;
-  std::cout << "end_key: " << response.end_key() << std::endl;
   DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
@@ -2836,7 +2933,7 @@ void SendTxnHeartBeat(TxnHeartBeatOptions const& opt) {
     return;
   } else {
     std::string key = opt.primary_lock;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       key = HexToString(opt.primary_lock);
     }
     request.set_primary_lock(key);
@@ -2919,7 +3016,7 @@ void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
     return;
   } else {
     std::string key = opt.start_key;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       key = HexToString(opt.start_key);
     }
     request.set_start_key(key);
@@ -2930,7 +3027,7 @@ void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
     return;
   } else {
     std::string key = opt.end_key;
-    if (opt.key_is_hex) {
+    if (opt.is_hex) {
       key = HexToString(opt.end_key);
     }
     request.set_end_key(key);
@@ -2974,7 +3071,7 @@ void SendTxnDump(TxnDumpOptions const& opt) {
   }
   std::string target_end_key = opt.end_key;
 
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_start_key = dingodb::Helper::HexToString(opt.start_key);
     target_end_key = dingodb::Helper::HexToString(opt.end_key);
   }
@@ -3046,7 +3143,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
     std::cout << "primary_lock is empty";
     return;
   }
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     request.set_primary_lock(HexToString(opt.primary_lock));
   } else {
     request.set_primary_lock(opt.primary_lock);
@@ -3083,7 +3180,7 @@ void StoreSendTxnPrewrite(TxnPrewriteOptions const& opt, const dingodb::pb::comm
   }
   std::string target_key = opt.key;
   std::string target_key2 = opt.key2;
-  if (opt.key_is_hex) {
+  if (opt.is_hex) {
     target_key = HexToString(opt.key);
     target_key2 = HexToString(opt.key2);
   }

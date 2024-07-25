@@ -964,7 +964,7 @@ class TxnScanLockStreamState : public StreamState {
     iter_options.upper_bound = mvcc::Codec::EncodeKey(range.end_key(), Constant::kLockVer);
 
     auto iter = engine->Reader()->NewIterator(Constant::kTxnLockCF, iter_options);
-    CHECK(iter != nullptr) << "[txn]GetLockInfo NewIterator failed, range: " << Helper::RangeToString(range);
+    CHECK(iter != nullptr) << "[txn] GetLockInfo NewIterator failed, range: " << Helper::RangeToString(range);
     iter->Seek(iter_options.lower_bound);
     return std::make_shared<TxnScanLockStreamState>(iter);
   }
@@ -1285,18 +1285,18 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "kvs is not empty");
   }
 
+  // get or new TxnIterator.
   auto stream_state =
       std::dynamic_pointer_cast<TxnScanStreamState>(stream->GetOrNewStreamState([&]() -> StreamStatePtr {
         auto iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
         auto ret = iter->Init();
         CHECK(ret.ok()) << fmt::format("[txn][{}] Scan init txn_iter failed, start_ts: {} range: {}  status: {}.",
                                        stream->StreamId(), start_ts, Helper::RangeToString(range), ret.error_str());
+        iter->Seek(range.start_key());
         return TxnScanStreamState::New(iter);
       }));
   TxnIteratorPtr iter = stream_state->iter;
   CHECK(iter != nullptr) << fmt::format("[txn][{}] Scan stream_state->iter is nullptr.", stream->StreamId());
-
-  iter->Seek(range.start_key());
 
   RawCoprocessor::StopChecker stop_checker = [&stream](size_t size, size_t bytes) -> bool {
     return stream->Check(size, bytes);

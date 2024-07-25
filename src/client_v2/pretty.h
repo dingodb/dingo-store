@@ -47,6 +47,8 @@ class Pretty {
   static void Show(dingodb::pb::debug::DumpRegionResponse &response);
 
   static void Show(std::vector<TenantInfo> tenants);
+  static void Show(dingodb::pb::store::TxnScanResponse &response);
+  static void Show(dingodb::pb::store::TxnScanLockResponse &response);
 };
 
 }  // namespace client_v2
