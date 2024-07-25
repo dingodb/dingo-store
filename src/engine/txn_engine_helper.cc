@@ -57,7 +57,7 @@ DEFINE_int64(max_resolve_count, 4096, "max rollback count");
 DEFINE_int64(max_pessimistic_count, 4096, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
-DEFINE_bool(dingo_log_switch_txn_detail, true, "txn detail log");
+DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
@@ -2626,14 +2626,12 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       continue;
     }
 
-    std::string lock_extra_data;
-    if (lock_extra_datas.find(i) != lock_extra_datas.end()) {
-      lock_extra_data = lock_extra_datas.at(i);
-    }
+    std::string lock_extra_data = lock_extra_datas.find(i) != lock_extra_datas.end() ? lock_extra_datas.at(i) : "";
+    int64_t for_update_ts = for_update_ts_checks.find(i) != for_update_ts_checks.end() ? for_update_ts_checks.at(i) : 0;
     int64_t min_commit_ts;
     // 3.1 write data and lock
     auto ret3 = GenPrewriteDataAndLock(region->Id(), mutation, prev_lock_info, write_info, primary_lock, start_ts,
-                                       for_update_ts_checks.at(i), lock_ttl, txn_size, lock_extra_data, max_commit_ts,
+                                       for_update_ts, lock_ttl, txn_size, lock_extra_data, max_commit_ts,
                                        need_check_pessimistic_lock, try_one_pc, kv_puts_data, kv_puts_lock,
                                        locks_for_1pc, min_commit_ts);
     if (!ret3.ok()) {
