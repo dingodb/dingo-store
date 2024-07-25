@@ -88,6 +88,10 @@ butil::Status DocumentReader::SearchDocument(int64_t ts, int64_t partition_id, D
 
   auto ret = document_index->Search(region_range, parameter, document_with_score_results);
 
+  if(!ret.ok()) {
+    return ret;
+  }
+
   // document index does not support restruct document, we restruct it using kv store
   if (with_scalar_data) {
     for (auto& document_with_score : document_with_score_results) {
