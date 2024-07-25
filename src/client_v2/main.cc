@@ -13,9 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <termios.h>
+#include <unistd.h>
+
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <map>
 #include <memory>
 #include <string>
@@ -45,19 +49,108 @@ const std::string kProgramName = "dingodb_cli";
 const std::string kProgramDesc = "dingo-store client tool.";
 
 void PrintSubcommandHelp(const CLI::App& app, const std::string& subcommand_name) {
-  CLI::App* subcommand = app.get_subcommand(subcommand_name);
-  if (subcommand) {
+  try {
+    CLI::App* subcommand = app.get_subcommand(subcommand_name);
     std::cout << subcommand->help() << std::endl;
-  } else {
-    std::cout << "Unknown subcommand: " << subcommand_name << std::endl;
+  } catch (const CLI::OptionNotFound& e) {
+    std::cout << "\n >Not found command: " << subcommand_name << std::endl;
+  }
+}
+
+char Getch() {
+  struct termios oldt, newt;
+  char ch;
+
+  tcgetattr(STDIN_FILENO, &oldt);
+  newt = oldt;
+
+  // Disable the echo and key buffering
+  newt.c_lflag &= ~(ICANON | ECHO);
+  tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+
+  ch = getchar();
+
+  // Restore the previous terminal properties
+  tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+  return ch;
+}
+
+void DisplayInput(const std::string& current_input, int cursor_position) {
+  std::cout << "\r" << std::string(80, ' ') << "\r >" << current_input;
+  for (int i = 0; i < current_input.length() - cursor_position; i++) {
+    std::cout << "\b";  // Move cursor left
+  }
+  std::cout.flush();
+}
+
+void ProcessInput(std::string& current_input, std::vector<std::string>& history, int& history_index,
+                  int& cursor_position) {
+  char ch;
+  while (true) {
+    DisplayInput(current_input, cursor_position);
+
+    ch = Getch();
+    // ESC
+    if (ch == 27) {
+      // Start Identifier Arrow key input
+      char next1 = Getch();
+      if (next1 == 91) {  // [
+        char next2 = Getch();
+        if (next2 == 'A') {  // Up Arrow
+          if (history_index + 1 < history.size()) {
+            history_index++;
+            current_input = history[history.size() - 1 - history_index];
+            cursor_position = current_input.length();
+          }
+        } else if (next2 == 'B') {  // Down Arrow
+          if (history_index > 0) {
+            history_index--;
+            current_input = history[history.size() - 1 - history_index];
+            cursor_position = current_input.length();
+          } else if (history_index == 0) {
+            history_index = -1;  // Reset history index
+            current_input.clear();
+            cursor_position = 0;
+          }
+        } else if (next2 == 'C') {  // Right Arrow
+          if (cursor_position < current_input.length()) {
+            cursor_position++;
+          }
+        } else if (next2 == 'D') {  // Left Arrow
+          if (cursor_position > 0) {
+            cursor_position--;
+          }
+        }
+        continue;
+      }
+    } else if (ch == '\n') {  // Enter
+      if (!current_input.empty()) {
+        history.push_back(current_input);
+        // std::cout << "\nSubmitted: " << current_input << std::endl;
+      }
+      return;
+    } else if (ch == 127) {  // Backspace
+      if (cursor_position > 0) {
+        current_input.erase(cursor_position - 1, 1);  // delete char
+        cursor_position--;
+      }
+    } else {
+      current_input.insert(current_input.begin() + cursor_position, ch);
+      cursor_position++;
+    }
   }
 }
 
 int InteractiveCli(CLI::App& app) {
+  std::vector<std::string> history_commands;
+  std::string input;
+  int history_index = -1;
+  int cursor_position = 0;
+
   while (true) {
-    std::cout << "> ";
-    std::string input;
-    std::getline(std::cin, input);
+    input.clear();
+    cursor_position = 0;
+    ProcessInput(input, history_commands, history_index, cursor_position);
 
     if (input.empty()) {
       continue;
@@ -80,7 +173,7 @@ int InteractiveCli(CLI::App& app) {
       continue;
     }
 
-    std::vector<std::string> args = {"dingo_client_v2"};
+    std::vector<std::string> args = {"dingodb_cli"};
     std::istringstream iss(input);
     for (std::string s; iss >> s;) {
       args.push_back(s);
