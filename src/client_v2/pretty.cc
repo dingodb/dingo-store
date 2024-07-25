@@ -36,12 +36,32 @@
 #include "glog/logging.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
+#include "proto/store.pb.h"
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 #include "serial/utils.h"
 #include "vector/codec.h"
 
 namespace client_v2 {
+
+const uint32_t kStringReserveSize = 32;
+
+std::string TruncateString(const std::string& str) {
+  if (str.size() <= kStringReserveSize) {
+    return str;
+  }
+
+  return str.substr(0, kStringReserveSize) + "...";
+}
+
+std::string TruncateHexString(const std::string& str) {
+  auto hex_str = dingodb::Helper::StringToHex(str);
+  if (hex_str.size() <= kStringReserveSize) {
+    return hex_str;
+  }
+
+  return hex_str.substr(0, kStringReserveSize) + "...";
+}
 
 bool Pretty::ShowError(const butil::Status& status) {
   if (status.error_code() != dingodb::pb::error::Errno::OK) {
@@ -224,7 +244,7 @@ void ShowTxnTableData(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
       const auto& column_definition = table_definition.columns().at(i);
       if (!IsExcludeColumns(column_definition.name(), exclude_columns)) {
         std::string column_value = dingodb::Helper::ConvertColumnValueToString(column_definition, record[i]);
-        row.push_back(ftxui::paragraph(column_value.substr(0, 32)));
+        row.push_back(ftxui::paragraph(TruncateString(column_value)));
       }
     }
 
@@ -271,9 +291,9 @@ void ShowTxnVectorIndexData(const dingodb::pb::debug::DumpRegionResponse::Txn& t
     row.push_back(ftxui::vflow(scalar_elems));
 
     // table data
-    auto table_elem = ftxui::vflow(
-        {ftxui::paragraph("key: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_key())),
-         ftxui::paragraph("value: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_value()))});
+    auto table_elem =
+        ftxui::vflow({ftxui::paragraph("key: " + TruncateHexString(vector_with_id.table_data().table_key())),
+                      ftxui::paragraph("value: " + TruncateHexString(vector_with_id.table_data().table_value()))});
     row.push_back(table_elem);
 
     rows.push_back(row);
@@ -332,7 +352,7 @@ static std::vector<std::pair<std::string, std::string>> ParseRecord(
 
     result.push_back(
         std::make_pair(column_definition.name(),
-                       dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]).substr(0, 32)));
+                       TruncateString(dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]))));
   }
 
   return result;
@@ -363,8 +383,8 @@ void ShowTxnTableLock(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
 
   for (const auto& lock : txn.locks()) {
     std::vector<ftxui::Element> row = {
-        ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(lock.lock_info().primary_lock()))),
-        ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(lock.lock_info().key()))),
+        ftxui::paragraph(fmt::format("{}", TruncateHexString(lock.lock_info().primary_lock()))),
+        ftxui::paragraph(fmt::format("{}", TruncateHexString(lock.lock_info().key()))),
         ftxui::paragraph(fmt::format("{}", lock.lock_info().lock_ts())),
         ftxui::paragraph(fmt::format("{}", lock.lock_info().for_update_ts())),
         ftxui::paragraph(fmt::format("{}", lock.lock_info().lock_ttl())),
@@ -407,9 +427,9 @@ void ShowTxnTableLock(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
         // table data
         showt_value_elems.push_back(ftxui::separator());
         showt_value_elems.push_back(
-            ftxui::paragraph("key: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_key())));
+            ftxui::paragraph("key: " + TruncateHexString(vector_with_id.table_data().table_key())));
         showt_value_elems.push_back(
-            ftxui::paragraph("value: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_value())));
+            ftxui::paragraph("value: " + TruncateHexString(vector_with_id.table_data().table_value())));
 
       } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
         // document index data
@@ -424,7 +444,7 @@ void ShowTxnTableLock(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
     }
     row.push_back(ftxui::vflow(showt_value_elems));
 
-    row.push_back(ftxui::paragraph(dingodb::Helper::StringToHex(lock.lock_info().extra_data())));
+    row.push_back(ftxui::paragraph(TruncateHexString(lock.lock_info().extra_data())));
     row.push_back(ftxui::paragraph(fmt::format("{}", lock.lock_info().min_commit_ts())));
 
     rows.push_back(row);
@@ -554,9 +574,9 @@ void ShowTxnVectorIndexWrite(const dingodb::pb::debug::DumpRegionResponse::Txn& 
       // table data
       showt_value_elems.push_back(ftxui::separator());
       showt_value_elems.push_back(
-          ftxui::paragraph("key: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_key())));
+          ftxui::paragraph("key: " + TruncateHexString(vector_with_id.table_data().table_key())));
       showt_value_elems.push_back(
-          ftxui::paragraph("value: " + dingodb::Helper::StringToHex(vector_with_id.table_data().table_value())));
+          ftxui::paragraph("value: " + TruncateHexString(vector_with_id.table_data().table_value())));
     }
 
     row.push_back(ftxui::vflow(showt_value_elems));
@@ -654,7 +674,7 @@ void Pretty::Show(const dingodb::pb::debug::DumpRegionResponse::Data& data,
       auto flag = dingodb::pb::debug::DumpRegionResponse::ValueFlag_Name(kv.flag());
 
       rows.push_back({dingodb::Helper::StringToHex(kv.key()), std::to_string(kv.ts()), flag, std::to_string(kv.ttl()),
-                      kv.value().substr(0, 32)
+                      TruncateHexString(kv.value())
 
       });
     }
@@ -679,8 +699,8 @@ void Pretty::Show(const dingodb::pb::debug::DumpRegionResponse::Data& data,
 
       // table data
       auto table_elem =
-          ftxui::vflow({ftxui::paragraph("key: " + dingodb::Helper::StringToHex(vector.table_data().table_key())),
-                        ftxui::paragraph("value: " + dingodb::Helper::StringToHex(vector.table_data().table_value()))});
+          ftxui::vflow({ftxui::paragraph("key: " + TruncateHexString(vector.table_data().table_key())),
+                        ftxui::paragraph("value: " + TruncateHexString(vector.table_data().table_value()))});
 
       rows.push_back({ftxui::paragraph(std::to_string(vector.vector_id())),
                       ftxui::paragraph(std::to_string(vector.ts())), ftxui::paragraph(flag),
@@ -745,6 +765,119 @@ void Pretty::Show(std::vector<TenantInfo> tenants) {
   }
 
   PrintTable(rows);
+}
+
+void ShowKeyValues(const std::vector<dingodb::pb::common::KeyValue>& kvs) {
+  std::vector<std::vector<std::string>> rows = {{"Key", "Value"}};
+
+  for (const auto& kv : kvs) {
+    rows.push_back({TruncateHexString(kv.key()), TruncateHexString(kv.value())});
+  }
+
+  PrintTable(rows);
+}
+
+void ShowVectorWithIds(const std::vector<dingodb::pb::common::VectorWithId>& vectors_with_ids) {
+  std::vector<std::vector<ftxui::Element>> rows = {
+      {ftxui::paragraph("ID"), ftxui::paragraph("Vector"), ftxui::paragraph("Scalar"), ftxui::paragraph("Table")}};
+
+  for (const auto& vector_with_id : vectors_with_ids) {
+    // scalar data
+    auto lines = client_v2::Helper::FormatVectorScalar(vector_with_id.scalar_data());
+    std::vector<ftxui::Element> scalar_elems;
+    scalar_elems.reserve(lines.size());
+    for (auto& line : lines) {
+      scalar_elems.push_back(ftxui::paragraph(line));
+    }
+
+    // table data
+    auto table_elem =
+        ftxui::vflow({ftxui::paragraph("key: " + TruncateHexString(vector_with_id.table_data().table_key())),
+                      ftxui::paragraph("value: " + TruncateHexString(vector_with_id.table_data().table_value()))});
+
+    rows.push_back({ftxui::paragraph(std::to_string(vector_with_id.id())),
+                    ftxui::paragraph(client_v2::Helper::FormatVectorData(vector_with_id.vector())),
+                    ftxui::vflow(scalar_elems), table_elem});
+  }
+
+  PrintTable(rows);
+}
+
+void ShowDocumentWithIds(const std::vector<dingodb::pb::common::DocumentWithId>& document_with_ids) {
+  std::vector<std::vector<ftxui::Element>> rows = {{ftxui::paragraph("ID"), ftxui::paragraph("Data")}};
+
+  for (const auto& document_with_id : document_with_ids) {
+    // scalar data
+    auto lines = client_v2::Helper::FormatDocument(document_with_id.document());
+    std::vector<ftxui::Element> scalar_elems;
+    scalar_elems.reserve(lines.size());
+    for (auto& line : lines) {
+      scalar_elems.push_back(ftxui::paragraph(line));
+    }
+
+    rows.push_back({ftxui::paragraph(std::to_string(document_with_id.id())), ftxui::vflow(scalar_elems)});
+  }
+
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::store::TxnScanResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  if (response.kvs().empty()) {
+    ShowKeyValues(dingodb::Helper::PbRepeatedToVector(response.kvs()));
+
+  } else if (response.vectors().empty()) {
+    ShowVectorWithIds(dingodb::Helper::PbRepeatedToVector(response.vectors()));
+
+  } else if (response.documents().empty()) {
+    ShowDocumentWithIds(dingodb::Helper::PbRepeatedToVector(response.documents()));
+  }
+}
+
+void ShowLockInfo(std::vector<dingodb::pb::store::LockInfo> locks) {
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("PrimaryLock"),
+      ftxui::paragraph("Key"),
+      ftxui::paragraph("LockTs"),
+      ftxui::paragraph("ForUpdateTs"),
+      ftxui::paragraph("LockTtl"),
+      ftxui::paragraph("TxnSize"),
+      ftxui::paragraph("LockType"),
+      ftxui::paragraph("ShortValue"),
+      ftxui::paragraph("ExtraData"),
+      ftxui::paragraph("MinCommitTs"),
+  }};
+
+  for (const auto& lock : locks) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", TruncateHexString(lock.primary_lock()))),
+        ftxui::paragraph(fmt::format("{}", TruncateHexString(lock.key()))),
+        ftxui::paragraph(fmt::format("{}", lock.lock_ts())),
+        ftxui::paragraph(fmt::format("{}", lock.for_update_ts())),
+        ftxui::paragraph(fmt::format("{}", lock.lock_ttl())),
+        ftxui::paragraph(fmt::format("{}", lock.txn_size())),
+        ftxui::paragraph(fmt::format("{}", dingodb::pb::store::Op_Name(lock.lock_type())))};
+
+    row.push_back(ftxui::paragraph(TruncateHexString(lock.short_value())));
+
+    row.push_back(ftxui::paragraph(TruncateHexString(lock.extra_data())));
+    row.push_back(ftxui::paragraph(fmt::format("{}", lock.min_commit_ts())));
+
+    rows.push_back(row);
+  }
+
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::store::TxnScanLockResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  ShowLockInfo(dingodb::Helper::PbRepeatedToVector(response.locks()));
 }
 
 }  // namespace client_v2
