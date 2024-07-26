@@ -366,20 +366,9 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
 
     if (stop_checker(kvs.size(), bytes)) {
       has_more = true;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-      {
-        auto next_start = lambda_time_now_function();
-        ON_SCOPE_EXIT([&]() {
-          auto next_end = lambda_time_now_function();
-          iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
-        });
-#endif
-        iter->Next();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-      }
-#endif
       break;
     }
+
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     {
       auto next_start = lambda_time_now_function();

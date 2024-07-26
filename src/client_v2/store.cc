@@ -53,7 +53,7 @@
 #include "serial/schema/long_schema.h"
 #include "vector/codec.h"
 
-const int kBatchSize = 1000;
+const int kBatchSize = 3;
 
 namespace client_v2 {
 
@@ -138,13 +138,13 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByNormalMode(dingodb::pb::common:
   request.mutable_context()->add_resolved_locks(resolve_locks);
 
   dingodb::pb::common::RangeWithOptions range_with_option;
-  *range_with_option.mutable_range() = range;
+  range_with_option.mutable_range()->CopyFrom(range);
   range_with_option.set_with_start(true);
   range_with_option.set_with_end(false);
 
   request.mutable_range()->Swap(&range_with_option);
 
-  request.set_limit(limit);
+  request.set_limit(kBatchSize);
   request.set_start_ts(start_ts);
 
   request.set_is_reverse(is_reverse);
@@ -166,30 +166,36 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByNormalMode(dingodb::pb::common:
       *response.mutable_error() = sub_response.error();
       break;
     }
-
     // adjust range
-    dingodb::pb::common::Range new_range;
-    new_range.set_start_key(sub_response.end_key());
-    new_range.set_end_key(range.end_key());
-
     dingodb::pb::common::RangeWithOptions range_with_option;
-    *range_with_option.mutable_range() = new_range;
-    range_with_option.set_with_start(true);
+    range_with_option.mutable_range()->set_start_key(sub_response.end_key());
+    range_with_option.mutable_range()->set_end_key(range.end_key());
+    range_with_option.set_with_start(false);
     range_with_option.set_with_end(false);
 
     request.mutable_range()->Swap(&range_with_option);
 
     // copy data
     for (int i = 0; i < sub_response.kvs_size(); ++i) {
-      response.add_kvs()->Swap(&response.mutable_kvs()->at(i));
+      if (response.kvs_size() < limit) {
+        response.add_kvs()->Swap(&sub_response.mutable_kvs()->at(i));
+      }
     }
 
     for (int i = 0; i < sub_response.vectors_size(); ++i) {
-      response.add_vectors()->Swap(&response.mutable_vectors()->at(i));
+      if (response.vectors_size() < limit) {
+        response.add_vectors()->Swap(&sub_response.mutable_vectors()->at(i));
+      }
     }
 
     for (int i = 0; i < sub_response.documents_size(); ++i) {
-      response.add_documents()->Swap(&response.mutable_documents()->at(i));
+      if (response.documents_size() < limit) {
+        response.add_documents()->Swap(&sub_response.mutable_documents()->at(i));
+      }
+    }
+
+    if (response.kvs_size() >= limit || response.vectors_size() >= limit || response.documents_size() >= limit) {
+      break;
     }
 
     if (!sub_response.has_more()) {
@@ -212,7 +218,7 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
   request.mutable_context()->add_resolved_locks(resolve_locks);
 
   dingodb::pb::common::RangeWithOptions range_with_option;
-  *range_with_option.mutable_range() = range;
+  range_with_option.mutable_range()->CopyFrom(range);
   range_with_option.set_with_start(true);
   range_with_option.set_with_end(false);
 
@@ -222,7 +228,7 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
 
   request.set_is_reverse(is_reverse);
   request.set_key_only(key_only);
-  request.mutable_stream_meta()->set_limit(limit);
+  request.mutable_stream_meta()->set_limit(kBatchSize);
 
   for (;;) {
     dingodb::pb::store::TxnScanResponse sub_response;
@@ -236,27 +242,38 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
       response.mutable_error()->set_errmsg(status.error_str());
       break;
     }
+
     if (sub_response.error().errcode() != dingodb::pb::error::OK) {
       *response.mutable_error() = sub_response.error();
       break;
     }
 
     // set request stream id
-    if (!response.stream_meta().stream_id().empty()) {
+    if (!sub_response.stream_meta().stream_id().empty()) {
       request.mutable_stream_meta()->set_stream_id(sub_response.stream_meta().stream_id());
     }
 
     // copy data
     for (int i = 0; i < sub_response.kvs_size(); ++i) {
-      response.add_kvs()->Swap(&response.mutable_kvs()->at(i));
+      if (response.kvs_size() < limit) {
+        response.add_kvs()->Swap(&sub_response.mutable_kvs()->at(i));
+      }
     }
 
     for (int i = 0; i < sub_response.vectors_size(); ++i) {
-      response.add_vectors()->Swap(&response.mutable_vectors()->at(i));
+      if (response.vectors_size() < limit) {
+        response.add_vectors()->Swap(&sub_response.mutable_vectors()->at(i));
+      }
     }
 
     for (int i = 0; i < sub_response.documents_size(); ++i) {
-      response.add_documents()->Swap(&response.mutable_documents()->at(i));
+      if (response.documents_size() < limit) {
+        response.add_documents()->Swap(&sub_response.mutable_documents()->at(i));
+      }
+    }
+
+    if (response.kvs_size() >= limit || response.vectors_size() >= limit || response.documents_size() >= limit) {
+      break;
     }
 
     if (!sub_response.stream_meta().has_next()) {
@@ -286,7 +303,7 @@ dingodb::pb::store::TxnScanLockResponse SendTxnScanLockByStreamMode(const dingod
   request.set_start_key(range.start_key());
   request.set_end_key(range.end_key());
 
-  request.mutable_stream_meta()->set_limit(limit);
+  request.mutable_stream_meta()->set_limit(kBatchSize);
 
   for (;;) {
     dingodb::pb::store::TxnScanLockResponse sub_response;
@@ -304,13 +321,19 @@ dingodb::pb::store::TxnScanLockResponse SendTxnScanLockByStreamMode(const dingod
     }
 
     // set request stream id
-    if (!response.stream_meta().stream_id().empty()) {
+    if (!sub_response.stream_meta().stream_id().empty()) {
       request.mutable_stream_meta()->set_stream_id(sub_response.stream_meta().stream_id());
     }
 
     // copy data
     for (int i = 0; i < sub_response.locks_size(); ++i) {
-      response.add_locks()->Swap(&response.mutable_locks()->at(i));
+      if (response.locks_size() < limit) {
+        response.add_locks()->Swap(&sub_response.mutable_locks()->at(i));
+      }
+    }
+
+    if (response.locks_size() >= limit) {
+      break;
     }
 
     if (!sub_response.stream_meta().has_next()) {
@@ -762,7 +785,7 @@ void RunKvScanReleaseV2(KvScanReleaseV2Options const& opt) {
 
 void SetUpTxnGet(CLI::App& app) {
   auto opt = std::make_shared<TxnGetOptions>();
-  auto* cmd = app.add_subcommand("TxnGet", "Txn get ")->group("Store Command");
+  auto* cmd = app.add_subcommand("TxnGet", "Txn get")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
@@ -782,18 +805,20 @@ void RunTxnGet(TxnGetOptions const& opt) {
 
 void SetUpTxnScan(CLI::App& app) {
   auto opt = std::make_shared<TxnScanOptions>();
-  auto* cmd = app.add_subcommand("TxnGet", "Txn scan")->group("Store Command");
+  auto* cmd = app.add_subcommand("TxnScan", "Txn scan")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter region id")->required();
-  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
-  cmd->add_option("--end_key", opt->end_key, "Request parameter start_key")->required();
-  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key");
+  cmd->add_option("--end_key", opt->end_key, "Request parameter start_key");
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->default_val(INT64_MAX);
   cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(20);
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
-  cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse ")->default_val(false);
-  cmd->add_flag("--key_only", opt->key_only, "Request parameter key_only")->default_val(false);
+  cmd->add_option("--rc", opt->rc, "read commit")->default_val(false)->default_str("false");
+  cmd->add_option("--is_reverse", opt->is_reverse, "Request parameter is_reverse")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--key_only", opt->key_only, "Request parameter key_only")->default_val(false)->default_str("false");
   cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
-  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true);
+  cmd->add_option("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true)->default_str("true");
 
   cmd->callback([opt]() { RunTxnScan(*opt); });
 }
@@ -810,25 +835,36 @@ void RunTxnScan(TxnScanOptions const& opt) {
   }
 
   dingodb::pb::common::Range range;
-  range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
-  range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+  if (opt.start_key.empty() || opt.end_key.empty()) {
+    range.set_start_key(region.definition().range().start_key());
+    range.set_end_key(region.definition().range().end_key());
+  } else {
+    range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
+    range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+  }
 
   auto response =
       SendTxnScanByStreamMode(region, range, opt.limit, opt.start_ts, opt.resolve_locks, opt.key_only, opt.is_reverse);
+
+  // auto response =
+  //     SendTxnScanByNormalMode(region, range, opt.limit, opt.start_ts, opt.resolve_locks, opt.key_only,
+  //     opt.is_reverse);
+
   Pretty::Show(response);
 }
 
 void SetUpTxnScanLock(CLI::App& app) {
   auto opt = std::make_shared<TxnScanLockOptions>();
-  auto* cmd = app.add_subcommand("TxnScanLock", "Txn scan lock ")->group("Store Command");
+  auto* cmd = app.add_subcommand("TxnScanLock", "Txn scan lock")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--is_rc", opt->rc, "read commit")->default_val(false)->default_str("false");
   cmd->add_option("--max_ts", opt->max_ts, "Request parameter max_ts")->required();
   cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
   cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true);
+  cmd->add_option("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true)->default_str("true");
   cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(20);
+
   cmd->callback([opt]() { RunTxnScanLock(*opt); });
 }
 
@@ -844,8 +880,13 @@ void RunTxnScanLock(TxnScanLockOptions const& opt) {
   }
 
   dingodb::pb::common::Range range;
-  range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
-  range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+  if (opt.start_key.empty() || opt.end_key.empty()) {
+    range.set_start_key(region.definition().range().start_key());
+    range.set_end_key(region.definition().range().end_key());
+  } else {
+    range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
+    range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+  }
 
   auto response = SendTxnScanLockByStreamMode(region, range, opt.rc, opt.max_ts, opt.limit);
   Pretty::Show(response);
@@ -979,7 +1020,7 @@ void RunTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
 
 void SetUpTxnResolveLock(CLI::App& app) {
   auto opt = std::make_shared<TxnResolveLockOptions>();
-  auto* cmd = app.add_subcommand("TxnResolveLock", "Txn resolve lock ")->group("Store Command");
+  auto* cmd = app.add_subcommand("TxnResolveLock", "Txn resolve lock")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
