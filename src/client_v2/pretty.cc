@@ -768,10 +768,10 @@ void Pretty::Show(std::vector<TenantInfo> tenants) {
 }
 
 void ShowKeyValues(const std::vector<dingodb::pb::common::KeyValue>& kvs) {
-  std::vector<std::vector<std::string>> rows = {{"Key", "Value"}};
+  std::vector<std::vector<ftxui::Element>> rows = {{ftxui::paragraph("Key"), ftxui::paragraph("Value")}};
 
   for (const auto& kv : kvs) {
-    rows.push_back({TruncateHexString(kv.key()), TruncateHexString(kv.value())});
+    rows.push_back({ftxui::paragraph(TruncateHexString(kv.key())), ftxui::paragraph(TruncateHexString(kv.value()))});
   }
 
   PrintTable(rows);
@@ -826,13 +826,13 @@ void Pretty::Show(dingodb::pb::store::TxnScanResponse& response) {
     return;
   }
 
-  if (response.kvs().empty()) {
+  if (!response.kvs().empty()) {
     ShowKeyValues(dingodb::Helper::PbRepeatedToVector(response.kvs()));
 
-  } else if (response.vectors().empty()) {
+  } else if (!response.vectors().empty()) {
     ShowVectorWithIds(dingodb::Helper::PbRepeatedToVector(response.vectors()));
 
-  } else if (response.documents().empty()) {
+  } else if (!response.documents().empty()) {
     ShowDocumentWithIds(dingodb::Helper::PbRepeatedToVector(response.documents()));
   }
 }

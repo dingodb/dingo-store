@@ -1318,8 +1318,6 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
       return status;
     }
 
-    end_scan_key = !kvs.empty() ? kvs.back().key() : "";
-
     txn_coprocessor->Close();
     txn_coprocessor.reset();
 
@@ -1335,10 +1333,7 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
       bytes += kv.ByteSizeLong();
       kvs.push_back(std::move(kv));
 
-      iter->Next();
-
       if (stop_checker(kvs.size(), bytes)) {
-        end_scan_key = iter->Key();
         has_more = true;
 
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
@@ -1349,7 +1344,14 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
 
         break;
       }
+
+      iter->Next();
     }
+  }
+
+  if (iter->Valid(txn_result_info)) {
+    end_scan_key = iter->Key();
+    iter->Next();
   }
 
   return butil::Status::OK();
