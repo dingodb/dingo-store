@@ -453,6 +453,23 @@ public class LockService {
         });
     }
 
+    public void watchAllOpLock(Kv kv, Runnable task) {
+        CompletableFuture.supplyAsync(() ->
+                kvService.watch(watchAllOpRequest(kv.getKv().getKey(), kv.getModRevision()))
+        ).whenCompleteAsync((r, e) -> {
+            if (e != null) {
+                if (!(e instanceof DingoClientException)) {
+                    watchAllOpLock(kv, task);
+                    return;
+                }
+                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
+                return;
+            }
+            task.run();
+            watchAllOpLock(kv, task);
+        });
+    }
+
     private PutRequest putRequest(String resourceKey, String value) {
         return PutRequest.builder()
             .lease(lease())
@@ -498,6 +515,16 @@ public class LockService {
                 .filters(Collections.singletonList(EventFilterType.NOPUT))
                 .build()
             ).build();
+    }
+
+    private WatchRequest watchAllOpRequest(byte[] resourceKey, long revision) {
+        return WatchRequest.builder()
+                .requestUnion(OneTimeRequest.builder()
+                        .key(resourceKey)
+                        .needPrevKv(true)
+                        .startRevision(revision)
+                        .build()
+                ).build();
     }
 
 }
