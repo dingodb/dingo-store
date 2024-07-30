@@ -88,7 +88,7 @@ butil::Status DocumentReader::SearchDocument(int64_t ts, int64_t partition_id, D
 
   auto ret = document_index->Search(region_range, parameter, document_with_score_results);
 
-  if(!ret.ok()) {
+  if (!ret.ok()) {
     return ret;
   }
 
@@ -220,11 +220,21 @@ butil::Status DocumentReader::DocumentGetRegionMetrics(int64_t /*region_id*/, co
   if (!status.ok()) {
     return status;
   }
+  status = inner_document_index->GetMetaJson(meta_json);
+  if (!status.ok()) {
+    return status;
+  }
+  status = inner_document_index->GetJsonParameter(json_parameter);
+  if (!status.ok()) {
+    return status;
+  }
 
   region_metrics.set_total_num_docs(total_doc_count);
   region_metrics.set_total_num_tokens(total_token_count);
   region_metrics.set_max_id(max_id);
   region_metrics.set_min_id(min_id);
+  region_metrics.set_meta_json(meta_json);
+  region_metrics.set_json_parameter(json_parameter);
 
   return butil::Status();
 }
