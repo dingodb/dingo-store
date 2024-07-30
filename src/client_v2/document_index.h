@@ -37,6 +37,18 @@ namespace client_v2 {
 
 void SetUpDocumentIndexSubCommands(CLI::App &app);
 
+struct CreateDocumentIndexOptions {
+  std::string coor_url;
+  std::string name;
+  int64_t schema_id;
+  int32_t part_count;
+  int64_t replica;
+  bool with_auto_increment;
+  bool use_json_parameter;
+};
+void SetUpCreateDocumentIndex(CLI::App &app);
+void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt);
+
 // document operation
 struct DocumentDeleteOptions {
   std::string coor_url;
@@ -129,7 +141,7 @@ void SendDocumentBatchQuery(DocumentBatchQueryOptions const &opt);
 void SendDocumentGetMaxId(DocumentGetMaxIdOptions const &opt);
 void SendDocumentGetMinId(DocumentGetMinIdOptions const &opt);
 void SendDocumentScanQuery(DocumentScanQueryOptions const &opt);
-int64_t SendDocumentCount(DocumentCountOptions const &opt);
+void SendDocumentCount(DocumentCountOptions const &opt);
 void SendDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const &opt);
 
 }  // namespace client_v2

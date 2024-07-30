@@ -112,7 +112,7 @@ static void PrintTable(const std::vector<std::vector<ftxui::Element>>& rows) {
   if (rows.empty()) {
     return;
   }
-
+  std::cout << std::endl;
   int clounm_num = rows[0].size();
 
   auto table = ftxui::Table(rows);
@@ -878,6 +878,162 @@ void Pretty::Show(dingodb::pb::store::TxnScanLockResponse& response) {
   }
 
   ShowLockInfo(dingodb::Helper::PbRepeatedToVector(response.locks()));
+}
+
+void Pretty::Show(dingodb::pb::meta::CreateIndexResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  auto dingo_command_id = response.index_id();
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("EntityType"),
+      ftxui::paragraph("ParentId"),
+      ftxui::paragraph("EntityId"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", dingodb::pb::meta::EntityType_Name(dingo_command_id.entity_type()))),
+      ftxui::paragraph(fmt::format("{}", dingo_command_id.parent_entity_id())),
+      ftxui::paragraph(fmt::format("{}", dingo_command_id.entity_id())),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::document::DocumentSearchResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  if (response.document_with_scores_size() == 0) {
+    std::cout << "Not search document ." << std::endl;
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("DocumentId"),
+      ftxui::paragraph("Score"),
+  }};
+  for (auto const& document_with_score : response.document_with_scores()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", document_with_score.document_with_id().id())),
+        ftxui::paragraph(fmt::format("{}", document_with_score.score())),
+    };
+    rows.push_back(row);
+  }
+
+  PrintTable(rows);
+}
+void Pretty::Show(dingodb::pb::document::DocumentBatchQueryResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  if (response.doucments_size() == 0) {
+    std::cout << "Not find document." << std::endl;
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("DocumentId"),
+      ftxui::paragraph("DocumentData"),
+  }};
+  for (auto const& document : response.doucments()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", document.id())),
+    };
+    std::string document_data;
+    for (auto const& data : document.document().document_data()) {
+      document_data +=
+          fmt::format("{}-{}", data.first, dingodb::pb::common::ScalarFieldType_Name(data.second.field_type()));
+    }
+    row.push_back(ftxui::paragraph(document_data));
+    rows.push_back(row);
+  }
+
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::document::DocumentGetBorderIdResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("ID"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", response.id())),
+  };
+  rows.push_back(row);
+
+  PrintTable(rows);
+}
+void Pretty::Show(dingodb::pb::document::DocumentScanQueryResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  if (response.documents_size() == 0) {
+    std::cout << "Not find document." << std::endl;
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("DocumentId"),
+      ftxui::paragraph("DocumentData"),
+  }};
+  for (auto const& document : response.documents()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", document.id())),
+    };
+    std::string document_data;
+    for (auto const& data : document.document().document_data()) {
+      document_data +=
+          fmt::format("{}-{}", data.first, dingodb::pb::common::ScalarFieldType_Name(data.second.field_type()));
+    }
+    row.push_back(ftxui::paragraph(document_data));
+    rows.push_back(row);
+  }
+
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::document::DocumentCountResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Count"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", response.count())),
+  };
+  rows.push_back(row);
+
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::document::DocumentGetRegionMetricsResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  auto metrics = response.metrics();
+  {
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("TotalNumDocs"),
+        ftxui::paragraph("TotalNumTokens"),
+        ftxui::paragraph("MaxId"),
+        ftxui::paragraph("MinId"),
+    }};
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", metrics.total_num_docs())),
+        ftxui::paragraph(fmt::format("{}", metrics.total_num_tokens())),
+        ftxui::paragraph(fmt::format("{}", metrics.max_id())),
+        ftxui::paragraph(fmt::format("{}", metrics.min_id())),
+    };
+    rows.push_back(row);
+
+    PrintTable(rows);
+  }
+  std::cout << "Meta_Json: " << metrics.meta_json() << std::endl;
+  std::cout << "Json_Parameter: " << metrics.json_parameter() << std::endl;
 }
 
 }  // namespace client_v2
