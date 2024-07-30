@@ -278,17 +278,7 @@ struct CreateIndexOptions {
 void SetUpCreateIndex(CLI::App &app);
 void RunCreateIndex(CreateIndexOptions const &opt);
 
-struct CreateDocumentIndexOptions {
-  std::string coor_url;
-  std::string name;
-  int64_t schema_id;
-  int32_t part_count;
-  int64_t replica;
-  bool with_auto_increment;
-  bool use_json_parameter;
-};
-void SetUpCreateDocumentIndex(CLI::App &app);
-void RunCreateDocumentIndex(CreateDocumentIndexOptions const &opt);
+
 
 struct CreateIndexIdOptions {
   std::string coor_url;

@@ -30,6 +30,7 @@
 #include "brpc/controller.h"
 #include "bthread/bthread.h"
 #include "client_v2/coordinator.h"
+#include "client_v2/document_index.h"
 #include "client_v2/dump.h"
 #include "client_v2/helper.h"
 #include "client_v2/interation.h"
@@ -225,6 +226,7 @@ int main(int argc, char* argv[]) {
   client_v2::SetUpKVSubCommands(app);
   client_v2::SetUpMetaSubCommands(app);
   client_v2::SetUpStoreSubCommands(app);
+  client_v2::SetUpDocumentIndexSubCommands(app);
   client_v2::SetUpToolSubCommands(app);
 
   if (argc > 1) {

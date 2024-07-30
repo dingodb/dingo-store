@@ -21,6 +21,7 @@
 #include "butil/status.h"
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
+#include "proto/document.pb.h"
 #include "proto/meta.pb.h"
 
 namespace client_v2 {
@@ -49,6 +50,14 @@ class Pretty {
   static void Show(std::vector<TenantInfo> tenants);
   static void Show(dingodb::pb::store::TxnScanResponse &response);
   static void Show(dingodb::pb::store::TxnScanLockResponse &response);
+
+  static void Show(dingodb::pb::meta::CreateIndexResponse &response);
+  static void Show(dingodb::pb::document::DocumentSearchResponse &response);
+  static void Show(dingodb::pb::document::DocumentBatchQueryResponse &response);
+  static void Show(dingodb::pb::document::DocumentGetBorderIdResponse &response);
+  static void Show(dingodb::pb::document::DocumentScanQueryResponse &response);
+  static void Show(dingodb::pb::document::DocumentCountResponse &response);
+  static void Show(dingodb::pb::document::DocumentGetRegionMetricsResponse &response);
 };
 
 }  // namespace client_v2
