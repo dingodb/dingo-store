@@ -119,13 +119,8 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentBatchQueryRequest(storage, request, region);
   if (!status.ok()) {
@@ -155,6 +150,8 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   for (auto& document_with_id : document_with_ids) {
     response->add_doucments()->Swap(&document_with_id);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void DocumentServiceImpl::DocumentBatchQuery(google::protobuf::RpcController* controller,
@@ -162,6 +159,11 @@ void DocumentServiceImpl::DocumentBatchQuery(google::protobuf::RpcController* co
                                              pb::document::DocumentBatchQueryResponse* response,
                                              google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_document_operation) {
     return DoDocumentBatchQuery(storage_, controller, request, response, svr_done);
@@ -172,7 +174,7 @@ void DocumentServiceImpl::DocumentBatchQuery(google::protobuf::RpcController* co
     DoDocumentBatchQuery(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -241,13 +243,8 @@ void DoDocumentSearch(StoragePtr storage, google::protobuf::RpcController* contr
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentSearchRequest(storage, request, region);
   if (!status.ok()) {
@@ -287,6 +284,11 @@ void DocumentServiceImpl::DocumentSearch(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (!FLAGS_enable_async_document_search) {
     return DoDocumentSearch(storage_, controller, request, response, svr_done);
   }
@@ -296,7 +298,7 @@ void DocumentServiceImpl::DocumentSearch(google::protobuf::RpcController* contro
     DoDocumentSearch(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteLeastQueue(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -376,13 +378,8 @@ void DoDocumentAdd(StoragePtr storage, google::protobuf::RpcController* controll
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateDocumentAddRequest(storage, request, region);
   if (!status.ok()) {
@@ -420,6 +417,11 @@ void DocumentServiceImpl::DocumentAdd(google::protobuf::RpcController* controlle
                                       pb::document::DocumentAddResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -439,7 +441,7 @@ void DocumentServiceImpl::DocumentAdd(google::protobuf::RpcController* controlle
     DoDocumentAdd(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -494,13 +496,8 @@ void DoDocumentDelete(StoragePtr storage, google::protobuf::RpcController* contr
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateDocumentDeleteRequest(storage, request, region);
   if (!status.ok()) {
@@ -531,6 +528,11 @@ void DocumentServiceImpl::DocumentDelete(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -543,7 +545,7 @@ void DocumentServiceImpl::DocumentDelete(google::protobuf::RpcController* contro
     DoDocumentDelete(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -581,13 +583,8 @@ void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* 
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentGetBorderIdRequest(storage, request, region);
   if (!status.ok()) {
@@ -604,6 +601,8 @@ void DoDocumentGetBorderId(StoragePtr storage, google::protobuf::RpcController* 
   }
 
   response->set_id(document_id);
+
+  tracker->SetReadStoreTime();
 }
 
 void DocumentServiceImpl::DocumentGetBorderId(google::protobuf::RpcController* controller,
@@ -611,6 +610,11 @@ void DocumentServiceImpl::DocumentGetBorderId(google::protobuf::RpcController* c
                                               pb::document::DocumentGetBorderIdResponse* response,
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_document_operation) {
     return DoDocumentGetBorderId(storage_, controller, request, response, svr_done);
@@ -621,7 +625,7 @@ void DocumentServiceImpl::DocumentGetBorderId(google::protobuf::RpcController* c
     DoDocumentGetBorderId(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -675,13 +679,8 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentScanQueryRequest(storage, request, region);
   if (!status.ok()) {
@@ -715,6 +714,8 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   for (auto& document_with_id : document_with_ids) {
     response->add_documents()->Swap(&document_with_id);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void DocumentServiceImpl::DocumentScanQuery(google::protobuf::RpcController* controller,
@@ -722,6 +723,11 @@ void DocumentServiceImpl::DocumentScanQuery(google::protobuf::RpcController* con
                                             pb::document::DocumentScanQueryResponse* response,
                                             google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_document_operation) {
     return DoDocumentScanQuery(storage_, controller, request, response, svr_done);
@@ -732,7 +738,7 @@ void DocumentServiceImpl::DocumentScanQuery(google::protobuf::RpcController* con
     DoDocumentScanQuery(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -776,13 +782,8 @@ void DoDocumentGetRegionMetrics(StoragePtr storage, google::protobuf::RpcControl
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentGetRegionMetricsRequest(storage, request, region);
   if (!status.ok()) {
@@ -808,6 +809,11 @@ void DocumentServiceImpl::DocumentGetRegionMetrics(google::protobuf::RpcControll
                                                    google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (!FLAGS_enable_async_document_operation) {
     return DoDocumentGetRegionMetrics(storage_, controller, request, response, svr_done);
   }
@@ -817,7 +823,7 @@ void DocumentServiceImpl::DocumentGetRegionMetrics(google::protobuf::RpcControll
     DoDocumentGetRegionMetrics(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -890,13 +896,8 @@ void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* contro
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateDocumentCountRequest(storage, request, region);
   if (!status.ok()) {
@@ -915,6 +916,8 @@ void DoDocumentCount(StoragePtr storage, google::protobuf::RpcController* contro
   }
 
   response->set_count(count);
+
+  tracker->SetReadStoreTime();
 }
 
 void DocumentServiceImpl::DocumentCount(google::protobuf::RpcController* controller,
@@ -922,6 +925,11 @@ void DocumentServiceImpl::DocumentCount(google::protobuf::RpcController* control
                                         pb::document::DocumentCountResponse* response,
                                         ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
 
   if (!FLAGS_enable_async_document_count) {
     return DoDocumentCount(storage_, controller, request, response, svr_done);
@@ -932,7 +940,7 @@ void DocumentServiceImpl::DocumentCount(google::protobuf::RpcController* control
     DoDocumentCount(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -968,13 +976,8 @@ void DoTxnGetDocument(StoragePtr storage, google::protobuf::RpcController* contr
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
@@ -1035,12 +1038,17 @@ void DocumentServiceImpl::TxnGet(google::protobuf::RpcController* controller, co
                                  pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnGetDocument(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1095,13 +1103,8 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
@@ -1185,12 +1188,17 @@ void DocumentServiceImpl::TxnScan(google::protobuf::RpcController* controller, c
                                   pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnScanDocument(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1209,6 +1217,11 @@ void DocumentServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* co
                                              google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1221,7 +1234,7 @@ void DocumentServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* co
     DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1241,6 +1254,11 @@ void DocumentServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController
                                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1253,7 +1271,7 @@ void DocumentServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController
     DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1409,13 +1427,8 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = ValidateDocumentTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
@@ -1485,6 +1498,11 @@ void DocumentServiceImpl::TxnPrewrite(google::protobuf::RpcController* controlle
                                       pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1504,7 +1522,7 @@ void DocumentServiceImpl::TxnPrewrite(google::protobuf::RpcController* controlle
     DoTxnPrewriteDocument(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1594,6 +1612,11 @@ void DocumentServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                     google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1613,7 +1636,7 @@ void DocumentServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     DoTxnCommit(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1678,6 +1701,11 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
                                             google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1692,14 +1720,8 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = DocumentValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
@@ -1712,7 +1734,7 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
     DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1779,6 +1801,11 @@ void DocumentServiceImpl::TxnResolveLock(google::protobuf::RpcController* contro
                                          pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1793,14 +1820,8 @@ void DocumentServiceImpl::TxnResolveLock(google::protobuf::RpcController* contro
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = DocumentValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
@@ -1813,7 +1834,7 @@ void DocumentServiceImpl::TxnResolveLock(google::protobuf::RpcController* contro
     DoTxnResolveLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1858,13 +1879,8 @@ void DoTxnBatchGetDocument(StoragePtr storage, google::protobuf::RpcController* 
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
+  auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
@@ -1927,12 +1943,17 @@ void DocumentServiceImpl::TxnBatchGet(google::protobuf::RpcController* controlle
                                       pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnBatchGetDocument(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1985,6 +2006,11 @@ void DocumentServiceImpl::TxnBatchRollback(google::protobuf::RpcController* cont
                                            google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1997,7 +2023,7 @@ void DocumentServiceImpl::TxnBatchRollback(google::protobuf::RpcController* cont
     DoTxnBatchRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2056,12 +2082,17 @@ void DocumentServiceImpl::TxnScanLock(google::protobuf::RpcController* controlle
                                       pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnScanLock(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2108,6 +2139,11 @@ void DocumentServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controll
                                        pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2120,7 +2156,7 @@ void DocumentServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controll
     DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2148,6 +2184,11 @@ void DocumentServiceImpl::TxnGc(google::protobuf::RpcController* controller, con
                                 pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2155,14 +2196,8 @@ void DocumentServiceImpl::TxnGc(google::protobuf::RpcController* controller, con
     return;
   }
 
+  auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-  auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND,
-                            fmt::format("Not found region {} at server {}", region_id, Server::GetInstance().Id()));
-    return;
-  }
 
   auto status = DocumentValidateTxnGcRequest(request, region);
   if (!status.ok()) {
@@ -2175,7 +2210,7 @@ void DocumentServiceImpl::TxnGc(google::protobuf::RpcController* controller, con
     DoTxnGc(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2218,6 +2253,11 @@ void DocumentServiceImpl::TxnDeleteRange(google::protobuf::RpcController* contro
                                          pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   if (IsRaftApplyPendingExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2230,7 +2270,7 @@ void DocumentServiceImpl::TxnDeleteRange(google::protobuf::RpcController* contro
     DoTxnDeleteRange(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2274,12 +2314,17 @@ void DocumentServiceImpl::TxnDump(google::protobuf::RpcController* controller, c
                                   pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnDump(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2347,7 +2392,7 @@ void DocumentServiceImpl::Hello(google::protobuf::RpcController* controller, con
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
 
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2363,7 +2408,7 @@ void DocumentServiceImpl::GetMemoryInfo(google::protobuf::RpcController* control
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
 
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");

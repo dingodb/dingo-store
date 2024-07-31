@@ -102,7 +102,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvGetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -123,7 +123,7 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->KvGet(ctx, keys, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -131,6 +131,8 @@ void DoKvGet(StoragePtr storage, google::protobuf::RpcController* controller,
   if (!kvs.empty()) {
     response->set_value(kvs[0].value());
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
@@ -138,7 +140,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -152,7 +154,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
     DoKvGet(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -200,7 +202,7 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvBatchGetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -218,12 +220,14 @@ void DoKvBatchGet(StoragePtr storage, google::protobuf::RpcController* controlle
   std::vector<pb::common::KeyValue> kvs;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchGetRequest*>(request);
   status = storage->KvGet(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
 
   Helper::VectorToPbRepeated(kvs, response->mutable_kvs());
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
@@ -231,7 +235,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
                                   google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -249,7 +253,7 @@ void StoreServiceImpl::KvBatchGet(google::protobuf::RpcController* controller,
     DoKvBatchGet(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -296,7 +300,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateKvPutRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -325,7 +329,7 @@ void DoKvPut(StoragePtr storage, google::protobuf::RpcController* controller,
   auto* mut_request = const_cast<dingodb::pb::store::KvPutRequest*>(request);
   kvs.emplace_back(std::move(*mut_request->release_kv()));
   status = storage->KvPut(ctx, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -337,7 +341,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
                              dingodb::pb::store::KvPutResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -354,7 +358,7 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     DoKvPut(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -407,7 +411,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvBatchPutRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -437,7 +441,7 @@ void DoKvBatchPut(StoragePtr storage, google::protobuf::RpcController* controlle
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutRequest*>(request);
   auto kvs = Helper::PbRepeatedToVector(mut_request->mutable_kvs());
   status = storage->KvPut(ctx, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -449,7 +453,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
                                   google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -471,7 +475,7 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     DoKvBatchPut(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -519,7 +523,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvPutIfAbsentRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -549,7 +553,7 @@ void DoKvPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* contro
   std::vector<pb::common::KeyValue> kvs;
   kvs.emplace_back(std::move(*mut_request->release_kv()));
   status = storage->KvPutIfAbsent(ctx, kvs, true, key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -565,7 +569,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
                                      pb::store::KvPutIfAbsentResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -582,7 +586,7 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     DoKvPutIfAbsent(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -635,7 +639,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvBatchPutIfAbsentRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -666,7 +670,7 @@ void DoKvBatchPutIfAbsent(StoragePtr storage, google::protobuf::RpcController* c
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchPutIfAbsentRequest*>(request);
   status = storage->KvPutIfAbsent(ctx, Helper::PbRepeatedToVector(mut_request->mutable_kvs()), request->is_atomic(),
                                   key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -683,7 +687,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -705,7 +709,7 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     DoKvBatchPutIfAbsent(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -749,7 +753,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateKvBatchDeleteRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -776,7 +780,7 @@ void DoKvBatchDelete(StoragePtr storage, google::protobuf::RpcController* contro
   std::vector<bool> key_states;
   auto* mut_request = const_cast<dingodb::pb::store::KvBatchDeleteRequest*>(request);
   status = storage->KvDelete(ctx, Helper::PbRepeatedToVector(mut_request->mutable_keys()), key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -793,7 +797,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
                                      pb::store::KvBatchDeleteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -815,7 +819,7 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     DoKvBatchDelete(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -860,7 +864,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvDeleteRangeRequest(request, region, uniform_range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
       ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
@@ -878,7 +882,7 @@ void DoKvDeleteRange(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->KvDeleteRange(ctx, correction_range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -891,7 +895,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
                                      pb::store::KvDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -908,7 +912,7 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     DoKvDeleteRange(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -951,7 +955,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateKvCompareAndSetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -979,7 +983,7 @@ void DoKvCompareAndSet(StoragePtr storage, google::protobuf::RpcController* cont
 
   std::vector<bool> key_states;
   status = storage->KvCompareAndSet(ctx, {request->kv()}, {request->expect_value()}, true, key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -995,7 +999,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
                                        pb::store::KvCompareAndSetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1012,7 +1016,7 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
     DoKvCompareAndSet(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1062,7 +1066,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateKvBatchCompareAndSetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1092,7 +1096,7 @@ void DoKvBatchCompareAndSet(StoragePtr storage, google::protobuf::RpcController*
   status = storage->KvCompareAndSet(ctx, Helper::PbRepeatedToVector(mut_request->kvs()),
                                     Helper::PbRepeatedToVector(mut_request->expect_values()), request->is_atomic(),
                                     key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -1109,7 +1113,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
                                             google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1131,7 +1135,7 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     DoKvBatchCompareAndSet(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1180,7 +1184,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequest(request, region, uniform_range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
       ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
@@ -1205,7 +1209,7 @@ void DoKvScanBegin(StoragePtr storage, google::protobuf::RpcController* controll
   status = storage->KvScanBegin(ctx, Constant::kStoreDataCF, region_id, correction_range, request->max_fetch_cnt(),
                                 request->key_only(), request->disable_auto_release(), request->disable_coprocessor(),
                                 request->coprocessor(), &scan_id, &kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -1223,7 +1227,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
                                    ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1237,7 +1241,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
     DoKvScanBegin(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1275,7 +1279,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvScanContinueRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1293,7 +1297,7 @@ void DoKvScanContinue(StoragePtr storage, google::protobuf::RpcController* contr
   bool has_more = false;
   status = storage->KvScanContinue(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs, has_more);
 
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     return;
@@ -1310,7 +1314,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
                                       ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1324,7 +1328,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
     DoKvScanContinue(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1358,7 +1362,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvScanReleaseRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1373,7 +1377,7 @@ void DoKvScanRelease(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->KvScanRelease(ctx, request->scan_id());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
@@ -1384,7 +1388,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
                                      ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1398,7 +1402,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
     DoKvScanRelease(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1469,7 +1473,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateKvScanBeginRequestV2(request, region, uniform_range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
       ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
@@ -1497,7 +1501,7 @@ void DoKvScanBeginV2(StoragePtr storage, google::protobuf::RpcController* contro
   status = storage->KvScanBeginV2(ctx, Constant::kStoreDataCF, region_id, correction_range, request->max_fetch_cnt(),
                                   request->key_only(), request->disable_auto_release(), !request->has_coprocessor(),
                                   request->coprocessor(), scan_id, &kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -1515,7 +1519,7 @@ void StoreServiceImpl::KvScanBeginV2(google::protobuf::RpcController* controller
                                      ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1529,7 +1533,7 @@ void StoreServiceImpl::KvScanBeginV2(google::protobuf::RpcController* controller
     DoKvScanBeginV2(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1568,7 +1572,7 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvScanContinueRequestV2(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1586,7 +1590,7 @@ void DoKvScanContinueV2(StoragePtr storage, google::protobuf::RpcController* con
   bool has_more = false;
   status = storage->KvScanContinueV2(ctx, request->scan_id(), request->max_fetch_cnt(), &kvs, has_more);
 
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     return;
@@ -1605,7 +1609,7 @@ void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* contr
                                         ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1619,7 +1623,7 @@ void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* contr
     DoKvScanContinueV2(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1654,7 +1658,7 @@ void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* cont
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateKvScanReleaseRequestV2(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1669,7 +1673,7 @@ void DoKvScanReleaseV2(StoragePtr storage, google::protobuf::RpcController* cont
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->KvScanReleaseV2(ctx, request->scan_id());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
   }
 }
@@ -1680,7 +1684,7 @@ void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* contro
                                        ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1694,7 +1698,7 @@ void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* contro
     DoKvScanReleaseV2(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1713,7 +1717,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateTxnGetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -1741,7 +1745,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -1750,13 +1754,15 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
     response->set_value(kvs[0].value());
   }
   *response->mutable_txn_result() = txn_result_info;
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
                               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1766,7 +1772,7 @@ void StoreServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
     DoTxnGet(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1822,7 +1828,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequest(request, region, uniform_range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::ERANGE_INVALID != static_cast<pb::error::Errno>(status.error_code())) {
       ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
       ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
@@ -1859,7 +1865,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
 
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -1881,13 +1887,15 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                                pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1897,7 +1905,7 @@ void StoreServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
     DoTxnScan(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1976,7 +1984,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnPessimisticLockRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2010,7 +2018,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
 
   status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
                                        request->lock_ttl(), request->for_update_ts(), true, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2028,7 +2036,7 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2045,7 +2053,7 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
     DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2109,7 +2117,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnPessimisticRollbackRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2135,7 +2143,7 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
 
   status = storage->TxnPessimisticRollback(ctx, region, request->start_ts(), request->for_update_ts(),
                                            Helper::PbRepeatedToVector(request->keys()));
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2148,7 +2156,7 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2165,7 +2173,7 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
     DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2236,7 +2244,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnPrewriteRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2285,7 +2293,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
                                 request->lock_ttl(), request->txn_size(), request->try_one_pc(),
                                 request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2297,7 +2305,7 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2314,7 +2322,7 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     DoTxnPrewrite(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2373,7 +2381,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnCommitRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2405,7 +2413,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnCommit(ctx, region, request->start_ts(), request->commit_ts(), keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2418,7 +2426,7 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2435,7 +2443,7 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     DoTxnCommit(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2493,7 +2501,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnCheckTxnStatusRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2518,7 +2526,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
 
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
                                       request->current_ts());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2531,7 +2539,7 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2548,7 +2556,7 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2609,7 +2617,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnResolveLockRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2631,7 +2639,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2644,7 +2652,7 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2661,7 +2669,7 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
     DoTxnResolveLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2711,7 +2719,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2740,7 +2748,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     return;
@@ -2752,6 +2760,8 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
     }
   }
   *response->mutable_txn_result() = txn_result_info;
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
@@ -2759,7 +2769,7 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2769,7 +2779,7 @@ void StoreServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
     DoTxnBatchGet(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2824,7 +2834,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnBatchRollbackRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2855,7 +2865,7 @@ void DoTxnBatchRollback(StoragePtr storage, google::protobuf::RpcController* con
   }
 
   status = storage->TxnBatchRollback(ctx, request->start_ts(), keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -2869,7 +2879,7 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2886,7 +2896,7 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
     DoTxnBatchRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2949,7 +2959,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   int64_t region_id = request->context().region_id();
 
   butil::Status status = ValidateTxnScanLockRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -2979,7 +2989,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
 
   status =
       storage->TxnScanLock(ctx, request->max_ts(), range, request->limit(), txn_result_info, locks, has_more, end_key);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     return;
@@ -3000,6 +3010,8 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
@@ -3007,7 +3019,7 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -3017,7 +3029,7 @@ void StoreServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
     DoTxnScanLock(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3072,7 +3084,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnHeartBeatRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -3096,7 +3108,7 @@ void DoTxnHeartBeat(StoragePtr storage, google::protobuf::RpcController* control
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnHeartBeat(ctx, request->primary_lock(), request->start_ts(), request->advise_lock_ttl());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -3109,7 +3121,7 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -3126,7 +3138,7 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
     DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3164,7 +3176,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnGcRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -3180,7 +3192,7 @@ void DoTxnGc(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnGc(ctx, request->safe_point_ts());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -3191,7 +3203,7 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -3208,7 +3220,7 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
     DoTxnGc(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3262,7 +3274,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   int64_t region_id = request->context().region_id();
 
   auto status = ValidateTxnDeleteRangeRequest(request, region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
@@ -3278,7 +3290,7 @@ void DoTxnDeleteRange(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnDeleteRange(ctx, request->start_key(), request->end_key());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
@@ -3290,7 +3302,7 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -3307,7 +3319,7 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
     DoTxnDeleteRange(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3412,7 +3424,7 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -3422,7 +3434,7 @@ void StoreServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
     DoTxnDump(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3492,7 +3504,7 @@ void StoreServiceImpl::Hello(google::protobuf::RpcController* controller, const 
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -3507,7 +3519,7 @@ void StoreServiceImpl::GetMemoryInfo(google::protobuf::RpcController* controller
       new ServiceClosure<pb::store::HelloRequest, pb::store::HelloResponse, false>(__func__, done, request, response);
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");

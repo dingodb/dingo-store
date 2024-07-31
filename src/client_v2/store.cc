@@ -2006,7 +2006,7 @@ void RunModifyRegionMeta(ModifyRegionMetaOptions const& opt) {
     return;
   }
   std::cout << "modify region: " << opt.region_id
-            << ", state: " << ::dingodb::pb::common::StoreRegionState_Name(opt.state) << " sucess.\n";
+            << ", state: " << ::dingodb::pb::common::StoreRegionState_Name(opt.state) << " success.\n";
 }
 
 void SendKvGet(KvGetOptions const& opt, std::string& value) {

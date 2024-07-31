@@ -109,7 +109,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     }
 
     // Region is STANDBY state, wait to apply.
-    while (region_->State() == pb::common::StoreRegionState::STANDBY) {
+    while (BAIDU_UNLIKELY(region_->State() == pb::common::StoreRegionState::STANDBY)) {
       DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is standby for spliting, waiting...",
                                         region_->Id());
       bthread_usleep(1000 * 1000);
@@ -127,7 +127,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
 
     // update apply max ts
     for (const auto& request : raft_cmd->requests()) {
-      if (request.ts() > 0) {
+      if (BAIDU_LIKELY(request.ts() > 0)) {
         region_->SetAppliedMaxTs(request.ts());
       }
     }
@@ -164,7 +164,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
         iter.index(), applied_index_,
         raft_cmd->requests().empty() ? "" : pb::raft::CmdType_Name(raft_cmd->requests().at(0).cmd_type()));
 
-    if (need_apply) {
+    if (BAIDU_LIKELY(need_apply)) {
       // Build event
       auto event = std::make_shared<SmApplyEvent>();
       event->region = region_;
