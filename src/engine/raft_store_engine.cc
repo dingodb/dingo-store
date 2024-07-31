@@ -417,28 +417,28 @@ butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
   BvarLatencyGuard bvar_guard(&g_raft_write_latency);
 
   auto node = raft_node_manager_->GetNode(ctx->RegionId());
-  if (node == nullptr) {
+  if (BAIDU_UNLIKELY(node == nullptr)) {
     DINGO_LOG(ERROR) << fmt::format("[raft.engine][region({})] not found raft node.", ctx->RegionId());
     return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
   }
 
   // CAUTION: sync mode cannot pass Done here
-  if (ctx->Done()) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] sync mode cannot pass Done here.", ctx->RegionId());
-  }
+  CHECK(ctx->Done() == nullptr) << fmt::format("[raft.engine][region({})] sync mode cannot pass Done here.",
+                                               ctx->RegionId());
 
   auto sync_mode_cond = ctx->CreateSyncModeCond();
 
   auto status = node->Commit(ctx, GenRaftCmdRequest(ctx, write_data));
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   sync_mode_cond->IncreaseWait();
 
-  if (!ctx->Status().ok()) {
+  if (BAIDU_UNLIKELY(ctx->Status().ok())) {
     return ctx->Status();
   }
+
   return butil::Status();
 }
 

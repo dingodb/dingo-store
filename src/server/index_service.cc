@@ -153,6 +153,8 @@ void DoVectorBatchQuery(StoragePtr storage, google::protobuf::RpcController* con
   for (auto& vector_with_id : vector_with_ids) {
     response->add_vectors()->Swap(&vector_with_id);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* controller,
@@ -161,7 +163,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -175,7 +177,7 @@ void IndexServiceImpl::VectorBatchQuery(google::protobuf::RpcController* control
     DoVectorBatchQuery(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -317,7 +319,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
                                     pb::index::VectorSearchResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -331,7 +333,7 @@ void IndexServiceImpl::VectorSearch(google::protobuf::RpcController* controller,
     DoVectorSearch(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteLeastQueue(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -492,7 +494,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -516,7 +518,7 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     DoVectorAdd(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -601,7 +603,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
                                     pb::index::VectorDeleteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -618,7 +620,7 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
     DoVectorDelete(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -675,6 +677,8 @@ void DoVectorGetBorderId(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   response->set_id(vector_id);
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* controller,
@@ -683,7 +687,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -697,7 +701,7 @@ void IndexServiceImpl::VectorGetBorderId(google::protobuf::RpcController* contro
     DoVectorGetBorderId(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -790,6 +794,8 @@ void DoVectorScanQuery(StoragePtr storage, google::protobuf::RpcController* cont
   for (auto& vector_with_id : vector_with_ids) {
     response->add_vectors()->Swap(&vector_with_id);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controller,
@@ -797,7 +803,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
                                        pb::index::VectorScanQueryResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -811,7 +817,7 @@ void IndexServiceImpl::VectorScanQuery(google::protobuf::RpcController* controll
     DoVectorScanQuery(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -883,7 +889,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -897,7 +903,7 @@ void IndexServiceImpl::VectorGetRegionMetrics(google::protobuf::RpcController* c
     DoVectorGetRegionMetrics(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -990,6 +996,8 @@ void DoVectorCount(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   response->set_count(count);
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
@@ -997,7 +1005,7 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
                                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1011,7 +1019,7 @@ void IndexServiceImpl::VectorCount(google::protobuf::RpcController* controller,
     DoVectorCount(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1153,7 +1161,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1166,7 +1174,7 @@ void IndexServiceImpl::VectorSearchDebug(google::protobuf::RpcController* contro
     DoVectorSearchDebug(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1257,13 +1265,15 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
     }
   }
   *response->mutable_txn_result() = txn_result_info;
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const pb::store::TxnGetRequest* request,
                               pb::store::TxnGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1273,7 +1283,7 @@ void IndexServiceImpl::TxnGet(google::protobuf::RpcController* controller, const
     DoTxnGetVector(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1408,13 +1418,15 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, const pb::store::TxnScanRequest* request,
                                pb::store::TxnScanResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1424,7 +1436,7 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
     DoTxnScanVector(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1443,7 +1455,7 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
                                           google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1460,7 +1472,7 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
     DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1480,7 +1492,7 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1497,7 +1509,7 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
     DoTxnPessimisticRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1746,7 +1758,7 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
                                    pb::store::TxnPrewriteResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1770,7 +1782,7 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     DoTxnPrewriteVector(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1865,7 +1877,7 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
                                  google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1889,7 +1901,7 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     DoTxnCommit(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -1954,7 +1966,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
                                          google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -1987,7 +1999,7 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2054,7 +2066,7 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
                                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2087,7 +2099,7 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
     DoTxnResolveLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2189,6 +2201,8 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
     }
   }
   *response->mutable_txn_result() = txn_result_info;
+
+  tracker->SetReadStoreTime();
 }
 
 void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
@@ -2196,7 +2210,7 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
                                    pb::store::TxnBatchGetResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2206,7 +2220,7 @@ void IndexServiceImpl::TxnBatchGet(google::protobuf::RpcController* controller,
     DoTxnBatchGetVector(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2259,7 +2273,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
                                         google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2276,7 +2290,7 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
     DoTxnBatchRollback(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2335,7 +2349,7 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
                                    pb::store::TxnScanLockResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2345,7 +2359,7 @@ void IndexServiceImpl::TxnScanLock(google::protobuf::RpcController* controller,
     DoTxnScanLock(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2392,7 +2406,7 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
                                     pb::store::TxnHeartBeatResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2409,7 +2423,7 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
     DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2446,7 +2460,7 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
                              pb::store::TxnGcResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2472,7 +2486,7 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
     DoTxnGc(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2515,7 +2529,7 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
                                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2532,7 +2546,7 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
     DoTxnDeleteRange(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2576,7 +2590,7 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
                                pb::store::TxnDumpResponse* response, google::protobuf::Closure* done) {
   auto* svr_done = new ServiceClosure(__func__, done, request, response);
 
-  if (svr_done->GetRegion() == nullptr) {
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
   }
@@ -2586,7 +2600,7 @@ void IndexServiceImpl::TxnDump(google::protobuf::RpcController* controller, cons
     DoTxnDump(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2655,7 +2669,7 @@ void IndexServiceImpl::Hello(google::protobuf::RpcController* controller, const 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
 
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");
@@ -2672,7 +2686,7 @@ void IndexServiceImpl::GetMemoryInfo(google::protobuf::RpcController* controller
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
 
   bool ret = read_worker_set_->ExecuteRR(task);
-  if (!ret) {
+  if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
                             "WorkerSet queue is full, please wait and retry");

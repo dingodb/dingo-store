@@ -114,14 +114,14 @@ void Storage::ReleaseSnapshot() {}
 
 butil::Status Storage::ValidateLeader(int64_t region_id) {
   auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
+  if (BAIDU_UNLIKELY(region == nullptr)) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+  if (BAIDU_LIKELY(region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE)) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region_id);
-    if (node == nullptr) {
+    if (BAIDU_UNLIKELY(node == nullptr)) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found region");
     }
 
@@ -134,14 +134,14 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
 }
 
 butil::Status Storage::ValidateLeader(store::RegionPtr region) {
-  if (region == nullptr) {
+  if (BAIDU_UNLIKELY(region == nullptr)) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+  if (BAIDU_LIKELY(region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE)) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     auto node = raft_kv_engine->GetNode(region->Id());
-    if (node == nullptr) {
+    if (BAIDU_UNLIKELY(node == nullptr)) {
       return butil::Status(pb::error::ERAFT_NOT_FOUND, "Not found raft node");
     }
 
@@ -149,42 +149,46 @@ butil::Status Storage::ValidateLeader(store::RegionPtr region) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
     }
   }
+
   return butil::Status();
 }
 
 bool Storage::IsLeader(int64_t region_id) {
   auto region = Server::GetInstance().GetRegion(region_id);
-  if (region == nullptr) {
+  if (BAIDU_UNLIKELY(region == nullptr)) {
     DINGO_LOG(ERROR) << fmt::format("[control.region][region({})] Not found region.", region_id);
     return false;
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+  if (BAIDU_LIKELY(region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE)) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     return raft_kv_engine->IsLeader(region_id);
   } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
   }
+
   return false;
 }
 
 bool Storage::IsLeader(store::RegionPtr region) {
-  if (region == nullptr) {
+  if (BAIDU_UNLIKELY(region == nullptr)) {
     return false;
   }
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+
+  if (BAIDU_LIKELY(region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE)) {
     auto raft_kv_engine = std::dynamic_pointer_cast<RaftStoreEngine>(raft_engine_);
     return raft_kv_engine->IsLeader(region->Id());
   } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
     return true;
   }
+
   return false;
 }
 
 butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std::string>& keys,
                              std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -193,7 +197,7 @@ butil::Status Storage::KvGet(std::shared_ptr<Context> ctx, const std::vector<std
   for (const auto& key : keys) {
     std::string value;
     auto status = reader->KvGet(ctx->CfName(), ctx->Ts(), key, value);
-    if (!status.ok()) {
+    if (BAIDU_UNLIKELY(!status.ok())) {
       if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
         continue;
       }
@@ -214,7 +218,7 @@ butil::Status Storage::KvPut(std::shared_ptr<Context> ctx, std::vector<pb::commo
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   auto status = writer->KvPut(ctx, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -226,7 +230,7 @@ butil::Status Storage::KvPutIfAbsent(std::shared_ptr<Context> ctx, const std::ve
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   auto status = writer->KvPutIfAbsent(ctx, kvs, is_atomic, key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -238,7 +242,7 @@ butil::Status Storage::KvDelete(std::shared_ptr<Context> ctx, const std::vector<
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   auto status = writer->KvDelete(ctx, keys, key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -249,7 +253,7 @@ butil::Status Storage::KvDeleteRange(std::shared_ptr<Context> ctx, const pb::com
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   auto status = writer->KvDeleteRange(ctx, range);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -262,7 +266,7 @@ butil::Status Storage::KvCompareAndSet(std::shared_ptr<Context> ctx, const std::
   auto writer = GetEngineWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   auto status = writer->KvCompareAndSet(ctx, kvs, expect_values, is_atomic, key_states);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -275,7 +279,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
                                    const pb::store::Coprocessor& coprocessor, std::string* scan_id,
                                    std::vector<pb::common::KeyValue>* kvs) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -285,7 +289,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
   auto reader = GetEngineMVCCReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = scan->Open(*scan_id, reader, cf_name, ctx->Ts());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", *scan_id);
     manager.DeleteScan(*scan_id);
     *scan_id = "";
@@ -294,7 +298,7 @@ butil::Status Storage::KvScanBegin(std::shared_ptr<Context> ctx, const std::stri
 
   status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release,
                                   disable_coprocessor, coprocessor, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", *scan_id);
     manager.DeleteScan(*scan_id);
     *scan_id = "";
@@ -310,13 +314,13 @@ butil::Status Storage::KvScanContinue(std::shared_ptr<Context>, const std::strin
   ScanManager& manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
-  if (!scan) {
+  if (BAIDU_UNLIKELY(!scan)) {
     DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
   status = ScanHandler::ScanContinue(scan, scan_id, max_fetch_cnt, kvs, has_more);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanContinue failed scan : {} max_fetch_cnt : {}", scan_id,
                                     max_fetch_cnt);
@@ -330,13 +334,13 @@ butil::Status Storage::KvScanRelease(std::shared_ptr<Context>, const std::string
   ScanManager& manager = ScanManager::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
-  if (!scan) {
+  if (BAIDU_UNLIKELY(!scan)) {
     DINGO_LOG(ERROR) << fmt::format("scan_id: {} not found", scan_id);
     return butil::Status(pb::error::ESCAN_NOTFOUND, "Not found scan_id");
   }
 
   status = ScanHandler::ScanRelease(scan, scan_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
     return status;
@@ -354,7 +358,7 @@ butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::st
                                      const pb::common::CoprocessorV2& coprocessor, int64_t scan_id,
                                      std::vector<pb::common::KeyValue>* kvs) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -369,7 +373,7 @@ butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::st
   auto reader = GetEngineMVCCReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = scan->Open(std::to_string(scan_id), reader, cf_name, ctx->Ts());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::Open failed : {}", scan_id);
     manager.DeleteScan(scan_id);
     scan_id = std::numeric_limits<int64_t>::max();
@@ -378,7 +382,7 @@ butil::Status Storage::KvScanBeginV2(std::shared_ptr<Context> ctx, const std::st
 
   status = ScanHandler::ScanBegin(scan, region_id, range, max_fetch_cnt, key_only, disable_auto_release,
                                   disable_coprocessor, coprocessor, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanBegin failed: {}", scan_id);
     manager.DeleteScan(scan_id);
     scan_id = std::numeric_limits<int64_t>::max();
@@ -394,14 +398,14 @@ butil::Status Storage::KvScanContinueV2(std::shared_ptr<Context> /*ctx*/, int64_
   ScanManagerV2& manager = ScanManagerV2::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
-  if (!scan) {
+  if (BAIDU_UNLIKELY(!scan)) {
     std::string s = fmt::format("scan_id: {} not found", scan_id);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::ESCAN_NOTFOUND, s);
   }
 
   status = ScanHandler::ScanContinue(scan, std::to_string(scan_id), max_fetch_cnt, kvs, has_more);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanContinue failed scan : {} max_fetch_cnt : {}", scan_id,
                                     max_fetch_cnt);
@@ -415,14 +419,14 @@ butil::Status Storage::KvScanReleaseV2(std::shared_ptr<Context> /*ctx*/, int64_t
   ScanManagerV2& manager = ScanManagerV2::GetInstance();
   std::shared_ptr<ScanContext> scan = manager.FindScan(scan_id);
   butil::Status status;
-  if (!scan) {
+  if (BAIDU_UNLIKELY(!scan)) {
     std::string s = fmt::format("scan_id: {} not found", scan_id);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::ESCAN_NOTFOUND, s);
   }
 
   status = ScanHandler::ScanRelease(scan, std::to_string(scan_id));
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     manager.DeleteScan(scan_id);
     DINGO_LOG(ERROR) << fmt::format("ScanContext::ScanRelease failed : {}", scan_id);
     return status;
@@ -534,14 +538,14 @@ butil::Status Storage::VectorDelete(std::shared_ptr<Context> ctx, bool is_sync, 
 butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                         std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = vector_reader->VectorBatchQuery(ctx, vector_with_ids);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -556,14 +560,14 @@ butil::Status Storage::VectorBatchQuery(std::shared_ptr<Engine::VectorReader::Co
 butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                          std::vector<pb::index::VectorWithDistanceResult>& results) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = vector_reader->VectorBatchSearch(ctx, results);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -577,14 +581,14 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
 
 butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& vector_id) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
   status = vector_reader->VectorGetBorderId(ts, region->Range(false), get_min, vector_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -594,14 +598,14 @@ butil::Status Storage::VectorGetBorderId(store::RegionPtr region, bool get_min, 
 butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                        std::vector<pb::common::VectorWithId>& vector_with_ids) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = vector_reader->VectorScanQuery(ctx, vector_with_ids);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -611,7 +615,7 @@ butil::Status Storage::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Con
 butil::Status Storage::VectorGetRegionMetrics(store::RegionPtr region, VectorIndexWrapperPtr vector_index_wrapper,
                                               pb::common::VectorIndexMetrics& region_metrics) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -619,7 +623,7 @@ butil::Status Storage::VectorGetRegionMetrics(store::RegionPtr region, VectorInd
 
   status =
       vector_reader->VectorGetRegionMetrics(region->Id(), region->Range(false), vector_index_wrapper, region_metrics);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -628,14 +632,14 @@ butil::Status Storage::VectorGetRegionMetrics(store::RegionPtr region, VectorInd
 
 butil::Status Storage::VectorCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
   status = vector_reader->VectorCount(ts, range, count);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -698,19 +702,19 @@ butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalc
   butil::Status status;
 
   status = lambda_op_vector_check_function(op_left_vectors, "op_left_vectors");
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("lambda_op_vector_check_function : op_left_vectors failed");
     return status;
   }
 
   status = lambda_op_vector_check_function(op_right_vectors, "op_right_vectors");
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("lambda_op_vector_check_function : op_right_vectors failed");
     return status;
   }
 
   status = VectorIndexUtils::CalcDistanceEntry(request, distances, result_op_left_vectors, result_op_right_vectors);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     DINGO_LOG(ERROR) << fmt::format("VectorIndexUtils::CalcDistanceEntry failed : {}", status.error_cstr());
   }
 
@@ -722,7 +726,7 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
                                               int64_t& deserialization_id_time_us, int64_t& scan_scalar_time_us,
                                               int64_t& search_time_us) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -730,7 +734,7 @@ butil::Status Storage::VectorBatchSearchDebug(std::shared_ptr<Engine::VectorRead
 
   status = vector_reader->VectorBatchSearchDebug(ctx, results, deserialization_id_time_us, scan_scalar_time_us,
                                                  search_time_us);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -844,14 +848,14 @@ butil::Status Storage::DocumentDelete(std::shared_ptr<Context> ctx, bool is_sync
 butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                           std::vector<pb::common::DocumentWithId>& document_with_ids) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = document_reader->DocumentBatchQuery(ctx, document_with_ids);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -866,14 +870,14 @@ butil::Status Storage::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader
 butil::Status Storage::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                       std::vector<pb::common::DocumentWithScore>& results) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = document_reader->DocumentSearch(ctx, results);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -887,14 +891,14 @@ butil::Status Storage::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Co
 
 butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto document_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
   status = document_reader->DocumentGetBorderId(ts, region->Range(false), get_min, document_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -904,14 +908,14 @@ butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min
 butil::Status Storage::DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                          std::vector<pb::common::DocumentWithId>& document_with_ids) {
   auto status = ValidateLeader(ctx->region_id);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
 
   status = document_reader->DocumentScanQuery(ctx, document_with_ids);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -921,7 +925,7 @@ butil::Status Storage::DocumentScanQuery(std::shared_ptr<Engine::DocumentReader:
 butil::Status Storage::DocumentGetRegionMetrics(store::RegionPtr region, DocumentIndexWrapperPtr document_index_wrapper,
                                                 pb::common::DocumentIndexMetrics& region_metrics) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -929,7 +933,7 @@ butil::Status Storage::DocumentGetRegionMetrics(store::RegionPtr region, Documen
 
   status = document_reader->DocumentGetRegionMetrics(region->Id(), region->Range(false), document_index_wrapper,
                                                      region_metrics);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -938,14 +942,14 @@ butil::Status Storage::DocumentGetRegionMetrics(store::RegionPtr region, Documen
 
 butil::Status Storage::DocumentCount(store::RegionPtr region, pb::common::Range range, int64_t ts, int64_t& count) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   auto document_reader = GetEngineDocumentReader(region->GetStoreEngineType(), region->GetRawEngineType());
 
   status = document_reader->DocumentCount(ts, range, count);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -958,7 +962,7 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
                                    const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info,
                                    std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -969,7 +973,7 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
   auto reader = GetEngineTxnReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = reader->TxnBatchGet(ctx, start_ts, keys, kvs, resolved_locks, txn_result_info);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -987,7 +991,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
                                bool& has_more, std::string& end_scan_key, bool disable_coprocessor,
                                const pb::common::CoprocessorV2& coprocessor) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1001,7 +1005,7 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
 
   status = reader->TxnScan(ctx, start_ts, range, limit, key_only, is_reverse, resolved_locks, disable_coprocessor,
                            coprocessor, txn_result_info, kvs, has_more, end_scan_key);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
       // return OK if not found
       return butil::Status::OK();
@@ -1019,7 +1023,7 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
                                           int64_t for_update_ts, bool return_values,
                                           std::vector<pb::common::KeyValue>& kvs) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1032,7 +1036,7 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
 
   status =
       writer->TxnPessimisticLock(ctx, mutations, primary_lock, start_ts, lock_ttl, for_update_ts, return_values, kvs);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1042,7 +1046,7 @@ butil::Status Storage::TxnPessimisticLock(std::shared_ptr<Context> ctx,
 butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
                                               int64_t for_update_ts, const std::vector<std::string>& keys) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1052,7 +1056,7 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, stor
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnPessimisticRollback(ctx, region, start_ts, for_update_ts, keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1066,7 +1070,7 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
                                    const std::map<int64_t, int64_t>& for_update_ts_checks,
                                    const std::map<int64_t, std::string>& lock_extra_datas) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1079,7 +1083,7 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
 
   status = writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc,
                                max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1089,7 +1093,7 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
 butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
                                  int64_t commit_ts, const std::vector<std::string>& keys) {
   auto status = ValidateLeader(region);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1099,7 +1103,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnCommit(ctx, region, start_ts, commit_ts, keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1109,7 +1113,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr 
 butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
                                          int64_t caller_start_ts, int64_t current_ts) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1119,7 +1123,7 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1129,7 +1133,7 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
 butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                       const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1139,7 +1143,7 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t star
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnResolveLock(ctx, start_ts, commit_ts, keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1149,7 +1153,7 @@ butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t star
 butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
                                         const std::vector<std::string>& keys) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1158,7 +1162,7 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnBatchRollback(ctx, start_ts, keys);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1170,7 +1174,7 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
                                    std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,
                                    std::string& end_scan_key) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1181,7 +1185,7 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
   auto reader = GetEngineTxnReader(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos, has_more, end_scan_key);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1191,7 +1195,7 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
 butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, int64_t start_ts,
                                     int64_t advise_lock_ttl) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1201,7 +1205,7 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnHeartBeat(ctx, primary_lock, start_ts, advise_lock_ttl);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1210,7 +1214,7 @@ butil::Status Storage::TxnHeartBeat(std::shared_ptr<Context> ctx, const std::str
 
 butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1219,7 +1223,7 @@ butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnGc(ctx, safe_point_ts);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1229,7 +1233,7 @@ butil::Status Storage::TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts
 butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::string& start_key,
                                       const std::string& end_key) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1238,7 +1242,7 @@ butil::Status Storage::TxnDeleteRange(std::shared_ptr<Context> ctx, const std::s
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
   status = writer->TxnDeleteRange(ctx, start_key, end_key);
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1254,7 +1258,7 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
                                std::vector<pb::store::TxnDataKey>& txn_data_keys,
                                std::vector<pb::store::TxnDataValue>& txn_data_values) {
   auto status = ValidateLeader(ctx->RegionId());
-  if (!status.ok()) {
+  if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
@@ -1273,13 +1277,13 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
 
   ctx->SetCfName(Constant::kTxnDataCF);
   auto ret = reader->KvScan(ctx, encode_start_key, encode_end_key, data_kvs);
-  if (!ret.ok()) {
+  if (BAIDU_UNLIKELY(!ret.ok())) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
   for (const auto& kv : data_kvs) {
     // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
-    if (kv.key().length() < 10) {
+    if (BAIDU_UNLIKELY(kv.key().length() < 10)) {
       DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "data_reader->KvScan failed");
     }
@@ -1307,14 +1311,14 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   ctx->SetCfName(Constant::kTxnLockCF);
   ret = reader->KvScan(ctx, mvcc::Codec::EncodeKey(start_key, Constant::kLockVer),
                        mvcc::Codec::EncodeKey(end_key, Constant::kLockVer), lock_kvs);
-  if (!ret.ok()) {
+  if (BAIDU_UNLIKELY(!ret.ok())) {
     DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
 
   for (const auto& kv : lock_kvs) {
     // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
-    if (kv.key().length() < 10) {
+    if (BAIDU_UNLIKELY(kv.key().length() < 10)) {
       DINGO_LOG(ERROR) << fmt::format("lock_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "lock_reader->KvScan failed");
     }
@@ -1338,14 +1342,14 @@ butil::Status Storage::TxnDump(std::shared_ptr<Context> ctx, const std::string& 
   std::vector<pb::common::KeyValue> write_kvs;
   ctx->SetCfName(Constant::kTxnWriteCF);
   ret = reader->KvScan(ctx, encode_start_key, encode_end_key, write_kvs);
-  if (!ret.ok()) {
+  if (BAIDU_UNLIKELY(!ret.ok())) {
     DINGO_LOG(ERROR) << fmt::format("data_reader->KvScan failed : {}", ret.error_cstr());
     return ret;
   }
 
   for (const auto& kv : write_kvs) {
     // the min key len is : 1 byte region prefix + 8 byte start_ts + >=1 byte key
-    if (kv.key().length() < 10) {
+    if (BAIDU_UNLIKELY(kv.key().length() < 10)) {
       DINGO_LOG(ERROR) << fmt::format("write_reader->KvScan read key faild: {}", kv.ShortDebugString());
       return butil::Status(pb::error::EINTERNAL, "write_reader->KvScan failed");
     }

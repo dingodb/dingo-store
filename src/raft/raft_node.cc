@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "bthread/bthread.h"
+#include "butil/compiler_specific.h"
 #include "butil/memory/ref_counted.h"
 #include "butil/status.h"
 #include "common/failpoint.h"
@@ -118,7 +119,7 @@ void RaftNode::Destroy() {
 
 // Commit message to raft
 butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb::raft::RaftCmdRequest> raft_cmd) {
-  if (!IsLeader()) {
+  if (BAIDU_UNLIKELY(!IsLeader())) {
     return butil::Status(pb::error::ERAFT_NOTLEADER, GetLeaderId().to_string());
   }
   butil::IOBuf data;
@@ -128,7 +129,7 @@ butil::Status RaftNode::Commit(std::shared_ptr<Context> ctx, std::shared_ptr<pb:
   FAIL_POINT("before_raft_commit");
 
   auto tracker = ctx->Tracker();
-  if (tracker) {
+  if (BAIDU_LIKELY(tracker)) {
     tracker->SetPrepairCommitTime();
   }
 

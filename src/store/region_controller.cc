@@ -665,7 +665,7 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (source_region->State() != pb::common::NORMAL) {
-    return butil::Status(pb::error::EREGION_STATE, "Source region state is NORMAL, not allow merge.");
+    return butil::Status(pb::error::EREGION_STATE, "Source region state is not NORMAL, not allow merge.");
   }
   if (target_region->State() != pb::common::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Target region state is NORMAL, not allow merge.");

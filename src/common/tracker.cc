@@ -16,68 +16,13 @@
 
 #include <memory>
 
-#include "common/helper.h"
-
 namespace dingodb {
 
-Tracker::Tracker(const pb::common::RequestInfo& request_info) : request_info_(request_info) {
-  start_time_ = Helper::TimestampNs();
-  last_time_ = start_time_;
-}
-
-std::shared_ptr<Tracker> Tracker::New(const pb::common::RequestInfo& request_info) {
-  return std::make_shared<Tracker>(request_info);
-}
-
-void Tracker::SetTotalRpcTime() { metrics_.total_rpc_time_ns = Helper::TimestampNs() - start_time_; }
-uint64_t Tracker::TotalRpcTime() const { return metrics_.total_rpc_time_ns; }
-
-void Tracker::SetServiceQueueWaitTime() {
-  uint64_t now_time = Helper::TimestampNs();
-  metrics_.service_queue_wait_time_ns = now_time - last_time_;
-  last_time_ = now_time;
-}
-
-uint64_t Tracker::ServiceQueueWaitTime() const { return metrics_.service_queue_wait_time_ns; }
-
-void Tracker::SetPrepairCommitTime() {
-  uint64_t now_time = Helper::TimestampNs();
-  metrics_.prepair_commit_time_ns = now_time - last_time_;
-  last_time_ = now_time;
-}
-
-uint64_t Tracker::PrepairCommitTime() const { return metrics_.prepair_commit_time_ns; }
-
-void Tracker::SetRaftCommitTime() {
-  uint64_t now_time = Helper::TimestampNs();
-  metrics_.raft_commit_time_ns = now_time - last_time_;
-  last_time_ = now_time;
-}
-
-uint64_t Tracker::RaftCommitTime() const { return metrics_.raft_commit_time_ns; }
-
-void Tracker::SetRaftQueueWaitTime() {
-  uint64_t now_time = Helper::TimestampNs();
-  metrics_.raft_queue_wait_time_ns = now_time - last_time_;
-  last_time_ = now_time;
-}
-
-uint64_t Tracker::RaftQueueWaitTime() const { return metrics_.raft_queue_wait_time_ns; }
-
-void Tracker::SetRaftApplyTime() {
-  uint64_t now_time = Helper::TimestampNs();
-  metrics_.raft_apply_time_ns = now_time - last_time_;
-  last_time_ = now_time;
-}
-uint64_t Tracker::RaftApplyTime() const { return metrics_.raft_apply_time_ns; }
-
-void Tracker::SetStoreWriteTime(uint64_t elapsed_time) { metrics_.store_write_time_ns = elapsed_time; }
-uint64_t Tracker::StoreWriteTime() const { return metrics_.store_write_time_ns; }
-
-void Tracker::SetVectorIndexWriteTime(uint64_t elapsed_time) { metrics_.vector_index_write_time_ns = elapsed_time; }
-uint64_t Tracker::VectorIndexwriteTime() const { return metrics_.vector_index_write_time_ns; }
-
-void Tracker::SetDocumentIndexWriteTime(uint64_t elapsed_time) { metrics_.document_index_write_time_ns = elapsed_time; }
-uint64_t Tracker::DocumentIndexwriteTime() const { return metrics_.document_index_write_time_ns; }
+bvar::LatencyRecorder Tracker::service_queue_latency("dingo_tracker_service_queue");
+bvar::LatencyRecorder Tracker::prepair_commit_latency("dingo_tracker_prepair_commit");
+bvar::LatencyRecorder Tracker::raft_commit_latency("dingo_tracker_raft_commit");
+bvar::LatencyRecorder Tracker::raft_queue_wait_latency("dingo_tracker_raft_queue_wait");
+bvar::LatencyRecorder Tracker::raft_apply_latency("dingo_tracker_raft_apply");
+bvar::LatencyRecorder Tracker::read_store_latency("dingo_tracker_read_store");
 
 }  // namespace dingodb

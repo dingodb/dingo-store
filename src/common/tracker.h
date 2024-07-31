@@ -18,16 +18,23 @@
 #include <cstdint>
 #include <memory>
 
+#include "bvar/latency_recorder.h"
+#include "common/helper.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
 
 class Tracker {
  public:
-  Tracker(const pb::common::RequestInfo& request_info);
+  Tracker(const pb::common::RequestInfo& request_info) : request_info_(request_info) {
+    start_time_ = Helper::TimestampNs();
+    last_time_ = start_time_;
+  }
   ~Tracker() = default;
 
-  static std::shared_ptr<Tracker> New(const pb::common::RequestInfo& request_info);
+  static std::shared_ptr<Tracker> New(const pb::common::RequestInfo& request_info) {
+    return std::make_shared<Tracker>(request_info);
+  }
 
   struct Metrics {
     uint64_t total_rpc_time_ns{0};
@@ -39,34 +46,83 @@ class Tracker {
     uint64_t store_write_time_ns{0};
     uint64_t vector_index_write_time_ns{0};
     uint64_t document_index_write_time_ns{0};
+
+    uint64_t read_store_time_ns{0};
   };
 
-  void SetTotalRpcTime();
-  uint64_t TotalRpcTime() const;
+  void SetTotalRpcTime() { metrics_.total_rpc_time_ns = Helper::TimestampNs() - start_time_; }
+  uint64_t TotalRpcTime() const { return metrics_.total_rpc_time_ns; }
 
-  void SetServiceQueueWaitTime();
-  uint64_t ServiceQueueWaitTime() const;
+  void SetServiceQueueWaitTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.service_queue_wait_time_ns = now_time - last_time_;
+    last_time_ = now_time;
 
-  void SetPrepairCommitTime();
-  uint64_t PrepairCommitTime() const;
+    service_queue_latency << metrics_.service_queue_wait_time_ns / 1000;
+  }
+  uint64_t ServiceQueueWaitTime() const { return metrics_.service_queue_wait_time_ns; }
 
-  void SetRaftCommitTime();
-  uint64_t RaftCommitTime() const;
+  void SetPrepairCommitTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.prepair_commit_time_ns = now_time - last_time_;
+    last_time_ = now_time;
 
-  void SetRaftQueueWaitTime();
-  uint64_t RaftQueueWaitTime() const;
+    prepair_commit_latency << metrics_.prepair_commit_time_ns / 1000;
+  }
+  uint64_t PrepairCommitTime() const { return metrics_.prepair_commit_time_ns; }
 
-  void SetRaftApplyTime();
-  uint64_t RaftApplyTime() const;
+  void SetRaftCommitTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.raft_commit_time_ns = now_time - last_time_;
+    last_time_ = now_time;
 
-  void SetStoreWriteTime(uint64_t elapsed_time);
-  uint64_t StoreWriteTime() const;
+    raft_commit_latency << metrics_.raft_commit_time_ns / 1000;
+  }
+  uint64_t RaftCommitTime() const { return metrics_.raft_commit_time_ns; }
 
-  void SetVectorIndexWriteTime(uint64_t elapsed_time);
-  uint64_t VectorIndexwriteTime() const;
+  void SetRaftQueueWaitTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.raft_queue_wait_time_ns = now_time - last_time_;
+    last_time_ = now_time;
 
-  void SetDocumentIndexWriteTime(uint64_t elapsed_time);
-  uint64_t DocumentIndexwriteTime() const;
+    raft_queue_wait_latency << metrics_.raft_queue_wait_time_ns / 1000;
+  }
+  uint64_t RaftQueueWaitTime() const { return metrics_.raft_queue_wait_time_ns; }
+
+  void SetRaftApplyTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.raft_apply_time_ns = now_time - last_time_;
+    last_time_ = now_time;
+
+    raft_apply_latency << metrics_.raft_apply_time_ns / 1000;
+  }
+  uint64_t RaftApplyTime() const { return metrics_.raft_apply_time_ns; }
+
+  void SetStoreWriteTime(uint64_t elapsed_time) { metrics_.store_write_time_ns = elapsed_time; }
+  uint64_t StoreWriteTime() const { return metrics_.store_write_time_ns; }
+
+  void SetVectorIndexWriteTime(uint64_t elapsed_time) { metrics_.vector_index_write_time_ns = elapsed_time; }
+  uint64_t VectorIndexwriteTime() const { return metrics_.vector_index_write_time_ns; }
+
+  void SetDocumentIndexWriteTime(uint64_t elapsed_time) { metrics_.document_index_write_time_ns = elapsed_time; }
+  uint64_t DocumentIndexwriteTime() const { return metrics_.document_index_write_time_ns; }
+
+  void SetReadStoreTime() {
+    uint64_t now_time = Helper::TimestampNs();
+    metrics_.read_store_time_ns = now_time - last_time_;
+    last_time_ = now_time;
+
+    read_store_latency << metrics_.read_store_time_ns / 1000;
+  }
+  inline uint64_t ReadStoreTime() const { return metrics_.read_store_time_ns; }
+
+  // latency statistics
+  static bvar::LatencyRecorder service_queue_latency;
+  static bvar::LatencyRecorder prepair_commit_latency;
+  static bvar::LatencyRecorder raft_commit_latency;
+  static bvar::LatencyRecorder raft_queue_wait_latency;
+  static bvar::LatencyRecorder raft_apply_latency;
+  static bvar::LatencyRecorder read_store_latency;
 
  private:
   uint64_t start_time_;
