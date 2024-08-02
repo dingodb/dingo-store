@@ -15,9 +15,11 @@
 
 #include "client_v2/store.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <map>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -1752,31 +1754,29 @@ void SetUpWhichRegion(CLI::App& app) {
   cmd->callback([opt]() { RunWhichRegion(*opt); });
 }
 
-butil::Status WhichRegion(WhichRegionOptions const& opt) {
-  if (opt.id <= 0) {
-    return butil::Status(-1, "Param id is error");
-  }
-  if (opt.key.empty()) {
-    return butil::Status(-1, "Param key is empty");
-  }
+std::vector<dingodb::pb::coordinator::ScanRegionInfo> GetRegionsByRange(const dingodb::pb::common::Range& range) {
+  dingodb::pb::coordinator::ScanRegionsRequest request;
+  dingodb::pb::coordinator::ScanRegionsResponse response;
 
-  dingodb::pb::meta::TableDefinition table_definition;
-  auto status = GetTableOrIndexDefinition(opt.id, table_definition);
+  request.set_key(range.start_key());
+  request.set_range_end(range.end_key());
+
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ScanRegions", request, response);
   if (!status.ok()) {
-    return status;
-  }
-  if (table_definition.name().empty()) {
-    return butil::Status(-1, "Not found table/index");
-  }
-  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
-    return butil::Status(-1, "Not support hash partition table/index");
+    return {};
   }
 
+  return dingodb::Helper::PbRepeatedToVector(response.regions());
+}
+
+butil::Status WhichRegionForOldTable(const dingodb::pb::meta::TableDefinition& table_definition,
+                                     int64_t table_or_index_id, const std::string& key) {
   // get region range
   dingodb::pb::meta::IndexRange index_range;
-  dingodb::pb::meta::TableRange table_range = SendGetTableRange(opt.id);
+  dingodb::pb::meta::TableRange table_range = SendGetTableRange(table_or_index_id);
   if (table_range.range_distribution().empty()) {
-    index_range = SendGetIndexRange(opt.id);
+    index_range = SendGetIndexRange(table_or_index_id);
   }
   auto range_distribution =
       !table_range.range_distribution().empty() ? table_range.range_distribution() : index_range.range_distribution();
@@ -1798,16 +1798,16 @@ butil::Status WhichRegion(WhichRegionOptions const& opt) {
       auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
 
       std::vector<std::string> origin_keys;
-      dingodb::Helper::SplitString(opt.key, ',', origin_keys);
+      dingodb::Helper::SplitString(key, ',', origin_keys);
       record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
 
     } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
-      int64_t vector_id = dingodb::Helper::StringToInt64(opt.key);
+      int64_t vector_id = dingodb::Helper::StringToInt64(key);
 
       plain_key = dingodb::VectorCodec::PackageVectorKey(perfix, partition_id, vector_id);
 
     } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
-      int64_t document_id = dingodb::Helper::StringToInt64(opt.key);
+      int64_t document_id = dingodb::Helper::StringToInt64(key);
 
       plain_key = dingodb::DocumentCodec::PackageDocumentKey(perfix, partition_id, document_id);
     }
@@ -1816,12 +1816,100 @@ butil::Status WhichRegion(WhichRegionOptions const& opt) {
                                    distribution.id().entity_id(), dingodb::Helper::RangeToString(range));
 
     if (plain_key >= range.start_key() && plain_key < range.end_key()) {
-      std::cout << fmt::format("key({}) in region({}).", opt.key, distribution.id().entity_id()) << std::endl;
+      std::cout << fmt::format("key({}) in region({}).", key, distribution.id().entity_id()) << std::endl;
       return butil::Status::OK();
     }
   }
 
   std::cout << "Not found key in any region." << std::endl;
+
+  return butil::Status::OK();
+}
+
+butil::Status WhichRegionForNewTable(const dingodb::pb::meta::TableDefinition& table_definition,
+                                     const std::string& key) {
+  std::map<int64_t, int64_t> region_partition_map;
+  std::vector<dingodb::pb::coordinator::ScanRegionInfo> region_infos;
+  for (const auto& partition : table_definition.table_partition().partitions()) {
+    auto tmp_region_infos = GetRegionsByRange(partition.range());
+    for (const auto& region_info : tmp_region_infos) {
+      region_infos.push_back(region_info);
+      region_partition_map[region_info.region_id()] = partition.id().entity_id();
+    }
+  }
+
+  std::sort(region_infos.begin(), region_infos.end(),
+            [](dingodb::pb::coordinator::ScanRegionInfo& r1, dingodb::pb::coordinator::ScanRegionInfo& r2) -> bool {
+              return r1.range().start_key() > r2.range().start_key();
+            });
+
+  const auto index_type = table_definition.index_parameter().index_type();
+
+  for (auto& region_info : region_infos) {
+    int64_t partition_id = region_partition_map[region_info.region_id()];
+    const auto& range = region_info.range();
+    const char perfix = dingodb::Helper::GetKeyPrefix(range.start_key());
+
+    std::string plain_key;
+    if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
+      auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
+
+      std::vector<std::string> origin_keys;
+      dingodb::Helper::SplitString(key, ',', origin_keys);
+      record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      int64_t vector_id = dingodb::Helper::StringToInt64(key);
+
+      plain_key = dingodb::VectorCodec::PackageVectorKey(perfix, partition_id, vector_id);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      int64_t document_id = dingodb::Helper::StringToInt64(key);
+
+      plain_key = dingodb::DocumentCodec::PackageDocumentKey(perfix, partition_id, document_id);
+    }
+
+    DINGO_LOG(INFO) << fmt::format("key: {} region: {} range: {}", dingodb::Helper::StringToHex(plain_key),
+                                   region_info.region_id(), dingodb::Helper::RangeToString(range));
+
+    if (plain_key >= range.start_key() && plain_key < range.end_key()) {
+      std::cout << fmt::format("key({}) in region({}).", key, region_info.region_id()) << std::endl;
+      return butil::Status::OK();
+    }
+  }
+
+  std::cout << "Not found key in any region." << std::endl;
+
+  return butil::Status();
+}
+
+butil::Status WhichRegion(WhichRegionOptions const& opt) {
+  if (opt.id <= 0) {
+    return butil::Status(-1, "Param id is error");
+  }
+  if (opt.key.empty()) {
+    return butil::Status(-1, "Param key is empty");
+  }
+
+  dingodb::pb::meta::TableDefinition table_definition;
+  auto status = GetTableOrIndexDefinition(opt.id, table_definition);
+  if (!status.ok()) {
+    return status;
+  }
+  if (table_definition.name().empty()) {
+    return butil::Status(-1, "Not found table/index");
+  }
+  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
+    return butil::Status(-1, "Not support hash partition table/index");
+  }
+
+  status = WhichRegionForOldTable(table_definition, opt.id, opt.key);
+  if (status.ok()) {
+    return status;
+  }
+
+  WhichRegionForNewTable(table_definition, opt.key);
 
   return butil::Status::OK();
 }
