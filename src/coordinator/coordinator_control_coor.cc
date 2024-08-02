@@ -712,6 +712,8 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
   *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
   region.mutable_definition()->set_tenant_id(region_internal.definition().tenant_id());
+  region.mutable_definition()->set_table_id(region_internal.definition().table_id());
+  region.mutable_definition()->set_index_id(region_internal.definition().index_id());
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
   region.set_region_type(region_internal.region_type());

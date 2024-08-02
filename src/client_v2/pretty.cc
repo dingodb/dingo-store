@@ -1036,4 +1036,31 @@ void Pretty::Show(dingodb::pb::document::DocumentGetRegionMetricsResponse& respo
   std::cout << "Json_Parameter: " << metrics.json_parameter() << std::endl;
 }
 
+void Pretty::Show(const std::vector<dingodb::pb::common::Region>& regions) {
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+      ftxui::paragraph("Name"),
+      ftxui::paragraph("TableId"),
+      ftxui::paragraph("IndexId"),
+      ftxui::paragraph("StartKey"),
+      ftxui::paragraph("EndKey"),
+  }};
+  for (auto const& region : regions) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", region.id())),
+        ftxui::paragraph(fmt::format("{}", region.definition().name())),
+        ftxui::paragraph(fmt::format("{}", region.definition().table_id())),
+        ftxui::paragraph(fmt::format("{}", region.definition().index_id())),
+    };
+    std::string start_key = dingodb::Helper::StringToHex(region.definition().range().start_key());
+    std::string end_key = dingodb::Helper::StringToHex(region.definition().range().end_key());
+    auto plaintext_range = client_v2::Helper::DecodeRangeToPlaintext(region);
+    start_key += fmt::format("({})", plaintext_range.start_key());
+    end_key += fmt::format("({})", plaintext_range.end_key());
+    row.push_back(ftxui::paragraph(start_key));
+    row.push_back(ftxui::paragraph(end_key));
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
 }  // namespace client_v2

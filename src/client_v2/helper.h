@@ -553,6 +553,51 @@ class Helper {
                                      dingodb::Helper::StringToHex(item.range().end_key()));
     }
   }
+
+  static dingodb::pb::common::Range DecodeRangeToPlaintext(const dingodb::pb::common::Region& region) {
+    const dingodb::pb::common::RegionDefinition& region_definition = region.definition();
+    const auto& origin_range = region_definition.range();
+
+    dingodb::pb::common::Range plaintext_range;
+    if (region.region_type() == dingodb::pb::common::INDEX_REGION &&
+        region.definition().index_parameter().has_vector_index_parameter()) {
+      int64_t min_vector_id = 0, max_vector_id = 0;
+      dingodb::VectorCodec::DecodeRangeToVectorId(false, origin_range, min_vector_id, max_vector_id);
+
+      plaintext_range.set_start_key(fmt::format("{}/{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.start_key()),
+                                                dingodb::VectorCodec::UnPackagePartitionId(origin_range.start_key()),
+                                                min_vector_id));
+
+      plaintext_range.set_end_key(fmt::format("{}/{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.end_key()),
+                                              dingodb::VectorCodec::UnPackagePartitionId(origin_range.end_key()),
+                                              max_vector_id));
+
+    } else if (region.region_type() == dingodb::pb::common::DOCUMENT_REGION &&
+               region.definition().index_parameter().has_document_index_parameter()) {
+      int64_t min_document_id = 0, max_document_id = 0;
+      dingodb::DocumentCodec::DecodeRangeToDocumentId(false, origin_range, min_document_id, max_document_id);
+
+      plaintext_range.set_start_key(fmt::format("{}/{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.start_key()),
+                                                dingodb::DocumentCodec::UnPackagePartitionId(origin_range.start_key()),
+                                                min_document_id));
+
+      plaintext_range.set_end_key(fmt::format("{}/{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.end_key()),
+                                              dingodb::DocumentCodec::UnPackagePartitionId(origin_range.end_key()),
+                                              max_document_id));
+
+    } else if (dingodb::Helper::IsExecutorRaw(origin_range.start_key()) ||
+               dingodb::Helper::IsExecutorTxn(origin_range.start_key())) {
+    } else {
+      std::string start_key = origin_range.start_key().substr(1, origin_range.start_key().size());
+      plaintext_range.set_start_key(fmt::format("{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.start_key()),
+                                                dingodb::Helper::StringToHex(start_key)));
+
+      std::string end_key = origin_range.end_key().substr(1, origin_range.end_key().size());
+      plaintext_range.set_end_key(fmt::format("{}/{}", dingodb::Helper::GetKeyPrefix(origin_range.end_key()),
+                                              dingodb::Helper::StringToHex(end_key)));
+    }
+    return plaintext_range;
+  }
 };
 
 }  // namespace client_v2
