@@ -33,6 +33,7 @@
 #include "coordinator/tso_control.h"
 #include "fmt/core.h"
 #include "nlohmann/json.hpp"
+#include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
 namespace client_v2 {
@@ -50,6 +51,7 @@ void SetUpMetaSubCommands(CLI::App &app) {
   SetUpGetTablesBySchema(app);
   SetUpCreateSchema(app);
   SetUpDropSchema(app);
+  SetUpGetRegionByTable(app);
 
   // tenant
   SetUpCreateTenant(app);
@@ -243,7 +245,7 @@ void SendDropTable(int64_t table_id) {
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "DropTable", request, response);
 }
 
-int64_t SendGetTableByName(const std::string &table_name) {
+butil::Status SendGetTableByName(const std::string &table_name, int64_t &table_id) {
   dingodb::pb::meta::GetTableByNameRequest request;
   dingodb::pb::meta::GetTableByNameResponse response;
 
@@ -254,9 +256,10 @@ int64_t SendGetTableByName(const std::string &table_name) {
 
   request.set_table_name(table_name);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableByName", request, response);
-
-  return response.table_definition_with_id().table_id().entity_id();
+  auto status =
+      InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableByName", request, response);
+  table_id = response.table_definition_with_id().table_id().entity_id();
+  return status;
 }
 
 std::vector<int64_t> SendGetTablesBySchema() {
@@ -3110,6 +3113,51 @@ void RunUpdateTso(UpdateTsoOptions const &opt) {
                                                                                                   response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << "RESPONSE =" << response.DebugString();
+}
+
+void SetUpGetRegionByTable(CLI::App &app) {
+  auto opt = std::make_shared<GetRegionByTableOptions>();
+  auto *cmd = app.add_subcommand("GetRegionByTable", "Get table")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--table_id", opt->table_id, "Request parameter table id")
+      ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
+      ->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id")->default_val(0);
+  cmd->callback([opt]() { RunGetRegionByTable(*opt); });
+}
+
+void RunGetRegionByTable(GetRegionByTableOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+
+  int64_t table_id = opt.table_id;
+  // get regionmap
+  dingodb::pb::coordinator::GetRegionMapRequest request;
+  dingodb::pb::coordinator::GetRegionMapResponse response;
+
+  request.set_epoch(1);
+  request.set_tenant_id(opt.tenant_id);
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMap", request, response);
+
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Get region map failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::vector<dingodb::pb::common::Region> regions;
+  for (auto const &region : response.regionmap().regions()) {
+    if (region.definition().table_id() == table_id || region.definition().index_id() == table_id) {
+      regions.push_back(region);
+    }
+  }
+  if (regions.empty()) {
+    std::cout << "Not find region." << std::endl;
+    return;
+  }
+  Pretty::Show(regions);
 }
 
 }  // namespace client_v2

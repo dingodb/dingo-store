@@ -58,6 +58,8 @@ class Pretty {
   static void Show(dingodb::pb::document::DocumentScanQueryResponse &response);
   static void Show(dingodb::pb::document::DocumentCountResponse &response);
   static void Show(dingodb::pb::document::DocumentGetRegionMetricsResponse &response);
+
+  static void Show(const std::vector<dingodb::pb::common::Region> &regions);
 };
 
 }  // namespace client_v2

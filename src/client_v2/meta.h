@@ -278,8 +278,6 @@ struct CreateIndexOptions {
 void SetUpCreateIndex(CLI::App &app);
 void RunCreateIndex(CreateIndexOptions const &opt);
 
-
-
 struct CreateIndexIdOptions {
   std::string coor_url;
 };
@@ -503,6 +501,14 @@ struct UpdateTsoOptions {
 };
 void SetUpUpdateTso(CLI::App &app);
 void RunUpdateTso(UpdateTsoOptions const &opt);
+
+struct GetRegionByTableOptions {
+  std::string coor_url;
+  int64_t table_id;
+  int64_t tenant_id;
+};
+void SetUpGetRegionByTable(CLI::App &app);
+void RunGetRegionByTable(GetRegionByTableOptions const &opt);
 
 }  // namespace client_v2
 
