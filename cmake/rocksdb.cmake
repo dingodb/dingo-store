@@ -1,16 +1,13 @@
 # Copyright (c) 2020-present Baidu, Inc. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
 include(ExternalProject)
 message(STATUS "Include rocksdb...")
@@ -58,9 +55,7 @@ ExternalProject_Add(
              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
              -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
              -DCMAKE_PREFIX_PATH=${prefix_path}
-             -DPORTABLE=${ROCKSDB_PROTABLE_OPTION} # Minimum CPU arch to
-                                                   # support, or 0 = current
-                                                   # CPU, 1 = baseline CPU
+             -DPORTABLE=${ROCKSDB_PROTABLE_OPTION} # Minimum CPU arch to support, or 0 = current CPU, 1 = baseline CPU
              -DWITH_SNAPPY=ON
              -DWITH_LZ4=ON
              -DWITH_ZSTD=ON
@@ -74,10 +69,8 @@ ExternalProject_Add(
              -DWITH_TRACE_TOOLS=OFF
              ${EXTERNAL_OPTIONAL_ARGS}
   LIST_SEPARATOR |
-  CMAKE_CACHE_ARGS
-    -DCMAKE_INSTALL_PREFIX:PATH=${ROCKSDB_INSTALL_DIR}
-    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
-    -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
+  CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${ROCKSDB_INSTALL_DIR} -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+                   -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
 
 add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_property(TARGET rocksdb PROPERTY IMPORTED_LOCATION ${ROCKSDB_LIBRARIES})

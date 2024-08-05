@@ -1,22 +1,18 @@
 # Copyright (c) 2020-present dingodb.com, Inc. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
 include(ExternalProject)
 message(STATUS "Include protobuf...")
 
-# Always invoke `FIND_PACKAGE(Protobuf)` for importing function
-# protobuf_generate_cpp FIND_PACKAGE(Protobuf QUIET)
+# Always invoke `FIND_PACKAGE(Protobuf)` for importing function protobuf_generate_cpp FIND_PACKAGE(Protobuf QUIET)
 macro(UNSET_VAR VAR_NAME)
   unset(${VAR_NAME} CACHE)
   unset(${VAR_NAME})
@@ -30,8 +26,7 @@ unset_var(PROTOBUF_LIBRARY)
 unset_var(PROTOBUF_INCLUDE_DIR)
 unset_var(Protobuf_PROTOC_EXECUTABLE)
 
-# Print and set the protobuf library information, finish this cmake process and
-# exit from this file.
+# Print and set the protobuf library information, finish this cmake process and exit from this file.
 macro(PROMPT_PROTOBUF_LIB)
   set(protobuf_DEPS ${ARGN})
 
@@ -55,15 +50,13 @@ macro(PROMPT_PROTOBUF_LIB)
   set_property(TARGET protobuf PROPERTY IMPORTED_LOCATION ${PROTOBUF_LIBRARY})
 
   add_library(protobuf_lite ${protobuf_LIBTYPE} IMPORTED GLOBAL)
-  set_property(TARGET protobuf_lite PROPERTY IMPORTED_LOCATION
-                                             ${PROTOBUF_LITE_LIBRARY})
+  set_property(TARGET protobuf_lite PROPERTY IMPORTED_LOCATION ${PROTOBUF_LITE_LIBRARY})
 
   add_library(libprotoc ${protobuf_LIBTYPE} IMPORTED GLOBAL)
   set_property(TARGET libprotoc PROPERTY IMPORTED_LOCATION ${PROTOC_LIBRARY})
 
   add_executable(protoc IMPORTED GLOBAL)
-  set_property(TARGET protoc PROPERTY IMPORTED_LOCATION
-                                      ${PROTOBUF_PROTOC_EXECUTABLE})
+  set_property(TARGET protoc PROPERTY IMPORTED_LOCATION ${PROTOBUF_PROTOC_EXECUTABLE})
   set(Protobuf_PROTOC_EXECUTABLE ${PROTOBUF_PROTOC_EXECUTABLE})
 
   foreach(dep ${protobuf_DEPS})
@@ -134,10 +127,8 @@ function(build_protobuf TARGET_NAME)
                -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
                -DCMAKE_PREFIX_PATH=${ZLIB_INSTALL_DIR}
     LIST_SEPARATOR |
-    CMAKE_CACHE_ARGS
-      -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
-      -DCMAKE_VERBOSE_MAKEFILE:BOOL=OFF
-      -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+    CMAKE_CACHE_ARGS -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE} -DCMAKE_VERBOSE_MAKEFILE:BOOL=OFF
+                     -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
     INSTALL_COMMAND $(MAKE) install
     COMMAND mkdir -p ${PROTOBUF_INCLUDE_DIR}
     COMMAND cp -f ${ZLIB_INCLUDE_DIR}/zlib.h ${PROTOBUF_INCLUDE_DIR}/
