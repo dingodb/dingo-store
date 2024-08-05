@@ -1,37 +1,28 @@
 # Copyright (c) 2023 dingodb.com, Inc. All Rights Reserved
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
-# Note: if BRPC_ENABLE_CPU_PROFILER is ON, there may be child process hang
-# because of the sample process of tcmalloc will cause dead lock after fork, so
-# do not enable DBRPC_ENABLE_CPU_PROFILER in production enviroment. For develop
-# without MKL: cmake .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug
-# -DBRPC_ENABLE_CPU_PROFILER=ON -DLINK_TCMALLOC=ON For develop with MKL: cmake
-# .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug -DWITH_MKL=ON
-# -DBRPC_ENABLE_CPU_PROFILER=ON -DLINK_TCMALLOC=ON For RelWithDbgInfo: cmake ..
-# -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo
-# -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON For
-# RelWithDbgInfo: cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
-# -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_MKL=ON
-# -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON For Release: cmake ..
-# -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DWITH_MKL=ON
-# -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON Build all binaries include
-# unit test: make Build only product binaries: make dingodb_server
+# Note: if BRPC_ENABLE_CPU_PROFILER is ON, there may be child process hang because of the sample process of tcmalloc
+# will cause dead lock after fork, so do not enable DBRPC_ENABLE_CPU_PROFILER in production enviroment. For develop
+# without MKL: cmake .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug -DBRPC_ENABLE_CPU_PROFILER=ON
+# -DLINK_TCMALLOC=ON For develop with MKL: cmake .. -DCMAKE_BUILD_TYPE=Debug -DTHIRD_PARTY_BUILD_TYPE=Debug
+# -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=ON -DLINK_TCMALLOC=ON For RelWithDbgInfo: cmake ..
+# -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF
+# -DLINK_TCMALLOC=ON For RelWithDbgInfo: cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo
+# -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON For Release:
+# cmake .. -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DWITH_MKL=ON -DBRPC_ENABLE_CPU_PROFILER=OFF
+# -DLINK_TCMALLOC=ON Build all binaries include unit test: make Build only product binaries: make dingodb_server
 # dingodb_client
 
-# if compile_commands.json is needed, please enable
-# CMAKE_EXPORT_COMPILE_COMMANDS, of use `bear --append -- make` to do make, it's
-# more recommended to use bear.
+# if compile_commands.json is needed, please enable CMAKE_EXPORT_COMPILE_COMMANDS, of use `bear --append -- make` to do
+# make, it's more recommended to use bear.
 
 cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(dingo-store C CXX)
@@ -40,8 +31,7 @@ option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
 option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
 option(BUILD_UNIT_TESTS "Build unit test" OFF)
 option(ENABLE_COVERAGE "Enable unit test code coverage" OFF)
-option(DINGO_BUILD_STATIC
-       "Link libraries statically to generate the dingodb binary" ON)
+option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb binary" ON)
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
@@ -58,8 +48,7 @@ set(CMAKE_C_FLAGS_DEBUG "$ENV{CFLAGS} -O0  -g3 -ggdb")
 set(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0  -g3 -ggdb")
 
 message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
-message(
-  STATUS "SYSTEM: ${CMAKE_HOST_SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+message(STATUS "SYSTEM: ${CMAKE_HOST_SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 
 # xdprocks
 if(XDPROCKS_PATH)
@@ -79,9 +68,7 @@ if(XDPROCKS_PATH)
   set(ENABLE_XDPROCKS ON)
   add_definitions(-DENABLE_XDPROCKS=ON)
 
-  execute_process(
-    COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/scripts/prepare_xdprocks.sh
-            --xdprocks_dir ${XDPROCKS_PATH})
+  execute_process(COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/scripts/prepare_xdprocks.sh --xdprocks_dir ${XDPROCKS_PATH})
 else()
   message(STATUS "Disable xdprocks")
   set(ENABLE_XDPROCKS OFF)
@@ -121,8 +108,7 @@ if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 17)
 else()
   set(ALLOWED_CXX_STANDARDS 17 20 23)
-  set_property(CACHE CMAKE_CXX_STANDARD PROPERTY STRINGS
-                                                 ${ALLOWED_CXX_STANDARDS})
+  set_property(CACHE CMAKE_CXX_STANDARD PROPERTY STRINGS ${ALLOWED_CXX_STANDARDS})
   list(FIND ALLOWED_CXX_STANDARDS ${CMAKE_CXX_STANDARD} POSITION)
   if(POSITION LESS 0)
     message(FATAL_ERROR "Invalid CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}. "
@@ -136,10 +122,7 @@ if(CMAKE_CXX_STANDARD EQUAL 23)
     set(CMAKE_CXX_STANDARD 23)
     set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
   else()
-    message(
-      FATAL_ERROR
-        "The compiler ${CMAKE_CXX_COMPILER} has no C++23 support. Please use a different C++ compiler."
-    )
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++23 support. Please use a different C++ compiler.")
   endif()
 elseif(CMAKE_CXX_STANDARD EQUAL 20)
   check_cxx_compiler_flag("-std=c++20" COMPILER_SUPPORTS_CXX20)
@@ -147,10 +130,7 @@ elseif(CMAKE_CXX_STANDARD EQUAL 20)
     set(CMAKE_CXX_STANDARD 20)
     set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
   else()
-    message(
-      FATAL_ERROR
-        "The compiler ${CMAKE_CXX_COMPILER} has no C++20 support. Please use a different C++ compiler."
-    )
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++20 support. Please use a different C++ compiler.")
   endif()
 else()
   check_cxx_compiler_flag("-std=c++17" COMPILER_SUPPORTS_CXX17)
@@ -158,10 +138,7 @@ else()
     set(CMAKE_CXX_STANDARD 17)
     set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
   else()
-    message(
-      FATAL_ERROR
-        "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler."
-    )
+    message(FATAL_ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support. Please use a different C++ compiler.")
   endif()
 endif()
 
@@ -202,8 +179,7 @@ set(THIRD_PARTY_PATH ${CMAKE_CURRENT_BINARY_DIR}/third-party)
 set(CMAKE_VERBOSE_MAKEFILE ON)
 set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 
-execute_process(COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/contrib/.clang-tidy
-                        ${CMAKE_CURRENT_BINARY_DIR}/)
+execute_process(COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/contrib/.clang-tidy ${CMAKE_CURRENT_BINARY_DIR}/)
 
 find_package(Threads REQUIRED)
 
@@ -280,16 +256,13 @@ foreach(msg ${MSG_PROTOS})
   list(APPEND PROTO_HDRS "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h")
 
   add_custom_command(
-    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc"
-           "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h"
-    COMMAND ${PROTOBUF_PROTOC_EXECUTABLE} ARGS --cpp_out ${PROTO_META_BASE_DIR}
-            -I ${MESSAGE_SOURCE_DIR} ${msg}
+    OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc" "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h"
+    COMMAND ${PROTOBUF_PROTOC_EXECUTABLE} ARGS --cpp_out ${PROTO_META_BASE_DIR} -I ${MESSAGE_SOURCE_DIR} ${msg}
     DEPENDS protobuf ${msg}
     COMMENT "Running C++ protocol buffer compiler on ${msg}"
     VERBATIM)
 endforeach()
-set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED
-                                                                   TRUE)
+set_source_files_properties(${PROTO_SRCS} ${PROTO_HDRS} PROPERTIES GENERATED TRUE)
 
 add_library(PROTO_OBJS OBJECT ${PROTO_SRCS})
 set_target_properties(PROTO_OBJS PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -356,10 +329,8 @@ set(DYNAMIC_LIB
     ${FTXUI_SCREEN_LIBRARY})
 
 if(ENABLE_XDPROCKS)
-  set(DYNAMIC_LIB
-      ${DYNAMIC_LIB} "${XDPROCKS_PATH}/lib/libxdprocks.a"
-      "${XDPROCKS_PATH}/lib/libstorelib.a" "${XDPROCKS_PATH}/lib/libzlog.a"
-      "-l:libpci.so.3" "-l:libudev.so.1")
+  set(DYNAMIC_LIB ${DYNAMIC_LIB} "${XDPROCKS_PATH}/lib/libxdprocks.a" "${XDPROCKS_PATH}/lib/libstorelib.a"
+                  "${XDPROCKS_PATH}/lib/libzlog.a" "-l:libpci.so.3" "-l:libudev.so.1")
 endif()
 
 set(DYNAMIC_LIB ${DYNAMIC_LIB} dl Threads::Threads)
@@ -432,8 +403,7 @@ if(WITH_MKL)
     NAMES ${COR_LIB}
     PATHS ${MKL_ROOT}/lib/intel64)
 
-  set(MKL_LIBRARIES ${MKL_SEQUENTIAL_LAYER_LIBRARY} ${MKL_INTERFACE_LIBRARY}
-                    ${MKL_CORE_LIBRARY})
+  set(MKL_LIBRARIES ${MKL_SEQUENTIAL_LAYER_LIBRARY} ${MKL_INTERFACE_LIBRARY} ${MKL_CORE_LIBRARY})
   set(BLAS_LIBRARIES ${MKL_LIBRARIES})
 
   message(STATUS "MKL_LIBRARIES=${MKL_LIBRARIES}")
@@ -444,8 +414,8 @@ if(WITH_MKL)
   include(faiss-mkl)
 
 else()
-  # find_package(MKL QUIET) if(MKL_FOUND) message(FATAL_ERROR "The MKL is found,
-  # cannot build faiss with openblas, please disable MKL.") endif()
+  # find_package(MKL QUIET) if(MKL_FOUND) message(FATAL_ERROR "The MKL is found, cannot build faiss with openblas,
+  # please disable MKL.") endif()
 
   message(STATUS "Enable USE_OPENBLAS")
   include(openblas)
@@ -464,25 +434,17 @@ set(VECTOR_LIB ${FAISS_LIBRARIES} ${OPENMP_LIBRARY})
 
 if(WITH_DISKANN)
   if(NOT WITH_MKL)
-    message(
-      FATAL_ERROR
-        "The WITH_MKL is not ON, please install enable WITH_MKL to build diskann."
-    )
+    message(FATAL_ERROR "The WITH_MKL is not ON, please install enable WITH_MKL to build diskann.")
   endif()
 
   if(NOT MKL_FOUND)
-    message(
-      FATAL_ERROR
-        "The MKL is not found, please install intel mkl to build diskann.")
+    message(FATAL_ERROR "The MKL is not found, please install intel mkl to build diskann.")
   endif()
 
   if(NOT BOOST_SEARCH_PATH)
     find_package(Boost REQUIRED COMPONENTS program_options)
   else()
-    message(
-      STATUS
-        "BOOST_SEARCH_PATH=${BOOST_SEARCH_PATH}, use user-defined boost version"
-    )
+    message(STATUS "BOOST_SEARCH_PATH=${BOOST_SEARCH_PATH}, use user-defined boost version")
   endif()
 
   include(diskann)
@@ -508,10 +470,8 @@ if(LINK_TCMALLOC)
 endif()
 
 # source file
-file(GLOB_RECURSE DINGO_SERIAL_SOURCES
-     ${PROJECT_SOURCE_DIR}/src/serial/src/*.cc)
-file(GLOB_RECURSE DINGO_SERIAL_SCHEMA_SOURCES
-     ${PROJECT_SOURCE_DIR}/src/serial/src/schema*.cc)
+file(GLOB_RECURSE DINGO_SERIAL_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/*.cc)
+file(GLOB_RECURSE DINGO_SERIAL_SCHEMA_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/schema*.cc)
 
 set(SERIAL_SRCS ${DINGO_SERIAL_SOURCES} ${DINGO_SERIAL_SCHEMA_SOURCES})
 
@@ -541,8 +501,7 @@ file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
 file(GLOB CLIENT_V2_SRCS ${PROJECT_SOURCE_DIR}/src/client_v2/*.cc)
 
 if(NOT ENABLE_XDPROCKS)
-  list(REMOVE_ITEM ENGINE_SRCS
-       "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
+  list(REMOVE_ITEM ENGINE_SRCS "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
 endif()
 
 list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/main.cc")
@@ -561,8 +520,7 @@ endmacro()
 detect_target_arch()
 
 if(__X86_64)
-  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc
-                     ${PROJECT_SOURCE_DIR}/src/simd/hook.cc)
+  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc ${PROJECT_SOURCE_DIR}/src/simd/hook.cc)
   set(SIMD_UTILS_SSE_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_sse.cc)
   set(SIMD_UTILS_AVX_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_avx.cc)
   set(SIMD_UTILS_AVX512_SRC ${PROJECT_SOURCE_DIR}/src/simd/distances_avx512.cc)
@@ -573,19 +531,15 @@ if(__X86_64)
 
   target_compile_options(simd_utils_sse PRIVATE -msse4.2)
   target_compile_options(simd_utils_avx PRIVATE -mf16c -mavx2)
-  target_compile_options(simd_utils_avx512 PRIVATE -mf16c -mavx512f -mavx512dq
-                                                   -mavx512bw)
+  target_compile_options(simd_utils_avx512 PRIVATE -mf16c -mavx512f -mavx512dq -mavx512bw)
 
-  add_library(
-    simd_utils STATIC
-    ${SIMD_UTILS_SRC} $<TARGET_OBJECTS:simd_utils_sse>
-    $<TARGET_OBJECTS:simd_utils_avx> $<TARGET_OBJECTS:simd_utils_avx512>)
+  add_library(simd_utils STATIC ${SIMD_UTILS_SRC} $<TARGET_OBJECTS:simd_utils_sse> $<TARGET_OBJECTS:simd_utils_avx>
+                                $<TARGET_OBJECTS:simd_utils_avx512>)
   # target_link_libraries(simd_utils PUBLIC glog::glog)
 endif()
 
 if(__AARCH64)
-  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/hook.cc
-                     ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc)
+  set(SIMD_UTILS_SRC ${PROJECT_SOURCE_DIR}/src/simd/hook.cc ${PROJECT_SOURCE_DIR}/src/simd/distances_ref.cc)
   add_library(simd_utils STATIC ${SIMD_UTILS_SRC})
   # target_link_libraries(simd_utils PUBLIC glog::glog)
 endif()
@@ -689,8 +643,7 @@ if(ENABLE_FAILPOINT)
   unset(ENABLE_FAILPOINT CACHE)
 endif()
 
-add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS>
-                              $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(
   dingodb_client
   ${CLIENT_SRCS}
@@ -730,12 +683,11 @@ add_dependencies(dingodb_cli ${DEPEND_LIBS})
 if(DINGO_BUILD_STATIC)
   message(STATUS "Build DingoDB with static libraries linking")
   if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
-    # This is only for build some modules for testing, not for the whole
-    # project. This project is currently not compatible with MacOS.
+    # This is only for build some modules for testing, not for the whole project. This project is currently not
+    # compatible with MacOS.
   else()
     if(BUILD_GOOGLE_SANITIZE)
-      set(CMAKE_EXE_LINKER_FLAGS
-          "-static-libgcc -static-libstdc++  -static-libasan")
+      set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++  -static-libasan")
     else()
       set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
     endif()
@@ -746,8 +698,7 @@ else()
   endif()
 endif()
 add_subdirectory(contrib/cli11)
-target_link_libraries(dingodb_server ${DYNAMIC_LIB} ${VECTOR_LIB}
-                      "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
+target_link_libraries(dingodb_server ${DYNAMIC_LIB} ${VECTOR_LIB} "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
 
 target_link_libraries(dingodb_client ${DYNAMIC_LIB})
 

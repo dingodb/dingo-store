@@ -29,7 +29,7 @@ set(UNIT_TEST_LIBS
     $<TARGET_OBJECTS:UNIT_TEST_DOCUMENT_OBJS>
     $<TARGET_OBJECTS:UNIT_TEST_TXN_OBJS>)
 
-set(UNIT_TEST_LIBS ${UNIT_TEST_LIBS} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES}
-                   "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
+set(UNIT_TEST_LIBS ${UNIT_TEST_LIBS} ${GTEST_LIBRARIES} ${GMOCK_LIBRARIES} "-Xlinker \"-(\"" ${BLAS_LIBRARIES}
+                   "-Xlinker \"-)\"")
 
 target_link_libraries(${UNIT_TEST_BIN} ${UNIT_TEST_LIBS})

@@ -1,16 +1,13 @@
 # Copyright (c) 2020-present Baidu, Inc. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
 include(ExternalProject)
 message(STATUS "Include zlib...")
@@ -28,10 +25,8 @@ set(ZLIB_LIBRARIES
     "${ZLIB_INSTALL_DIR}/lib/libz.a"
     CACHE FILEPATH "zlib library." FORCE)
 
-file(
-  WRITE ${ZLIB_BINARY_DIR}/copy_repo.sh
-  "mkdir -p ${ZLIB_BINARY_DIR} && cp -rf ${ZLIB_SOURCES_DIR}/* ${ZLIB_BINARY_DIR}/"
-)
+file(WRITE ${ZLIB_BINARY_DIR}/copy_repo.sh
+     "mkdir -p ${ZLIB_BINARY_DIR} && cp -rf ${ZLIB_SOURCES_DIR}/* ${ZLIB_BINARY_DIR}/")
 
 execute_process(COMMAND sh ${ZLIB_BINARY_DIR}/copy_repo.sh)
 
@@ -51,11 +46,8 @@ ExternalProject_Add(
              -DCMAKE_MACOSX_RPATH=ON
              -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
   LIST_SEPARATOR |
-  CMAKE_CACHE_ARGS
-    -DCMAKE_INSTALL_PREFIX:PATH=${ZLIB_INSTALL_DIR}
-    -DCMAKE_INSTALL_LIBDIR:PATH=${ZLIB_INSTALL_DIR}/lib
-    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
-    -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
+  CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${ZLIB_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR:PATH=${ZLIB_INSTALL_DIR}/lib
+                   -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
 
 add_library(zlib STATIC IMPORTED GLOBAL)
 set_property(TARGET zlib PROPERTY IMPORTED_LOCATION ${ZLIB_LIBRARIES})

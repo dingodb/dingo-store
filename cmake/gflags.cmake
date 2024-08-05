@@ -1,16 +1,13 @@
 # Copyright (c) 2020-present Baidu, Inc. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License"); you may not
-# use this file except in compliance with the License. You may obtain a copy of
-# the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-# License for the specific language governing permissions and limitations under
-# the License.
+# Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+# specific language governing permissions and limitations under the License.
 
 include(ExternalProject)
 message(STATUS "Include gflags...")
@@ -50,8 +47,7 @@ ExternalProject_Add(
              -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
              -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
              -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
-             # -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-             # -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
+             # -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
              # -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
              -DBUILD_STATIC_LIBS=ON
              -DCMAKE_INSTALL_PREFIX=${GFLAGS_INSTALL_DIR}
@@ -61,17 +57,14 @@ ExternalProject_Add(
              -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
              ${EXTERNAL_OPTIONAL_ARGS}
   CMAKE_CACHE_ARGS
-    -DCMAKE_INSTALL_PREFIX:PATH=${GFLAGS_INSTALL_DIR}
-    -DCMAKE_INSTALL_LIBDIR:PATH=${GFLAGS_INSTALL_DIR}/lib
-    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
-    -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
+    -DCMAKE_INSTALL_PREFIX:PATH=${GFLAGS_INSTALL_DIR} -DCMAKE_INSTALL_LIBDIR:PATH=${GFLAGS_INSTALL_DIR}/lib
+    -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
 
 add_library(gflags STATIC IMPORTED GLOBAL)
 set_property(TARGET gflags PROPERTY IMPORTED_LOCATION ${GFLAGS_LIBRARIES})
 add_dependencies(gflags extern_gflags)
 
-# On Windows (including MinGW), the Shlwapi library is used by gflags if
-# available.
+# On Windows (including MinGW), the Shlwapi library is used by gflags if available.
 if(WIN32)
   include(CheckIncludeFileCXX)
   check_include_file_cxx("shlwapi.h" HAVE_SHLWAPI)
