@@ -465,6 +465,13 @@ public class LockService {
                 log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 return;
             }
+            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
+                try {
+                    Thread.sleep(1000L);
+                } catch (Exception e1) {
+                    
+                }
+            }
             task.run();
             watchAllOpLock(kv, task);
         });
