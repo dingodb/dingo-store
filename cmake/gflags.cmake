@@ -1,77 +1,81 @@
 # Copyright (c) 2020-present Baidu, Inc. All Rights Reserved.
 #
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy of
+# the License at
 #
 # http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations under
+# the License.
 
-INCLUDE(ExternalProject)
+include(ExternalProject)
 message(STATUS "Include gflags...")
 
-SET(GFLAGS_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/gflags)
-SET(GFLAGS_BINARY_DIR ${THIRD_PARTY_PATH}/build/gflags)
-SET(GFLAGS_INSTALL_DIR ${THIRD_PARTY_PATH}/install/gflags)
-SET(GFLAGS_INCLUDE_DIR "${GFLAGS_INSTALL_DIR}/include" CACHE PATH "gflags include directory." FORCE)
-IF (WIN32)
-    set(GFLAGS_LIBRARIES "${GFLAGS_INSTALL_DIR}/lib/gflags_static.lib" CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
-ELSE (WIN32)
-    if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
-        set(GFLAGS_LIBRARIES "${GFLAGS_INSTALL_DIR}/lib/libgflags_debug.a" CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
-    else()
-        set(GFLAGS_LIBRARIES "${GFLAGS_INSTALL_DIR}/lib/libgflags.a" CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
-    endif()
-    # set(BUILD_COMMAND $(MAKE) --silent)
-    # set(INSTALL_COMMAND $(MAKE) install)
-ENDIF (WIN32)
-
+set(GFLAGS_SOURCES_DIR ${CMAKE_SOURCE_DIR}/contrib/gflags)
+set(GFLAGS_BINARY_DIR ${THIRD_PARTY_PATH}/build/gflags)
+set(GFLAGS_INSTALL_DIR ${THIRD_PARTY_PATH}/install/gflags)
+set(GFLAGS_INCLUDE_DIR
+    "${GFLAGS_INSTALL_DIR}/include"
+    CACHE PATH "gflags include directory." FORCE)
+if(WIN32)
+  set(GFLAGS_LIBRARIES
+      "${GFLAGS_INSTALL_DIR}/lib/gflags_static.lib"
+      CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
+else(WIN32)
+  if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
+    set(GFLAGS_LIBRARIES
+        "${GFLAGS_INSTALL_DIR}/lib/libgflags_debug.a"
+        CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
+  else()
+    set(GFLAGS_LIBRARIES
+        "${GFLAGS_INSTALL_DIR}/lib/libgflags.a"
+        CACHE FILEPATH "GFLAGS_LIBRARIES" FORCE)
+  endif()
+  # set(BUILD_COMMAND $(MAKE) --silent) set(INSTALL_COMMAND $(MAKE) install)
+endif(WIN32)
 
 ExternalProject_Add(
-    extern_gflags
-    ${EXTERNAL_PROJECT_LOG_ARGS}
-
-    SOURCE_DIR ${GFLAGS_SOURCES_DIR}
-    BINARY_DIR ${GFLAGS_BINARY_DIR}
-    PREFIX ${GFLAGS_BINARY_DIR}
-
-    UPDATE_COMMAND ""
-    CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    # -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
-    -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
-    -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
-    -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
-    # -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-    # -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
-    # -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
-    -DBUILD_STATIC_LIBS=ON
-    -DCMAKE_INSTALL_PREFIX=${GFLAGS_INSTALL_DIR}
-    -DCMAKE_INSTALL_LIBDIR=${GFLAGS_INSTALL_DIR}/lib
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-    -DBUILD_TESTING=OFF
-    -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
-    ${EXTERNAL_OPTIONAL_ARGS}
-    CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${GFLAGS_INSTALL_DIR}
+  extern_gflags
+  ${EXTERNAL_PROJECT_LOG_ARGS}
+  SOURCE_DIR ${GFLAGS_SOURCES_DIR}
+  BINARY_DIR ${GFLAGS_BINARY_DIR}
+  PREFIX ${GFLAGS_BINARY_DIR}
+  UPDATE_COMMAND ""
+  CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
+             # -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
+             -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+             -DCMAKE_CXX_FLAGS_RELEASE=${CMAKE_CXX_FLAGS_RELEASE}
+             -DCMAKE_CXX_FLAGS_DEBUG=${CMAKE_CXX_FLAGS_DEBUG}
+             # -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
+             # -DCMAKE_C_FLAGS_DEBUG=${CMAKE_C_FLAGS_DEBUG}
+             # -DCMAKE_C_FLAGS_RELEASE=${CMAKE_C_FLAGS_RELEASE}
+             -DBUILD_STATIC_LIBS=ON
+             -DCMAKE_INSTALL_PREFIX=${GFLAGS_INSTALL_DIR}
+             -DCMAKE_INSTALL_LIBDIR=${GFLAGS_INSTALL_DIR}/lib
+             -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+             -DBUILD_TESTING=OFF
+             -DCMAKE_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE}
+             ${EXTERNAL_OPTIONAL_ARGS}
+  CMAKE_CACHE_ARGS
+    -DCMAKE_INSTALL_PREFIX:PATH=${GFLAGS_INSTALL_DIR}
     -DCMAKE_INSTALL_LIBDIR:PATH=${GFLAGS_INSTALL_DIR}/lib
     -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
-    -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE}
-)
+    -DCMAKE_BUILD_TYPE:STRING=${THIRD_PARTY_BUILD_TYPE})
 
-ADD_LIBRARY(gflags STATIC IMPORTED GLOBAL)
-SET_PROPERTY(TARGET gflags PROPERTY IMPORTED_LOCATION ${GFLAGS_LIBRARIES})
-ADD_DEPENDENCIES(gflags extern_gflags)
+add_library(gflags STATIC IMPORTED GLOBAL)
+set_property(TARGET gflags PROPERTY IMPORTED_LOCATION ${GFLAGS_LIBRARIES})
+add_dependencies(gflags extern_gflags)
 
-# On Windows (including MinGW), the Shlwapi library is used by gflags if available.
-if (WIN32)
-    include(CheckIncludeFileCXX)
-    check_include_file_cxx("shlwapi.h" HAVE_SHLWAPI)
-    if (HAVE_SHLWAPI)
-        set_property(GLOBAL PROPERTY OS_DEPENDENCY_MODULES shlwapi.lib)
-    endif (HAVE_SHLWAPI)
-endif (WIN32)
-
+# On Windows (including MinGW), the Shlwapi library is used by gflags if
+# available.
+if(WIN32)
+  include(CheckIncludeFileCXX)
+  check_include_file_cxx("shlwapi.h" HAVE_SHLWAPI)
+  if(HAVE_SHLWAPI)
+    set_property(GLOBAL PROPERTY OS_DEPENDENCY_MODULES shlwapi.lib)
+  endif(HAVE_SHLWAPI)
+endif(WIN32)
