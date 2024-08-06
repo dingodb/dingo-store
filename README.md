@@ -1,6 +1,5 @@
 [![CMake_ubuntu](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml)
 [![CMake_rocky8.6](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml)
-[![CMake_centos7](https://github.com/dingodb/dingo-store/actions/workflows/ci_centos.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_centos.yml)
 [![Java_Maven_Build](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml)
 [![Maven_Publish_package](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml)
 
@@ -36,7 +35,7 @@ Welcome to visit [DingoDB](https://github.com/dingodb/dingo). The documentation 
 
 # How can you engage with us?
 
-## How to build 
+## How to build
 
 Dingo-Store is a hybrid project of C++ and Java, where C++ provides distributed storage and computing capabilities, while the Java layer provides basic API interfaces.
 
