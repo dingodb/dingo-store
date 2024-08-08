@@ -15,6 +15,7 @@
 #ifndef DINGODB_CLIENT_PRETTY_H_
 #define DINGODB_CLIENT_PRETTY_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
 #include "proto/document.pb.h"
+#include "proto/index.pb.h"
 #include "proto/meta.pb.h"
 
 namespace client_v2 {
@@ -76,6 +78,11 @@ class Pretty {
 
   static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
   static void Show(dingodb::pb::coordinator::QueryRegionResponse &response);
+  static void Show(dingodb::pb::index::VectorGetBorderIdResponse &response);
+  static void Show(dingodb::pb::index::VectorCountResponse &response);
+  static void ShowTotalCount(int64_t total_count);
+  static void Show(dingodb::pb::index::VectorCalcDistanceResponse &response);
+  static void Show(dingodb::pb::index::VectorGetRegionMetricsResponse &response);
 };
 
 }  // namespace client_v2

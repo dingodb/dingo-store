@@ -273,28 +273,6 @@ struct GetIndexesCountOptions {
 };
 void SetUpGetIndexesCount(CLI::App &app);
 void RunGetIndexesCount(GetIndexesCountOptions const &opt);
-
-struct CreateIndexOptions {
-  std::string coor_url;
-  std::string name;
-  int64_t schema_id;
-  int32_t part_count;
-  int64_t replica;
-  bool with_auto_increment;
-  bool with_scalar_schema;
-  std::string vector_index_type;
-  int32_t dimension;
-  std::string metrics_type;
-  int32_t max_elements;
-  int32_t efconstruction;
-  int32_t nlinks;
-  int ncentroids;
-  int nbits_per_idx;
-  int nsubvector;
-};
-void SetUpCreateIndex(CLI::App &app);
-void RunCreateIndex(CreateIndexOptions const &opt);
-
 struct CreateIndexIdOptions {
   std::string coor_url;
 };

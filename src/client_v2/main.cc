@@ -38,6 +38,7 @@
 #include "client_v2/meta.h"
 #include "client_v2/store.h"
 #include "client_v2/tools.h"
+#include "client_v2/vector_index.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
@@ -228,7 +229,7 @@ int main(int argc, char* argv[]) {
   client_v2::SetUpStoreSubCommands(app);
   client_v2::SetUpDocumentIndexSubCommands(app);
   client_v2::SetUpToolSubCommands(app);
-
+  client_v2::SetUpVectorIndexSubCommands(app);
   if (argc > 1) {
     CLI11_PARSE(app, argc, argv);
 

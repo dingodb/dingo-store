@@ -1437,4 +1437,88 @@ void Pretty::Show(dingodb::pb::coordinator::QueryRegionResponse& response) {
   PrintTable(rows);
 }
 
+void Pretty::Show(dingodb::pb::index::VectorGetBorderIdResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", response.id())),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::index::VectorCountResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Count"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", response.count())),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
+
+void Pretty::ShowTotalCount(int64_t total_count) {
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("TotalCount"),
+  }};
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", total_count)),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::index::VectorCalcDistanceResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("InternalDistence"),
+  }};
+  for (auto const& distences : response.distances()) {
+    std::string distance_str;
+    for (auto const internal_distance : distences.internal_distances()) {
+      distance_str += fmt::format("{},", internal_distance);
+    }
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", distance_str)),
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+  std::cout << "Summary: distance size: " << response.distances_size() << std::endl;
+}
+
+void Pretty::Show(dingodb::pb::index::VectorGetRegionMetricsResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("VectorType"),
+      ftxui::paragraph("CurrentCount"),
+      ftxui::paragraph("DeletedCount"),
+      ftxui::paragraph("MaxId"),
+      ftxui::paragraph("MinId"),
+      ftxui::paragraph("MemoryBytes"),
+  }};
+  const auto& metrics = response.metrics();
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::VectorIndexType_Name(metrics.vector_index_type()))),
+      ftxui::paragraph(fmt::format("{}", metrics.current_count())),
+      ftxui::paragraph(fmt::format("{}", metrics.deleted_count())),
+      ftxui::paragraph(fmt::format("{}", metrics.max_id())),
+      ftxui::paragraph(fmt::format("{}", metrics.min_id())),
+      ftxui::paragraph(fmt::format("{}", metrics.memory_bytes())),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
 }  // namespace client_v2
