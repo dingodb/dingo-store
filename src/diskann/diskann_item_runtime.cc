@@ -24,7 +24,6 @@ DEFINE_bool(use_pthread_diskann_build_worker_set, true, "use pthread diskann bui
 DEFINE_bool(use_pthread_diskann_load_worker_set, true, "use pthread diskann load worker set");
 DEFINE_bool(use_pthread_diskann_search_worker_set, true, "use pthread diskann search worker set");
 DEFINE_bool(use_pthread_diskann_misc_worker_set, true, "use pthread diskann misc worker set");
-DEFINE_bool(use_prior_diskann_worker_set, true, "use prior diskann worker set");
 
 DEFINE_int32(diskann_import_worker_num, 32, "the number of import worker used by diskann_service");
 DEFINE_int32(diskann_import_worker_max_pending_num, 1024, "diskann_import_worker_max_pending_num");
@@ -39,151 +38,69 @@ DEFINE_int32(diskann_misc_worker_max_pending_num, 1024, " 0 is unlimited");
 
 namespace dingodb {
 
-template <typename FLAGS>
-static bool ParseItem(std::shared_ptr<Config> config, const std::string& name, int& value, FLAGS& flags) {
-  value = config->GetInt("server." + name);
-  if (value <= 0) {
-    DINGO_LOG(WARNING) << fmt::format("server.{} is not set, use dingodb::FLAGS_{}", name, name);
-  } else {
-    flags = value;
-  }
-
-  if (flags <= 0) {
-    DINGO_LOG(ERROR) << fmt::format("server.{} is less than 0", name);
+bool DiskANNItemRuntime::Init() {
+  // init import worker set
+  import_worker_set =
+      SimpleWorkerSet::New("diskann_import", FLAGS_diskann_import_worker_num,
+                           FLAGS_diskann_import_worker_max_pending_num, FLAGS_use_pthread_diskann_import_worker_set);
+  if (!import_worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Failed to init import worker set";
     return false;
   }
-  DINGO_LOG(INFO) << fmt::format("server.FLAGS_{} is set to {}", name, flags);
-  return true;
-}
 
-bool DiskANNItemRuntime::Init(std::shared_ptr<Config> config) {
-  // init import worker set
-  {
-    int diskann_import_worker_num = 0;
-    if (!ParseItem(config, "diskann_import_worker_num", diskann_import_worker_num, FLAGS_diskann_import_worker_num)) {
-      return false;
-    }
-
-    int diskann_import_worker_max_pending_num = 0;
-    if (!ParseItem(config, "diskann_import_worker_max_pending_num", diskann_import_worker_max_pending_num,
-                   FLAGS_diskann_import_worker_max_pending_num)) {
-      return false;
-    }
-
-    import_worker_set = std::make_shared<SimpleWorkerSet>(
-        "diskann_import", FLAGS_diskann_import_worker_num, FLAGS_diskann_import_worker_max_pending_num,
-        FLAGS_use_pthread_diskann_import_worker_set, FLAGS_use_prior_diskann_worker_set);
-    if (!import_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Failed to init import worker set";
-      return false;
-    }
-
-    num_bthreads += (FLAGS_use_pthread_diskann_import_worker_set ? 0 : FLAGS_diskann_import_worker_num);
-  }
+  num_bthreads += (FLAGS_use_pthread_diskann_import_worker_set ? 0 : FLAGS_diskann_import_worker_num);
 
   // init build worker set
-  {
-    int diskann_build_worker_num = 0;
-    if (!ParseItem(config, "diskann_build_worker_num", diskann_build_worker_num, FLAGS_diskann_build_worker_num)) {
-      return false;
-    }
-
-    int diskann_build_worker_max_pending_num = 0;
-    if (!ParseItem(config, "diskann_build_worker_max_pending_num", diskann_build_worker_max_pending_num,
-                   FLAGS_diskann_build_worker_max_pending_num)) {
-      return false;
-    }
-
-    build_worker_set = std::make_shared<SimpleWorkerSet>(
-        "diskann_build", FLAGS_diskann_build_worker_num, FLAGS_diskann_build_worker_max_pending_num,
-        FLAGS_use_pthread_diskann_build_worker_set, FLAGS_use_prior_diskann_worker_set);
-    if (!build_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Failed to init build worker set";
-      return false;
-    }
-    num_bthreads += (FLAGS_use_pthread_diskann_build_worker_set ? 0 : FLAGS_diskann_build_worker_num);
+  build_worker_set =
+      SimpleWorkerSet::New("diskann_build", FLAGS_diskann_build_worker_num, FLAGS_diskann_build_worker_max_pending_num,
+                           FLAGS_use_pthread_diskann_build_worker_set);
+  if (!build_worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Failed to init build worker set";
+    return false;
   }
+  num_bthreads += (FLAGS_use_pthread_diskann_build_worker_set ? 0 : FLAGS_diskann_build_worker_num);
 
   // init load worker set
-  {
-    int diskann_load_worker_num = 0;
-    if (!ParseItem(config, "diskann_load_worker_num", diskann_load_worker_num, FLAGS_diskann_load_worker_num)) {
-      return false;
-    }
-
-    int diskann_load_worker_max_pending_num = 0;
-    if (!ParseItem(config, "diskann_load_worker_max_pending_num", diskann_load_worker_max_pending_num,
-                   FLAGS_diskann_load_worker_max_pending_num)) {
-      return false;
-    }
-
-    load_worker_set = std::make_shared<SimpleWorkerSet>(
-        "diskann_load", FLAGS_diskann_load_worker_num, FLAGS_diskann_load_worker_max_pending_num,
-        FLAGS_use_pthread_diskann_load_worker_set, FLAGS_use_prior_diskann_worker_set);
-    if (!load_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Failed to init load worker set";
-      return false;
-    }
-
-    num_bthreads += (FLAGS_use_pthread_diskann_load_worker_set ? 0 : FLAGS_diskann_load_worker_num);
+  load_worker_set =
+      SimpleWorkerSet::New("diskann_load", FLAGS_diskann_load_worker_num, FLAGS_diskann_load_worker_max_pending_num,
+                           FLAGS_use_pthread_diskann_load_worker_set);
+  if (!load_worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Failed to init load worker set";
+    return false;
   }
+
+  num_bthreads += (FLAGS_use_pthread_diskann_load_worker_set ? 0 : FLAGS_diskann_load_worker_num);
 
   // init search worker Set
-  {
-    int diskann_search_worker_num = 0;
-    if (!ParseItem(config, "diskann_search_worker_num", diskann_search_worker_num, FLAGS_diskann_search_worker_num)) {
-      return false;
-    }
-
-    int diskann_search_worker_max_pending_num = 0;
-    if (!ParseItem(config, "diskann_search_worker_max_pending_num", diskann_search_worker_max_pending_num,
-                   FLAGS_diskann_search_worker_max_pending_num)) {
-      return false;
-    }
-
-    search_worker_set = std::make_shared<SimpleWorkerSet>(
-        "diskann_search", FLAGS_diskann_search_worker_num, FLAGS_diskann_search_worker_max_pending_num,
-        FLAGS_use_pthread_diskann_search_worker_set, FLAGS_use_prior_diskann_worker_set);
-    if (!search_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Failed to init search worker set";
-      return false;
-    }
-    num_bthreads += (FLAGS_use_pthread_diskann_search_worker_set ? 0 : FLAGS_diskann_search_worker_num);
+  search_worker_set =
+      SimpleWorkerSet::New("diskann_search", FLAGS_diskann_search_worker_num,
+                           FLAGS_diskann_search_worker_max_pending_num, FLAGS_use_pthread_diskann_search_worker_set);
+  if (!search_worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Failed to init search worker set";
+    return false;
   }
+  num_bthreads += (FLAGS_use_pthread_diskann_search_worker_set ? 0 : FLAGS_diskann_search_worker_num);
 
   // init misc worker set
-  {
-    int diskann_misc_worker_num = 0;
-    if (!ParseItem(config, "diskann_misc_worker_num", diskann_misc_worker_num, FLAGS_diskann_misc_worker_num)) {
-      return false;
-    }
-
-    int diskann_misc_worker_max_pending_num = 0;
-    if (!ParseItem(config, "diskann_misc_worker_max_pending_num", diskann_misc_worker_max_pending_num,
-                   FLAGS_diskann_misc_worker_max_pending_num)) {
-      return false;
-    }
-
-    misc_worker_set = std::make_shared<SimpleWorkerSet>(
-        "diskann_misc", FLAGS_diskann_misc_worker_num, FLAGS_diskann_misc_worker_max_pending_num,
-        FLAGS_use_pthread_diskann_misc_worker_set, FLAGS_use_prior_diskann_worker_set);
-    if (!misc_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Failed to init misc worker set";
-      return false;
-    }
-
-    num_bthreads += (FLAGS_use_pthread_diskann_misc_worker_set ? 0 : FLAGS_diskann_misc_worker_num);
+  misc_worker_set =
+      SimpleWorkerSet::New("diskann_misc", FLAGS_diskann_misc_worker_num, FLAGS_diskann_misc_worker_max_pending_num,
+                           FLAGS_use_pthread_diskann_misc_worker_set);
+  if (!misc_worker_set->Init()) {
+    DINGO_LOG(ERROR) << "Failed to init misc worker set";
+    return false;
   }
+
+  num_bthreads += (FLAGS_use_pthread_diskann_misc_worker_set ? 0 : FLAGS_diskann_misc_worker_num);
 
   DINGO_LOG(INFO) << "DiskANNItemRuntime initialized";
   return true;
 }
 
-SimpleWorkerSetPtr& DiskANNItemRuntime::GetImportWorkerSet() { return import_worker_set; }
-SimpleWorkerSetPtr& DiskANNItemRuntime::GetBuildWorkerSet() { return build_worker_set; }
-SimpleWorkerSetPtr& DiskANNItemRuntime::GetLoadWorkerSet() { return load_worker_set; }
-SimpleWorkerSetPtr& DiskANNItemRuntime::GetSearchWorkerSet() { return search_worker_set; }
-SimpleWorkerSetPtr& DiskANNItemRuntime::GetMiscWorkerSet() { return misc_worker_set; }
+WorkerSetPtr DiskANNItemRuntime::GetImportWorkerSet() { return import_worker_set; }
+WorkerSetPtr DiskANNItemRuntime::GetBuildWorkerSet() { return build_worker_set; }
+WorkerSetPtr DiskANNItemRuntime::GetLoadWorkerSet() { return load_worker_set; }
+WorkerSetPtr DiskANNItemRuntime::GetSearchWorkerSet() { return search_worker_set; }
+WorkerSetPtr DiskANNItemRuntime::GetMiscWorkerSet() { return misc_worker_set; }
 uint32_t DiskANNItemRuntime::GetNumBthreads() { return num_bthreads; }
 
 }  // namespace dingodb

@@ -306,7 +306,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void CreateIds(google::protobuf::RpcController* controller, const pb::coordinator::CreateIdsRequest* request,
                  pb::coordinator::CreateIdsResponse* response, google::protobuf::Closure* done) override;
 
-  void SetWorkSet(SimpleWorkerSetPtr worker_set) { worker_set_ = worker_set; }
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:
   std::shared_ptr<CoordinatorControl> coordinator_control_;
@@ -315,7 +315,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   std::shared_ptr<AutoIncrementControl> auto_increment_control_;
   std::shared_ptr<Engine> engine_;
   // Run service request.
-  SimpleWorkerSetPtr worker_set_;
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb

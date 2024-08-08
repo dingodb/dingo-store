@@ -184,13 +184,13 @@ class VersionServiceProtoImpl : public dingodb::pb::version::VersionService {
   void GetMemoryInfo(google::protobuf::RpcController* controller, const pb::version::HelloRequest* request,
                      pb::version::HelloResponse* response, google::protobuf::Closure* done) override;
 
-  void SetWorkSet(SimpleWorkerSetPtr worker_set) { worker_set_ = worker_set; }
+  void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:
   std::shared_ptr<KvControl> kv_control_;
   std::shared_ptr<Engine> engine_;
   // Run service request.
-  SimpleWorkerSetPtr worker_set_;
+  WorkerSetPtr worker_set_;
 };
 
 }  // namespace dingodb

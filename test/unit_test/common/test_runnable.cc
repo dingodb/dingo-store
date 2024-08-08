@@ -52,8 +52,7 @@ TEST_F(SimpleWorkerSetTest, Performance01) {
   GTEST_SKIP() << "Performence test, skip...";
 
   bool use_pthead = false;
-  bool use_prior = false;
-  auto worker_set = dingodb::SimpleWorkerSet::New("unit_test", 128, 0, use_pthead, use_prior);
+  auto worker_set = dingodb::SimpleWorkerSet::New("unit_test", 128, 0, use_pthead);
   ASSERT_TRUE(worker_set->Init());
 
   std::this_thread::sleep_for(std::chrono::seconds(1));

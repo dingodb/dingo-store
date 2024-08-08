@@ -7,14 +7,8 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   # worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
-  # worker_thread_ratio: 1.0 # cpu core * ratio
-  brpc_common_worker_num: 32 # must > 4, the totol bthread_concurrency of brpc is sum of all other worker_num + brpc_common_worker_num
-  coordinator_service_worker_num: 32 # must < server.worker_thread_num
-  coordinator_service_worker_max_pending_num: 1024 # 0 is unlimited
-  meta_service_worker_num: 32 # must < server.worker_thread_num
-  meta_service_worker_max_pending_num: 1024 # 0 is unlimited
-  version_service_worker_num: 32 # must < server.worker_thread_num
-  version_service_worker_max_pending_num: 1024 # 0 is unlimited
+  worker_thread_ratio: 1 # cpu core * ratio
+  raft_worker_thread_ratio: 0.1 # max(cpu core * worker_thread_ratio * ratio, 5)
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1

@@ -165,8 +165,8 @@ class VectorIndexDiskANN : public VectorIndex {
   RWLock rw_lock_;
 
   static inline std::string diskann_server_addr;
-  static inline SimpleWorkerSetPtr diskann_server_build_worker_set;
-  static inline SimpleWorkerSetPtr diskann_server_load_worker_set;
+  static inline WorkerSetPtr diskann_server_build_worker_set;
+  static inline WorkerSetPtr diskann_server_load_worker_set;
 };
 
 }  // namespace dingodb

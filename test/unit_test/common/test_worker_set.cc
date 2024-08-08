@@ -64,12 +64,11 @@ class TestWorkerSetTask : public dingodb::TaskRunnable {
 TEST(DingoWorkerSetTest, init) {
   bool ret = false;
 
-  dingodb::ExecqWorkerSetPtr test_worker_set = dingodb::ExecqWorkerSet::New("TestWorkerSet", 10, 100);
+  dingodb::WorkerSetPtr test_worker_set = dingodb::ExecqWorkerSet::New("TestWorkerSet", 10, 100);
   ret = test_worker_set->Init();
   EXPECT_TRUE(ret);
 
-  dingodb::SimpleWorkerSetPtr test_prior_worker_set =
-      dingodb::SimpleWorkerSet::New("TestPriorWorkerSet", 10, 100, false, true);
+  dingodb::WorkerSetPtr test_prior_worker_set = dingodb::PriorWorkerSet::New("TestPriorWorkerSet", 10, 100, false);
   ret = test_worker_set->Init();
   EXPECT_TRUE(ret);
 }
@@ -77,7 +76,7 @@ TEST(DingoWorkerSetTest, init) {
 TEST(DingoWorkerSetTest, perf) {
   bool ret = false;
 
-  dingodb::ExecqWorkerSetPtr test_worker_set =
+  dingodb::WorkerSetPtr test_worker_set =
       dingodb::ExecqWorkerSet::New("TestWorkerSet", FLAGS_worker_set_worker_num, FLAGS_worker_set_max_pending_num);
   ret = test_worker_set->Init();
   EXPECT_TRUE(ret);
@@ -127,8 +126,8 @@ TEST(DingoWorkerSetTest, perf) {
 TEST(DingoWorkerSetTest, perf_prior) {
   bool ret = false;
 
-  dingodb::SimpleWorkerSetPtr test_worker_set = dingodb::SimpleWorkerSet::New(
-      "TestSimpleWorkerSet", FLAGS_worker_set_worker_num, FLAGS_worker_set_max_pending_num, true, false);
+  dingodb::WorkerSetPtr test_worker_set = dingodb::SimpleWorkerSet::New(
+      "TestSimpleWorkerSet", FLAGS_worker_set_worker_num, FLAGS_worker_set_max_pending_num, true);
   ret = test_worker_set->Init();
   EXPECT_TRUE(ret);
 

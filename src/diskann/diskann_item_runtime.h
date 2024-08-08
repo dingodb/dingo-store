@@ -28,21 +28,21 @@ class DiskANNItemRuntime {
 
   ~DiskANNItemRuntime() = delete;
 
-  static bool Init(std::shared_ptr<Config> config);
-  static SimpleWorkerSetPtr &GetImportWorkerSet();
-  static SimpleWorkerSetPtr &GetBuildWorkerSet();
-  static SimpleWorkerSetPtr &GetLoadWorkerSet();
-  static SimpleWorkerSetPtr &GetSearchWorkerSet();
-  static SimpleWorkerSetPtr &GetMiscWorkerSet();
+  static bool Init();
+  static WorkerSetPtr GetImportWorkerSet();
+  static WorkerSetPtr GetBuildWorkerSet();
+  static WorkerSetPtr GetLoadWorkerSet();
+  static WorkerSetPtr GetSearchWorkerSet();
+  static WorkerSetPtr GetMiscWorkerSet();
   static uint32_t GetNumBthreads();
 
  protected:
  private:
-  static inline SimpleWorkerSetPtr import_worker_set;
-  static inline SimpleWorkerSetPtr build_worker_set;
-  static inline SimpleWorkerSetPtr load_worker_set;
-  static inline SimpleWorkerSetPtr search_worker_set;
-  static inline SimpleWorkerSetPtr misc_worker_set;
+  static inline WorkerSetPtr import_worker_set;
+  static inline WorkerSetPtr build_worker_set;
+  static inline WorkerSetPtr load_worker_set;
+  static inline WorkerSetPtr search_worker_set;
+  static inline WorkerSetPtr misc_worker_set;
   static inline uint32_t num_bthreads = 0;
 };
 

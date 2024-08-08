@@ -125,107 +125,64 @@ class Worker {
 
 using WorkerPtr = std::shared_ptr<Worker>;
 
-class ExecqWorkerSet {
+class WorkerSet {
  public:
-  ExecqWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count);
-  ~ExecqWorkerSet();
+  WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  virtual ~WorkerSet() = default;
 
-  static std::shared_ptr<ExecqWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
-    return std::make_shared<ExecqWorkerSet>(name, worker_num, max_pending_task_count);
+  virtual bool Init() = 0;
+  virtual void Destroy() = 0;
+
+  virtual bool Execute(TaskRunnablePtr task) = 0;
+  virtual bool ExecuteRR(TaskRunnablePtr task) = 0;
+  virtual bool ExecuteLeastQueue(TaskRunnablePtr task) = 0;
+  virtual bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) = 0;
+
+  std::string Name() const { return name_; }
+  std::string GenWorkerName() { return name_ + "_" + std::to_string(GenWorkerNo()); }
+  uint32_t GenWorkerNo() { return worker_no_generator_.fetch_add(1); }
+  bool IsUsePthread() const { return use_pthread_; }
+  uint32_t WorkerNum() const { return worker_num_; }
+  int64_t MaxPendingTaskCount() const { return max_pending_task_count_; }
+
+  uint64_t TotalTaskCount() { return total_task_count_metrics_.get_value(); }
+  void IncTotalTaskCount() { total_task_count_metrics_ << 1; }
+
+  uint64_t PendingTaskCount() { return pending_task_count_.load(std::memory_order_relaxed); }
+  void IncPendingTaskCount() {
+    pending_task_count_metrics_ << 1;
+    pending_task_count_.fetch_add(1, std::memory_order_relaxed);
+  }
+  void DecPendingTaskCount() {
+    pending_task_count_metrics_ << -1;
+    pending_task_count_.fetch_sub(1, std::memory_order_relaxed);
+  }
+  void QueueWaitMetrics(int64_t value) { queue_wait_metrics_ << value; }
+  void QueueRunMetrics(int64_t value) { queue_run_metrics_ << value; }
+
+  virtual std::vector<std::vector<std::string>> GetPendingTaskTrace() { return {}; }
+
+  virtual void WatchWorker(WorkerEventType type) {
+    if (type == WorkerEventType::kFinishTask) {
+      DecPendingTaskCount();
+    }
   }
 
-  bool Init();
-  void Destroy();
-
-  bool ExecuteRR(TaskRunnablePtr task);
-  bool ExecuteLeastQueue(TaskRunnablePtr task);
-  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
-
-  void WatchWorker(WorkerEventType type);
-
-  uint64_t TotalTaskCount();
-  void IncTotalTaskCount();
-
-  uint64_t PendingTaskCount();
-  void IncPendingTaskCount();
-  void DecPendingTaskCount();
-
-  std::vector<std::vector<std::string>> GetPendingTaskTrace();
-
- private:
-  uint32_t LeastPendingTaskWorker();
-
-  const std::string name_;
-  int64_t max_pending_task_count_;
-  uint32_t worker_num_;
-  std::vector<WorkerPtr> workers_;
-  std::atomic<uint64_t> active_worker_id_;
-
-  std::atomic<int64_t> pending_task_count_{0};
-
-  // Metrics
-  bvar::Adder<uint64_t> total_task_count_metrics_;
-  bvar::Adder<int64_t> pending_task_count_metrics_;
-};
-
-using ExecqWorkerSetPtr = std::shared_ptr<ExecqWorkerSet>;
-
-class SimpleWorkerSet {
- public:
-  SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
-                  bool use_prior);
-  ~SimpleWorkerSet();
-
-  static std::shared_ptr<SimpleWorkerSet> New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count,
-                                              bool use_pthead, bool use_prior) {
-    return std::make_shared<SimpleWorkerSet>(name, worker_num, max_pending_task_count, use_pthead, use_prior);
+  void Notify(WorkerEventType type) {
+    if (notify_func_ != nullptr) {
+      notify_func_(type);
+    }
   }
 
-  bool Init();
-  void Destroy();
-
-  bool Execute(TaskRunnablePtr task);
-  bool ExecuteRR(TaskRunnablePtr task);
-  bool ExecuteLeastQueue(TaskRunnablePtr task);
-  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task);
-
-  void WatchWorker(WorkerEventType type);
-
-  uint64_t TotalTaskCount();
-  void IncTotalTaskCount();
-
-  uint64_t PendingTaskCount();
-  void IncPendingTaskCount();
-  void DecPendingTaskCount();
-
-  std::vector<std::vector<std::string>> GetPendingTaskTrace();
-
-  void Notify(WorkerEventType type);
-
  private:
-  bool IsDestroied();
-
   const std::string name_;
 
   std::atomic<uint32_t> worker_no_generator_{0};
 
-  bool is_stop_{false};
-  std::atomic<uint32_t> stoped_count_{0};
-  std::atomic<bool> is_destroied_{false};
-
-  bthread_mutex_t mutex_;
-  bthread_cond_t cond_;
-  std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> prior_tasks_;
-  std::queue<TaskRunnablePtr> tasks_;
-
   bool use_pthread_;
-  bool use_prior_;
-  std::vector<Bthread> bthread_workers_;
-  std::vector<std::thread> pthread_workers_;
 
-  int64_t max_pending_task_count_;
-  uint32_t worker_num_;
-
+  uint32_t worker_num_{0};
+  int64_t max_pending_task_count_{0};
   std::atomic<int64_t> pending_task_count_{0};
 
   // Notify
@@ -236,9 +193,104 @@ class SimpleWorkerSet {
   bvar::Adder<int64_t> pending_task_count_metrics_;
   bvar::LatencyRecorder queue_wait_metrics_;
   bvar::LatencyRecorder queue_run_metrics_;
+
+ protected:
+  bool IsDestroied() {
+    bool expect = false;
+    return !is_destroied.compare_exchange_strong(expect, true);
+  }
+
+  bool is_stop{false};
+  std::atomic<uint32_t> stoped_count{0};
+  std::atomic<bool> is_destroied{false};
 };
 
-using SimpleWorkerSetPtr = std::shared_ptr<SimpleWorkerSet>;
+using WorkerSetPtr = std::shared_ptr<WorkerSet>;
+
+// MPSC Multiple producer, single consumer
+// Use brpc ExecutionQueueId implement
+class ExecqWorkerSet : public WorkerSet {
+ public:
+  ExecqWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
+      : WorkerSet(name, worker_num, max_pending_task_count, false) {}
+  ~ExecqWorkerSet() override = default;
+
+  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
+    return std::make_shared<ExecqWorkerSet>(name, worker_num, max_pending_task_count);
+  }
+
+  bool Init() override;
+  void Destroy() override;
+
+  bool Execute(TaskRunnablePtr task) override { return ExecuteLeastQueue(task); };
+  bool ExecuteRR(TaskRunnablePtr task) override;
+  bool ExecuteLeastQueue(TaskRunnablePtr task) override;
+  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) override;
+
+  std::vector<std::vector<std::string>> GetPendingTaskTrace() override;
+
+ private:
+  uint32_t LeastPendingTaskWorker();
+
+  std::vector<WorkerPtr> workers_;
+  std::atomic<uint64_t> active_worker_id_{0};
+};
+
+// MPMC multiple producer, multiple consumer
+// Use std::queue implement
+class SimpleWorkerSet : public WorkerSet {
+ public:
+  SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  ~SimpleWorkerSet() override;
+
+  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread) {
+    return std::make_shared<SimpleWorkerSet>(name, worker_num, max_pending_task_count, use_pthread);
+  }
+
+  bool Init() override;
+  void Destroy() override;
+
+  bool Execute(TaskRunnablePtr task) override;
+  bool ExecuteRR(TaskRunnablePtr task) override;
+  bool ExecuteLeastQueue(TaskRunnablePtr task) override;
+  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) override;
+
+ private:
+  bthread_mutex_t mutex_;
+  bthread_cond_t cond_;
+  std::queue<TaskRunnablePtr> tasks_;
+
+  std::vector<Bthread> bthread_workers_;
+  std::vector<std::thread> pthread_workers_;
+};
+
+// MPMC multiple producer, multiple consumer
+// Use std::priority_queue implement
+class PriorWorkerSet : public WorkerSet {
+ public:
+  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  ~PriorWorkerSet() override;
+
+  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread) {
+    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count, use_pthread);
+  }
+
+  bool Init() override;
+  void Destroy() override;
+
+  bool Execute(TaskRunnablePtr task) override;
+  bool ExecuteRR(TaskRunnablePtr task) override;
+  bool ExecuteLeastQueue(TaskRunnablePtr task) override;
+  bool ExecuteHashByRegionId(int64_t region_id, TaskRunnablePtr task) override;
+
+ private:
+  bthread_mutex_t mutex_;
+  bthread_cond_t cond_;
+  std::priority_queue<TaskRunnablePtr, std::vector<TaskRunnablePtr>, CompareTaskRunnable> tasks_;
+
+  std::vector<Bthread> bthread_workers_;
+  std::vector<std::thread> pthread_workers_;
+};
 
 }  // namespace dingodb
 

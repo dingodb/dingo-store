@@ -30,12 +30,12 @@ class UtilServiceImpl : public pb::util::UtilService {
                           ::google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
-  void SetReadWorkSet(SimpleWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
+  void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
 
  private:
   std::shared_ptr<Storage> storage_;
   // Run service request.
-  SimpleWorkerSetPtr read_worker_set_;
+  WorkerSetPtr read_worker_set_;
 };
 
 void DoVectorCalcDistance(StoragePtr storage, google::protobuf::RpcController* controller,

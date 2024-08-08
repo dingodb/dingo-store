@@ -40,8 +40,6 @@
 #include "server/service_helper.h"
 #include "vector/vector_index.h"
 
-DEFINE_int32(raft_apply_worker_max_pending_num, 0, "raft apply worker num");
-
 namespace dingodb {
 
 DEFINE_bool(enable_async_store_kvscan, true, "enable async store kvscan");
@@ -54,17 +52,6 @@ DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 static void StoreRpcDone(BthreadCond* cond) { cond->DecreaseSignal(); }
 
 StoreServiceImpl::StoreServiceImpl() = default;
-
-bool StoreServiceImpl::IsRaftApplyPendingExceed() {
-  if (BAIDU_UNLIKELY(raft_apply_worker_set_ != nullptr && FLAGS_raft_apply_worker_max_pending_num > 0 &&
-                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
-    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
-                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
-    return true;
-  } else {
-    return false;
-  }
-}
 
 static butil::Status ValidateKvGetRequest(const dingodb::pb::store::KvGetRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
@@ -153,6 +140,7 @@ void StoreServiceImpl::KvGet(google::protobuf::RpcController* controller,
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvGet(storage_, controller, request, response, svr_done);
   });
+
   bool ret = read_worker_set_->ExecuteRR(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -346,18 +334,16 @@ void StoreServiceImpl::KvPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvPut(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvPut(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -458,22 +444,20 @@ void StoreServiceImpl::KvBatchPut(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (request->kvs().empty()) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
+  }
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvBatchPut(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvBatchPut(storage_, controller, request, response, svr_done, true);
   });
+
   bool ret = write_worker_set_->ExecuteRR(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
@@ -574,18 +558,15 @@ void StoreServiceImpl::KvPutIfAbsent(google::protobuf::RpcController* controller
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvPutIfAbsent(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvPutIfAbsent(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -692,23 +673,20 @@ void StoreServiceImpl::KvBatchPutIfAbsent(google::protobuf::RpcController* contr
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (request->kvs().empty()) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
+  }
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvBatchPutIfAbsent(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvBatchPutIfAbsent(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -802,23 +780,20 @@ void StoreServiceImpl::KvBatchDelete(google::protobuf::RpcController* controller
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (request->keys().empty()) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
+  }
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvBatchDelete(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvBatchDelete(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -900,18 +875,15 @@ void StoreServiceImpl::KvDeleteRange(google::protobuf::RpcController* controller
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvDeleteRange(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvDeleteRange(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1004,18 +976,15 @@ void StoreServiceImpl::KvCompareAndSet(google::protobuf::RpcController* controll
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvCompareAndSet(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvCompareAndSet(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1118,23 +1087,20 @@ void StoreServiceImpl::KvBatchCompareAndSet(google::protobuf::RpcController* con
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (request->kvs().empty()) {
     brpc::ClosureGuard done_guard(svr_done);
     return;
+  }
+
+  if (!FLAGS_enable_async_store_operation) {
+    return DoKvBatchCompareAndSet(storage_, controller, request, response, svr_done, true);
   }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvBatchCompareAndSet(storage_, controller, request, response, svr_done, true);
   });
-  bool ret = write_worker_set_->ExecuteRR(task);
+  bool ret = write_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1240,7 +1206,7 @@ void StoreServiceImpl::KvScanBegin(google::protobuf::RpcController* controller,
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanBegin(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1327,7 +1293,7 @@ void StoreServiceImpl::KvScanContinue(google::protobuf::RpcController* controlle
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanContinue(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1401,7 +1367,7 @@ void StoreServiceImpl::KvScanRelease(google::protobuf::RpcController* controller
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanRelease(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1532,7 +1498,7 @@ void StoreServiceImpl::KvScanBeginV2(google::protobuf::RpcController* controller
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanBeginV2(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1622,7 +1588,7 @@ void StoreServiceImpl::KvScanContinueV2(::google::protobuf::RpcController* contr
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanContinueV2(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -1697,7 +1663,7 @@ void StoreServiceImpl::KvScanReleaseV2(::google::protobuf::RpcController* contro
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoKvScanReleaseV2(storage_, controller, request, response, svr_done);
   });
-  bool ret = read_worker_set_->ExecuteRR(task);
+  bool ret = read_worker_set_->Execute(task);
   if (BAIDU_UNLIKELY(!ret)) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2041,13 +2007,6 @@ void StoreServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
@@ -2158,13 +2117,6 @@ void StoreServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2310,13 +2262,6 @@ void StoreServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnPrewrite(storage_, controller, request, response, svr_done, true);
@@ -2431,13 +2376,6 @@ void StoreServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnCommit(storage_, controller, request, response, svr_done, true);
@@ -2544,13 +2482,6 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
@@ -2654,13 +2585,6 @@ void StoreServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2881,13 +2805,6 @@ void StoreServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -3126,13 +3043,6 @@ void StoreServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
@@ -3205,13 +3115,6 @@ void StoreServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -3304,13 +3207,6 @@ void StoreServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
