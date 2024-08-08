@@ -16,10 +16,31 @@
 
 #include "client_v2/helper.h"
 #include "client_v2/meta.h"
+#include "client_v2/pretty.h"
 
 namespace client_v2 {
 
-void SetUpVectorIndexSubCommands(CLI::App& app) {}
+void SetUpVectorIndexSubCommands(CLI::App& app) {
+  SetUpCreateIndex(app);
+  SetUpVectorAdd(app);
+  SetUpVectorSearch(app);
+  SetUpVectorDelete(app);
+  SetUpVectorGetMaxId(app);
+  SetUpVectorGetMinId(app);
+  SetUpVectorAddBatch(app);
+  SetUpVectorCount(app);
+  SetUpVectorCalcDistance(app);
+  SetUpCountVectorTable(app);
+
+  SetUpVectorSearchDebug(app);
+  // SetUpVectorRangeSearch(app);
+  // SetUpVectorRangeSearchDebug(app);
+  // SetUpVectorBatchSearch(app);
+  // SetUpVectorBatchQuery(app);
+  // SetUpVectorScanQuery(app);
+  // SetUpVectorScanDump(app);
+  SetUpVectorGetRegionMetrics(app);
+}
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
   if (Helper::SetUp(url) < 0) {
@@ -51,7 +72,7 @@ bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, int64_t
     }
   }
 
-  DINGO_LOG(ERROR) << fmt::format("query region id by key failed, vector_id {}", vector_id);
+  std::cout << fmt::format("query region id by key failed, vector_id {}", vector_id);
   return false;
 }
 
@@ -74,14 +95,10 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
   }
 
   if (max_size == 0) {
-    DINGO_LOG(INFO) << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
-                    << ", vector_datas.size: " << vector_datas.size()
-                    << ", vector_datas_offset: " << vector_datas_offset << ", vector_ids.size: " << vector_ids.size();
+    std::cout << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
+              << ", vector_datas.size: " << vector_datas.size() << ", vector_datas_offset: " << vector_datas_offset
+              << ", vector_ids.size: " << vector_ids.size() << std::endl;
     return 0;
-  } else {
-    DINGO_LOG(DEBUG) << "vector_datas.size(): " << vector_datas.size()
-                     << " vector_datas_offset: " << vector_datas_offset << " vector_ids.size(): " << vector_ids.size()
-                     << " max_size: " << max_size;
   }
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
@@ -329,8 +346,6 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
       table_data->set_table_key(fmt::format("table_key{}", vector_id));
       table_data->set_table_value(fmt::format("table_value{}", vector_id));
     }
-
-    DINGO_LOG(DEBUG) << "vector_with_id : " << vector_with_id->ShortDebugString();
   }
 
   butil::Status status =
@@ -341,14 +356,13 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
       ++success_count;
     }
   }
-
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "VectorAdd repsonse error: " << response.error().DebugString();
+  if (Pretty::ShowError(status)) {
+    response.error().errcode();
   }
 
-  DINGO_LOG(INFO) << fmt::format("VectorAdd response success region: {} count: {} fail count: {} vector count: {}",
-                                 region_id, success_count, response.key_states().size() - success_count,
-                                 request.vectors().size());
+  std::cout << fmt::format("VectorAdd response success region: {} count: {} fail count: {} vector count: {}", region_id,
+                           success_count, response.key_states().size() - success_count, request.vectors().size())
+            << std::endl;
 
   return response.error().errcode();
 }
@@ -361,7 +375,7 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
 void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
   auto index_range = SendGetIndexRange(opt.table_id);
   if (index_range.range_distribution().empty()) {
-    DINGO_LOG(INFO) << fmt::format("Not found range of table {}", opt.table_id);
+    std::cout << fmt::format("Not found range of table {}", opt.table_id) << std::endl;
     return;
   }
   Helper::PrintIndexRange(index_range);
@@ -370,7 +384,7 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
 
   if (!opt.csv_data.empty()) {
     if (!dingodb::Helper::IsExistPath(opt.csv_data)) {
-      DINGO_LOG(ERROR) << fmt::format("csv data file {} not exist", opt.csv_data);
+      std::cout << fmt::format("csv data file {} not exist", opt.csv_data) << std::endl;
       return;
     }
 
@@ -389,8 +403,6 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
       }
       file.close();
     }
-
-    DINGO_LOG(INFO) << fmt::format("csv data size: {}", vector_datas.size());
   }
 
   uint32_t total_count = 0;
@@ -401,7 +413,6 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
   } else {
     end_id = opt.start_id + vector_datas.size();
   }
-  DINGO_LOG(INFO) << "start_id: " << opt.start_id << " end_id: " << end_id << ", step_count: " << opt.step_count;
 
   std::vector<int64_t> vector_ids;
   vector_ids.reserve(opt.step_count);
@@ -412,7 +423,7 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
 
     int64_t region_id = 0;
     if (!QueryRegionIdByVectorId(index_range, i, region_id)) {
-      DINGO_LOG(ERROR) << fmt::format("query region id by vector id failed, vector id {}", i);
+      std::cout << fmt::format("query region id by vector id failed, vector id {}", i) << std::endl;
       return;
     }
 
@@ -424,8 +435,6 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
       index_range = SendGetIndexRange(opt.table_id);
       Helper::PrintIndexRange(index_range);
     }
-
-    DINGO_LOG(INFO) << fmt::format("schedule: {}/{}", i, end_id);
 
     total_count += vector_ids.size();
 
@@ -446,7 +455,7 @@ void SendVectorAdd(VectorAddOptions const& opt) {
 
   if (!opt.csv_data.empty()) {
     if (!dingodb::Helper::IsExistPath(opt.csv_data)) {
-      DINGO_LOG(ERROR) << fmt::format("csv data file {} not exist", opt.csv_data);
+      std::cout << fmt::format("csv data file {} not exist", opt.csv_data) << std::endl;
       return;
     }
 
@@ -465,8 +474,6 @@ void SendVectorAdd(VectorAddOptions const& opt) {
       }
       file.close();
     }
-
-    DINGO_LOG(INFO) << fmt::format("csv data size: {}", vector_datas.size());
   }
 
   uint32_t total_count = 0;
@@ -477,7 +484,6 @@ void SendVectorAdd(VectorAddOptions const& opt) {
   } else {
     end_id = opt.start_id + vector_datas.size();
   }
-  DINGO_LOG(INFO) << "start_id: " << opt.start_id << " end_id: " << end_id << ", step_count: " << opt.step_count;
 
   for (int i = opt.start_id; i < end_id; i += opt.step_count) {
     for (int j = i; j < i + opt.step_count; ++j) {
@@ -510,10 +516,12 @@ void SendVectorDelete(VectorDeleteOptions const& opt) {  // NOLINT
       ++success_count;
     }
   }
-
-  DINGO_LOG(INFO) << "VectorDelete repsonse error: " << response.error().DebugString();
-  DINGO_LOG(INFO) << fmt::format("VectorDelete response success count: {} fail count: {}", success_count,
-                                 response.key_states().size() - success_count);
+  if (Pretty::ShowError(response.error())) {
+    return;
+  }
+  std::cout << fmt::format("VectorDelete response success count: {} fail count: {}", success_count,
+                           response.key_states().size() - success_count)
+            << std::endl;
 }
 
 void SendVectorGetMaxId(VectorGetMaxIdOptions const& opt) {  // NOLINT
@@ -524,7 +532,7 @@ void SendVectorGetMaxId(VectorGetMaxIdOptions const& opt) {  // NOLINT
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetBorderId", request, response);
 
-  DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
+  Pretty::Show(response);
 }
 
 void SendVectorGetMinId(VectorGetMinIdOptions const& opt) {  // NOLINT
@@ -533,35 +541,34 @@ void SendVectorGetMinId(VectorGetMinIdOptions const& opt) {  // NOLINT
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
   request.set_get_min(true);
-
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetBorderId", request, response);
 
-  DINGO_LOG(INFO) << "VectorGetBorderId response: " << response.DebugString();
+  Pretty::Show(response);
 }
 
 void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
   if (opt.step_count == 0) {
-    DINGO_LOG(ERROR) << "step_count must be greater than 0";
+    std::cout << "step_count must be greater than 0" << std::endl;
     return;
   }
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    std::cout << "region_id must be greater than 0" << std::endl;
     return;
   }
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension must be greater than 0";
+    std::cout << "dimension must be greater than 0" << std::endl;
     return;
   }
   if (opt.count == 0) {
-    DINGO_LOG(ERROR) << "count must be greater than 0";
+    std::cout << "count must be greater than 0" << std::endl;
     return;
   }
   if (opt.start_id < 0) {
-    DINGO_LOG(ERROR) << "start_id must be greater than 0";
+    std::cout << "start_id must be greater than 0" << std::endl;
     return;
   }
   if (opt.vector_index_add_cost_file.empty()) {
-    DINGO_LOG(ERROR) << "vector_index_add_cost_file must not be empty";
+    std::cout << "vector_index_add_cost_file must not be empty" << std::endl;
     return;
   }
 
@@ -575,7 +582,7 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
   }
 
   if (!out.is_open()) {
-    DINGO_LOG(ERROR) << fmt::format("{} open failed", opt.vector_index_add_cost_file);
+    std::cout << fmt::format("{} open failed", opt.vector_index_add_cost_file) << std::endl;
     out.close();
     return;
   }
@@ -584,7 +591,7 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
   int64_t total = 0;
 
   if (opt.count % opt.step_count != 0) {
-    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", opt.count, opt.step_count);
+    std::cout << fmt::format("count {} must be divisible by step_count {}", opt.count, opt.step_count);
     return;
   }
 
@@ -601,7 +608,7 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
     }
 
     if (i % 10000 == 0) {
-      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, opt.count);
+      std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
     }
   }
 
@@ -616,11 +623,11 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
   //     }
   //   });
   // } catch (std::runtime_error& e) {
-  //   DINGO_LOG(ERROR) << "generate random data failed, error=" << e.what();
+  //   std::cout << "generate random data failed, error=" << e.what();
   //   return;
   // }
 
-  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", opt.count, opt.count);
+  std::cout << fmt::format("generate random seeds: {}/{}", opt.count, opt.count) << std::endl;
 
   for (uint32_t x = 0; x < cnt; x++) {
     auto start = std::chrono::steady_clock::now();
@@ -668,41 +675,42 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
     out << x << " , " << diff << "\n";
 
-    DINGO_LOG(INFO) << "index : " << x << " : " << diff
-                    << " us, avg : " << static_cast<long double>(diff) / opt.step_count << " us";
+    std::cout << "index : " << x << " : " << diff << " us, avg : " << static_cast<long double>(diff) / opt.step_count
+              << " us";
 
     total += diff;
   }
 
-  DINGO_LOG(INFO) << fmt::format("total : {} cost : {} (us) avg : {} us", opt.count, total,
-                                 static_cast<long double>(total) / opt.count);
+  std::cout << fmt::format("total : {} cost : {} (us) avg : {} us", opt.count, total,
+                           static_cast<long double>(total) / opt.count)
+            << std::endl;
 
   out.close();
 }
 
 void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
   if (opt.step_count == 0) {
-    DINGO_LOG(ERROR) << "step_count must be greater than 0";
+    std::cout << "step_count must be greater than 0" << std::endl;
     return;
   }
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    std::cout << "region_id must be greater than 0" << std::endl;
     return;
   }
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension must be greater than 0";
+    std::cout << "dimension must be greater than 0" << std::endl;
     return;
   }
   if (opt.count == 0) {
-    DINGO_LOG(ERROR) << "count must be greater than 0";
+    std::cout << "count must be greater than 0" << std::endl;
     return;
   }
   if (opt.start_id < 0) {
-    DINGO_LOG(ERROR) << "start_id must be greater than 0";
+    std::cout << "start_id must be greater than 0" << std::endl;
     return;
   }
   if (opt.vector_index_add_cost_file.empty()) {
-    DINGO_LOG(ERROR) << "vector_index_add_cost_file must not be empty";
+    std::cout << "vector_index_add_cost_file must not be empty" << std::endl;
     return;
   }
 
@@ -716,7 +724,7 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
   }
 
   if (!out.is_open()) {
-    DINGO_LOG(ERROR) << fmt::format("{} open failed", opt.vector_index_add_cost_file);
+    std::cout << fmt::format("{} open failed", opt.vector_index_add_cost_file) << std::endl;
     out.close();
     return;
   }
@@ -725,7 +733,7 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
   int64_t total = 0;
 
   if (opt.count % opt.step_count != 0) {
-    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", opt.count, opt.step_count);
+    std::cout << fmt::format("count {} must be divisible by step_count {}", opt.count, opt.step_count) << std::endl;
     return;
   }
 
@@ -742,7 +750,7 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
     }
 
     if (i % 10000 == 0) {
-      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, opt.count);
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
     }
   }
 
@@ -757,11 +765,9 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
   //     }
   //   });
   // } catch (std::runtime_error& e) {
-  //   DINGO_LOG(ERROR) << "generate random data failed, error=" << e.what();
+  //   std::cout << "generate random data failed, error=" << e.what();
   //   return;
   // }
-
-  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", opt.count, opt.count);
 
   for (uint32_t x = 0; x < cnt; x++) {
     auto start = std::chrono::steady_clock::now();
@@ -829,13 +835,14 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
     out << x << " , " << diff << "\n";
 
     DINGO_LOG(INFO) << "index : " << x << " : " << diff
-                    << " us, avg : " << static_cast<long double>(diff) / opt.step_count << " us";
+                    << " us, avg : " << static_cast<long double>(diff) / opt.step_count << " us" << std::endl;
 
     total += diff;
   }
 
   DINGO_LOG(INFO) << fmt::format("total : {} cost : {} (us) avg : {} us", opt.count, total,
-                                 static_cast<long double>(total) / opt.count);
+                                 static_cast<long double>(total) / opt.count)
+                  << std::endl;
 
   out.close();
 }
@@ -844,7 +851,7 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
 // vector_data2: "1.1, 2.0, 3.0, 4.1"
 void SendCalcDistance(CalcDistanceOptions const& opt) {
   if (opt.vector_data1.empty() || opt.vector_data2.empty()) {
-    DINGO_LOG(ERROR) << "vector_data1 or vector_data2 is empty";
+    std::cout << "vector_data1 or vector_data2 is empty";
     return;
   }
 
@@ -852,7 +859,7 @@ void SendCalcDistance(CalcDistanceOptions const& opt) {
   std::vector<float> y_j = dingodb::Helper::StringToVector(opt.vector_data2);
 
   if (x_i.size() != y_j.size() || x_i.empty() || y_j.empty()) {
-    DINGO_LOG(ERROR) << "vector_data1 size must be equal to vector_data2 size";
+    std::cout << "vector_data1 size must be equal to vector_data2 size";
     return;
   }
 
@@ -876,7 +883,7 @@ void SendVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
   ::dingodb::pb::index::VectorCalcDistanceResponse response;
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "step_count must be greater than 0";
+    std::cout << "step_count must be greater than 0" << std::endl;
     return;
   }
 
@@ -890,7 +897,7 @@ void SendVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
   bool is_hnsw = ("hnsw" == real_alg_type);
 
   // if (!is_faiss && !is_hnsw) {
-  //   DINGO_LOG(ERROR) << "invalid alg_type :  use faiss or hnsw!!!";
+  //   std::cout << "invalid alg_type :  use faiss or hnsw!!!";
   //   return;
   // }
 
@@ -898,17 +905,17 @@ void SendVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
   bool is_ip = ("ip" == real_metric_type);
   bool is_cosine = ("cosine" == real_metric_type);
   // if (!is_l2 && !is_ip && !is_cosine) {
-  //   DINGO_LOG(ERROR) << "invalid metric_type :  use L2 or IP or cosine !!!";
+  //   std::cout << "invalid metric_type :  use L2 or IP or cosine !!!";
   //   return;
   // }
 
   // if (left_vector_size <= 0) {
-  //   DINGO_LOG(ERROR) << "left_vector_size <=0 : " << left_vector_size;
+  //   std::cout << "left_vector_size <=0 : " << left_vector_size;
   //   return;
   // }
 
   // if (right_vector_size <= 0) {
-  //   DINGO_LOG(ERROR) << "right_vector_size <=0 : " << left_vector_size;
+  //   std::cout << "right_vector_size <=0 : " << left_vector_size;
   //   return;
   // }
 
@@ -960,18 +967,11 @@ void SendVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
   request.mutable_op_left_vectors()->Add(op_left_vectors.begin(), op_left_vectors.end());
   request.mutable_op_right_vectors()->Add(op_right_vectors.begin(), op_right_vectors.end());
 
-  DINGO_LOG(INFO) << "SendVectorCalcDistance request: " << request.DebugString();
-
   InteractionManager::GetInstance().SendRequestWithoutContext("UtilService", "VectorCalcDistance", request, response);
-
-  for (const auto& distance : response.distances()) {
-    DINGO_LOG(INFO) << "distance: " << distance.ShortDebugString();
-  }
-  DINGO_LOG(INFO) << "SendVectorCalcDistance error: " << response.error().ShortDebugString();
-  DINGO_LOG(INFO) << "distance size: " << response.distances_size();
+  Pretty::Show(response);
 }
 
-int64_t SendVectorCount(VectorCountOptions const& opt) {
+int64_t SendVectorCount(VectorCountOptions const& opt, bool show) {
   ::dingodb::pb::index::VectorCountRequest request;
   ::dingodb::pb::index::VectorCountResponse response;
 
@@ -984,10 +984,11 @@ int64_t SendVectorCount(VectorCountOptions const& opt) {
   }
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCount", request, response);
-
-  return response.error().errcode() != 0 ? 0 : response.count();
+  if (show) {
+    Pretty::Show(response);
+  }
+  return response.count();
 }
-
 void CountVectorTable(CountVectorTableOptions const& opt) {
   auto index_range = SendGetIndexRange(opt.table_id);
 
@@ -995,21 +996,19 @@ void CountVectorTable(CountVectorTableOptions const& opt) {
   std::map<std::string, dingodb::pb::meta::RangeDistribution> region_map;
   for (const auto& region_range : index_range.range_distribution()) {
     if (region_range.range().start_key() >= region_range.range().end_key()) {
-      DINGO_LOG(ERROR) << fmt::format("Invalid region {} range [{}-{})", region_range.id().entity_id(),
-                                      dingodb::Helper::StringToHex(region_range.range().start_key()),
-                                      dingodb::Helper::StringToHex(region_range.range().end_key()));
+      std::cout << fmt::format("Invalid region {} range [{}-{})", region_range.id().entity_id(),
+                               dingodb::Helper::StringToHex(region_range.range().start_key()),
+                               dingodb::Helper::StringToHex(region_range.range().end_key()));
       continue;
     }
     VectorCountOptions opt;
     opt.region_id = region_range.id().entity_id();
     opt.end_id = 0;
     opt.start_id = 0;
-    int64_t count = SendVectorCount(opt);
+    int64_t count = SendVectorCount(opt, false);
     total_count += count;
-    DINGO_LOG(INFO) << fmt::format("partition_id({}) region({}) count({}) total_count({})",
-                                   region_range.id().parent_entity_id(), region_range.id().entity_id(), count,
-                                   total_count);
   }
+  Pretty::ShowTotalCount(total_count);
 }
 
 // We cant use FLAGS_vector_data to define the vector we want to search, the format is:
@@ -1024,17 +1023,17 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
   auto* vector = request.add_vector_with_ids();
 
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id is 0";
+    std::cout << "region_id is 0" << std::endl;
     return;
   }
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension is 0";
+    std::cout << "dimension is 0" << std::endl;
     return;
   }
 
   if (opt.topn == 0) {
-    DINGO_LOG(ERROR) << "topn is 0";
+    std::cout << "topn is 0" << std::endl;
     return;
   }
 
@@ -1045,7 +1044,7 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
   } else {
     std::vector<float> row = dingodb::Helper::StringToVector(opt.vector_data);
 
-    CHECK(opt.dimension == row.size()) << "dimension not match";
+    CHECK(opt.dimension == row.size()) << "dimension not match" << std::endl;
 
     for (auto v : row) {
       vector->mutable_vector()->add_float_values(v);
@@ -1093,13 +1092,13 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
       request.mutable_parameter()->add_vector_ids(id);
     }
 
-    std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
+    // std::cout << "vector_ids : " << request.parameter().vector_ids().size() << " [ ";
 
-    for (auto id : request.parameter().vector_ids()) {
-      std::cout << id << " ";
-    }
-    std::cout << "]";
-    std::cout << '\n';
+    // for (auto id : request.parameter().vector_ids()) {
+    //   std::cout << id << " ";
+    // }
+    // std::cout << "]";
+    // std::cout << '\n';
   }
 
   if (opt.with_scalar_pre_filter) {
@@ -1107,7 +1106,7 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
 
     if (opt.scalar_filter_key.empty() || opt.scalar_filter_value.empty()) {
-      DINGO_LOG(ERROR) << "scalar_filter_key or scalar_filter_value is empty";
+      std::cout << "scalar_filter_key or scalar_filter_value is empty" << std::endl;
       return;
     }
 
@@ -1201,9 +1200,6 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
         field->set_string_data(opt.scalar_filter_value);
 
         vector->mutable_scalar_data()->mutable_scalar_data()->insert({opt.scalar_filter_key, scalar_value});
-
-        DINGO_LOG(INFO) << "scalar_filter_key: " << opt.scalar_filter_key
-                        << " scalar_filter_value: " << opt.scalar_filter_value;
       }
     }
 
@@ -1218,9 +1214,6 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
         field->set_string_data(opt.scalar_filter_value2);
 
         vector->mutable_scalar_data()->mutable_scalar_data()->insert({opt.scalar_filter_key2, scalar_value});
-
-        DINGO_LOG(INFO) << "scalar_filter_key2: " << opt.scalar_filter_key2
-                        << " scalar_filter_value2: " << opt.scalar_filter_value2;
       }
     }
   }
@@ -1229,7 +1222,7 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
     request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
     request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_POST);
     if (opt.scalar_filter_key.empty() || opt.scalar_filter_value.empty()) {
-      DINGO_LOG(ERROR) << "scalar_filter_key or scalar_filter_value is empty";
+      std::cout << "scalar_filter_key or scalar_filter_value is empty" << std::endl;
       return;
     }
 
@@ -1240,9 +1233,6 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
       field->set_string_data(opt.scalar_filter_value);
 
       vector->mutable_scalar_data()->mutable_scalar_data()->insert({opt.scalar_filter_key, scalar_value});
-
-      DINGO_LOG(INFO) << "scalar_filter_key: " << opt.scalar_filter_key
-                      << " scalar_filter_value: " << opt.scalar_filter_value;
     }
 
     if (!opt.scalar_filter_key2.empty()) {
@@ -1252,9 +1242,6 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
       field->set_string_data(opt.scalar_filter_value2);
 
       vector->mutable_scalar_data()->mutable_scalar_data()->insert({opt.scalar_filter_key2, scalar_value});
-
-      DINGO_LOG(INFO) << "scalar_filter_key2: " << opt.scalar_filter_key2
-                      << " scalar_filter_value2: " << opt.scalar_filter_value2;
     }
   }
 
@@ -1264,12 +1251,10 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
   }
 
   if (opt.ef_search > 0) {
-    DINGO_LOG(INFO) << "ef_search=" << opt.ef_search;
     request.mutable_parameter()->mutable_hnsw()->set_efsearch(opt.ef_search);
   }
 
   if (opt.bruteforce) {
-    DINGO_LOG(INFO) << "bruteforce=" << opt.bruteforce;
     request.mutable_parameter()->set_use_brute_force(opt.bruteforce);
   }
 
@@ -1279,19 +1264,17 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
     auto end = std::chrono::steady_clock::now();
     auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
 
-    DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
-
   } else {
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
   }
 
-  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+  std::cout << "VectorSearch response: " << response.DebugString();
 
   std::ofstream file;
   if (!opt.csv_output.empty()) {
     file = std::ofstream(opt.csv_output, std::ios::out | std::ios::app);
     if (!file.is_open()) {
-      DINGO_LOG(ERROR) << "open file failed";
+      std::cout << "open file failed" << std::endl;
       return;
     }
   }
@@ -1407,22 +1390,22 @@ void SendVectorSearchDebug(VectorSearchDebugOptions const& opt) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
 
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id is 0";
+    std::cout << "region_id is 0" << std::endl;
     return;
   }
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension is 0";
+    std::cout << "dimension is 0" << std::endl;
     return;
   }
 
   if (opt.topn == 0) {
-    DINGO_LOG(ERROR) << "topn is 0";
+    std::cout << "topn is 0" << std::endl;
     return;
   }
 
   if (opt.batch_count == 0) {
-    DINGO_LOG(ERROR) << "batch_count is 0";
+    std::cout << "batch_count is 0" << std::endl;
     return;
   }
 
@@ -1539,12 +1522,12 @@ void SendVectorSearchDebug(VectorSearchDebugOptions const& opt) {
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
   }
 
-  DINGO_LOG(INFO) << "VectorSearchDebug response: " << response.DebugString();
+  std::cout << "VectorSearchDebug response: " << response.DebugString() << std::endl;
 
-  DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size();
+  std::cout << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size() << std::endl;
   for (const auto& batch_result : response.batch_results()) {
-    DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_dist_size: "
-                    << batch_result.vector_with_distances_size();
+    std::cout << "VectorSearchDebug response, batch_result_dist_size: " << batch_result.vector_with_distances_size()
+              << std::endl;
   }
 
 #if 0  // NOLINT
@@ -1626,12 +1609,12 @@ void SendVectorRangeSearch(VectorRangeSearchOptions const& opt) {
   auto* vector = request.add_vector_with_ids();
 
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id is 0";
+    std::cout << "region_id is 0" << std::endl;
     return;
   }
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension is 0";
+    std::cout << "dimension is 0" << std::endl;
     return;
   }
 
@@ -1731,7 +1714,7 @@ void SendVectorRangeSearch(VectorRangeSearchOptions const& opt) {
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
   }
 
-  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+  std::cout << "VectorSearch response: " << response.DebugString() << std::endl;
 
   // match compare
   if (opt.with_vector_ids) {
@@ -1804,17 +1787,17 @@ void SendVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
 
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id is 0";
+    std::cout << "region_id is 0" << std::endl;
     return;
   }
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension is 0";
+    std::cout << "dimension is 0" << std::endl;
     return;
   }
 
   if (opt.batch_count == 0) {
-    DINGO_LOG(ERROR) << "batch_count is 0";
+    std::cout << "batch_count is 0" << std::endl;
     return;
   }
 
@@ -1934,12 +1917,12 @@ void SendVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearchDebug", request, response);
   }
 
-  DINGO_LOG(INFO) << "VectorSearchDebug response: " << response.DebugString();
+  std::cout << "VectorSearchDebug response: " << response.DebugString() << std::endl;
 
-  DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size();
+  std::cout << "VectorSearchDebug response, batch_result_size: " << response.batch_results_size() << std::endl;
   for (const auto& batch_result : response.batch_results()) {
-    DINGO_LOG(INFO) << "VectorSearchDebug response, batch_result_dist_size: "
-                    << batch_result.vector_with_distances_size();
+    std::cout << "VectorSearchDebug response, batch_result_dist_size: " << batch_result.vector_with_distances_size()
+              << std::endl;
   }
 
 #if 0  // NOLINT
@@ -2020,22 +2003,22 @@ void SendVectorBatchSearch(VectorBatchSearchOptions const& opt) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
 
   if (opt.region_id == 0) {
-    DINGO_LOG(ERROR) << "region_id is 0";
+    std::cout << "region_id is 0" << std::endl;
     return;
   }
 
   if (opt.dimension == 0) {
-    DINGO_LOG(ERROR) << "dimension is 0";
+    std::cout << "dimension is 0" << std::endl;
     return;
   }
 
   if (opt.topn == 0) {
-    DINGO_LOG(ERROR) << "topn is 0";
+    std::cout << "topn is 0" << std::endl;
     return;
   }
 
   if (opt.batch_count == 0) {
-    DINGO_LOG(ERROR) << "batch_count is 0";
+    std::cout << "batch_count is 0" << std::endl;
     return;
   }
 
@@ -2131,11 +2114,12 @@ void SendVectorBatchSearch(VectorBatchSearchOptions const& opt) {
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
   }
 
-  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
+  std::cout << "VectorSearch response: " << response.DebugString() << std::endl;
 
-  DINGO_LOG(INFO) << "VectorSearch response, batch_result_size: " << response.batch_results_size();
+  std::cout << "VectorSearch response, batch_result_size: " << response.batch_results_size();
   for (const auto& batch_result : response.batch_results()) {
-    DINGO_LOG(INFO) << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size();
+    std::cout << "VectorSearch response, batch_result_dist_size: " << batch_result.vector_with_distances_size()
+              << std::endl;
   }
 
   // match compare
@@ -2235,7 +2219,7 @@ void SendVectorBatchQuery(VectorBatchQueryOptions const& opt) {
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorBatchQuery", request, response);
 
-  DINGO_LOG(INFO) << "VectorBatchQuery response: " << response.DebugString();
+  std::cout << "VectorBatchQuery response: " << response.DebugString() << std::endl;
 }
 
 void SendVectorScanQuery(VectorScanQueryOptions const& opt) {
@@ -2299,8 +2283,8 @@ void SendVectorScanQuery(VectorScanQueryOptions const& opt) {
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorScanQuery", request, response);
 
-  DINGO_LOG(INFO) << "VectorScanQuery response: " << response.DebugString()
-                  << " vector count: " << response.vectors().size();
+  std::cout << "VectorScanQuery response: " << response.DebugString() << " vector count: " << response.vectors().size()
+            << std::endl;
 }
 
 butil::Status ScanVectorData(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse,
@@ -2320,12 +2304,12 @@ butil::Status ScanVectorData(int64_t region_id, int64_t start_id, int64_t end_id
   auto ret =
       InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorScanQuery", request, response);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "VectorScanQuery failed: " << ret.error_str();
+    std::cout << "VectorScanQuery failed: " << ret.error_str();
     return ret;
   }
 
   if (response.error().errcode() != 0) {
-    DINGO_LOG(ERROR) << "VectorScanQuery failed: " << response.error().errcode() << " " << response.error().errmsg();
+    std::cout << "VectorScanQuery failed: " << response.error().errcode() << " " << response.error().errmsg();
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
@@ -2351,14 +2335,14 @@ butil::Status ScanVectorData(int64_t region_id, int64_t start_id, int64_t end_id
 
 void SendVectorScanDump(VectorScanDumpOptions const& opt) {
   if (opt.csv_output.empty()) {
-    DINGO_LOG(ERROR) << "csv_output is empty";
+    std::cout << "csv_output is empty" << std::endl;
     return;
   }
 
   std::ofstream file(opt.csv_output, std::ios::out);
 
   if (!file.is_open()) {
-    DINGO_LOG(ERROR) << "open file failed";
+    std::cout << "open file failed" << std::endl;
     return;
   }
 
@@ -2378,7 +2362,7 @@ void SendVectorScanDump(VectorScanDumpOptions const& opt) {
     auto ret = ScanVectorData(opt.region_id, new_start_id + 1, opt.end_id, batch_count, opt.is_reverse, vector_datas,
                               new_start_id);
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "ScanVectorData failed: " << ret.error_str();
+      std::cout << "ScanVectorData failed: " << ret.error_str();
       return;
     }
 
@@ -2404,38 +2388,327 @@ void SendVectorGetRegionMetrics(VectorGetRegionMetricsOptions const& opt) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorGetRegionMetrics", request, response);
+  Pretty::Show(response);
+}
 
-  DINGO_LOG(INFO) << "VectorGetRegionMetrics response: " << response.DebugString();
+void SetUpCreateIndex(CLI::App& app) {
+  auto opt = std::make_shared<CreateIndexOptions>();
+  auto* cmd = app.add_subcommand("CreateIndex", "Create index ")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--name", opt->name, "Request parameter region name")->required();
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id");
+  cmd->add_option("--part_count", opt->part_count, "Request parameter part count")->default_val(1);
+  cmd->add_option("--with_auto_increment", opt->with_auto_increment, "Request parameter with_auto_increment")
+      ->default_val(true)
+      ->default_str("true");
+  cmd->add_option("--with_scalar_schema", opt->with_scalar_schema, "Request parameter with_scalar_schema")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")->default_val(3);
+  cmd->add_option("--vector_index_type", opt->vector_index_type,
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq");
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")->ignore_case();
+  cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
+  cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction");
+  cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks");
+  cmd->add_option("--ncentroids", opt->ncentroids, "Request parameter ncentroids, ncentroids default 10")
+      ->default_val(10);
+  cmd->add_option("--nsubvector", opt->nsubvector, "Request parameter nsubvector, ivf pq default subvector nums 8")
+      ->default_val(8);
+  cmd->add_option("--nbits_per_idx", opt->nbits_per_idx,
+                  "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
+      ->default_val(8);
+  cmd->callback([opt]() { RunCreateIndex(*opt); });
+}
+
+void RunCreateIndex(CreateIndexOptions const& opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::meta::CreateIndexRequest request;
+  dingodb::pb::meta::CreateIndexResponse response;
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  if (opt.schema_id > 0) {
+    schema_id->set_entity_id(opt.schema_id);
+  }
+
+  uint32_t part_count = opt.part_count;
+
+  std::vector<int64_t> new_ids;
+  int ret = client_v2::Helper::GetCreateTableIds(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta(),
+                                                 1 + opt.part_count, new_ids);
+  if (ret < 0) {
+    std::cout << "GetCreateTableIds failed" << std::endl;
+    return;
+  }
+  if (new_ids.empty()) {
+    std::cout << "GetCreateTableIds failed" << std::endl;
+    return;
+  }
+  if (new_ids.size() != 1 + opt.part_count) {
+    std::cout << "GetCreateTableIds failed" << std::endl;
+    return;
+  }
+
+  int64_t new_index_id = new_ids.at(0);
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = new_ids.at(1 + i);
+    part_ids.push_back(new_part_id);
+  }
+
+  // setup index_id
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(schema_id->entity_id());
+  index_id->set_entity_id(new_index_id);
+
+  // string name = 1;
+  auto* index_definition = request.mutable_index_definition();
+  index_definition->set_name(opt.name);
+
+  if (opt.replica > 0) {
+    index_definition->set_replica(opt.replica);
+  }
+
+  if (opt.with_auto_increment) {
+    index_definition->set_with_auto_incrment(true);
+    index_definition->set_auto_increment(1024);
+  }
+
+  // vector index parameter
+  index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
+  auto* vector_index_parameter = index_definition->mutable_index_parameter()->mutable_vector_index_parameter();
+
+  if (opt.vector_index_type == "hnsw") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+  } else if (opt.vector_index_type == "flat") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+  } else if (opt.vector_index_type == "bruteforce") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE);
+  } else if (opt.vector_index_type == "ivf_flat") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+  } else if (opt.vector_index_type == "ivf_pq") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+  } else {
+    std::cout << "vector_index_type is invalid, now only support hnsw and flat" << std::endl;
+    return;
+  }
+
+  if (opt.dimension == 0) {
+    std::cout << "dimension is empty" << std::endl;
+    return;
+  }
+
+  dingodb::pb::common::MetricType metric_type;
+
+  if (opt.metrics_type == "L2" || opt.metrics_type == "l2") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_L2;
+  } else if (opt.metrics_type == "IP" || opt.metrics_type == "ip") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
+  } else if (opt.metrics_type == "COSINE" || opt.metrics_type == "cosine") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+  } else {
+    std::cout << "metrics_type is invalid, now only support L2, IP and COSINE" << std::endl;
+    return;
+  }
+
+  if (opt.vector_index_type == "hnsw") {
+    if (opt.max_elements < 0) {
+      std::cout << "max_elements is negative" << std::endl;
+      return;
+    }
+    if (opt.efconstruction == 0) {
+      std::cout << "efconstruction is empty" << std::endl;
+      return;
+    }
+    if (opt.nlinks == 0) {
+      std::cout << "nlinks is empty" << std::endl;
+      return;
+    }
+
+    // DINGO_LOG(INFO) << "max_elements=" << opt.max_elements << ", dimension=" << opt.dimension;
+
+    auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
+
+    hsnw_index_parameter->set_dimension(opt.dimension);
+    hsnw_index_parameter->set_metric_type(metric_type);
+    hsnw_index_parameter->set_efconstruction(opt.efconstruction);
+    hsnw_index_parameter->set_nlinks(opt.nlinks);
+    hsnw_index_parameter->set_max_elements(opt.max_elements);
+  } else if (opt.vector_index_type == "flat") {
+    auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
+    flat_index_parameter->set_dimension(opt.dimension);
+    flat_index_parameter->set_metric_type(metric_type);
+  } else if (opt.vector_index_type == "bruteforce") {
+    auto* bruteforce_index_parameter = vector_index_parameter->mutable_bruteforce_parameter();
+    bruteforce_index_parameter->set_dimension(opt.dimension);
+    bruteforce_index_parameter->set_metric_type(metric_type);
+  } else if (opt.vector_index_type == "ivf_flat") {
+    auto* ivf_flat_index_parameter = vector_index_parameter->mutable_ivf_flat_parameter();
+    ivf_flat_index_parameter->set_dimension(opt.dimension);
+    ivf_flat_index_parameter->set_metric_type(metric_type);
+    ivf_flat_index_parameter->set_ncentroids(opt.ncentroids);
+  } else if (opt.vector_index_type == "ivf_pq") {
+    auto* ivf_pq_index_parameter = vector_index_parameter->mutable_ivf_pq_parameter();
+    ivf_pq_index_parameter->set_dimension(opt.dimension);
+    ivf_pq_index_parameter->set_metric_type(metric_type);
+    ivf_pq_index_parameter->set_ncentroids(opt.ncentroids);
+    ivf_pq_index_parameter->set_nsubvector(opt.nsubvector);
+    ivf_pq_index_parameter->set_nbits_per_idx(opt.nbits_per_idx);
+  }
+
+  index_definition->set_version(1);
+
+  auto* partition_rule = index_definition->mutable_index_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_index_id);
+    part->mutable_range()->set_start_key(client_v2::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client_v2::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  if (opt.with_auto_increment) {
+    DINGO_LOG(INFO) << "with_auto_increment" << std::endl;
+    index_definition->set_auto_increment(100);
+  }
+
+  // scalar key speed up
+  if (opt.with_scalar_schema) {
+    auto* scalar_parameter = vector_index_parameter->mutable_scalar_schema();
+
+    auto* field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_int");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_float");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_int");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_float");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(false);
+  }
+
+  // DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateIndex",
+                                                                                                  request, response);
+  if (Pretty::ShowError(status)) {
+    return;
+  }
+  std::cout << "create index success, index_id==" << response.index_id().entity_id() << std::endl;
+  DINGO_LOG(INFO) << response.DebugString();
 }
 
 void SetUpVectorSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorSearchOptions>();
-  auto* cmd = app.add_subcommand("VectorSearch", "Vector search ")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorSearch", "Vector search ")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
   cmd->add_option("--vector_data", opt->vector_data, "Request parameter vector data");
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--key", opt->key, "Request parameter key");
-  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false);
-  cmd->add_flag("--with_table_pre_filter", opt->with_table_pre_filter, "Search vector with table data pre filter")
-      ->default_val(false);
+  cmd->add_option("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_table_pre_filter", opt->with_table_pre_filter, "Search vector with table data pre filter")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key");
   cmd->add_option("--scalar_filter_value", opt->scalar_filter_value, "Request parameter scalar_filter_value");
   cmd->add_option("--scalar_filter_key2", opt->scalar_filter_key2, "Request parameter scalar_filter_key2");
   cmd->add_option("--scalar_filter_value2", opt->scalar_filter_value2, "Request parameter scalar_filter_value2");
-  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
-      ->default_val(false);
-  cmd->add_flag("--bruteforce", opt->bruteforce, "Use bruteforce search")->default_val(false);
-  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false);
+  cmd->add_option("--with_scalar_post_filter", opt->with_scalar_post_filter,
+                  "Search vector with scalar data post filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--bruteforce", opt->bruteforce, "Use bruteforce search")->default_val(false)->default_str("false");
+  cmd->add_option("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--ef_search", opt->ef_search, "hnsw index search ef")->default_val(0);
   cmd->add_option("--csv_output", opt->csv_output, "csv output");
   cmd->callback([opt]() { RunVectorSearch(*opt); });
@@ -2451,28 +2724,34 @@ void RunVectorSearch(VectorSearchOptions const& opt) {
 
 void SetUpVectorSearchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorSearchDebugOptions>();
-  auto* cmd = app.add_subcommand("VectorSearchDebug", "Vector search debug")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorSearchDebug", "Vector search debug")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
   cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch count")->required();
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
   cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
   cmd->add_option("--key", opt->key, "Request parameter key");
   cmd->add_option("--value", opt->value, "Request parameter value");
-  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false);
+  cmd->add_option("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--vector_ids_count", opt->vector_ids_count, "Request parameter vector_ids_count")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false);
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false)
+      ->default_str("false");
 
-  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
-      ->default_val(false);
+  cmd->add_option("--with_scalar_post_filter", opt->with_scalar_post_filter,
+                  "Search vector with scalar data post filter")
+      ->default_val(false)
+      ->default_str("false");
 
   cmd->callback([opt]() { RunVectorSearchDebug(*opt); });
 }
@@ -2486,24 +2765,34 @@ void RunVectorSearchDebug(VectorSearchDebugOptions const& opt) {
 
 void SetUpVectorRangeSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorRangeSearchOptions>();
-  auto* cmd = app.add_subcommand("VectorRangeSearch", "Vector range search ")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorRangeSearch", "Vector range search ")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
   cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--key", opt->key, "Request parameter key");
-  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
-      ->default_val(false);
-  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false);
+  cmd->add_option("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_post_filter", opt->with_scalar_post_filter,
+                  "Search vector with scalar data post filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunVectorRangeSearch(*opt); });
 }
 
@@ -2516,29 +2805,38 @@ void RunVectorRangeSearch(VectorRangeSearchOptions const& opt) {
 
 void SetUpVectorRangeSearchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorRangeSearchDebugOptions>();
-  auto* cmd =
-      app.add_subcommand("VectorRangeSearchDebug", "Vector range search debug")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorRangeSearchDebug", "Vector range search debug")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
   cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
   cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--key", opt->key, "Request parameter key");
   cmd->add_option("--value", opt->value, "Request parameter value");
-  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false);
-  cmd->add_flag("--vector_ids_count", opt->vector_ids_count, "Search vector with vector ids count")->default_val(100);
-  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
-      ->default_val(false);
-  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false);
+  cmd->add_option("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--vector_ids_count", opt->vector_ids_count, "Search vector with vector ids count")->default_val(100);
+  cmd->add_option("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_post_filter", opt->with_scalar_post_filter,
+                  "Search vector with scalar data post filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunVectorRangeSearchDebug(*opt); });
 }
 
@@ -2551,25 +2849,35 @@ void RunVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
 
 void SetUpVectorBatchSearch(CLI::App& app) {
   auto opt = std::make_shared<VectorBatchSearchOptions>();
-  auto* cmd = app.add_subcommand("VectorBatchSearch", "Vector batch search")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorBatchSearch", "Vector batch search")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--key", opt->key, "Request parameter key");
-  cmd->add_flag("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
-      ->default_val(false);
-  cmd->add_flag("--with_scalar_post_filter", opt->with_scalar_post_filter, "Search vector with scalar data post filter")
-      ->default_val(false);
-  cmd->add_flag("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
-      ->default_val(false);
+  cmd->add_option("--with_vector_ids", opt->with_vector_ids, "Search vector with vector ids list default false")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_pre_filter", opt->with_scalar_pre_filter, "Search vector with scalar data pre filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--with_scalar_post_filter", opt->with_scalar_post_filter,
+                  "Search vector with scalar data post filter")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--print_vector_search_delay", opt->print_vector_search_delay, "print vector search delay")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunVectorBatchSearch(*opt); });
 }
 
@@ -2582,15 +2890,20 @@ void RunVectorBatchSearch(VectorBatchSearchOptions const& opt) {
 
 void SetUpVectorBatchQuery(CLI::App& app) {
   auto opt = std::make_shared<VectorBatchQueryOptions>();
-  auto* cmd = app.add_subcommand("VectorBatchQuery", "Vector batch query")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorBatchQuery", "Vector batch query")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--vector_ids", opt->vector_ids, "Request parameter vector_ids");
   cmd->add_option("--key", opt->key, "Request parameter key");
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunVectorBatchQuery(*opt); });
 }
 
@@ -2603,19 +2916,24 @@ void RunVectorBatchQuery(VectorBatchQueryOptions const& opt) {
 
 void SetUpVectorScanQuery(CLI::App& app) {
   auto opt = std::make_shared<VectorScanQueryOptions>();
-  auto* cmd = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
 
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
   cmd->add_option("--end_id", opt->end_id, "Request parameter end_id")->required();
   cmd->add_option("--limit", opt->limit, "Request parameter limit")->default_val(50);
-  cmd->add_flag("--is_reverse", opt->is_reverse, "Request parameter is_reverse")->default_val(false);
+  cmd->add_option("--is_reverse", opt->is_reverse, "Request parameter is_reverse")->default_val(false);
 
-  cmd->add_flag("--without_vector", opt->without_vector, "Search vector without output vector data")
-      ->default_val(false);
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Search vector without scalar data")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Search vector without table data")->default_val(false);
+  cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Search vector without scalar data")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Search vector without table data")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--key", opt->key, "Request parameter key");
 
   cmd->add_option("--scalar_filter_key", opt->scalar_filter_key, "Request scalar_filter_key");
@@ -2636,7 +2954,7 @@ void RunVectorScanQuery(VectorScanQueryOptions const& opt) {
 
 void SetUpVectorScanDump(CLI::App& app) {
   auto opt = std::make_shared<VectorScanDumpOptions>();
-  auto* cmd = app.add_subcommand("VectorScanQuery", "Vector scan query ")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorScanDump", "Vector scan dump ")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
@@ -2658,8 +2976,7 @@ void RunVectorScanDump(VectorScanDumpOptions const& opt) {
 
 void SetUpVectorGetRegionMetrics(CLI::App& app) {
   auto opt = std::make_shared<VectorGetRegionMetricsOptions>();
-  auto* cmd =
-      app.add_subcommand("VectorGetRegionMetrics", "Vector get region metrics")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorGetRegionMetrics", "Vector get region metrics")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunVectorGetRegionMetricsd(*opt); });
@@ -2675,7 +2992,7 @@ void RunVectorGetRegionMetricsd(VectorGetRegionMetricsOptions const& opt) {
 
 void SetUpVectorAdd(CLI::App& app) {
   auto opt = std::make_shared<VectorAddOptions>();
-  auto* cmd = app.add_subcommand("VectorAdd", "Vector add ")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorAdd", "Vector add ")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--table_id", opt->table_id, "Request parameter table_id");
@@ -2683,8 +3000,12 @@ void SetUpVectorAdd(CLI::App& app) {
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
   cmd->add_option("--count", opt->count, "Request parameter count");
   cmd->add_option("--step_count", opt->step_count, "Request parameter step_count");
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
-  cmd->add_flag("--without_table", opt->without_table, "Request parameter without_scalar")->default_val(false);
+  cmd->add_option("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--without_table", opt->without_table, "Request parameter without_scalar")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--csv_data", opt->csv_data, "Request parameter csv_data");
   cmd->add_option("--json_data", opt->json_data, "Request parameter json_data");
 
@@ -2711,7 +3032,7 @@ void RunVectorAdd(VectorAddOptions const& opt) {
 
 void SetUpVectorDelete(CLI::App& app) {
   auto opt = std::make_shared<VectorDeleteOptions>();
-  auto* cmd = app.add_subcommand("VectorDelete", "Vector delete")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorDelete", "Vector delete")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
@@ -2729,7 +3050,7 @@ void RunVectorDelete(VectorDeleteOptions const& opt) {
 
 void SetUpVectorGetMaxId(CLI::App& app) {
   auto opt = std::make_shared<VectorGetMaxIdOptions>();
-  auto* cmd = app.add_subcommand("VectorGetMaxId", "Vector get max id")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorGetMaxId", "Vector get max id")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunVectorGetMaxId(*opt); });
@@ -2745,7 +3066,7 @@ void RunVectorGetMaxId(VectorGetMaxIdOptions const& opt) {
 
 void SetUpVectorGetMinId(CLI::App& app) {
   auto opt = std::make_shared<VectorGetMinIdOptions>();
-  auto* cmd = app.add_subcommand("VectorGetMinId", "Vector get min id")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorGetMinId", "Vector get min id")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunVectorGetMinId(*opt); });
@@ -2761,7 +3082,7 @@ void RunVectorGetMinId(VectorGetMinIdOptions const& opt) {
 
 void SetUpVectorAddBatch(CLI::App& app) {
   auto opt = std::make_shared<VectorAddBatchOptions>();
-  auto* cmd = app.add_subcommand("VectorAddBatch", "Vector add batch")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorAddBatch", "Vector add batch")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
@@ -2785,7 +3106,7 @@ void RunVectorAddBatch(VectorAddBatchOptions const& opt) {
 
 void SetUpVectorAddBatchDebug(CLI::App& app) {
   auto opt = std::make_shared<VectorAddBatchDebugOptions>();
-  auto* cmd = app.add_subcommand("VectorAddBatchDebug", "Vector add batch debug")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorAddBatchDebug", "Vector add batch debug")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
@@ -2794,7 +3115,9 @@ void SetUpVectorAddBatchDebug(CLI::App& app) {
   cmd->add_option("--step_count", opt->step_count, "Request parameter step_count")->required();
   cmd->add_option("--vector_index_add_cost_file", opt->vector_index_add_cost_file, "exec batch vector add. cost time")
       ->default_val("./cost.txt");
-  cmd->add_flag("--without_scalar", opt->without_scalar, "Request parameter without_scalar")->default_val(false);
+  cmd->add_option("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunVectorAddBatchDebug(*opt); });
 }
 
@@ -2808,7 +3131,7 @@ void RunVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
 
 void SetUpVectorCalcDistance(CLI::App& app) {
   auto opt = std::make_shared<VectorCalcDistanceOptions>();
-  auto* cmd = app.add_subcommand("VectorCalcDistance", "Vector add batch debug")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorCalcDistance", "Vector add batch debug")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
@@ -2816,7 +3139,9 @@ void SetUpVectorCalcDistance(CLI::App& app) {
   cmd->add_option("--metric_type", opt->metric_type, "metric type. such as L2 or IP or cosine")->default_val("L2");
   cmd->add_option("--left_vector_size", opt->left_vector_size, "left vector size. <= 0 error")->default_val(2);
   cmd->add_option("--right_vector_size", opt->right_vector_size, "right vector size. <= 0 error")->default_val(3);
-  cmd->add_flag("--is_return_normlize", opt->is_return_normlize, "is return normlize")->default_val(true);
+  cmd->add_option("--is_return_normlize", opt->is_return_normlize, "is return normlize")
+      ->default_val(true)
+      ->default_str("true");
   cmd->callback([opt]() { RunVectorCalcDistance(*opt); });
 }
 
@@ -2829,7 +3154,7 @@ void RunVectorCalcDistance(VectorCalcDistanceOptions const& opt) {
 
 void SetUpCalcDistance(CLI::App& app) {
   auto opt = std::make_shared<CalcDistanceOptions>();
-  auto* cmd = app.add_subcommand("CalcDistance", "Calc distance")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("CalcDistance", "Calc distance")->group("Vector Command");
   cmd->add_option("--vector_data1", opt->vector_data1, "Request parameter vector_data1")->required();
   cmd->add_option("--vector_data2", opt->vector_data2, "Request parameter vector_data2")->required();
   cmd->callback([opt]() { RunCalcDistance(*opt); });
@@ -2839,7 +3164,7 @@ void RunCalcDistance(CalcDistanceOptions const& opt) { client_v2::SendCalcDistan
 
 void SetUpVectorCount(CLI::App& app) {
   auto opt = std::make_shared<VectorCountOptions>();
-  auto* cmd = app.add_subcommand("VectorCount", "Vector count")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("VectorCount", "Vector count")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
@@ -2851,12 +3176,12 @@ void RunVectorCount(VectorCountOptions const& opt) {
   if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
-  client_v2::SendVectorCount(opt);
+  client_v2::SendVectorCount(opt, true);
 }
 
 void SetUpCountVectorTable(CLI::App& app) {
   auto opt = std::make_shared<CountVectorTableOptions>();
-  auto* cmd = app.add_subcommand("CountVectorTable", "Count vector table")->group("Store Manager Commands");
+  auto* cmd = app.add_subcommand("CountVectorTable", "Count vector table")->group("Vector Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
   cmd->add_option("--table_id", opt->table_id, "Request parameter table_id")->required();

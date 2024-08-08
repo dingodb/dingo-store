@@ -38,6 +38,27 @@ namespace client_v2 {
 void SetUpVectorIndexSubCommands(CLI::App &app);
 
 // vector operation
+struct CreateIndexOptions {
+  std::string coor_url;
+  std::string name;
+  int64_t schema_id;
+  int32_t part_count;
+  int64_t replica;
+  bool with_auto_increment;
+  bool with_scalar_schema;
+  std::string vector_index_type;
+  int32_t dimension;
+  std::string metrics_type;
+  int32_t max_elements;
+  int32_t efconstruction;
+  int32_t nlinks;
+  int ncentroids;
+  int nbits_per_idx;
+  int nsubvector;
+};
+void SetUpCreateIndex(CLI::App &app);
+void RunCreateIndex(CreateIndexOptions const &opt);
+
 struct VectorSearchOptions {
   std::string coor_url;
   int64_t region_id;
@@ -317,7 +338,7 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const &opt);
 void SendVectorGetRegionMetrics(VectorGetRegionMetricsOptions const &opt);
 void SendVectorCalcDistance(VectorCalcDistanceOptions const &opt);
 void SendCalcDistance(CalcDistanceOptions const &opt);
-int64_t SendVectorCount(VectorCountOptions const &opt);
+int64_t SendVectorCount(VectorCountOptions const &opt, bool show);
 void CountVectorTable(CountVectorTableOptions const &opt);
 
 }  // namespace client_v2
