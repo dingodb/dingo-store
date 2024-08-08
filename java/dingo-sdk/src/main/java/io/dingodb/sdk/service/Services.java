@@ -315,6 +315,15 @@ public class Services {
     }
 
     @SneakyThrows
+    public static DocumentService documentRegionService(
+        Set<Location> locations, long regionId, int retry
+    ) {
+        Set<Location> locationsStr = Parameters.notEmpty(locations, "locations");
+        ChannelProvider regionProvider = regionCache.get(locationsStr).get(regionId);
+        return new ServiceCaller<>(regionProvider, retry, DEFAULT, DocumentService.Impl::new).getService();
+    }
+
+    @SneakyThrows
     public static UtilService utilService(
             Set<Location> locations, long regionId, int retry
     ) {
