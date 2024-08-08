@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
 #include "proto/document.pb.h"
@@ -60,6 +61,21 @@ class Pretty {
   static void Show(dingodb::pb::document::DocumentGetRegionMetricsResponse &response);
 
   static void Show(const std::vector<dingodb::pb::common::Region> &regions);
+
+  static void Show(const dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id);
+  static void Show(dingodb::pb::meta::TsoResponse &response);
+  static void ShowSchemas(const std::vector<dingodb::pb::meta::Schema> &schemas);
+  static void Show(dingodb::pb::meta::GetSchemasResponse &response);
+  static void Show(dingodb::pb::meta::GetSchemaResponse &response);
+  static void Show(dingodb::pb::meta::GetSchemaByNameResponse &response);
+
+  static void Show(dingodb::pb::meta::GetTablesBySchemaResponse &response);
+
+  static void Show(dingodb::pb::coordinator::GetGCSafePointResponse &response);
+  static void Show(dingodb::pb::coordinator::GetTaskListResponse &response);
+
+  static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
+  static void Show(dingodb::pb::coordinator::QueryRegionResponse &response);
 };
 
 }  // namespace client_v2

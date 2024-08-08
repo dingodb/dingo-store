@@ -983,12 +983,12 @@ void SetUpTxnCommit(CLI::App& app) {
   auto* cmd = app.add_subcommand("TxnCommit", "Txn commit")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--rc", opt->rc, "read commit")->default_val(false)->default_str("false");
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--commit_ts", opt->commit_ts, "Request parameter commit_ts")->required();
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--key2", opt->key2, "Request parameter key2");
-  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
+  cmd->add_option("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false)->default_str("false");
   cmd->callback([opt]() { RunTxnCommit(*opt); });
 }
 
@@ -2543,7 +2543,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     request.set_return_values(true);
   }
   if (opt.primary_lock.empty()) {
-    std::cout << "primary_lock is empty";
+    std::cout << "primary_lock is empty" << std::endl;
     return;
   } else {
     std::string key = opt.primary_lock;
@@ -2554,29 +2554,29 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    std::cout << "start_ts is empty";
+    std::cout << "start_ts is empty" << std::endl;
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    std::cout << "lock_ttl is empty";
+    std::cout << "lock_ttl is empty" << std::endl;
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.for_update_ts == 0) {
-    std::cout << "for_update_ts is empty";
+    std::cout << "for_update_ts is empty" << std::endl;
     return;
   }
   request.set_for_update_ts(opt.for_update_ts);
 
   if (opt.mutation_op.empty()) {
-    std::cout << "mutation_op is empty, mutation MUST be one of [lock]";
+    std::cout << "mutation_op is empty, mutation MUST be one of [lock]" << std::endl;
     return;
   }
   if (opt.key.empty()) {
-    std::cout << "key is empty";
+    std::cout << "key is empty" << std::endl;
     return;
   }
   std::string target_key = opt.key;
@@ -2584,7 +2584,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     target_key = HexToString(opt.key);
   }
   if (opt.value.empty()) {
-    std::cout << "value is empty";
+    std::cout << "value is empty" << std::endl;
     return;
   }
   std::string target_value = opt.value;
@@ -2593,7 +2593,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
   if (opt.mutation_op == "lock") {
     if (opt.value.empty()) {
-      std::cout << "value is empty";
+      std::cout << "value is empty" << std::endl;
       return;
     }
     auto* mutation = request.add_mutations();
@@ -2601,24 +2601,22 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     mutation->set_key(target_key);
     mutation->set_value(target_value);
   } else {
-    std::cout << "mutation_op MUST be [lock]";
+    std::cout << "mutation_op MUST be [lock]" << std::endl;
     return;
   }
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnPessimisticLock", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "txn pessimistic lock failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
-  std::cout << "txn pessimistic lock success.\n";
+  std::cout << "txn pessimistic lock success." << std::endl;
   if (response.txn_result_size() > 0) {
     std::cout << "txn_result:{ \n";
     for (auto const& txn_result : response.txn_result()) {
-      std::cout << "\t " << txn_result.DebugString() << "\n";
+      std::cout << "\t " << txn_result.DebugString() << std::endl;
     }
     std::cout << "}\n";
   } else if (opt.return_values) {
@@ -2645,7 +2643,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     }
   }
   std::cout << std::endl;
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+  // DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
@@ -2726,9 +2724,9 @@ void SendTxnPrewrite(TxnPrewriteOptions const& opt) {
              region.definition().index_parameter().has_document_index_parameter()) {
     DocumentSendTxnPrewrite(opt, region);
   } else {
-    DINGO_LOG(ERROR) << "region_type is invalid";
+    std::cout << "region_type is invalid" << std::endl;
   }
-  std::cout << std::endl;
+  std::cout << "Prewrite success." << std::endl;
 }
 void SendTxnCommit(TxnCommitOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
@@ -2751,19 +2749,19 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    std::cout << "start_ts is empty";
+    std::cout << "start_ts is empty" << std::endl;
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.commit_ts == 0) {
-    std::cout << "commit_ts is empty";
+    std::cout << "commit_ts is empty" << std::endl;
     return;
   }
   request.set_commit_ts(opt.commit_ts);
 
   if (opt.key.empty()) {
-    std::cout << "key is empty";
+    std::cout << "key is empty" << std::endl;
     return;
   }
   std::string target_key = opt.key;
@@ -2771,7 +2769,6 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
     target_key = HexToString(opt.key);
   }
   request.add_keys()->assign(target_key);
-  DINGO_LOG(INFO) << "key: " << opt.key;
 
   if (!opt.key2.empty()) {
     std::string target_key2 = opt.key2;
@@ -2779,10 +2776,7 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
       target_key2 = HexToString(opt.key2);
     }
     request.add_keys()->assign(target_key2);
-    DINGO_LOG(INFO) << "key2: " << opt.key2;
   }
-
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
 
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnCommit", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
@@ -2792,7 +2786,7 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
     return;
   }
   std::cout << "txn commit success, txn_result: " << response.txn_result().DebugString()
-            << " commit_ts: " << response.commit_ts() << "\n";
+            << " commit_ts: " << response.commit_ts() << std::endl;
 }
 
 void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {

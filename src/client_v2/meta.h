@@ -36,20 +36,37 @@ namespace client_v2 {
 
 void SetUpMetaSubCommands(CLI::App &app);
 
-dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id);
-dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id);
+dingodb::pb::meta::TableDefinitionWithId SendGetIndex(int64_t index_id);
+dingodb::pb::meta::TableDefinitionWithId SendGetTable(int64_t table_id);
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
 dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id);
+
+butil::Status SendGetSchema(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema& schema);
+butil::Status SendGetSchemas(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas);
 
 int GetCreateTableId(int64_t &table_id);
 int64_t SendCreateTable(const std::string &table_name, int partition_num);
 void SendDropTable(int64_t table_id);
 int64_t SendGetTableByName(const std::string &table_name);
-int64_t SendGetTableByName(const std::string &table_name);
+butil::Status SendGetTableByName(const std::string &table_name,
+                                 dingodb::pb::meta::TableDefinitionWithId &table_definition);
 std::vector<int64_t> SendGetTablesBySchema();
 
 butil::Status GetSqlTableOrIndexMeta(int64_t table_id, dingodb::pb::meta::TableDefinitionWithId &table_definition);
+butil::Status GetSqlTableOrIndexMeta(std::string table_name, int64_t schema_id,
+                                     dingodb::pb::meta::TableDefinitionWithId &table_definition);
+
+butil::Status GetSqlSchemaMeta(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema);
+butil::Status GetSqlSchemasMeta(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas);
+
 butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinition &table_definition);
+butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id);
+butil::Status GetTableOrIndexDefinition(std::string table_name, int64_t schema_id,
+                                        dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id);
+
+butil::Status GetSchemaDefinition(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema);
+
+butil::Status GetSchemasDefinition(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas);
 
 struct MetaHelloOptions {
   std::string coor_url;
@@ -506,6 +523,8 @@ struct GetRegionByTableOptions {
   std::string coor_url;
   int64_t table_id;
   int64_t tenant_id;
+  std::string table_name;
+  int64_t schema_id;
 };
 void SetUpGetRegionByTable(CLI::App &app);
 void RunGetRegionByTable(GetRegionByTableOptions const &opt);

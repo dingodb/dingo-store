@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "client/coordinator_client_function.h"
 #include "client_v2/coordinator.h"
 #include "client_v2/helper.h"
 #include "client_v2/pretty.h"
@@ -33,6 +34,7 @@
 #include "coordinator/tso_control.h"
 #include "fmt/core.h"
 #include "nlohmann/json.hpp"
+#include "nlohmann/json_fwd.hpp"
 #include "proto/common.pb.h"
 #include "proto/meta.pb.h"
 
@@ -41,7 +43,7 @@ namespace client_v2 {
 void SetUpMetaSubCommands(CLI::App &app) {
   SetUpCreateTable(app);
   SetUpGetTable(app);
-  SetUpGetTableRange(app);
+  // SetUpGetTableRange(app); //not support
   SetUpGetTableByName(app);
   SetUpGenTso(app);
 
@@ -60,7 +62,7 @@ void SetUpMetaSubCommands(CLI::App &app) {
   SetUpGetTenant(app);
 }
 
-dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id) {
+dingodb::pb::meta::TableDefinitionWithId SendGetIndex(int64_t index_id) {
   dingodb::pb::meta::GetTablesRequest request;
   dingodb::pb::meta::GetTablesResponse response;
 
@@ -77,10 +79,10 @@ dingodb::pb::meta::TableDefinition SendGetIndex(int64_t index_id) {
     return {};
   }
 
-  return response.table_definition_with_ids()[0].table_definition();
+  return response.table_definition_with_ids()[0];
 }
 
-dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
+dingodb::pb::meta::TableDefinitionWithId SendGetTable(int64_t table_id) {
   dingodb::pb::meta::GetTableRequest request;
   dingodb::pb::meta::GetTableResponse response;
 
@@ -91,7 +93,7 @@ dingodb::pb::meta::TableDefinition SendGetTable(int64_t table_id) {
 
   InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTable", request, response);
 
-  return response.table_definition_with_id().table_definition();
+  return response.table_definition_with_id();
 }
 
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id) {
@@ -262,6 +264,24 @@ butil::Status SendGetTableByName(const std::string &table_name, int64_t &table_i
   return status;
 }
 
+butil::Status SendGetTableByName(const std::string &table_name,
+                                 dingodb::pb::meta::TableDefinitionWithId &table_definition) {
+  dingodb::pb::meta::GetTableByNameRequest request;
+  dingodb::pb::meta::GetTableByNameResponse response;
+
+  auto *schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  request.set_table_name(table_name);
+
+  auto status =
+      InteractionManager::GetInstance().SendRequestWithoutContext("MetaService", "GetTableByName", request, response);
+  table_definition.CopyFrom(response.table_definition_with_id());
+  return status;
+}
+
 std::vector<int64_t> SendGetTablesBySchema() {
   dingodb::pb::meta::GetTablesBySchemaRequest request;
   dingodb::pb::meta::GetTablesBySchemaResponse response;
@@ -279,6 +299,34 @@ std::vector<int64_t> SendGetTablesBySchema() {
   }
 
   return table_ids;
+}
+
+butil::Status SendGetSchema(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema) {
+  dingodb::pb::meta::GetSchemaRequest request;
+  dingodb::pb::meta::GetSchemaResponse response;
+  request.set_tenant_id(tenant_id);
+
+  auto *id = request.mutable_schema_id();
+  id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+  id->set_entity_id(schema_id);
+
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchema", request, response);
+  schema = response.schema();
+  return status;
+}
+
+butil::Status SendGetSchemas(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas) {
+  dingodb::pb::meta::GetSchemasRequest request;
+  dingodb::pb::meta::GetSchemasResponse response;
+
+  request.set_tenant_id(tenant_id);
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas", request,
+                                                                                                  response);
+  schemas = dingodb::Helper::PbRepeatedToVector(response.schemas());
+  return status;
 }
 
 // 740000000000000000+m+tenants|tenant:{tenantId}|schema:{schemaId}|table:{tableId}+h+tenant:{tenantId}|schema:{schemaIdId}|table:{tableId}|index:{indexId}
@@ -355,7 +403,6 @@ butil::Status GetSqlMeta(std::vector<MetaItem> &metas) {
 
   // decode key and value
   for (const auto &kv : kvs) {
-    // decode key
     MetaItem meta;
     ParseKey(kv.key(), meta.type, meta.parent_id, meta.entity_id);
     meta.value = kv.value();
@@ -379,10 +426,109 @@ butil::Status GetSqlTableOrIndexMeta(int64_t table_id, dingodb::pb::meta::TableD
       break;
     }
   }
+  return butil::Status::OK();
+}
+
+butil::Status GetSqlTableOrIndexMeta(std::string table_name, int64_t schema_id,
+                                     dingodb::pb::meta::TableDefinitionWithId &table_definition) {
+  std::vector<MetaItem> metas;
+  butil::Status status = GetSqlMeta(metas);
+  if (!status.ok()) {
+    return status;
+  }
+
+  for (auto &meta : metas) {
+    dingodb::pb::meta::TableDefinitionWithId temp_definition;
+    if ((meta.type == "Table" || meta.type == "Index") && meta.parent_id == schema_id) {
+      bool ret = temp_definition.ParseFromArray(meta.value.data(), meta.value.size());
+      CHECK(ret) << "parse table definition failed.";
+    }
+    if (temp_definition.table_definition().name() == table_name) {
+      table_definition.CopyFrom(temp_definition);
+      break;
+    }
+  }
 
   return butil::Status::OK();
 }
 
+butil::Status GetSqlSchemaMeta(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema) {
+  std::vector<MetaItem> metas;
+  butil::Status status = GetSqlMeta(metas);
+  if (!status.ok()) {
+    return status;
+  }
+  for (auto &meta : metas) {
+    if (meta.type == "DB" && meta.entity_id == schema_id) {
+      // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
+      auto schema_json = nlohmann::json::parse(meta.value);
+      if (tenant_id == schema_json["tenantId"].get<int64_t>()) {
+        auto *id = schema.mutable_id();
+        id->set_entity_id(meta.entity_id);
+        id->set_parent_entity_id(meta.parent_id);
+        id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+        schema.set_name(schema_json["name"].get<std::string>());
+        schema.set_tenant_id(schema_json["tenantId"].get<int64_t>());
+        for (auto &meta : metas) {
+          if (meta.type == "Table" && meta.parent_id == schema_id) {
+            auto *table_ids = schema.add_table_ids();
+            table_ids->set_entity_id(meta.entity_id);
+            table_ids->set_parent_entity_id(meta.parent_id);
+            table_ids->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+          } else if (meta.type == "Index" && meta.parent_id == schema_id) {
+            auto *index_ids = schema.add_index_ids();
+            index_ids->set_entity_id(meta.entity_id);
+            index_ids->set_parent_entity_id(meta.parent_id);
+            index_ids->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status GetSqlSchemasMeta(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas) {
+  std::vector<MetaItem> metas;
+  butil::Status status = GetSqlMeta(metas);
+  if (!status.ok()) {
+    return status;
+  }
+  for (auto &meta : metas) {
+    if (meta.type == "DB") {
+      // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
+      auto schema_json = nlohmann::json::parse(meta.value);
+      if (tenant_id == schema_json["tenantId"].get<int64_t>()) {
+        dingodb::pb::meta::Schema schema;
+        auto *id = schema.mutable_id();
+        id->set_entity_id(meta.entity_id);
+        id->set_parent_entity_id(meta.parent_id);
+        id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+        schema.set_name(schema_json["name"].get<std::string>());
+        schema.set_tenant_id(schema_json["tenantId"].get<int64_t>());
+        int64_t schema_id = schema_json["schemaId"].get<int64_t>();
+        for (auto &meta : metas) {
+          if (meta.type == "Table" && meta.parent_id == schema_id) {
+            auto *table_ids = schema.add_table_ids();
+            table_ids->set_entity_id(meta.entity_id);
+            table_ids->set_parent_entity_id(meta.parent_id);
+            table_ids->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
+          } else if (meta.type == "Index" && meta.parent_id == schema_id) {
+            auto *index_ids = schema.add_index_ids();
+            index_ids->set_entity_id(meta.entity_id);
+            index_ids->set_parent_entity_id(meta.parent_id);
+            index_ids->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+          }
+        }
+        schemas.push_back(schema);
+      }
+    }
+  }
+
+  return butil::Status::OK();
+}
 butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefinition &table_definition) {
   dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
   auto status = GetSqlTableOrIndexMeta(id, table_definition_with_id);
@@ -395,14 +541,88 @@ butil::Status GetTableOrIndexDefinition(int64_t id, dingodb::pb::meta::TableDefi
     return butil::Status::OK();
   }
 
-  table_definition = SendGetTable(id);
-  if (table_definition.name().empty()) {
-    table_definition = SendGetIndex(id);
+  table_definition_with_id = SendGetTable(id);
+  if (table_definition_with_id.table_definition().name().empty()) {
+    table_definition_with_id = SendGetIndex(id);
   }
-
+  table_definition = table_definition_with_id.table_definition();
   return butil::Status::OK();
 }
 
+butil::Status GetTableOrIndexDefinition(int64_t id,
+                                        dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id) {
+  auto status = GetSqlTableOrIndexMeta(id, table_definition_with_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (table_definition_with_id.table_id().entity_id() > 0) {
+    return butil::Status::OK();
+  }
+
+  table_definition_with_id = SendGetTable(id);
+  if (table_definition_with_id.table_id().entity_id() == 0) {
+    table_definition_with_id = SendGetIndex(id);
+  }
+  if (table_definition_with_id.table_id().entity_id() == 0) {
+    return butil::Status(dingodb::pb::error::ETABLE_NOT_FOUND, "Not find table");
+  }
+  return butil::Status::OK();
+}
+
+butil::Status GetTableOrIndexDefinition(std::string table_name, int64_t schema_id,
+                                        dingodb::pb::meta::TableDefinitionWithId &table_definition_with_id) {
+  auto status = GetSqlTableOrIndexMeta(table_name, schema_id, table_definition_with_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (table_definition_with_id.table_id().entity_id() > 0) {
+    return butil::Status::OK();
+  }
+
+  SendGetTableByName(table_name, table_definition_with_id);
+  if (table_definition_with_id.table_id().entity_id() == 0) {
+    return butil::Status(dingodb::pb::error::ETABLE_NOT_FOUND, "Not find table");
+  }
+  return butil::Status::OK();
+}
+
+butil::Status GetSchemaDefinition(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema) {
+  auto status = GetSqlSchemaMeta(tenant_id, schema_id, schema);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (schema.id().entity_id() > 0) {
+    return butil::Status::OK();
+  }
+
+  status = SendGetSchema(tenant_id, schema_id, schema);
+  if (!status.ok()) {
+    return status;
+  }
+  if (schema.id().entity_id() == 0) {
+    return butil::Status(dingodb::pb::error::ESCHEMA_NOT_FOUND, "Not find schema");
+  }
+  return butil::Status::OK();
+}
+butil::Status GetSchemasDefinition(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas) {
+  auto status = GetSqlSchemasMeta(tenant_id, schemas);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (schemas.size() > 0) {
+    return butil::Status::OK();
+  }
+
+  status = SendGetSchemas(tenant_id, schemas);
+  if (schemas.size() == 0) {
+    return butil::Status(dingodb::pb::error::ESCHEMA_NOT_FOUND, "Not find schema");
+  }
+  return butil::Status::OK();
+}
 void SetUpMetaHello(CLI::App &app) {
   auto opt = std::make_shared<MetaHelloOptions>();
   auto *cmd = app.add_subcommand("MetaHello", "Meta hello")->group("Meta Command");
@@ -470,7 +690,7 @@ void SetUpGetSchema(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaOptions>();
   auto *cmd = app.add_subcommand("GetSchema", "Get schema ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->default_val(0);
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunGetSchema(*opt); });
 }
@@ -479,41 +699,19 @@ void RunGetSchema(GetSchemaOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::meta::GetSchemaRequest request;
-  dingodb::pb::meta::GetSchemaResponse response;
-  request.set_tenant_id(opt.tenant_id);
-
-  auto *schema_id = request.mutable_schema_id();
-  schema_id->set_entity_type(dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_parent_entity_id(dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
-  schema_id->set_entity_id(opt.schema_id);
-
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchema", request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get schema failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+  dingodb::pb::meta::Schema schema;
+  auto status = GetSchemaDefinition(opt.tenant_id, opt.schema_id, schema);
+  if (Pretty::ShowError(status)) {
     return;
   }
-
-  std::cout << "tenant_id=[" << response.schema().tenant_id() << "]"
-            << "schema_id=[" << response.schema().id().entity_id() << "]"
-            << "schema_name=[" << response.schema().name() << "]"
-            << "child_table_count=" << response.schema().table_ids_size() << std::endl;
-  for (const auto &child_table_id : response.schema().table_ids()) {
-    std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
-  }
-  for (const auto &child_table_id : response.schema().index_ids()) {
-    std::cout << "child index_id=[" << child_table_id.entity_id() << "]" << std::endl;
-  }
+  Pretty::ShowSchemas({schema});
 }
 
 void SetUpGetSchemas(CLI::App &app) {
   auto opt = std::make_shared<GetSchemasOptions>();
-  auto *cmd = app.add_subcommand("GetSchemas", "Get schema ")->group("Meta Command");
+  auto *cmd = app.add_subcommand("GetSchemas", "Get schemas")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->default_val(0);
   cmd->callback([opt]() { RunGetSchemas(*opt); });
 }
 
@@ -521,34 +719,29 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::meta::GetSchemasRequest request;
-  dingodb::pb::meta::GetSchemasResponse response;
-
-  request.set_tenant_id(opt.tenant_id);
-
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas", request,
-                                                                                                  response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get schemas failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+  std::vector<dingodb::pb::meta::Schema> schemas;
+  auto status = GetSchemasDefinition(opt.tenant_id, schemas);
+  if (Pretty::ShowError(status)) {
     return;
   }
-  for (const auto &schema : response.schemas()) {
-    std::cout << "schema_id=[" << schema.id().entity_id() << "]"
-              << "schema_name=[" << schema.name() << "]"
-              << "child_table_count=" << schema.table_ids_size() << std::endl;
-    for (const auto &child_table_id : schema.table_ids()) {
-      std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
-    }
-  }
+  Pretty::ShowSchemas(schemas);
+
+  // dingodb::pb::meta::GetSchemasRequest request;
+  // dingodb::pb::meta::GetSchemasResponse response;
+
+  // request.set_tenant_id(opt.tenant_id);
+
+  // auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas",
+  // request,
+  //                                                                                                 response);
+  // Pretty::Show(response);
 }
 
 void SetUpGetSchemaByName(CLI::App &app) {
   auto opt = std::make_shared<GetSchemaByNameOptions>();
   auto *cmd = app.add_subcommand("GetSchemaByName", "Get schema by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->default_val(0);
   cmd->add_option("--name", opt->name, "Request parameter schema name")->required();
   cmd->callback([opt]() { RunGetSchemaByName(*opt); });
 }
@@ -565,20 +758,7 @@ void RunGetSchemaByName(GetSchemaByNameOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemaByName",
                                                                                                   request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get schema by name failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-
-  std::cout << "tenant_id=[" << response.schema().tenant_id() << "]"
-            << "schema_id=[" << response.schema().id().entity_id() << "]"
-            << "schema_name=[" << response.schema().name() << "]"
-            << "child_table_count=" << response.schema().table_ids_size() << std::endl;
-  for (const auto &child_table_id : response.schema().table_ids()) {
-    std::cout << "child table_id=[" << child_table_id.entity_id() << "]" << std::endl;
-  }
+  Pretty::Show(response);
 }
 
 void SetUpGetTablesBySchema(CLI::App &app) {
@@ -607,20 +787,8 @@ void RunGetTablesBySchema(GetTablesBySchemaOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTablesBySchema",
                                                                                                   request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get tables by schema, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-
-  for (const auto &table_definition_with_id : response.table_definition_with_ids()) {
-    std::cout << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-              << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
-              << table_definition_with_id.table_definition().columns_size() << "]" << std::endl;
-  }
-
-  std::cout << "table_count=" << response.table_definition_with_ids_size() << std::endl;
+  Pretty::Show(response);
+  std::cout << "\n Summary: table_count=" << response.table_definition_with_ids_size() << std::endl;
 }
 
 void SetUpGetTablesCount(CLI::App &app) {
@@ -731,7 +899,7 @@ void RunCreateTable(CreateTableOptions const &opt) {
 
   // string name = 1;
   auto *table_definition = request.mutable_table_definition();
-  table_definition->set_name(opt.name);
+  table_definition->set_name(Helper::ToUpperCase(opt.name));
 
   table_definition->set_replica(opt.replica);
   if (opt.enable_rocks_engine) {
@@ -936,7 +1104,6 @@ void RunCreateSchema(CreateSchemaOptions const &opt) {
     return;
   }
   std::cout << "Create schema success." << std::endl;
-  std::cout << "Schema: " << response.schema().DebugString() << std::endl;
 }
 
 void SetUpDropSchema(CLI::App &app) {
@@ -967,7 +1134,7 @@ void RunDropSchema(DropSchemaOptions const &opt) {
               << response.error().errmsg();
     return;
   }
-  std::cout << "Drop schema_id: " << opt.schema_id << " success." << std::endl;
+  std::cout << "Drop schema: " << opt.schema_id << " success." << std::endl;
 }
 
 void SetUpGetTable(CLI::App &app) {
@@ -977,7 +1144,7 @@ void SetUpGetTable(CLI::App &app) {
   cmd->add_option("--id", opt->id, "Request parameter table id")
       ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
       ->required();
-  cmd->add_flag("--is_index", opt->is_index, "Request parameter is_index");
+  cmd->add_option("--is_index", opt->is_index, "Request parameter is_index")->default_val(false)->default_str("false");
   cmd->callback([opt]() { RunGetTable(*opt); });
 }
 
@@ -985,153 +1152,12 @@ void RunGetTable(GetTableOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::meta::GetTableRequest request;
-  dingodb::pb::meta::GetTableResponse response;
-
-  auto *table_id = request.mutable_table_id();
-  if (opt.is_index) {
-    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
-  } else {
-    table_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_TABLE);
-  }
-  table_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
-
-  table_id->set_entity_id(opt.id);
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTable", request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get table failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+  dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
+  auto status = GetTableOrIndexDefinition(opt.id, table_definition_with_id);
+  if (Pretty::ShowError(status)) {
     return;
   }
-  std::cout << "table_definition_with_id { " << std::endl;
-  std::cout << "  tenant_id: " << response.table_definition_with_id().tenant_id() << std::endl;
-
-  std::cout << "  table_id {" << std::endl;
-  std::cout << "\t entity_type: "
-            << dingodb::pb::meta::EntityType_Name(response.table_definition_with_id().table_id().entity_type())
-            << std::endl;
-
-  std::cout << "\t parent_entity_id: " << response.table_definition_with_id().table_id().parent_entity_id()
-            << std::endl;
-
-  std::cout << "\t entity_id: " << response.table_definition_with_id().table_id().entity_id() << std::endl;
-  std::cout << "  }" << std::endl;
-
-  std::cout << "  table_definition {" << std::endl;
-  std::cout << "\t name: " << response.table_definition_with_id().table_definition().name() << "\n"
-            << "\t version: " << response.table_definition_with_id().table_definition().version() << "\n"
-            << "\t ttl: " << response.table_definition_with_id().table_definition().ttl() << "\n"
-            << "\t auto_increment: " << response.table_definition_with_id().table_definition().auto_increment() << "\n"
-            << "\t create_sql: " << response.table_definition_with_id().table_definition().create_sql() << "\n"
-            << "\t charset: " << response.table_definition_with_id().table_definition().charset() << "\n"
-            << "\t collate: " << response.table_definition_with_id().table_definition().collate() << "\n"
-            << "\t replica: " << response.table_definition_with_id().table_definition().replica() << "\n"
-            << "\t engine"
-            << dingodb::pb::common::Engine_Name(response.table_definition_with_id().table_definition().engine()) << "\n"
-            << "\t create_timestamp: " << response.table_definition_with_id().table_definition().create_timestamp()
-            << "\n"
-            << "\t update_timestamp: " << response.table_definition_with_id().table_definition().update_timestamp()
-            << "\n"
-            << "\t delete_timestamp:" << response.table_definition_with_id().table_definition().delete_timestamp()
-            << "\n"
-            << "\t revision: " << response.table_definition_with_id().table_definition().revision() << "\n";
-  for (auto const &columns : response.table_definition_with_id().table_definition().columns()) {
-    std::cout << "\t columns { \n";
-    std::cout << "\t \t name:" << columns.name() << "\n"
-              << "\t \t sql_type:" << columns.sql_type() << "\n"
-              << "\t \t element_type:" << columns.element_type() << "\n"
-              << "\t \t precision: " << columns.precision() << "\n"
-              << "\t \t scale: " << columns.scale() << "\n"
-              << "\t \t nullable: " << columns.nullable() << "\n"
-              << "\t \t indexOfKey: " << columns.indexofkey() << "\n"
-              << "\t \t has_default_val: " << columns.has_default_val() << "\n"
-              << "\t \t default_val: " << columns.default_val() << "\n"
-              << "\t \t is_auto_increment: " << columns.is_auto_increment() << "\n"
-              << "\t \t state: " << columns.state() << "\n"
-              << "\t \t comment: " << columns.comment() << "\n"
-              << "\t \t create_version: " << columns.create_version() << "\n"
-              << "\t \t update_version: " << columns.update_version() << "\n"
-              << "\t \t delete_version: " << columns.delete_version() << "\n"
-              << "\t }\n";
-  }
-  for (auto const &t : response.table_definition_with_id().table_definition().properties()) {
-    std::cout << "\t properties { key:" << t.first << " value:" << t.second << "} \n";
-  }
-  if (response.table_definition_with_id().table_definition().index_parameter().index_type() ==
-      dingodb::pb::common::INDEX_TYPE_VECTOR) {
-    const auto &vector_index_parameter =
-        response.table_definition_with_id().table_definition().index_parameter().vector_index_parameter();
-    std::cout << "\t vector_index_parameter{ \n";
-    std::cout << "\t \t vector_index_type: "
-              << dingodb::pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()) << "\n";
-    if (vector_index_parameter.has_flat_parameter()) {
-      std::cout << "\t \t flat_param: { dimension: " << vector_index_parameter.flat_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.flat_parameter().metric_type())
-                << " }\n";
-    } else if (vector_index_parameter.has_ivf_flat_parameter()) {
-      std::cout << "\t \t ivf_flat_param: { dimension: " << vector_index_parameter.ivf_flat_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_flat_parameter().metric_type())
-                << " , ncentroids: " << vector_index_parameter.ivf_flat_parameter().ncentroids() << " }\n";
-    } else if (vector_index_parameter.has_ivf_pq_parameter()) {
-      std::cout << "\t \t ivf_pg_param: { dimension: " << vector_index_parameter.ivf_pq_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_pq_parameter().metric_type())
-                << " , ncentroids: " << vector_index_parameter.ivf_pq_parameter().ncentroids()
-                << " , nsubvector: " << vector_index_parameter.ivf_pq_parameter().nsubvector()
-                << " , bucket_init_size: " << vector_index_parameter.ivf_pq_parameter().bucket_init_size()
-                << " , bucket_max_size: " << vector_index_parameter.ivf_pq_parameter().bucket_max_size()
-                << " , nbits_per_idx: " << vector_index_parameter.ivf_pq_parameter().nbits_per_idx() << " }\n";
-    } else if (vector_index_parameter.has_hnsw_parameter()) {
-      std::cout << "\t \t hnsw_param: { dimension: " << vector_index_parameter.hnsw_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.hnsw_parameter().metric_type())
-                << " , ef_construction: " << vector_index_parameter.hnsw_parameter().efconstruction()
-                << " , nlinks: " << vector_index_parameter.hnsw_parameter().nlinks()
-                << " , max_elements: " << vector_index_parameter.hnsw_parameter().max_elements() << " }\n";
-    } else if (vector_index_parameter.has_diskann_parameter()) {
-#if 0
-      std::cout << "\t \t diskann_param: { dimension: " << vector_index_parameter.diskann_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.diskann_parameter().metric_type())
-                << " , num_trees: " << vector_index_parameter.diskann_parameter().num_trees()
-                << " , num_neighbors: " << vector_index_parameter.diskann_parameter().num_neighbors()
-                << " , num_threads: " << vector_index_parameter.diskann_parameter().num_trees() << " }\n";
-#endif
-    } else if (vector_index_parameter.has_bruteforce_parameter()) {
-      std::cout << "\t \t bruteforce_param: { dimension: " << vector_index_parameter.bruteforce_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.bruteforce_parameter().metric_type())
-                << " }\n";
-    }
-    std::cout << "\t \t scalar_schema:{\n";
-    for (auto const &t : vector_index_parameter.scalar_schema().fields()) {
-      std::cout << "\t \t \t key: " << t.key()
-                << " , field_type: " << dingodb::pb::common::ScalarFieldType_Name(t.field_type())
-                << " , enable_speed_up: " << t.enable_speed_up() << "\n";
-    }
-    std::cout << "\t \t }\n";
-
-    std::cout << "\t } \n";
-  } else if (response.table_definition_with_id().table_definition().index_parameter().index_type() ==
-             dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
-    const auto &document_index_parameter =
-        response.table_definition_with_id().table_definition().index_parameter().document_index_parameter();
-    std::cout << "\t document_index_parameter{ \n";
-    std::cout << "\t \t json_parameter: " << document_index_parameter.json_parameter() << "\n";
-    std::cout << "\t \t scalar_schema:{\n";
-    for (auto const &t : document_index_parameter.scalar_schema().fields()) {
-      std::cout << "\t \t \t key: " << t.key()
-                << " , field_type: " << dingodb::pb::common::ScalarFieldType_Name(t.field_type())
-                << " , enable_speed_up: " << t.enable_speed_up() << "\n";
-    }
-    std::cout << "\t \t }\n";
-    std::cout << "\t }\n";
-  }
-  std::cout << "  }" << std::endl;
+  Pretty::Show(table_definition_with_id);
 }
 
 void SetUpGetTableByName(CLI::App &app) {
@@ -1139,7 +1165,9 @@ void SetUpGetTableByName(CLI::App &app) {
   auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema_id")->required();
-  cmd->add_option("--name", opt->name, "Request parameter name")->required();
+  cmd->add_option("--name", opt->name, "Request parameter name")->required()->transform([](const std::string &str) {
+    return Helper::ToUpperCase(str);
+  });
   cmd->callback([opt]() { RunGetTableByName(*opt); });
 }
 
@@ -1147,154 +1175,12 @@ void RunGetTableByName(GetTableByNameOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::meta::GetTableByNameRequest request;
-  dingodb::pb::meta::GetTableByNameResponse response;
-
-  request.set_table_name(opt.name);
-  auto *schema_id = request.mutable_schema_id();
-  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
-  schema_id->set_entity_id(opt.schema_id);
-
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTableByName",
-                                                                                                  request, response);
-
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "get table by name failed, error: "
-                     << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
-                     << " " << response.error().errmsg();
-    std::cout << "get table by name failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+  dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
+  auto status = GetTableOrIndexDefinition(opt.name, opt.schema_id, table_definition_with_id);
+  if (Pretty::ShowError(status)) {
     return;
   }
-
-  std::cout << "table_definition_with_id { " << std::endl;
-  std::cout << "  tenant_id: " << response.table_definition_with_id().tenant_id() << std::endl;
-
-  std::cout << "  table_id {" << std::endl;
-  std::cout << "\t entity_type: "
-            << dingodb::pb::meta::EntityType_Name(response.table_definition_with_id().table_id().entity_type())
-            << std::endl;
-
-  std::cout << "\t parent_entity_id: " << response.table_definition_with_id().table_id().parent_entity_id()
-            << std::endl;
-
-  std::cout << "\t entity_id: " << response.table_definition_with_id().table_id().entity_id() << " }" << std::endl;
-  std::cout << "  }" << std::endl;
-
-  std::cout << "  table_definition {" << std::endl;
-  std::cout << "\t name: " << response.table_definition_with_id().table_definition().name() << "\n"
-            << "\t version: " << response.table_definition_with_id().table_definition().version() << "\n"
-            << "\t ttl: " << response.table_definition_with_id().table_definition().ttl() << "\n"
-            << "\t auto_increment: " << response.table_definition_with_id().table_definition().auto_increment() << "\n"
-            << "\t create_sql: " << response.table_definition_with_id().table_definition().create_sql() << "\n"
-            << "\t charset: " << response.table_definition_with_id().table_definition().charset() << "\n"
-            << "\t collate: " << response.table_definition_with_id().table_definition().collate() << "\n"
-            << "\t replica: " << response.table_definition_with_id().table_definition().replica() << "\n"
-            << "\t engine"
-            << dingodb::pb::common::Engine_Name(response.table_definition_with_id().table_definition().engine()) << "\n"
-            << "\t create_timestamp: " << response.table_definition_with_id().table_definition().create_timestamp()
-            << "\n"
-            << "\t update_timestamp: " << response.table_definition_with_id().table_definition().update_timestamp()
-            << "\n"
-            << "\t delete_timestamp:" << response.table_definition_with_id().table_definition().delete_timestamp()
-            << "\n"
-            << "\t revision: " << response.table_definition_with_id().table_definition().revision() << "\n";
-  for (auto const &columns : response.table_definition_with_id().table_definition().columns()) {
-    std::cout << "\t columns { \n";
-    std::cout << "\t \t name:" << columns.name() << "\n"
-              << "\t \t sql_type:" << columns.sql_type() << "\n"
-              << "\t \t element_type:" << columns.element_type() << "\n"
-              << "\t \t precision: " << columns.precision() << "\n"
-              << "\t \t scale: " << columns.scale() << "\n"
-              << "\t \t nullable: " << columns.nullable() << "\n"
-              << "\t \t indexOfKey: " << columns.indexofkey() << "\n"
-              << "\t \t has_default_val: " << columns.has_default_val() << "\n"
-              << "\t \t default_val: " << columns.default_val() << "\n"
-              << "\t \t is_auto_increment: " << columns.is_auto_increment() << "\n"
-              << "\t \t state: " << columns.state() << "\n"
-              << "\t \t comment: " << columns.comment() << "\n"
-              << "\t \t create_version: " << columns.create_version() << "\n"
-              << "\t \t update_version: " << columns.update_version() << "\n"
-              << "\t \t delete_version: " << columns.delete_version() << "\n"
-              << "\t }\n";
-  }
-  for (auto const &t : response.table_definition_with_id().table_definition().properties()) {
-    std::cout << "\t properties { key:" << t.first << " value:" << t.second << "} \n";
-  }
-  if (response.table_definition_with_id().table_definition().index_parameter().index_type() ==
-      dingodb::pb::common::INDEX_TYPE_VECTOR) {
-    const auto &vector_index_parameter =
-        response.table_definition_with_id().table_definition().index_parameter().vector_index_parameter();
-    std::cout << "\t vector_index_parameter{ \n";
-    std::cout << "\t \t vector_index_type: "
-              << dingodb::pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()) << "\n";
-    if (vector_index_parameter.has_flat_parameter()) {
-      std::cout << "\t \t flat_param: { dimension: " << vector_index_parameter.flat_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.flat_parameter().metric_type())
-                << " }\n";
-    } else if (vector_index_parameter.has_ivf_flat_parameter()) {
-      std::cout << "\t \t ivf_flat_param: { dimension: " << vector_index_parameter.ivf_flat_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_flat_parameter().metric_type())
-                << " , ncentroids: " << vector_index_parameter.ivf_flat_parameter().ncentroids() << " }\n";
-    } else if (vector_index_parameter.has_ivf_pq_parameter()) {
-      std::cout << "\t \t ivf_pg_param: { dimension: " << vector_index_parameter.ivf_pq_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_pq_parameter().metric_type())
-                << " , ncentroids: " << vector_index_parameter.ivf_pq_parameter().ncentroids()
-                << " , nsubvector: " << vector_index_parameter.ivf_pq_parameter().nsubvector()
-                << " , bucket_init_size: " << vector_index_parameter.ivf_pq_parameter().bucket_init_size()
-                << " , bucket_max_size: " << vector_index_parameter.ivf_pq_parameter().bucket_max_size()
-                << " , nbits_per_idx: " << vector_index_parameter.ivf_pq_parameter().nbits_per_idx() << " }\n";
-    } else if (vector_index_parameter.has_hnsw_parameter()) {
-      std::cout << "\t \t hnsw_param: { dimension: " << vector_index_parameter.hnsw_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.hnsw_parameter().metric_type())
-                << " , ef_construction: " << vector_index_parameter.hnsw_parameter().efconstruction()
-                << " , nlinks: " << vector_index_parameter.hnsw_parameter().nlinks()
-                << " , max_elements: " << vector_index_parameter.hnsw_parameter().max_elements() << " }\n";
-    } else if (vector_index_parameter.has_diskann_parameter()) {
-#if 0
-      std::cout << "\t \t diskann_param: { dimension: " << vector_index_parameter.diskann_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.diskann_parameter().metric_type())
-                << " , num_trees: " << vector_index_parameter.diskann_parameter().num_trees()
-                << " , num_neighbors: " << vector_index_parameter.diskann_parameter().num_neighbors()
-                << " , num_threads: " << vector_index_parameter.diskann_parameter().num_trees() << " }\n";
-#endif
-    } else if (vector_index_parameter.has_bruteforce_parameter()) {
-      std::cout << "\t \t bruteforce_param: { dimension: " << vector_index_parameter.bruteforce_parameter().dimension()
-                << " , metric_type: "
-                << dingodb::pb::common::MetricType_Name(vector_index_parameter.bruteforce_parameter().metric_type())
-                << " }\n";
-    }
-    std::cout << "\t \t scalar_schema:{\n";
-    for (auto const &t : vector_index_parameter.scalar_schema().fields()) {
-      std::cout << "\t \t \t key: " << t.key()
-                << " , field_type: " << dingodb::pb::common::ScalarFieldType_Name(t.field_type())
-                << " , enable_speed_up: " << t.enable_speed_up() << "\n";
-    }
-    std::cout << "\t \t }\n";
-
-    std::cout << "\t } \n";
-  } else if (response.table_definition_with_id().table_definition().index_parameter().index_type() ==
-             dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
-    const auto &document_index_parameter =
-        response.table_definition_with_id().table_definition().index_parameter().document_index_parameter();
-    std::cout << "\t document_index_parameter{ \n";
-    std::cout << "\t \t json_parameter: " << document_index_parameter.json_parameter() << "\n";
-    std::cout << "\t \t scalar_schema:{\n";
-    for (auto const &t : document_index_parameter.scalar_schema().fields()) {
-      std::cout << "\t \t \t key: " << t.key()
-                << " , field_type: " << dingodb::pb::common::ScalarFieldType_Name(t.field_type())
-                << " , enable_speed_up: " << t.enable_speed_up() << "\n";
-    }
-    std::cout << "\t \t }\n";
-    std::cout << "\t }\n";
-  }
-  std::cout << "  }" << std::endl;
+  Pretty::Show(table_definition_with_id);
 }
 
 void SetUpGetTableRange(CLI::App &app) {
@@ -3019,22 +2905,7 @@ void RunGenTso(GenTsoOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("TsoService", request,
                                                                                                   response);
-  if (response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    Pretty::ShowError(response.error());
-    return;
-  }
-
-  auto lambda_tso_2_timestamp_function = [](const ::dingodb::pb::meta::TsoTimestamp &tso) {
-    return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
-  };
-
-  for (int i = 0; i < 10; i++) {
-    dingodb::pb::meta::TsoTimestamp tso;
-    tso.set_physical(response.start_timestamp().physical());
-    tso.set_logical(response.start_timestamp().logical() + i);
-    int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
-    std::cout << "ts: " << time_safe_ts << std::endl;
-  }
+  Pretty::Show(response);
 }
 
 void SetUpResetTso(CLI::App &app) {
@@ -3120,9 +2991,11 @@ void SetUpGetRegionByTable(CLI::App &app) {
   auto *cmd = app.add_subcommand("GetRegionByTable", "Get table")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--table_id", opt->table_id, "Request parameter table id")
-      ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()))
-      ->required();
-  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id")->default_val(0);
+      ->check(CLI::Range(1, std::numeric_limits<int32_t>::max()));
+  cmd->add_option("--table_name", opt->table_name, "Request parameter table name")
+      ->transform([](const std::string &str) { return Helper::ToUpperCase(str); });
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id")->default_val(0);
+  cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->default_val(0);
   cmd->callback([opt]() { RunGetRegionByTable(*opt); });
 }
 
@@ -3130,8 +3003,24 @@ void RunGetRegionByTable(GetRegionByTableOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-
+  if (opt.table_id == 0 && opt.table_name.empty()) {
+    std::cout << "Must set table_id or table_name." << std::endl;
+    return;
+  }
   int64_t table_id = opt.table_id;
+  if (opt.table_id == 0) {
+    if (opt.schema_id == 0) {
+      std::cout << "Must schema_id." << std::endl;
+      return;
+    }
+    dingodb::pb::meta::TableDefinitionWithId table_definition_with_id;
+    auto status = GetTableOrIndexDefinition(opt.table_name, opt.schema_id, table_definition_with_id);
+    if (Pretty::ShowError(status)) {
+      return;
+    }
+    table_id = table_definition_with_id.table_id().entity_id();
+    // GetTableOrIndexDefinition(opt.table_id, )
+  }
   // get regionmap
   dingodb::pb::coordinator::GetRegionMapRequest request;
   dingodb::pb::coordinator::GetRegionMapResponse response;

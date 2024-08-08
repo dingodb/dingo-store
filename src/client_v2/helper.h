@@ -113,6 +113,11 @@ class CoordinatorInteraction {
 
 class Helper {
  public:
+  static std::string ToUpperCase(const std::string& input) {
+    std::string output = input;
+    std::transform(output.begin(), output.end(), output.begin(), [](unsigned char c) { return std::toupper(c); });
+    return output;
+  }
   static std::string Ltrim(const std::string& s, const std::string& delete_str) {
     size_t start = s.find_first_not_of(delete_str);
     return (start == std::string::npos) ? "" : s.substr(start);

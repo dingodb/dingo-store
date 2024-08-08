@@ -44,6 +44,7 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
 
   // executor
   SetUpCreateExecutor(app);
+  SetUpDeleteExecutor(app);
   SetUpExecutorHeartbeat(app);
   SetUpGetExecutorMap(app);
 }
@@ -789,12 +790,11 @@ void RunCreateExecutor(CreateExecutorOption const &opt) {
     return;
   }
   std::cout << "Create executor success." << std::endl;
-  std::cout << "executors: " << response.executor().DebugString() << std::endl;
 }
 
 void SetUpDeleteExecutor(CLI::App &app) {
   auto opt = std::make_shared<DeleteExecutorOption>();
-  auto *cmd = app.add_subcommand("CreateStore", "Create store ")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("DeleteExcutor", "Delete executor ")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--keyring", opt->keyring, "Request parameter keyring")->required();
   cmd->add_option("--user", opt->user, "Request parameter user")->required();
@@ -814,10 +814,15 @@ void RunDeleteExecutor(DeleteExecutorOption const &opt) {
   request.mutable_executor()->mutable_executor_user()->set_user(opt.user);
   request.mutable_executor()->mutable_executor_user()->set_keyring(opt.keyring);
 
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateExecutor", request,
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("DeleteExecutor", request,
                                                                                               response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Delete executor  failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << "Delete executor success." << std::endl;
 }
 
 void SetUpCreateExecutorUser(CLI::App &app) {
@@ -958,13 +963,10 @@ void RunExecutorHeartbeat(ExecutorHeartbeatOption const &opt) {
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Executor Heartbeat table error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "Executor Heartbeat success." << std::endl;
-  for (auto const &executor : response.executormap().executors()) {
-    std::cout << "executor: " << executor.DebugString() << std::endl;
-  }
 }
 
 void SetUpGetStoreMap(CLI::App &app) {
@@ -1016,13 +1018,11 @@ void RunGetExecutorMap(GetExecutorMapOption const &opt) {
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Get executor map  failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "Get executor map success." << std::endl;
-  for (auto const &executor : response.executormap().executors()) {
-    std::cout << "executor: " << executor.DebugString() << std::endl;
-  }
+  Pretty::Show(response);
 }
 
 void SetUpGetDeleteRegionMap(CLI::App &app) {
@@ -1191,23 +1191,24 @@ void RunQueryRegion(QueryRegionOption const &opt) {
   request.set_region_id(opt.id);
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("QueryRegion", request, response);
-
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "query region " << opt.id << " failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-  auto region = response.region();
-  std::cout << "Region id=" << region.id() << " name=" << region.definition().name()
-            << " state=" << dingodb::pb::common::RegionState_Name(region.state())
-            << " leader_store_id=" << region.leader_store_id()
-            << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
-            << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
-            << std::endl;
-  std::cout << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]"
-            << std::endl;
-  std::cout << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]" << std::endl;
+  Pretty::Show(response);
+  // if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+  //   std::cout << "query region " << opt.id << " failed, error: "
+  //             << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+  //             << response.error().errmsg();
+  //   return;
+  // }
+  // auto region = response.region();
+  // std::cout << "Region id=" << region.id() << " name=" << region.definition().name()
+  //           << " state=" << dingodb::pb::common::RegionState_Name(region.state())
+  //           << " leader_store_id=" << region.leader_store_id()
+  //           << " replica_state=" << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status())
+  //           << " raft_status=" << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
+  //           << std::endl;
+  // std::cout << "start_key=[" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << "]"
+  //           << std::endl;
+  // std::cout << "  end_key=[" << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]" <<
+  // std::endl;
 }
 
 void SetUpCreateRegion(CLI::App &app) {
@@ -1619,7 +1620,7 @@ void RunSplitRegion(SplitRegionOption const &opt) {
   if (opt.split_from_id > 0) {
     request.mutable_split_request()->set_split_from_region_id(opt.split_from_id);
   } else {
-    std::cout << "split_from_id is empty";
+    std::cout << "split_from_id is empty" << std::endl;
     return;
   }
 
@@ -1627,7 +1628,6 @@ void RunSplitRegion(SplitRegionOption const &opt) {
     std::string split_key = dingodb::Helper::HexToString(opt.split_key);
     request.mutable_split_request()->set_split_watershed_key(split_key);
   } else {
-    DINGO_LOG(INFO) << "split_key is empty, will auto generate from the mid between start_key and end_key";
     // query the region
     dingodb::pb::coordinator::QueryRegionRequest query_request;
     dingodb::pb::coordinator::QueryRegionResponse query_response;
@@ -1638,17 +1638,17 @@ void RunSplitRegion(SplitRegionOption const &opt) {
     if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
       std::cout << "query region failed, error: "
                 << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
-                << " " << query_response.error().errmsg();
+                << " " << query_response.error().errmsg() << std::endl;
       return;
     }
 
     if (query_response.region().definition().range().start_key().empty()) {
-      std::cout << "split from region " << opt.split_from_id << " has no start_key";
+      std::cout << "split from region " << opt.split_from_id << " has no start_key" << std::endl;
       return;
     }
 
     if (query_response.region().definition().range().end_key().empty()) {
-      std::cout << "split from region " << opt.split_from_id << " has no end_key";
+      std::cout << "split from region " << opt.split_from_id << " has no end_key" << std::endl;
       return;
     }
 
@@ -1685,7 +1685,8 @@ void RunSplitRegion(SplitRegionOption const &opt) {
                 << dingodb::Helper::StringToHex(real_mid)
                 << ", query_response.region()_id = " << query_response.region().id() << " start_key="
                 << dingodb::Helper::StringToHex(query_response.region().definition().range().start_key())
-                << ", end_key=" << dingodb::Helper::StringToHex(query_response.region().definition().range().end_key());
+                << ", end_key=" << dingodb::Helper::StringToHex(query_response.region().definition().range().end_key())
+                << std::endl;
       return;
     }
   }
@@ -1702,7 +1703,7 @@ void RunSplitRegion(SplitRegionOption const &opt) {
               << " store_create_region=" << opt.store_create_region << " with watershed key ["
               << dingodb::Helper::StringToHex(request.split_request().split_watershed_key()) << "] failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "split from region " << opt.split_from_id << " to region " << opt.split_to_id
@@ -1734,14 +1735,14 @@ void RunMergeRegion(MergeRegionOption const &opt) {
   if (opt.target_id > 0) {
     request.mutable_merge_request()->set_target_region_id(opt.target_id);
   } else {
-    std::cout << "target_id is empty";
+    std::cout << "target_id is empty" << std::endl;
     return;
   }
 
   if (opt.source_id > 0) {
     request.mutable_merge_request()->set_source_region_id(opt.source_id);
   } else {
-    std::cout << "source_id is empty";
+    std::cout << "source_id is empty" << std::endl;
     return;
   }
 
@@ -1752,7 +1753,7 @@ void RunMergeRegion(MergeRegionOption const &opt) {
     std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id
               << "] failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "merge from source_region " << opt.source_id << " to target_region " << opt.target_id << " success"
@@ -1783,7 +1784,7 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "get store map failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
+              << response.error().errmsg() << std::endl;
     return;
   }
   dingodb::pb::common::Peer new_peer;
@@ -1812,7 +1813,7 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "query region failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
-              << " " << query_response.error().errmsg();
+              << " " << query_response.error().errmsg() << std::endl;
     return;
   }
 
@@ -1844,7 +1845,7 @@ void RunAddPeerRegion(AddPeerRegionOption const &opt) {
     std::cout
         << "change peer region failed, error: "
         << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
-        << " " << change_peer_response.error().errmsg();
+        << " " << change_peer_response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "change peer success" << std::endl;
@@ -1875,12 +1876,12 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
   if (query_response.has_error() && query_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "query region failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(query_response.error().errcode())->name()
-              << " " << query_response.error().errmsg();
+              << " " << query_response.error().errmsg() << std::endl;
     return;
   }
 
   if (query_response.region().definition().peers_size() == 0) {
-    std::cout << "region not found";
+    std::cout << "region not found" << std::endl;
     return;
   }
 
@@ -1894,7 +1895,7 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
   }
 
   if (!found) {
-    std::cout << "peer not found";
+    std::cout << "peer not found" << std::endl;
     return;
   }
 
@@ -1912,8 +1913,6 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
     }
   }
 
-  DINGO_LOG(INFO) << "new_definition: " << new_definition->DebugString();
-
   auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "ChangePeerRegion", change_peer_request, change_peer_response);
 
@@ -1921,7 +1920,7 @@ void RunRemovePeerRegion(RemovePeerRegionOption const &opt) {
     std::cout
         << "change peer region failed, error: "
         << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(change_peer_response.error().errcode())->name()
-        << " " << change_peer_response.error().errmsg();
+        << " " << change_peer_response.error().errmsg() << std::endl;
     return;
   }
   std::cout << "change peer success" << std::endl;
@@ -2140,16 +2139,7 @@ void RunGetTaskList(GetTaskListOptions const &opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetTaskList", request, response);
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get task list failed, error: "
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-
-  for (const auto &task_list : response.task_lists()) {
-    std::cout << "task_list: " << task_list.DebugString() << std::endl;
-  }
+  Pretty::Show(response);
 }
 
 void SetUpCleanTaskList(CLI::App &app) {
@@ -2496,14 +2486,7 @@ void RunGetGCSafePoint(GetGCSafePointOptions const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetGCSafePoint", request,
                                                                                               response);
-
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "get gc safe point failed , error:"
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
-  }
-  std::cout << "gc_safe_point: " << response.safe_point() << " , gc_stop: " << response.gc_stop() << std::endl;
+  Pretty::Show(response);
 }
 
 void SetUpBalanceLeader(CLI::App &app) {
