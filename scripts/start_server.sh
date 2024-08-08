@@ -1,5 +1,5 @@
 #!/bin/bash
-# The ulimit is setup in start_program, the paramter of ulimit is:
+# The ulimit is setup in start_server, the paramter of ulimit is:
 #   ulimit -n 1048576
 #   ulimit -u 4194304
 #   ulimit -c unlimited
@@ -28,7 +28,7 @@ source $mydir/deploy_func.sh
 for ((i=1; i<=$SERVER_NUM; ++i)); do
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
 
-  start_program ${FLAGS_role} ${program_dir}
+  start_server ${FLAGS_role} ${program_dir}
 done
 
 echo "Finish..."

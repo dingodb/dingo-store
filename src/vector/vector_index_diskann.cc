@@ -39,7 +39,7 @@
 
 namespace dingodb {
 
-DEFINE_bool(enable_vector_index_diskann, false, "enable vector index diskann. default is true");
+DEFINE_bool(enable_vector_index_diskann, true, "enable vector index diskann. default is true");
 
 DEFINE_bool(dingo_log_switch_diskann_detail, false, "dingo log switch diskann detail. default is false");
 
