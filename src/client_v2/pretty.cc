@@ -14,6 +14,7 @@
 
 #include "client_v2/pretty.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -24,6 +25,7 @@
 #include "client_v2/helper.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/tso_control.h"
 #include "coprocessor/utils.h"
 #include "document/codec.h"
 #include "fmt/core.h"
@@ -1063,4 +1065,376 @@ void Pretty::Show(const std::vector<dingodb::pb::common::Region>& regions) {
   }
   PrintTable(rows);
 }
+
+void ShowIndexParameter(dingodb::pb::common::IndexParameter& index_parameter) {
+  // vector
+  if (index_parameter.index_type() == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+    const auto& vector_index_parameter = index_parameter.vector_index_parameter();
+    // header
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("VectorIndexType"),
+        ftxui::paragraph("Dimension"),
+        ftxui::paragraph("MetrictType"),
+    }};
+    std::vector<ftxui::Element> row = {ftxui::paragraph(
+        fmt::format("{}", dingodb::pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type())))};
+
+    if (vector_index_parameter.has_flat_parameter()) {
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.flat_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.flat_parameter().metric_type()))));
+    } else if (vector_index_parameter.has_ivf_flat_parameter()) {
+      rows[0].push_back(ftxui::paragraph("NCentroids"));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_flat_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_flat_parameter().metric_type()))));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_flat_parameter().ncentroids())));
+    } else if (vector_index_parameter.has_ivf_pq_parameter()) {
+      rows[0].push_back(ftxui::paragraph("NCentroids"));
+      rows[0].push_back(ftxui::paragraph("NSubVector"));
+      rows[0].push_back(ftxui::paragraph("BucketInitSize"));
+      rows[0].push_back(ftxui::paragraph("BucketMaxSize"));
+      rows[0].push_back(ftxui::paragraph("NbitsPerIdx"));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_pq_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_pq_parameter().metric_type()))));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_pq_parameter().ncentroids())));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_pq_parameter().bucket_init_size())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.ivf_pq_parameter().bucket_max_size()))));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.ivf_pq_parameter().nbits_per_idx())));
+    } else if (vector_index_parameter.has_hnsw_parameter()) {
+      rows[0].push_back(ftxui::paragraph("EfConstruction"));
+      rows[0].push_back(ftxui::paragraph("MaxElements"));
+      rows[0].push_back(ftxui::paragraph("NLinks"));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.hnsw_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.hnsw_parameter().metric_type()))));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.hnsw_parameter().efconstruction())));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.hnsw_parameter().max_elements())));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.hnsw_parameter().nlinks())));
+    } else if (vector_index_parameter.has_diskann_parameter()) {
+      rows[0].push_back(ftxui::paragraph("ValueType"));
+      rows[0].push_back(ftxui::paragraph("MaxDegree"));
+      rows[0].push_back(ftxui::paragraph("SearchListSize"));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.diskann_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.diskann_parameter().metric_type()))));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::ValueType_Name(vector_index_parameter.diskann_parameter().value_type()))));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.diskann_parameter().max_degree())));
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.diskann_parameter().search_list_size())));
+    } else if (vector_index_parameter.has_bruteforce_parameter()) {
+      row.push_back(ftxui::paragraph(fmt::format("{}", vector_index_parameter.bruteforce_parameter().dimension())));
+      row.push_back(ftxui::paragraph(fmt::format(
+          "{}", dingodb::pb::common::MetricType_Name(vector_index_parameter.bruteforce_parameter().metric_type()))));
+    }
+    rows.push_back(row);
+    PrintTable(rows);
+  } else if (index_parameter.index_type() == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+    const auto& scalar_index_parameter = index_parameter.scalar_index_parameter();
+    // header
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("ScalarIndexType"),
+        ftxui::paragraph("IsUnique"),
+    }};
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(
+            fmt::format("{}", dingodb::pb::common::ScalarIndexType_Name(scalar_index_parameter.scalar_index_type()))),
+        ftxui::paragraph(fmt::format("{}", scalar_index_parameter.is_unique())),
+    };
+    rows.push_back(row);
+    PrintTable(rows);
+  } else if (index_parameter.index_type() == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+    const auto& document_index_parameter = index_parameter.document_index_parameter();
+    // header
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("JsonParameter"),
+    }};
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", document_index_parameter.json_parameter())),
+    };
+    rows.push_back(row);
+    PrintTable(rows);
+  }
+}
+
+void Pretty::Show(const dingodb::pb::meta::TableDefinitionWithId& table_definition_with_id) {
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("TableId"),
+      ftxui::paragraph("TenantId"),
+      ftxui::paragraph("TableName"),
+      ftxui::paragraph("AutoIncrement"),
+      ftxui::paragraph("Engine"),
+      ftxui::paragraph("Partitions"),
+      ftxui::paragraph("Replica"),
+      ftxui::paragraph("CreateTime"),
+      ftxui::paragraph("UpdateTime"),
+      ftxui::paragraph("IndexType"),
+  }};
+  const auto& table_definition = table_definition_with_id.table_definition();
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", table_definition_with_id.table_id().entity_id())),
+      ftxui::paragraph(fmt::format("{}", table_definition_with_id.tenant_id())),
+      ftxui::paragraph(fmt::format("{}", table_definition.name())),
+      ftxui::paragraph(fmt::format("{}", table_definition.auto_increment())),
+      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::Engine_Name(table_definition.engine()))),
+      ftxui::paragraph(fmt::format("{}", table_definition.table_partition().partitions_size())),
+      ftxui::paragraph(fmt::format("{}", table_definition.replica())),
+      ftxui::paragraph(
+          fmt::format("{}", dingodb::Helper::FormatMsTime(table_definition.create_timestamp(), "%Y-%m-%d %H:%M:%S"))),
+      ftxui::paragraph(
+          fmt::format("{}", dingodb::Helper::FormatMsTime(table_definition.update_timestamp(), "%Y-%m-%d %H:%M:%S"))),
+      ftxui::paragraph(
+          fmt::format("{}", dingodb::pb::common::IndexType_Name(table_definition.index_parameter().index_type()))),
+
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+  auto index_parameter = table_definition.index_parameter();
+  ShowIndexParameter(index_parameter);
+}
+
+void Pretty::Show(dingodb::pb::meta::TsoResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("TimeStamp"),
+  }};
+  auto lambda_tso_2_timestamp_function = [](const ::dingodb::pb::meta::TsoTimestamp& tso) {
+    return (tso.physical() << ::dingodb::kLogicalBits) + tso.logical();
+  };
+
+  for (int i = 0; i < 10; i++) {
+    dingodb::pb::meta::TsoTimestamp tso;
+    tso.set_physical(response.start_timestamp().physical());
+    tso.set_logical(response.start_timestamp().logical() + i);
+    int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
+    std::cout << "ts: " << time_safe_ts << std::endl;
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", time_safe_ts)),
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
+void Pretty::ShowSchemas(const std::vector<dingodb::pb::meta::Schema>& schemas) {
+  if (schemas.size() == 0) {
+    std::cout << "Not find schema." << std::endl;
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+      ftxui::paragraph("Name"),
+      ftxui::paragraph("TenantId"),
+      ftxui::paragraph("ChildTableCount"),
+      ftxui::paragraph("ChildIndexCount"),
+      ftxui::paragraph("ChildTableIds"),
+      ftxui::paragraph("ChildIndexIds"),
+  }};
+
+  for (auto const& schema : schemas) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", schema.id().entity_id())),
+        ftxui::paragraph(fmt::format("{}", schema.name())),
+        ftxui::paragraph(fmt::format("{}", schema.tenant_id())),
+        ftxui::paragraph(fmt::format("{}", schema.table_ids_size())),
+        ftxui::paragraph(fmt::format("{}", schema.index_ids_size())),
+    };
+    std::string table_ids_str;
+    std::string index_ids_str;
+    for (size_t i = 0; i < schema.table_ids_size(); i++) {
+      table_ids_str += fmt::format("{}", schema.table_ids()[i].entity_id());
+      if (i != schema.table_ids_size() - 1) {
+        table_ids_str += ",";
+      }
+    }
+    for (size_t i = 0; i < schema.index_ids_size(); i++) {
+      index_ids_str += fmt::format("{}", schema.index_ids()[i].entity_id());
+      if (i != schema.index_ids_size() - 1) {
+        index_ids_str += ",";
+      }
+    }
+    row.push_back(ftxui::paragraph(table_ids_str));
+    row.push_back(ftxui::paragraph(index_ids_str));
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
+void Pretty::Show(dingodb::pb::meta::GetSchemasResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  ShowSchemas(dingodb::Helper::PbRepeatedToVector(response.schemas()));
+}
+
+void Pretty::Show(dingodb::pb::meta::GetSchemaResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<dingodb::pb::meta::Schema> schemas;
+  schemas.push_back(response.schema());
+  ShowSchemas(schemas);
+}
+
+void Pretty::Show(dingodb::pb::meta::GetSchemaByNameResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<dingodb::pb::meta::Schema> schemas;
+  schemas.push_back(response.schema());
+  ShowSchemas(schemas);
+}
+
+void Pretty::Show(dingodb::pb::meta::GetTablesBySchemaResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  if (response.table_definition_with_ids_size() == 0) {
+    std::cout << "Schema has no table." << std::endl;
+    return;
+  }
+  for (auto const& table_definition_with_id : response.table_definition_with_ids()) {
+    Show(table_definition_with_id);
+  }
+}
+
+void Pretty::Show(dingodb::pb::coordinator::GetGCSafePointResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  {
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("SafePoint"),
+        ftxui::paragraph("GcStop"),
+    }};
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", response.safe_point())),
+        ftxui::paragraph(fmt::format("{}", response.gc_stop())),
+    };
+    rows.push_back(row);
+    PrintTable(rows);
+  }
+
+  // for other tenants that are not default tenant
+  {
+    std::vector<std::vector<ftxui::Element>> rows = {{
+        ftxui::paragraph("TenantId"),
+        ftxui::paragraph("SafePoint"),
+    }};
+    for (auto const& item : response.tenant_safe_points()) {
+      std::vector<ftxui::Element> row = {
+          ftxui::paragraph(fmt::format("{}", item.first)),
+          ftxui::paragraph(fmt::format("{}", item.second)),
+      };
+      rows.push_back(row);
+    }
+    PrintTable(rows);
+  }
+}
+
+void Pretty::Show(dingodb::pb::coordinator::GetTaskListResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+      ftxui::paragraph("Name"),
+      ftxui::paragraph("NextStep"),
+      ftxui::paragraph("TaskSize"),
+      ftxui::paragraph("CreateTime"),
+      ftxui::paragraph("FinishTime"),
+  }};
+  if (response.task_lists_size() == 0) {
+    std::cout << "Task list is empty." << std::endl;
+    return;
+  }
+  for (auto const& task_list : response.task_lists()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", task_list.id())),
+        ftxui::paragraph(fmt::format("{}", task_list.name())),
+        ftxui::paragraph(fmt::format("{}", task_list.next_step())),
+        ftxui::paragraph(fmt::format("{}", task_list.tasks_size())),
+        ftxui::paragraph(task_list.create_time()),
+        ftxui::paragraph(task_list.finish_time()),
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+  std::cout << "Sumary: total_task_list_size: " << response.task_lists_size() << std::endl;
+}
+
+void Pretty::Show(dingodb::pb::coordinator::GetExecutorMapResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+      ftxui::paragraph("Epoch"),
+      ftxui::paragraph("State"),
+      ftxui::paragraph("ServerLocation"),
+      ftxui::paragraph("User"),
+      ftxui::paragraph("CreateTime"),
+      ftxui::paragraph("LastSeenTime"),
+      ftxui::paragraph("ClusterName"),
+  }};
+  const auto& executor_map = response.executormap().executors();
+  if (response.executormap().executors_size() == 0) {
+    std::cout << "Executor map is empty." << std::endl;
+    return;
+  }
+  for (auto const& executor : executor_map) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", executor.id())),
+        ftxui::paragraph(fmt::format("{}", executor.epoch())),
+        ftxui::paragraph(fmt::format("{}", dingodb::pb::common::ExecutorState_Name(executor.state()))),
+        ftxui::paragraph(fmt::format("{}", dingodb::Helper::LocationToString(executor.server_location()))),
+        ftxui::paragraph(fmt::format("{}-{}", executor.executor_user().user(), executor.executor_user().keyring())),
+        ftxui::paragraph(dingodb::Helper::FormatMsTime(executor.create_timestamp())),
+        ftxui::paragraph(dingodb::Helper::FormatMsTime(executor.last_seen_timestamp())),
+        ftxui::paragraph(fmt::format("{}", executor.cluster_name())),
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
+
+void Pretty::Show(dingodb::pb::coordinator::QueryRegionResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("Id"),
+      ftxui::paragraph("Epoch"),
+      ftxui::paragraph("Type"),
+      ftxui::paragraph("State"),
+      ftxui::paragraph("LeaderStoreId"),
+      ftxui::paragraph("CreateTime"),
+      ftxui::paragraph("StartKey"),
+      ftxui::paragraph("EndKey"),
+      ftxui::paragraph("TableId"),
+      ftxui::paragraph("SchemaId"),
+      ftxui::paragraph("TenantId"),
+
+  }};
+  const auto& region = response.region();
+  std::vector<ftxui::Element> row = {
+      ftxui::paragraph(fmt::format("{}", region.id())),
+      ftxui::paragraph(fmt::format("{}", region.epoch())),
+      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::RegionType_Name(region.region_type()))),
+      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::RegionState_Name(region.state()))),
+      ftxui::paragraph(fmt::format("{}", region.leader_store_id())),
+      ftxui::paragraph(dingodb::Helper::FormatMsTime(region.create_timestamp())),
+      ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(region.definition().range().start_key()))),
+      ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(region.definition().range().end_key()))),
+      ftxui::paragraph(fmt::format("{}", region.definition().table_id())),
+      ftxui::paragraph(fmt::format("{}", region.definition().schema_id())),
+      ftxui::paragraph(fmt::format("{}", region.definition().tenant_id())),
+  };
+  rows.push_back(row);
+  PrintTable(rows);
+}
+
 }  // namespace client_v2
