@@ -1,11 +1,11 @@
 #!/bin/bash
-# The ulimit is setup in start_program, the paramter of ulimit is:
+# The ulimit is setup in start_server, the paramter of ulimit is:
 #   ulimit -n 1048576
 #   ulimit -u 4194304
 #   ulimit -c unlimited
 # If set ulimit failed, please use root or sudo to execute sysctl.sh to increase kernal limit.
 
-function deploy_store() {
+function deploy_server() {
   role=$1
   srcpath=$2
   dstpath=$3
@@ -14,6 +14,7 @@ function deploy_store() {
   instance_id=$6
   coor_raft_peers=$7
   coor_service_file=$8
+  diskann_port=`expr ${DISKANN_SERVER_START_PORT} + 1`
 
   echo "server ${dstpath}"
 
@@ -51,6 +52,10 @@ function deploy_store() {
     sed  -i 's,\$BASE_PATH\$,'"$dstpath"',g'                        $dstpath/conf/${role}.yaml
 
     sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
+
+    sed  -i 's|\$DISKANN_SERVER_LISTEN_HOST\$|'"$SERVER_LISTEN_HOST"'|g'  $dstpath/conf/${role}.yaml
+    sed  -i 's|\$DISKANN_SERVER_HOST\$|'"$SERVER_HOST"'|g'  $dstpath/conf/${role}.yaml
+    sed  -i 's|\$DISKANN_SERVER_PORT\$|'" $diskann_port"'|g'  $dstpath/conf/${role}.yaml
 
     if [ -f $srcpath/conf/${role}-gflags.conf ]
     then
@@ -183,7 +188,7 @@ function set_ulimit() {
     fi
 }
 
-function start_program() {
+function start_server() {
   role=$1
   root_dir=$2
   echo "set ulimit"
