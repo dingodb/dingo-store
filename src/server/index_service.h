@@ -47,8 +47,9 @@ class IndexServiceImpl : public pb::index::IndexService {
   void VectorCount(google::protobuf::RpcController* controller, const pb::index::VectorCountRequest* request,
                    pb::index::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
 
-  void VectorCountMemory(google::protobuf::RpcController* controller, const pb::index::VectorCountMemoryRequest* request,
-                   pb::index::VectorCountMemoryResponse* response, ::google::protobuf::Closure* done) override;
+  void VectorCountMemory(google::protobuf::RpcController* controller,
+                         const pb::index::VectorCountMemoryRequest* request,
+                         pb::index::VectorCountMemoryResponse* response, ::google::protobuf::Closure* done) override;
 
   void VectorImport(google::protobuf::RpcController* controller, const pb::index::VectorImportRequest* request,
                     pb::index::VectorImportResponse* response, ::google::protobuf::Closure* done) override;
@@ -118,22 +119,19 @@ class IndexServiceImpl : public pb::index::IndexService {
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
-  void SetReadWorkSet(SimpleWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
-  void SetWriteWorkSet(SimpleWorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
-  void SetRaftApplyWorkSet(SimpleWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+  void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
+  void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
   void SetVectorIndexManager(VectorIndexManagerPtr vector_index_manager) {
     vector_index_manager_ = vector_index_manager;
   }
 
-  bool IsRaftApplyPendingExceed();
   bool IsBackgroundPendingTaskCountExceed();
 
  private:
   StoragePtr storage_;
   // Run service request.
-  SimpleWorkerSetPtr read_worker_set_;
-  SimpleWorkerSetPtr write_worker_set_;
-  SimpleWorkerSetPtr raft_apply_worker_set_;
+  WorkerSetPtr read_worker_set_;
+  WorkerSetPtr write_worker_set_;
   VectorIndexManagerPtr vector_index_manager_;
 };
 

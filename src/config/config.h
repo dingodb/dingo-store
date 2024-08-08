@@ -16,6 +16,7 @@
 #define DINGODB_CONFIG_H_
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -45,6 +46,8 @@ class Config {
 
   virtual std::string ToString() = 0;
 };
+
+using ConfigPtr = std::shared_ptr<Config>;
 
 }  // namespace dingodb
 

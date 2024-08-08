@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "bthread/bthread.h"
+#include "butil/compiler_specific.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/failpoint.h"
@@ -58,7 +59,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   const auto &request = req.put();
 
   auto writer = engine->Writer();
-  if (!writer) {
+  if (BAIDU_UNLIKELY(!writer)) {
     DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] get writer failed.", region->Id());
   }
   if (request.kvs().size() == 1) {
@@ -67,7 +68,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
     status = writer->KvBatchPut(request.cf_name(), Helper::PbRepeatedToVector(request.kvs()));
   }
 
-  if (status.error_code() == pb::error::Errno::EINTERNAL) {
+  if (BAIDU_UNLIKELY(status.error_code() == pb::error::Errno::EINTERNAL)) {
     DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] put failed, error: {}", region->Id(), status.error_str());
   }
 
@@ -76,7 +77,7 @@ int PutHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, st
   }
 
   // Update region metrics min/max key
-  if (region_metrics != nullptr) {
+  if (BAIDU_LIKELY(region_metrics != nullptr)) {
     region_metrics->UpdateMaxAndMinKey(request.kvs());
   }
 

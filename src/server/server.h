@@ -208,13 +208,10 @@ class Server {
   bool IsLeader(int64_t region_id);
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
 
-  void SetStoreServiceReadWorkerSet(SimpleWorkerSetPtr worker_set);
-  void SetStoreServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set);
-  void SetIndexServiceReadWorkerSet(SimpleWorkerSetPtr worker_set);
-  void SetIndexServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set);
-
-  void SetRaftApplyWorkerSet(SimpleWorkerSetPtr worker_set);
-  SimpleWorkerSetPtr GetRaftApplyWorkerSet();
+  void SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set);
+  void SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set);
+  void SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set);
+  void SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set);
 
   std::vector<std::vector<std::string>> GetStoreServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetStoreServiceWriteWorkerSetTrace();
@@ -225,8 +222,6 @@ class Server {
 
   std::vector<std::vector<std::string>> GetDocumentIndexBackgroundWorkerSetTrace();
   uint64_t GetDocumentIndexManagerBackgroundPendingTaskCount();
-
-  std::vector<std::vector<std::string>> GetRaftApplyWorkerSetTrace();
 
   std::string GetAllWorkSetPendingTaskCount();
 
@@ -357,19 +352,16 @@ class Server {
   std::string cluster_force_read_only_reason_{};
 
   // reference worker queue, just for trace
-  SimpleWorkerSetPtr store_service_read_worker_set_{nullptr};
-  SimpleWorkerSetPtr store_service_write_worker_set_{nullptr};
-  SimpleWorkerSetPtr index_service_read_worker_set_{nullptr};
-  SimpleWorkerSetPtr index_service_write_worker_set_{nullptr};
+  WorkerSetPtr store_service_read_worker_set_{nullptr};
+  WorkerSetPtr store_service_write_worker_set_{nullptr};
+  WorkerSetPtr index_service_read_worker_set_{nullptr};
+  WorkerSetPtr index_service_write_worker_set_{nullptr};
 
   // vector index thread pool
   ThreadPoolPtr vector_index_thread_pool_;
 
   // document index thread pool
   ThreadPoolPtr document_index_thread_pool_;
-
-  // RaftApply worker queue
-  SimpleWorkerSetPtr raft_apply_worker_set_{nullptr};
 
   // ts provider
   mvcc::TsProviderPtr ts_provider_{nullptr};

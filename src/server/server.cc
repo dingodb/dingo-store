@@ -68,8 +68,8 @@ DEFINE_bool(ip2hostname, false, "resolve ip to hostname for get map api");
 DEFINE_bool(enable_ip2hostname_cache, true, "enable ip2hostname cache");
 DEFINE_int64(ip2hostname_cache_seconds, 300, "ip2hostname cache seconds");
 
-DEFINE_int32(vector_operation_parallel_thread_num, 1, "vector operation parallel thread num");
-DEFINE_int32(document_operation_parallel_thread_num, 1, "document operation parallel thread num");
+DEFINE_int32(vector_operation_parallel_thread_num, 16, "vector operation parallel thread num");
+DEFINE_int32(document_operation_parallel_thread_num, 16, "document operation parallel thread num");
 DEFINE_string(pid_file_name, "pid", "pid file name");
 
 DEFINE_int32(omp_num_threads, 1, "omp num threads");
@@ -1159,25 +1159,13 @@ bool Server::IsLeader(int64_t region_id) { return GetStorage()->IsLeader(region_
 
 std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
 
-void Server::SetStoreServiceReadWorkerSet(SimpleWorkerSetPtr worker_set) {
-  store_service_read_worker_set_ = worker_set;
-}
+void Server::SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
 
-void Server::SetStoreServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set) {
-  store_service_write_worker_set_ = worker_set;
-}
+void Server::SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set) { store_service_write_worker_set_ = worker_set; }
 
-void Server::SetIndexServiceReadWorkerSet(SimpleWorkerSetPtr worker_set) {
-  index_service_read_worker_set_ = worker_set;
-}
+void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_service_read_worker_set_ = worker_set; }
 
-void Server::SetIndexServiceWriteWorkerSet(SimpleWorkerSetPtr worker_set) {
-  index_service_write_worker_set_ = worker_set;
-}
-
-void Server::SetRaftApplyWorkerSet(SimpleWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
-
-SimpleWorkerSetPtr Server::GetRaftApplyWorkerSet() { return raft_apply_worker_set_; }
+void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
 
 std::vector<std::vector<std::string>> Server::GetStoreServiceReadWorkerSetTrace() {
   if (store_service_read_worker_set_ == nullptr) {
@@ -1235,13 +1223,6 @@ uint64_t Server::GetDocumentIndexManagerBackgroundPendingTaskCount() {
   return document_index_manager_->GetBackgroundPendingTaskCount();
 }
 
-std::vector<std::vector<std::string>> Server::GetRaftApplyWorkerSetTrace() {
-  if (raft_apply_worker_set_ == nullptr) {
-    return {};
-  }
-  return raft_apply_worker_set_->GetPendingTaskTrace();
-}
-
 std::string Server::GetAllWorkSetPendingTaskCount() {
   uint64_t store_servcie_read_pending_task_count =
       store_service_read_worker_set_ ? store_service_read_worker_set_->PendingTaskCount() : 0;
@@ -1251,12 +1232,10 @@ std::string Server::GetAllWorkSetPendingTaskCount() {
       index_service_read_worker_set_ ? index_service_read_worker_set_->PendingTaskCount() : 0;
   uint64_t index_servcie_write_pending_task_count =
       index_service_write_worker_set_ ? index_service_write_worker_set_->PendingTaskCount() : 0;
-  uint64_t raft_apply_pending_task_count = raft_apply_worker_set_ ? raft_apply_worker_set_->PendingTaskCount() : 0;
 
-  return fmt::format("store_read({}) store_write({}) index_read({}) index_write({}) raft_apply({})",
+  return fmt::format("store_read({}) store_write({}) index_read({}) index_write({})",
                      store_servcie_read_pending_task_count, store_servcie_write_pending_task_count,
-                     index_servcie_read_pending_task_count, index_servcie_write_pending_task_count,
-                     raft_apply_pending_task_count);
+                     index_servcie_read_pending_task_count, index_servcie_write_pending_task_count);
 }
 
 ThreadPoolPtr Server::GetVectorIndexThreadPool() {

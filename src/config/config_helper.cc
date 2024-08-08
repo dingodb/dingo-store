@@ -191,4 +191,31 @@ std::string ConfigHelper::GetBalanceLeaderInspectionTimePeriod() {
   return config->GetString("coordinator.balance_leader_inspection_time_period");
 }
 
+int32_t ConfigHelper::GetWorkerThreadNum() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return -1;
+  }
+
+  return config->GetInt("server.worker_thread_num");
+}
+
+double ConfigHelper::GetWorkerThreadRatio() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return -1;
+  }
+
+  return config->GetDouble("server.worker_thread_ratio");
+}
+
+double ConfigHelper::GetRaftWorkerThreadRatio() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return -1;
+  }
+
+  return config->GetDouble("server.raft_worker_thread_ratio");
+}
+
 }  // namespace dingodb

@@ -21,8 +21,11 @@
 #include <queue>
 
 #include "bthread/bthread.h"
+#include "bthread/butex.h"
 #include "bthread/types.h"
 #include "butil/scoped_lock.h"
+#include "common/logging.h"
+#include "glog/logging.h"
 
 namespace dingodb {
 
@@ -47,6 +50,43 @@ class BthreadCond {
 };
 
 using BthreadCondPtr = std::shared_ptr<BthreadCond>;
+
+class BthreadSemaphore {
+ public:
+  BthreadSemaphore(int initial_value = 0) {
+    butex_ = bthread::butex_create_checked<int>();
+    *butex_ = initial_value;
+  }
+  ~BthreadSemaphore() { bthread::butex_destroy(butex_); }
+
+  int GetValue() const { return ((butil::atomic<int>*)butex_)->load(butil::memory_order_acquire); }
+
+  void Release(int value) {
+    CHECK(value > 0) << "Invalid value:" << value;
+
+    ((butil::atomic<int>*)butex_)->fetch_add(value, butil::memory_order_release);
+    bthread::butex_wake(butex_, false);
+  }
+
+  void Acquire() {
+    for (;;) {
+      int curr_value = ((butil::atomic<int>*)butex_)->load(butil::memory_order_acquire);
+      if (curr_value <= 0) {
+        if (bthread::butex_wait(butex_, curr_value, nullptr) < 0 && errno != EWOULDBLOCK && errno != EINTR) {
+          DINGO_LOG(ERROR) << "butex_wait failed, errno: " << errno;
+        }
+      } else {
+        if (((butil::atomic<int>*)butex_)
+                ->compare_exchange_strong(curr_value, curr_value - 1, butil::memory_order_release)) {
+          break;
+        }
+      }
+    }
+  }
+
+ private:
+  int* butex_;
+};
 
 // wrapper bthread functions for c++ style
 class Bthread {

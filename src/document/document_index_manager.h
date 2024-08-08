@@ -305,8 +305,8 @@ class DocumentIndexManager {
                                      const std::string& start_key, [[maybe_unused]] const std::string& end_key);
 
   // Execute all document index load/build/rebuild/save task.
-  ExecqWorkerSetPtr background_workers_;
-  ExecqWorkerSetPtr fast_background_workers_;
+  WorkerSetPtr background_workers_;
+  WorkerSetPtr fast_background_workers_;
 };
 
 using DocumentIndexManagerPtr = std::shared_ptr<DocumentIndexManager>;

@@ -95,22 +95,19 @@ class DocumentServiceImpl : public pb::document::DocumentService {
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
-  void SetReadWorkSet(SimpleWorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
-  void SetWriteWorkSet(SimpleWorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
-  void SetRaftApplyWorkSet(SimpleWorkerSetPtr worker_set) { raft_apply_worker_set_ = worker_set; }
+  void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
+  void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }
   void SetDocumentIndexManager(DocumentIndexManagerPtr document_index_manager) {
     document_index_manager_ = document_index_manager;
   }
 
-  bool IsRaftApplyPendingExceed();
   bool IsBackgroundPendingTaskCountExceed();
 
  private:
   StoragePtr storage_;
   // Run service request.
-  SimpleWorkerSetPtr read_worker_set_;
-  SimpleWorkerSetPtr write_worker_set_;
-  SimpleWorkerSetPtr raft_apply_worker_set_;
+  WorkerSetPtr read_worker_set_;
+  WorkerSetPtr write_worker_set_;
   DocumentIndexManagerPtr document_index_manager_;
 };
 

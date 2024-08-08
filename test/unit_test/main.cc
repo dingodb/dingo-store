@@ -70,6 +70,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":TrackerTest.*";
     default_run_case += ":ThreadPoolTest.*";
     default_run_case += ":SimpleWorkerSetTest.*";
+    default_run_case += ":BthreadSemaphoreTest.*";
+    default_run_case += ":UnboundQueueTest.*";
 
     default_run_case += ":DingoSafeMapTest.*";
     default_run_case += ":SegmentLogStorageTest.*";

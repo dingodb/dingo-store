@@ -44,8 +44,6 @@
 
 using dingodb::pb::error::Errno;
 
-DECLARE_int32(raft_apply_worker_max_pending_num);
-
 namespace dingodb {
 
 DEFINE_int64(vector_max_batch_count, 1024, "vector max batch count in one request");
@@ -68,17 +66,6 @@ DECLARE_int64(vector_max_background_task_count);
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
 
 IndexServiceImpl::IndexServiceImpl() = default;
-
-bool IndexServiceImpl::IsRaftApplyPendingExceed() {
-  if (BAIDU_UNLIKELY(raft_apply_worker_set_ != nullptr && FLAGS_raft_apply_worker_max_pending_num > 0 &&
-                     raft_apply_worker_set_->PendingTaskCount() > FLAGS_raft_apply_worker_max_pending_num)) {
-    DINGO_LOG(WARNING) << "raft apply worker pending task count " << raft_apply_worker_set_->PendingTaskCount()
-                       << " is greater than " << FLAGS_raft_apply_worker_max_pending_num;
-    return true;
-  } else {
-    return false;
-  }
-}
 
 bool IndexServiceImpl::IsBackgroundPendingTaskCountExceed() {
   return vector_index_manager_->GetBackgroundPendingTaskCount() > FLAGS_vector_max_background_task_count;
@@ -510,13 +497,6 @@ void IndexServiceImpl::VectorAdd(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry, please wait and retry");
-    return;
-  }
-
   if (IsBackgroundPendingTaskCountExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -622,13 +602,6 @@ void IndexServiceImpl::VectorDelete(google::protobuf::RpcController* controller,
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -1359,13 +1332,6 @@ void IndexServiceImpl::VectorImport(google::protobuf::RpcController* controller,
 
   if (svr_done->GetRegion() == nullptr) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry, please wait and retry");
     return;
   }
 
@@ -2486,13 +2452,6 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoIndexTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
@@ -2520,13 +2479,6 @@ void IndexServiceImpl::TxnPessimisticRollback(google::protobuf::RpcController* c
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -2789,13 +2741,6 @@ void IndexServiceImpl::TxnPrewrite(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (IsBackgroundPendingTaskCountExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2908,13 +2853,6 @@ void IndexServiceImpl::TxnCommit(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   if (IsBackgroundPendingTaskCountExceed()) {
     brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
@@ -2994,13 +2932,6 @@ void IndexServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -3094,13 +3025,6 @@ void IndexServiceImpl::TxnResolveLock(google::protobuf::RpcController* controlle
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -3304,13 +3228,6 @@ void IndexServiceImpl::TxnBatchRollback(google::protobuf::RpcController* control
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnBatchRollback(storage_, controller, request, response, svr_done, true);
@@ -3437,13 +3354,6 @@ void IndexServiceImpl::TxnHeartBeat(google::protobuf::RpcController* controller,
     return;
   }
 
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
-    return;
-  }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnHeartBeat(storage_, controller, request, response, svr_done, true);
@@ -3488,13 +3398,6 @@ void IndexServiceImpl::TxnGc(google::protobuf::RpcController* controller, const 
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 
@@ -3557,13 +3460,6 @@ void IndexServiceImpl::TxnDeleteRange(google::protobuf::RpcController* controlle
 
   if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
     brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  if (IsRaftApplyPendingExceed()) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "Raft apply queue is full, please wait and retry");
     return;
   }
 

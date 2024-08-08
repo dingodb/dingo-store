@@ -304,8 +304,8 @@ class VectorIndexManager {
                                      const pb::common::Range& encode_range);
 
   // Execute all vector index load/build/rebuild/save task.
-  ExecqWorkerSetPtr background_workers_;
-  ExecqWorkerSetPtr fast_background_workers_;
+  WorkerSetPtr background_workers_;
+  WorkerSetPtr fast_background_workers_;
 };
 
 using VectorIndexManagerPtr = std::shared_ptr<VectorIndexManager>;

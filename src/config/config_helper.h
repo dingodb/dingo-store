@@ -44,6 +44,10 @@ class ConfigHelper {
   static uint32_t GetReserveTaskListRecentDay();
 
   static std::string GetBalanceLeaderInspectionTimePeriod();
+
+  static int32_t GetWorkerThreadNum();
+  static double GetWorkerThreadRatio();
+  static double GetRaftWorkerThreadRatio();
 };
 
 }  // namespace dingodb

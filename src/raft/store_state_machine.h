@@ -53,8 +53,7 @@ class DispatchEventTask : public TaskRunnable {
 class StoreStateMachine : public BaseStateMachine {
  public:
   explicit StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
-                             store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
-                             SimpleWorkerSetPtr raft_apply_worker_set);
+                             store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners);
   ~StoreStateMachine() override;
 
   static bool Init();
@@ -97,9 +96,6 @@ class StoreStateMachine : public BaseStateMachine {
 
   // Protect apply serial
   bthread_mutex_t apply_mutex_;
-
-  // raft_apply_worker_set
-  SimpleWorkerSetPtr raft_apply_worker_set_;
 };
 
 }  // namespace dingodb

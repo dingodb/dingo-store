@@ -39,8 +39,7 @@ const int kSaveAppliedIndexStep = 10;
 namespace dingodb {
 
 StoreStateMachine::StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
-                                     store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
-                                     SimpleWorkerSetPtr raft_apply_worker_set)
+                                     store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners)
     : raw_engine_(engine),
       region_(region),
       str_node_id_(std::to_string(region->Id())),
@@ -49,8 +48,7 @@ StoreStateMachine::StoreStateMachine(RawEnginePtr engine, store::RegionPtr regio
       listeners_(listeners),
       applied_term_(raft_meta->Term()),
       applied_index_(raft_meta->AppliedId()),
-      last_snapshot_index_(0),
-      raft_apply_worker_set_(raft_apply_worker_set) {
+      last_snapshot_index_(0) {
   bthread_mutex_init(&apply_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.StoreStateMachine][id({})]", str_node_id_);
 }
@@ -175,28 +173,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       event->term_id = iter.term();
       event->log_id = iter.index();
 
-      if (BAIDU_LIKELY(raft_apply_worker_set_ != nullptr)) {
-        // Run in queue.
-        auto cond = std::make_shared<BthreadCond>();
-
-        auto task = std::make_shared<DispatchEventTask>([this, event, cond, tracker]() {
-          if (tracker != nullptr) {
-            tracker->SetRaftQueueWaitTime();
-          }
-          DoDispatchEvent(region_->Id(), listeners_, EventType::kSmApply, event, cond);
-        });
-
-        bool ret = raft_apply_worker_set_->ExecuteRR(task);
-        if (BAIDU_UNLIKELY(!ret)) {
-          DINGO_LOG(FATAL) << fmt::format(
-              "[raft.sm][region({})] execute apply task failed, downgrade to in_place execute", region_->Id());
-          DispatchEvent(EventType::kSmApply, event);
-        } else {
-          cond->IncreaseWait();
-        }
-      } else {
-        DispatchEvent(EventType::kSmApply, event);
-      }
+      DispatchEvent(EventType::kSmApply, event);
     }
 
     if (tracker != nullptr) {
