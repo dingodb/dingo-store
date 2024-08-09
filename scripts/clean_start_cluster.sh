@@ -14,6 +14,7 @@ DEPLOY_STORE_SERVER_NUM=3
 DEPLOY_INDEX_SERVER_NUM=3
 DEPLOY_DOC_SERVER_NUM=3
 DEPLOY_DISKANN_SERVER_NUM=1
+
 # This is for developer, and only can be openned in develop envirement.
 export TCMALLOC_SAMPLE_PARAMETER=524288
 echo "export TCMALLOC_SAMPLE_PARAMETER=524288, to enable heap profiler"
@@ -55,7 +56,8 @@ echo "====== deploy all ======"
 sleep 1
 
 echo "====== start all ======"
-./start_server.sh --role coordinator --server_num=${DEPLOY_COORDINATOR_SERVER_NUM} 
+./start_server.sh --role coordinator --server_num=${DEPLOY_COORDINATOR_SERVER_NUM}
+sleep 6
 ./start_server.sh --role store --server_num=${DEPLOY_STORE_SERVER_NUM}
 ./start_server.sh --role index --server_num=${DEPLOY_INDEX_SERVER_NUM}
 ./start_server.sh --role document --server_num=${DEPLOY_DOC_SERVER_NUM}

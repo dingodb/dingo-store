@@ -120,6 +120,10 @@ function deploy_server() {
   fi
 }
 
+function deploy_store() {
+  deploy_server
+}
+
 function set_ulimit() {
     NUM_FILE=1048576
     NUM_PROC=4194304
@@ -200,6 +204,10 @@ function start_server() {
   echo "${root_dir}/bin/dingodb_server -role=${role}"
 
   nohup ${root_dir}/bin/dingodb_server -role=${role} 2>&1 >./log/out &
+}
+
+function start_program() {
+  start_server
 }
 
 wait_for_process_exit() {
