@@ -40,6 +40,15 @@ void SetUpVectorIndexSubCommands(CLI::App& app) {
   // SetUpVectorScanQuery(app);
   // SetUpVectorScanDump(app);
   SetUpVectorGetRegionMetrics(app);
+
+  // diskann
+  SetUpVectorImport(app);
+  SetUpVectorBuild(app);
+  SetUpVectorLoad(app);
+  SetUpVectorStatus(app);
+  SetUpVectorReset(app);
+  SetUpVectorDump(app);
+  SetUpVectorCountMemory(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -2406,7 +2415,7 @@ void SetUpCreateIndex(CLI::App& app) {
       ->default_str("false");
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")->default_val(3);
   cmd->add_option("--vector_index_type", opt->vector_index_type,
-                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq");
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq|diskann");
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
   cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")->ignore_case();
   cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
@@ -2419,6 +2428,13 @@ void SetUpCreateIndex(CLI::App& app) {
   cmd->add_option("--nbits_per_idx", opt->nbits_per_idx,
                   "Request parameter nbits_per_idx, ivf pq default nbits_per_idx 8")
       ->default_val(8);
+
+  cmd->add_option("--max_degree", opt->max_degree,
+                  "diskann the degree of the graph index, typically between 60 and 150.")
+      ->default_val(64);
+  cmd->add_option("--search_list_size", opt->search_list_size,
+                  "diskann the size of search list during index build. Typical values are between 75 to 200.")
+      ->default_val(100);
   cmd->callback([opt]() { RunCreateIndex(*opt); });
 }
 
@@ -2496,6 +2512,8 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
   } else if (opt.vector_index_type == "ivf_pq") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+  } else if (opt.vector_index_type == "diskann") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN);
   } else {
     std::cout << "vector_index_type is invalid, now only support hnsw and flat" << std::endl;
     return;
@@ -2562,6 +2580,13 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
     ivf_pq_index_parameter->set_ncentroids(opt.ncentroids);
     ivf_pq_index_parameter->set_nsubvector(opt.nsubvector);
     ivf_pq_index_parameter->set_nbits_per_idx(opt.nbits_per_idx);
+  } else if (opt.vector_index_type == "diskann") {
+    auto* diskann_parameter = vector_index_parameter->mutable_diskann_parameter();
+    diskann_parameter->set_dimension(opt.dimension);
+    diskann_parameter->set_metric_type(metric_type);
+    diskann_parameter->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    diskann_parameter->set_max_degree(opt.max_degree);
+    diskann_parameter->set_search_list_size(opt.search_list_size);
   }
 
   index_definition->set_version(1);
@@ -2668,6 +2693,215 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
   }
   std::cout << "create index success, index_id==" << response.index_id().entity_id() << std::endl;
   DINGO_LOG(INFO) << response.DebugString();
+}
+
+int64_t SendVectorCountMemory(VectorCountMemoryOptions const& opt) {
+  if (opt.region_id <= 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return -1;
+  }
+  dingodb::pb::index::VectorCountMemoryRequest request;
+  dingodb::pb::index::VectorCountMemoryResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorCountMemory", request, response);
+
+  DINGO_LOG(INFO) << "VectorCountMemory request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorCountMemory response: " << response.DebugString();
+  return response.error().errcode() != 0 ? 0 : response.count();
+}
+
+void SendVectorDump(VectorDumpOptions const& opt) {
+  if (opt.region_id <= 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  dingodb::pb::index::VectorDumpRequest request;
+  dingodb::pb::index::VectorDumpResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  request.set_dump_all(opt.dump_all);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorDump", request, response);
+
+  std::cout << "VectorDump response: " << std::endl;
+}
+
+void SendVectorReset(VectorResetOptions const& opt) {
+  if (opt.region_id <= 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  dingodb::pb::index::VectorResetRequest request;
+  dingodb::pb::index::VectorResetResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  request.set_delete_data_file(opt.delete_data_file);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorReset", request, response);
+
+  std::cout << "VectorReset response: " << response.DebugString() << std::endl;
+}
+
+void SendVectorStatus(VectorStatusOptions const& opt) {
+  if (opt.region_id <= 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  dingodb::pb::index::VectorStatusRequest request;
+  dingodb::pb::index::VectorStatusResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorStatus", request, response);
+
+  DINGO_LOG(INFO) << "VectorStatus request: " << request.DebugString();
+  std::cout << "VectorStatus response: " << response.DebugString() << std::endl;
+}
+
+void SendVectorLoad(VectorLoadOptions const& opt) {
+  if (opt.region_id <= 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  dingodb::pb::index::VectorLoadRequest request;
+  dingodb::pb::index::VectorLoadResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  request.mutable_parameter()->mutable_diskann()->set_direct_load_without_build(opt.direct_load_without_build);
+  request.mutable_parameter()->mutable_diskann()->set_num_nodes_to_cache(opt.num_nodes_to_cache);
+  request.mutable_parameter()->mutable_diskann()->set_warmup(opt.warmup);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorLoad", request, response);
+
+  std::cout << "VectorLoad response: " << response.DebugString() << std::endl;
+}
+
+void SendVectorBuild(VectorBuildOptions const& opt) {
+  if (opt.region_id <= 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  dingodb::pb::index::VectorBuildRequest request;
+  dingodb::pb::index::VectorBuildResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  butil::Status status =
+      InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorBuild", request, response);
+
+  DINGO_LOG(INFO) << "VectorBuild request: " << request.DebugString();
+  std::cout << "VectorBuild response: " << response.DebugString() << std::endl;
+}
+
+void SendVectorImport(VectorImportOptions const& opt) {
+  if (opt.step_count == 0) {
+    std::cout << "step_count must be greater than 0" << std::endl;
+    return;
+  }
+  if (opt.region_id == 0) {
+    std::cout << "region_id must be greater than 0" << std::endl;
+    return;
+  }
+  if (opt.dimension == 0) {
+    std::cout << "dimension must be greater than 0" << std::endl;
+    return;
+  }
+  if (opt.count == 0) {
+    std::cout << "count must be greater than 0" << std::endl;
+    return;
+  }
+  if (opt.start_id < 0) {
+    std::cout << "start_id must be greater than 0" << std::endl;
+    return;
+  }
+
+  int64_t total = 0;
+
+  if (opt.count % opt.step_count != 0) {
+    std::cout << fmt::format("count {} must be divisible by step_count {}", opt.count, opt.step_count);
+    return;
+  }
+
+  uint32_t cnt = opt.count / opt.step_count;
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(0.0, 10.0);
+
+  std::vector<float> random_seeds;
+  random_seeds.resize(opt.count * opt.dimension);
+  for (uint32_t i = 0; i < opt.count; ++i) {
+    for (uint32_t j = 0; j < opt.dimension; ++j) {
+      random_seeds[i * opt.dimension + j] = distrib(rng);
+    }
+
+    if (i % 10000 == 0) {
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, opt.count);
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", opt.count, opt.count);
+
+  for (uint32_t x = 0; x < cnt; x++) {
+    auto start = std::chrono::steady_clock::now();
+    {
+      dingodb::pb::index::VectorImportRequest request;
+      dingodb::pb::index::VectorImportResponse response;
+
+      *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+      int64_t real_start_id = opt.start_id + x * opt.step_count;
+      for (int64_t i = real_start_id; i < real_start_id + opt.step_count; ++i) {
+        if (opt.import_for_add) {  // add
+          auto* vector_with_id = request.add_vectors();
+          vector_with_id->set_id(i);
+          vector_with_id->mutable_vector()->set_dimension(opt.dimension);
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          for (int j = 0; j < opt.dimension; j++) {
+            vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - opt.start_id) * opt.dimension + j]);
+          }
+
+          if (!opt.without_scalar) {
+            for (int k = 0; k < 3; k++) {
+              ::dingodb::pb::common::ScalarValue scalar_value;
+              int index = k + (i < 30 ? 0 : 1);
+              scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+              ::dingodb::pb::common::ScalarField* field = scalar_value.add_fields();
+              field->set_string_data("value" + std::to_string(index));
+
+              vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert(
+                  {"key" + std::to_string(index), scalar_value});
+            }
+          }
+        } else {  // delete
+          request.add_delete_ids(i);
+        }
+      }
+
+      butil::Status status =
+          InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorImport", request, response);
+    }
+
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << "index : " << x << " : " << diff
+                    << " us, avg : " << static_cast<long double>(diff) / opt.step_count << " us";
+
+    total += diff;
+  }
+
+  std::cout << fmt::format("total : {} cost : {} (us) avg : {} us", opt.count, total,
+                           static_cast<long double>(total) / opt.count)
+            << std::endl;
 }
 
 void SetUpVectorSearch(CLI::App& app) {
@@ -3194,6 +3428,151 @@ void RunCountVectorTable(CountVectorTableOptions const& opt) {
   }
 
   client_v2::CountVectorTable(opt);
+}
+
+void SetUpVectorImport(CLI::App& app) {
+  auto opt = std::make_shared<VectorImportOptions>();
+  auto* cmd = app.add_subcommand("VectorImport", "Vector import")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dimension", opt->dimension, "Request parameter dimension ")->required();
+  cmd->add_option("--count", opt->count, "Request parameter count")->default_val(50);
+  cmd->add_option("--step_count", opt->step_count, "Request parameter step count")->default_val(1024);
+  cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
+  cmd->add_option("--import_for_add", opt->import_for_add, "diskann execute import for add or delete, default is add")
+      ->default_val(true)
+      ->default_str("true");
+  cmd->add_option("--without_scalar", opt->without_scalar, "Request parameter without scalar")
+      ->default_val(false)
+      ->default_str("false");
+  ;
+  cmd->callback([opt]() { RunVectorImport(*opt); });
+}
+
+void RunVectorImport(VectorImportOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorImport(opt);
+}
+
+void SetUpVectorBuild(CLI::App& app) {
+  auto opt = std::make_shared<VectorBuildOptions>();
+  auto* cmd = app.add_subcommand("VectorBuild", "Vector build")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorBuild(*opt); });
+}
+
+void RunVectorBuild(VectorBuildOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorBuild(opt);
+}
+
+void SetUpVectorLoad(CLI::App& app) {
+  auto opt = std::make_shared<VectorLoadOptions>();
+  auto* cmd = app.add_subcommand("VectorLoad", "Vector load")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--num_nodes_to_cache", opt->num_nodes_to_cache,
+                  "While serving the index, the entire graph is stored on SSD.For faster search performance, you can "
+                  "cache a few frequently accessed nodes in memory.");
+  cmd->add_option("--direct_load_without_build", opt->direct_load_without_build,
+                  "diskann if true, direct load without build index. default is false. Note: If it is true, do not "
+                  "call the import build interface, call load directly. If it is false, first import the data, then "
+                  "build, and then call load")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--warmup", opt->warmup,
+                  "Whether to warm up the index. If true, the index will be loaded into memory and kept in memory for "
+                  "faster.")
+      ->default_val(true)
+      ->default_str("true");
+  ;
+  cmd->callback([opt]() { RunVectorLoad(*opt); });
+}
+
+void RunVectorLoad(VectorLoadOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorLoad(opt);
+}
+
+void SetUpVectorStatus(CLI::App& app) {
+  auto opt = std::make_shared<VectorStatusOptions>();
+  auto* cmd = app.add_subcommand("VectorStatus", "Vector status")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorStatus(*opt); });
+}
+
+void RunVectorStatus(VectorStatusOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorStatus(opt);
+}
+
+void SetUpVectorReset(CLI::App& app) {
+  auto opt = std::make_shared<VectorResetOptions>();
+  auto* cmd = app.add_subcommand("VectorReset", "Vector reset")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--delete_data_file", opt->delete_data_file, "Diskann If true, delete data file after reset.")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->callback([opt]() { RunVectorReset(*opt); });
+}
+
+void RunVectorReset(VectorResetOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorReset(opt);
+}
+
+void SetUpVectorDump(CLI::App& app) {
+  auto opt = std::make_shared<VectorDumpOptions>();
+  auto* cmd = app.add_subcommand("VectorDump", "Vector dump")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--dump_all", opt->dump_all,
+                  "Diskann If true, dump all vector id data from diskann. or just dump the data of this region.")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->callback([opt]() { RunVectorDump(*opt); });
+}
+
+void RunVectorDump(VectorDumpOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorDump(opt);
+}
+
+void SetUpVectorCountMemory(CLI::App& app) {
+  auto opt = std::make_shared<VectorCountMemoryOptions>();
+  auto* cmd = app.add_subcommand("VectorCountMemory", "Vector count memory")->group("Vector Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->callback([opt]() { RunVectorCountMemory(*opt); });
+}
+
+void RunVectorCountMemory(VectorCountMemoryOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, 0)) {
+    exit(-1);
+  }
+
+  client_v2::SendVectorCountMemory(opt);
 }
 
 }  // namespace client_v2
