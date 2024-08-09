@@ -55,6 +55,8 @@ struct CreateIndexOptions {
   int ncentroids;
   int nbits_per_idx;
   int nsubvector;
+  uint32_t max_degree;
+  uint32_t search_list_size;
 };
 void SetUpCreateIndex(CLI::App &app);
 void RunCreateIndex(CreateIndexOptions const &opt);
@@ -319,7 +321,74 @@ struct CountVectorTableOptions {
 void SetUpCountVectorTable(CLI::App &app);
 void RunCountVectorTable(CountVectorTableOptions const &opt);
 
+struct VectorImportOptions {
+  std::string coor_url;
+  int64_t region_id;
+  int32_t dimension;
+  int64_t count;
+  int32_t step_count;
+  int64_t start_id;
+  bool import_for_add;
+  bool without_scalar;
+};
+void SetUpVectorImport(CLI::App &app);
+void RunVectorImport(VectorImportOptions const &opt);
+
+struct VectorBuildOptions {
+  std::string coor_url;
+  int64_t region_id;
+};
+void SetUpVectorBuild(CLI::App &app);
+void RunVectorBuild(VectorBuildOptions const &opt);
+
+struct VectorLoadOptions {
+  std::string coor_url;
+  int64_t region_id;
+  bool direct_load_without_build;
+  uint32_t num_nodes_to_cache;
+  bool warmup;
+};
+void SetUpVectorLoad(CLI::App &app);
+void RunVectorLoad(VectorLoadOptions const &opt);
+
+struct VectorStatusOptions {
+  std::string coor_url;
+  int64_t region_id;
+};
+void SetUpVectorStatus(CLI::App &app);
+void RunVectorStatus(VectorStatusOptions const &opt);
+
+struct VectorResetOptions {
+  std::string coor_url;
+  int64_t region_id;
+  bool delete_data_file;
+};
+void SetUpVectorReset(CLI::App &app);
+void RunVectorReset(VectorResetOptions const &opt);
+
+struct VectorDumpOptions {
+  std::string coor_url;
+  int64_t region_id;
+  bool dump_all;
+};
+void SetUpVectorDump(CLI::App &app);
+void RunVectorDump(VectorDumpOptions const &opt);
+
+struct VectorCountMemoryOptions {
+  std::string coor_url;
+  int64_t region_id;
+};
+void SetUpVectorCountMemory(CLI::App &app);
+void RunVectorCountMemory(VectorCountMemoryOptions const &opt);
+
 // vector
+int64_t SendVectorCountMemory(VectorCountMemoryOptions const &opt);
+void SendVectorDump(VectorDumpOptions const &opt);
+void SendVectorReset(VectorResetOptions const &opt);
+void SendVectorStatus(VectorStatusOptions const &opt);
+void SendVectorLoad(VectorLoadOptions const &opt);
+void SendVectorImport(VectorImportOptions const &opt);
+void SendVectorBuild(VectorBuildOptions const &opt);
 void SendVectorSearch(VectorSearchOptions const &opt);
 void SendVectorSearchDebug(VectorSearchDebugOptions const &opt);
 void SendVectorRangeSearch(VectorRangeSearchOptions const &opt);
