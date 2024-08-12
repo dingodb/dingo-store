@@ -2017,13 +2017,13 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
   std::vector<pb::common::KeyValue> kvs;
 
   status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
-                                       request->lock_ttl(), request->for_update_ts(), true, kvs);
+                                       request->lock_ttl(), request->for_update_ts(), request->return_values(), kvs);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
     if (!is_sync) done->Run();
   }
-  if (!kvs.empty()) {
+  if (request->return_values() && !kvs.empty()) {
     for (const auto& kv : kvs) {
       *response->add_kvs() = kv;
     }
