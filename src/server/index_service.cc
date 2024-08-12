@@ -2330,11 +2330,150 @@ void IndexServiceImpl::TxnScan(google::protobuf::RpcController* controller, cons
   }
 }
 
-butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store::TxnPessimisticLockRequest* request);
+static butil::Status ValidateIndexTxnPessimisticLockRequest(
+    StoragePtr storage, const dingodb::pb::store::TxnPessimisticLockRequest* request, store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
 
-void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
-                          const dingodb::pb::store::TxnPessimisticLockRequest* request,
-                          dingodb::pb::store::TxnPessimisticLockResponse* response, TrackClosure* done, bool is_sync);
+  if (request->mutations_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations is empty");
+  }
+
+  if (request->mutations_size() > FLAGS_max_prewrite_count) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
+  }
+
+  if (request->primary_lock().empty()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "primary_lock is empty");
+  }
+
+  if (request->start_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0");
+  }
+
+  if (request->lock_ttl() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "lock_ttl is 0");
+  }
+
+  if (request->for_update_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "for_update_ts is 0");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->VectorIndexWrapper()->IsReady()) {
+    if (region->VectorIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
+                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
+                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+  }
+
+  std::vector<std::string_view> keys;
+  for (const auto& mutation : request->mutations()) {
+    if (mutation.key().empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
+    }
+    keys.push_back(mutation.key());
+
+    if (mutation.value().size() > 8192) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "value size is too large, max=8192");
+    }
+
+    if (mutation.op() != pb::store::Op::Lock) {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "op is not Lock");
+    }
+  }
+  status = ServiceHelper::ValidateRegion(region, keys);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoIndexTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* controller,
+                               const dingodb::pb::store::TxnPessimisticLockRequest* request,
+                               dingodb::pb::store::TxnPessimisticLockResponse* response, TrackClosure* done,
+                               bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  auto status = ValidateIndexTxnPessimisticLockRequest(storage, request, region);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& mutation : request->mutations()) {
+    keys_for_lock.push_back(mutation.key());
+  }
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(region_id);
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+
+  std::vector<pb::store::Mutation> mutations;
+  for (const auto& mutation : request->mutations()) {
+    mutations.emplace_back(mutation);
+  }
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  status = storage->TxnPessimisticLock(ctx, mutations, request->primary_lock(), request->start_ts(),
+                                       request->lock_ttl(), request->for_update_ts(), request->return_values(), kvs);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    if (!is_sync) done->Run();
+  }
+  if (request->return_values() && !kvs.empty()) {
+    for (auto& kv : kvs) {
+      pb::common::VectorWithId vector_with_id;
+
+      if (!kv.value().empty()) {
+        auto parse_ret = vector_with_id.ParseFromString(kv.value());
+        if (!parse_ret) {
+          auto* err = response->mutable_error();
+          err->set_errcode(static_cast<Errno>(pb::error::EINTERNAL));
+          err->set_errmsg("parse vector_with_id failed");
+          return;
+        }
+      }
+
+      response->add_vector()->Swap(&vector_with_id);
+    }
+  }
+}
 
 void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* controller,
                                           const pb::store::TxnPessimisticLockRequest* request,
@@ -2356,7 +2495,7 @@ void IndexServiceImpl::TxnPessimisticLock(google::protobuf::RpcController* contr
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
+    DoIndexTxnPessimisticLock(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (BAIDU_UNLIKELY(!ret)) {
