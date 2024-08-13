@@ -360,6 +360,27 @@ bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parame
       error_message = "unknown column";
       return false;
     }
+    // check ngram tokenizer parameter
+    if (tokenizer_type == "ngram") {
+      if (tokenizer_item.find("min_gram") == tokenizer_item.end()) {
+        error_message = "not found ngram tokenizer min_gram";
+        return false;
+      }
+      if (tokenizer_item.find("max_gram") == tokenizer_item.end()) {
+        error_message = "not found ngram tokenizer max_gram";
+        return false;
+      }
+      const auto& min_gram = tokenizer_item.at("min_gram");
+      const auto& max_gram = tokenizer_item.at("max_gram");
+      if (min_gram == 0) {
+        error_message = "min_gram must be greater than 0";
+        return false;
+      }
+      if (min_gram >= max_gram) {
+        error_message = "min_gram should be smaller than max_gram";
+        return false;
+      }
+    }
   }
 
   // use ffi to validate json_parameter again for more tokenizer parameter
