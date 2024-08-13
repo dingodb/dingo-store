@@ -856,6 +856,29 @@ TEST(DingoTantivySearchTest, test_json_parse) {
                                                                   column_tokenizer_parameter, error_message),
             false);
   std::cout << "error_message:" << error_message << '\n';
+
+  // ngram tokenizer illegal parameter
+  {
+    column_tokenizer_parameter.clear();
+    error_message.clear();
+    std::string json_parameter =
+        R"({"col1": { "tokenizer": { "type": "ngram", "min_gram":0,"max_gram":7}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+    EXPECT_EQ(dingodb::DocumentCodec::IsValidTokenizerJsonParameter(json_parameter, column_tokenizer_parameter,
+                                                                    error_message),
+              false);
+    std::cout << "error_message:" << error_message << '\n';
+  }
+  // ngram tokenizer illegal parameter
+  {
+    column_tokenizer_parameter.clear();
+    error_message.clear();
+    std::string json_parameter =
+        R"({"col1": { "tokenizer": { "type": "ngram", "min_gram":10,"max_gram":7}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+    EXPECT_EQ(dingodb::DocumentCodec::IsValidTokenizerJsonParameter(json_parameter, column_tokenizer_parameter,
+                                                                    error_message),
+              false);
+    std::cout << "error_message:" << error_message << '\n';
+  }
 }
 
 TEST(DingoTantivySearchTest, test_gen_default_json) {
