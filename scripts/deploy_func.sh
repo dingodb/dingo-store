@@ -121,7 +121,7 @@ function deploy_server() {
 }
 
 function deploy_store() {
-  deploy_server
+  deploy_server "$@"
 }
 
 function set_ulimit() {
@@ -207,7 +207,7 @@ function start_server() {
 }
 
 function start_program() {
-  start_server
+  start_server "$@"
 }
 
 wait_for_process_exit() {
