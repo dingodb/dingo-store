@@ -351,7 +351,7 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
     DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
     status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_kv);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
+      DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed, error: {}", status.error_str());
       return status;
     }
 

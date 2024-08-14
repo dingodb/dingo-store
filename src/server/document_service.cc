@@ -1092,6 +1092,10 @@ static butil::Status ValidateTxnScanRequestIndex(const pb::store::TxnScanRequest
     return status;
   }
 
+  if (request->has_coprocessor()) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Not support scan document with coprocessor");
+  }
+
   return butil::Status();
 }
 
