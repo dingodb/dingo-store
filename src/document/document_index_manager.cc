@@ -34,13 +34,13 @@
 #include "document/document_index_snapshot_manager.h"
 #include "fmt/core.h"
 #include "meta/store_meta_manager.h"
+#include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
 #include "proto/node.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
-
 namespace dingodb {
 
 DEFINE_int32(document_background_worker_num, 16, "document index background worker num");
@@ -1179,7 +1179,6 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.build][index_id({})][trace({})] Build document index, range: {}, path:({})", document_index_id,
       trace, Helper::RangeToString(range), document_index_path);
-
   auto document_index = DocumentIndexFactory::LoadOrCreateIndex(
       document_index_id, document_index_path, document_index_wrapper->IndexParameter(), region->Epoch(), range, status);
   if (!document_index) {
@@ -1210,9 +1209,9 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
       document_index->SetApplyLogId(raft_status->known_applied_index());
     }
   }
-
-  const std::string& start_key = range.start_key();
-  const std::string& end_key = range.end_key();
+  auto encode_range = document_index->Range(true);
+  const std::string& start_key = encode_range.start_key();
+  const std::string& end_key = encode_range.end_key();
 
   DINGO_LOG(INFO) << fmt::format(
       "[document_index.build][index_id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: "
@@ -1261,11 +1260,10 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
     pb::common::DocumentWithId document;
 
     std::string key(iter->Key());
-    document.set_id(DocumentCodec::UnPackageDocumentId(key));
-
-    std::string value(iter->Value());
+    document.set_id(DocumentCodec::DecodeDocumentIdFromEncodeKeyWithTs(key));
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
     if (!document.mutable_document()->ParseFromString(value)) {
-      DINGO_LOG(WARNING) << fmt::format(
+      DINGO_LOG(ERROR) << fmt::format(
           "[document_index.build][index_id({})][trace({})] document with id ParseFromString failed.", document_index_id,
           trace);
       continue;
