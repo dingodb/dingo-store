@@ -52,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 import static io.dingodb.sdk.service.entity.version.EventType.DELETE;
 import static io.dingodb.sdk.service.entity.version.EventType.NOT_EXISTS;
@@ -469,13 +470,35 @@ public class LockService {
                 try {
                     Thread.sleep(1000L);
                 } catch (Exception e1) {
-                    
-                }
+
+                } 
             }
             task.run();
             watchAllOpLock(kv, task);
         });
     }
+
+    public void watchAllOpEvent(Kv kv, Function<String, String> function) {
+        CompletableFuture.supplyAsync(() ->
+                kvService.watch(watchAllOpRequest(kv.getKv().getKey(), kv.getModRevision()))
+        ).whenCompleteAsync((r, e) -> {
+            if (e != null) {
+                if (!(e instanceof DingoClientException)) {
+                    watchAllOpEvent(kv, function);
+                    return;
+                }
+                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
+                return;
+            }
+            String typeStr = "normal";
+            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
+                typeStr = "keyNone";
+            }
+            function.apply(typeStr);
+            watchAllOpEvent(kv, function);
+        });
+    }
+
 
     private PutRequest putRequest(String resourceKey, String value) {
         return PutRequest.builder()
