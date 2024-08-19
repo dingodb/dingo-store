@@ -156,6 +156,9 @@ public class RpcMethodAnnotationProcessor extends AbstractProcessor {
                 if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("index")) {
                     messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
                 }
+                if (elements.getPackageOf(reqTypeElement).getSimpleName().toString().equals("document")) {
+                    messageGenerateProcessor.messages.get(reqTypeName).addSuperinterface(Constant.STORE_REQ);
+                }
                 serviceElements.add((TypeElement) element.getEnclosingElement());
                 entityElements.add((TypeElement) reqTypeElement.getEnclosingElement());
             } catch (Exception e) {
