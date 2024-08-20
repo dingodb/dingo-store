@@ -110,9 +110,8 @@ DEFINE_uint32(version_service_worker_num, 32, "service worker num");
 DEFINE_uint64(version_service_worker_max_pending_num, 1024, "service worker num");
 
 extern "C" {
-extern void goto_set_num_threads(int num_threads);            // NOLINT
-extern void openblas_set_num_threads(int num_threads);        // NOLINT
-extern void openblas_set_num_threads_local(int num_threads);  // NOLINT
+extern void goto_set_num_threads(int num_threads);      // NOLINT
+extern void openblas_set_num_threads(int num_threads);  // NOLINT
 }
 
 namespace bvar {
@@ -594,7 +593,6 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "USE_OPENBLAS is ON";
   goto_set_num_threads(1);
   openblas_set_num_threads(1);
-  openblas_set_num_threads_local(1);
 #endif
 
   // check system env
