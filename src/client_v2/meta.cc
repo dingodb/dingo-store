@@ -725,16 +725,6 @@ void RunGetSchemas(GetSchemasOptions const &opt) {
     return;
   }
   Pretty::ShowSchemas(schemas);
-
-  // dingodb::pb::meta::GetSchemasRequest request;
-  // dingodb::pb::meta::GetSchemasResponse response;
-
-  // request.set_tenant_id(opt.tenant_id);
-
-  // auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetSchemas",
-  // request,
-  //                                                                                                 response);
-  // Pretty::Show(response);
 }
 
 void SetUpGetSchemaByName(CLI::App &app) {

@@ -15,7 +15,10 @@
 #ifndef DINGODB_CLIENT_HELPER_H_
 #define DINGODB_CLIENT_HELPER_H_
 
+#include <time.h>
+
 #include <cstdint>
+#include <ctime>
 #include <fstream>
 #include <map>
 #include <random>
@@ -602,6 +605,27 @@ class Helper {
                                               dingodb::Helper::StringToHex(end_key)));
     }
     return plaintext_range;
+  }
+
+  static bool IsDateString(const std::string& date_str) {
+    struct tm time_struct = {0};
+    return strptime(date_str.c_str(), "%Y-%m-%d", &time_struct) != nullptr;
+  }
+
+  static int64_t StringToTimestamp(const std::string& date_str) {
+    struct tm time_struct = {0};
+    if (!strptime(date_str.c_str(), "%Y-%m-%d", &time_struct)) {
+      DINGO_LOG(ERROR) << "Error converting date string to tm structure!" << std::endl;
+      return -1;
+    }
+
+    time_t timestamp = std::mktime(&time_struct);
+    if (timestamp <= 0) {
+      DINGO_LOG(ERROR) << fmt::format("mktime failed, timestamp: {}", timestamp);
+      return -1;
+    }
+
+    return static_cast<int64_t>(timestamp);
   }
 };
 
