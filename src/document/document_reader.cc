@@ -26,7 +26,6 @@
 #include "document/codec.h"
 #include "document/document_index.h"
 #include "fmt/core.h"
-#include "gflags/gflags.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
@@ -35,7 +34,7 @@ namespace dingodb {
 
 butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::Range& region_range,
                                                   int64_t partition_id, int64_t document_id, bool with_scalar_data,
-                                                  std::vector<std::string>& selected_scalar_keys,
+                                                  bool with_table_data, std::vector<std::string>& selected_scalar_keys,
                                                   pb::common::DocumentWithId& document_with_id) {
   std::string plain_key =
       DocumentCodec::PackageDocumentKey(Helper::GetKeyPrefix(region_range), partition_id, document_id);
@@ -66,8 +65,16 @@ butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::
         (*document_with_id.mutable_document()->mutable_document_data())[key] = scalar->second;
       }
 
+      if (with_table_data) {
+        // swap table data
+        document_with_id.mutable_document()->mutable_table_data()->Swap(document.mutable_table_data());
+      }
+
       return butil::Status();
     }
+  } else if (with_table_data) {
+    // swap table data
+    document_with_id.mutable_document()->mutable_table_data()->Swap(document.mutable_table_data());
   }
 
   return butil::Status();
@@ -79,6 +86,7 @@ butil::Status DocumentReader::SearchDocument(int64_t ts, int64_t partition_id, D
                                              std::vector<pb::common::DocumentWithScore>& document_with_score_results) {
   bool with_scalar_data = !(parameter.without_scalar_data());
   std::vector<std::string> selected_scalar_keys;
+  bool with_table_data = !(parameter.without_table_data());
 
   if (with_scalar_data) {
     for (const auto& scalar_key : parameter.selected_keys()) {
@@ -93,11 +101,11 @@ butil::Status DocumentReader::SearchDocument(int64_t ts, int64_t partition_id, D
   }
 
   // document index does not support restruct document, we restruct it using kv store
-  if (with_scalar_data) {
+  if (with_scalar_data || with_table_data) {
     for (auto& document_with_score : document_with_score_results) {
       pb::common::DocumentWithId document_with_id;
       auto status = QueryDocumentWithId(ts, region_range, partition_id, document_with_score.document_with_id().id(),
-                                        with_scalar_data, selected_scalar_keys, document_with_id);
+                                        with_scalar_data, with_table_data, selected_scalar_keys, document_with_id);
       if (!status.ok()) {
         return status;
       }
@@ -126,7 +134,7 @@ butil::Status DocumentReader::DocumentBatchQuery(std::shared_ptr<Engine::Documen
   for (auto document_id : ctx->document_ids) {
     pb::common::DocumentWithId document_with_id;
     auto status = QueryDocumentWithId(ctx->ts, ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
-                                      ctx->selected_scalar_keys, document_with_id);
+                                      ctx->with_table_data, ctx->selected_scalar_keys, document_with_id);
     if ((!status.ok()) && status.error_code() != pb::error::EKEY_NOT_FOUND) {
       DINGO_LOG(WARNING) << fmt::format("Query document_with_id failed, document_id: {} error: {}", document_id,
                                         status.error_str());
@@ -173,7 +181,7 @@ butil::Status DocumentReader::DocumentScanQuery(std::shared_ptr<Engine::Document
   for (auto document_id : document_ids) {
     pb::common::DocumentWithId document_with_id;
     auto status = QueryDocumentWithId(ctx->ts, ctx->region_range, ctx->partition_id, document_id, ctx->with_scalar_data,
-                                      ctx->selected_scalar_keys, document_with_id);
+                                      ctx->with_table_data, ctx->selected_scalar_keys, document_with_id);
     if (!status.ok()) {
       DINGO_LOG(WARNING) << fmt::format("Query document data failed, document_id {} error: {}", document_id,
                                         status.error_str());

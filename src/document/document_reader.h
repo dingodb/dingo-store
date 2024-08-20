@@ -59,7 +59,7 @@ class DocumentReader {
 
  private:
   butil::Status QueryDocumentWithId(int64_t ts, const pb::common::Range& region_range, int64_t partition_id,
-                                    int64_t document_id, bool with_scalar_data,
+                                    int64_t document_id, bool with_scalar_data, bool with_table_data,
                                     std::vector<std::string>& selected_scalar_keys,
                                     pb::common::DocumentWithId& document_with_id);
   butil::Status SearchDocument(int64_t ts, int64_t partition_id, DocumentIndexWrapperPtr document_index,

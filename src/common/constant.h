@@ -38,9 +38,6 @@ class Constant {
   // Define Global SchemaId for Coordinator(As only one)
   static const int64_t kCoordinatorSchemaId = 0;
 
-  // Define mbvar metrics number
-  static const int kBvarMaxDumpMultiDimensionMetricNumberDefault = 20000;
-
   // Define Store data column family.
   // table and vector_index's vector use "default"
   inline static const std::string kStoreDataCF = "default";
