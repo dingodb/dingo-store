@@ -218,6 +218,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
       int64_t limit{};
 
       bool with_scalar_data{};
+      bool with_table_data{};
       bool is_reverse{};
       bool use_scalar_filter{};
 

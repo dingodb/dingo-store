@@ -456,8 +456,7 @@ bool SetBrpcFlag() {
 
   // Open bvar multi dimesion metrics.
   bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number =
-      std::max(bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number,
-               dingodb::Constant::kBvarMaxDumpMultiDimensionMetricNumberDefault);
+      std::max(bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number, 20000);
 
   return true;
 }

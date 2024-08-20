@@ -24,7 +24,6 @@
 #include "common/constant.h"
 #include "common/context.h"
 #include "common/helper.h"
-#include "common/logging.h"
 #include "common/synchronization.h"
 #include "common/version.h"
 #include "document/codec.h"
@@ -123,6 +122,7 @@ void DoDocumentBatchQuery(StoragePtr storage, google::protobuf::RpcController* c
   ctx->document_ids = Helper::PbRepeatedToVector(request->document_ids());
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
+  ctx->with_table_data = !request->without_table_data();
   ctx->raw_engine_type = region->GetRawEngineType();
   ctx->store_engine_type = region->GetStoreEngineType();
   ctx->ts = request->ts();
@@ -668,6 +668,7 @@ void DoDocumentScanQuery(StoragePtr storage, google::protobuf::RpcController* co
   ctx->region_range = region->Range(false);
   ctx->selected_scalar_keys = Helper::PbRepeatedToVector(request->selected_keys());
   ctx->with_scalar_data = !request->without_scalar_data();
+  ctx->with_table_data = !request->without_table_data();
   ctx->start_id = request->document_id_start();
   ctx->end_id = request->document_id_end();
   ctx->is_reverse = request->is_reverse_scan();
@@ -1154,7 +1155,7 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
 
   auto* mut_stream_meta = response->mutable_stream_meta();
   mut_stream_meta->set_stream_id(stream->StreamId());
-  mut_stream_meta->set_has_next(has_more);
+  mut_stream_meta->set_has_more(has_more);
 
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);

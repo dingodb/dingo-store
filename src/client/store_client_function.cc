@@ -45,8 +45,6 @@
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
 #include "proto/store.pb.h"
-#include "serial/buf.h"
-#include "serial/schema/long_schema.h"
 #include "vector/codec.h"
 
 const int kBatchSize = 1000;
@@ -1723,12 +1721,12 @@ void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, in
 
   InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorScanQuery", request, response);
 
-  std::cout << "================ show data ================" << std::endl;
+  std::cout << "================ show data ================" << '\n';
   for (const auto& vector : response.vectors()) {
     Helper::PrintVectorWithId(vector);
   }
 
-  std::cout << fmt::format("================ size({}) ================", response.vectors().size()) << std::endl;
+  std::cout << fmt::format("================ size({}) ================", response.vectors().size()) << '\n';
 }
 
 butil::Status ScanVectorData(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse,
@@ -2191,6 +2189,13 @@ void SendDocumentAdd(int64_t region_id) {
     (*document_data)["col4"] = document_value1;
   }
 
+  // table data
+  {
+    auto* table_data = document->mutable_document()->mutable_table_data();
+    table_data->set_table_key("table_key");
+    table_data->set_table_value("table_value");
+  }
+
   if (FLAGS_is_update) {
     request.set_is_update(true);
   }
@@ -2247,6 +2252,7 @@ void SendDocumentSearch(int64_t region_id) {
   parameter->set_top_n(FLAGS_topn);
   parameter->set_query_string(FLAGS_query_string);
   parameter->set_without_scalar_data(FLAGS_without_scalar);
+  parameter->set_without_table_data(FLAGS_without_table);
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
@@ -2268,6 +2274,10 @@ void SendDocumentBatchQuery(int64_t region_id, std::vector<int64_t> document_ids
 
   if (FLAGS_without_scalar) {
     request.set_without_scalar_data(true);
+  }
+
+  if(FLAGS_without_table) {
+    request.set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {
@@ -2321,6 +2331,10 @@ void SendDocumentScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, 
 
   if (FLAGS_without_scalar) {
     request.set_without_scalar_data(true);
+  }
+
+  if(FLAGS_without_table) {
+    request.set_without_table_data(true);
   }
 
   if (!FLAGS_key.empty()) {

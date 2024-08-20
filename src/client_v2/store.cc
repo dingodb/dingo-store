@@ -95,7 +95,7 @@ static bool SetUpStore(const std::string& url, const std::vector<std::string>& a
     // Get store addr from coordinator
     auto status = client_v2::InteractionManager::GetInstance().CreateStoreInteraction(region_id);
     if (!status.ok()) {
-      std::cout << "Create store interaction failed, error: " << status.error_cstr() << std::endl;
+      std::cout << "Create store interaction failed, error: " << status.error_cstr() << '\n';
       return false;
     }
   }
@@ -278,7 +278,7 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
       break;
     }
 
-    if (!sub_response.stream_meta().has_next()) {
+    if (!sub_response.stream_meta().has_more()) {
       break;
     }
   }
@@ -338,7 +338,7 @@ dingodb::pb::store::TxnScanLockResponse SendTxnScanLockByStreamMode(const dingod
       break;
     }
 
-    if (!sub_response.stream_meta().has_next()) {
+    if (!sub_response.stream_meta().has_more()) {
       break;
     }
   }
@@ -832,7 +832,7 @@ void RunTxnScan(TxnScanOptions const& opt) {
 
   dingodb::pb::common::Region region = SendQueryRegion(opt.id);
   if (region.id() == 0) {
-    std::cout << "Get region failed." << std::endl;
+    std::cout << "Get region failed." << '\n';
     return;
   }
 
@@ -877,7 +877,7 @@ void RunTxnScanLock(TxnScanLockOptions const& opt) {
 
   dingodb::pb::common::Region region = SendQueryRegion(opt.id);
   if (region.id() == 0) {
-    std::cout << "Get region failed." << std::endl;
+    std::cout << "Get region failed." << '\n';
     return;
   }
 
@@ -1741,7 +1741,7 @@ void RunDumpDb(DumpDbOptions const& opt) {
 
   auto status = client_v2::DumpDb(opt);
   if (!status.ok()) {
-    std::cout << fmt::format("Error: {} {}", status.error_code(), status.error_str()) << std::endl;
+    std::cout << fmt::format("Error: {} {}", status.error_code(), status.error_str()) << '\n';
   }
 }
 
@@ -1816,12 +1816,12 @@ butil::Status WhichRegionForOldTable(const dingodb::pb::meta::TableDefinition& t
                                    distribution.id().entity_id(), dingodb::Helper::RangeToString(range));
 
     if (plain_key >= range.start_key() && plain_key < range.end_key()) {
-      std::cout << fmt::format("key({}) in region({}).", key, distribution.id().entity_id()) << std::endl;
+      std::cout << fmt::format("key({}) in region({}).", key, distribution.id().entity_id()) << '\n';
       return butil::Status::OK();
     }
   }
 
-  std::cout << "Not found key in any region." << std::endl;
+  std::cout << "Not found key in any region." << '\n';
 
   return butil::Status::OK();
 }
@@ -1874,12 +1874,12 @@ butil::Status WhichRegionForNewTable(const dingodb::pb::meta::TableDefinition& t
                                    region_info.region_id(), dingodb::Helper::RangeToString(range));
 
     if (plain_key >= range.start_key() && plain_key < range.end_key()) {
-      std::cout << fmt::format("key({}) in region({}).", key, region_info.region_id()) << std::endl;
+      std::cout << fmt::format("key({}) in region({}).", key, region_info.region_id()) << '\n';
       return butil::Status::OK();
     }
   }
 
-  std::cout << "Not found key in any region." << std::endl;
+  std::cout << "Not found key in any region." << '\n';
 
   return butil::Status();
 }
@@ -2009,11 +2009,11 @@ void RunRegionMetrics(RegionMetricsOptions const& opt) {
   }
   if (opt.type == 6) {
     for (const auto& it : response.region_metrics().region_metricses()) {
-      std::cout << it.DebugString() << std::endl;
+      std::cout << it.DebugString() << '\n';
     }
   } else if (opt.type == 8) {
     for (const auto& it : response.region_actual_metrics().region_metricses()) {
-      std::cout << it.DebugString() << std::endl;
+      std::cout << it.DebugString() << '\n';
     }
   }
 }
@@ -2047,7 +2047,7 @@ void RunQueryRegionStatus(QueryRegionStatusOptions const& opt) {
     return;
   }
   for (auto const& it : response.region_meta_details().regions()) {
-    std::cout << it.DebugString() << std::endl;
+    std::cout << it.DebugString() << '\n';
   }
   if (response.region_meta_details().regions_size() == 0) {
     std::string region_ids;
@@ -2057,7 +2057,7 @@ void RunQueryRegionStatus(QueryRegionStatusOptions const& opt) {
         region_ids += ", ";
       }
     }
-    std::cout << "Region: " << region_ids << " not exist." << std::endl;
+    std::cout << "Region: " << region_ids << " not exist." << '\n';
   }
 }
 
@@ -2111,7 +2111,7 @@ void SendKvGet(KvGetOptions const& opt, std::string& value) {
     return;
   }
   value = response.value();
-  std::cout << "value: " << value << std::endl;
+  std::cout << "value: " << value << '\n';
 }
 
 void SendKvBatchGet(KvBatchGetOptions const& opt) {
@@ -2144,7 +2144,7 @@ int SendKvPut(KvPutOptions const& opt, std::string value) {
               << response.error().errmsg();
     return response.error().errcode();
   }
-  std::cout << "value:" << value << std::endl;
+  std::cout << "value:" << value << '\n';
   return response.error().errcode();
 }
 
@@ -2523,7 +2523,7 @@ void SendTxnGet(TxnGetOptions const& opt) {
 void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2543,7 +2543,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     request.set_return_values(true);
   }
   if (opt.primary_lock.empty()) {
-    std::cout << "primary_lock is empty" << std::endl;
+    std::cout << "primary_lock is empty" << '\n';
     return;
   } else {
     std::string key = opt.primary_lock;
@@ -2554,29 +2554,29 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    std::cout << "start_ts is empty" << std::endl;
+    std::cout << "start_ts is empty" << '\n';
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.lock_ttl == 0) {
-    std::cout << "lock_ttl is empty" << std::endl;
+    std::cout << "lock_ttl is empty" << '\n';
     return;
   }
   request.set_lock_ttl(opt.lock_ttl);
 
   if (opt.for_update_ts == 0) {
-    std::cout << "for_update_ts is empty" << std::endl;
+    std::cout << "for_update_ts is empty" << '\n';
     return;
   }
   request.set_for_update_ts(opt.for_update_ts);
 
   if (opt.mutation_op.empty()) {
-    std::cout << "mutation_op is empty, mutation MUST be one of [lock]" << std::endl;
+    std::cout << "mutation_op is empty, mutation MUST be one of [lock]" << '\n';
     return;
   }
   if (opt.key.empty()) {
-    std::cout << "key is empty" << std::endl;
+    std::cout << "key is empty" << '\n';
     return;
   }
   std::string target_key = opt.key;
@@ -2584,7 +2584,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     target_key = HexToString(opt.key);
   }
   if (opt.value.empty()) {
-    std::cout << "value is empty" << std::endl;
+    std::cout << "value is empty" << '\n';
     return;
   }
   std::string target_value = opt.value;
@@ -2593,7 +2593,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   }
   if (opt.mutation_op == "lock") {
     if (opt.value.empty()) {
-      std::cout << "value is empty" << std::endl;
+      std::cout << "value is empty" << '\n';
       return;
     }
     auto* mutation = request.add_mutations();
@@ -2601,7 +2601,7 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
     mutation->set_key(target_key);
     mutation->set_value(target_value);
   } else {
-    std::cout << "mutation_op MUST be [lock]" << std::endl;
+    std::cout << "mutation_op MUST be [lock]" << '\n';
     return;
   }
 
@@ -2609,14 +2609,14 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "txn pessimistic lock failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg() << std::endl;
+              << response.error().errmsg() << '\n';
     return;
   }
-  std::cout << "txn pessimistic lock success." << std::endl;
+  std::cout << "txn pessimistic lock success." << '\n';
   if (response.txn_result_size() > 0) {
     std::cout << "txn_result:{ \n";
     for (auto const& txn_result : response.txn_result()) {
-      std::cout << "\t " << txn_result.DebugString() << std::endl;
+      std::cout << "\t " << txn_result.DebugString() << '\n';
     }
     std::cout << "}\n";
   } else if (opt.return_values) {
@@ -2642,14 +2642,14 @@ void SendTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
       std::cout << "}\n";
     }
   }
-  std::cout << std::endl;
+  std::cout << '\n';
   // DINGO_LOG(INFO) << "Response: " << response.DebugString();
 }
 
 void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2711,7 +2711,7 @@ void SendTxnPessimisticRollback(TxnPessimisticRollbackOptions const& opt) {
 void SendTxnPrewrite(TxnPrewriteOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2724,14 +2724,14 @@ void SendTxnPrewrite(TxnPrewriteOptions const& opt) {
              region.definition().index_parameter().has_document_index_parameter()) {
     DocumentSendTxnPrewrite(opt, region);
   } else {
-    std::cout << "region_type is invalid" << std::endl;
+    std::cout << "region_type is invalid" << '\n';
   }
-  std::cout << "Prewrite success." << std::endl;
+  std::cout << "Prewrite success." << '\n';
 }
 void SendTxnCommit(TxnCommitOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2749,19 +2749,19 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
   }
 
   if (opt.start_ts == 0) {
-    std::cout << "start_ts is empty" << std::endl;
+    std::cout << "start_ts is empty" << '\n';
     return;
   }
   request.set_start_ts(opt.start_ts);
 
   if (opt.commit_ts == 0) {
-    std::cout << "commit_ts is empty" << std::endl;
+    std::cout << "commit_ts is empty" << '\n';
     return;
   }
   request.set_commit_ts(opt.commit_ts);
 
   if (opt.key.empty()) {
-    std::cout << "key is empty" << std::endl;
+    std::cout << "key is empty" << '\n';
     return;
   }
   std::string target_key = opt.key;
@@ -2786,13 +2786,13 @@ void SendTxnCommit(TxnCommitOptions const& opt) {
     return;
   }
   std::cout << "txn commit success, txn_result: " << response.txn_result().DebugString()
-            << " commit_ts: " << response.commit_ts() << std::endl;
+            << " commit_ts: " << response.commit_ts() << '\n';
 }
 
 void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2847,7 +2847,7 @@ void SendTxnCheckTxnStatus(TxnCheckTxnStatusOptions const& opt) {
 void SendTxnResolveLock(TxnResolveLockOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2899,7 +2899,7 @@ void SendTxnResolveLock(TxnResolveLockOptions const& opt) {
 void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -2983,7 +2983,7 @@ void SendTxnBatchGet(TxnBatchGetOptions const& opt) {
 void SendTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -3034,7 +3034,7 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const& opt) {
 void SendTxnHeartBeat(TxnHeartBeatOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -3084,7 +3084,7 @@ void SendTxnHeartBeat(TxnHeartBeatOptions const& opt) {
 void SendTxnGc(TxnGCOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -3117,7 +3117,7 @@ void SendTxnGc(TxnGCOptions const& opt) {
 void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -3165,7 +3165,7 @@ void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {
 void SendTxnDump(TxnDumpOptions const& opt) {
   dingodb::pb::common::Region region = SendQueryRegion(opt.region_id);
   if (region.id() == 0) {
-    std::cout << "GetRegion failed." << std::endl;
+    std::cout << "GetRegion failed." << '\n';
     return;
   }
 
@@ -3223,29 +3223,29 @@ void SendTxnDump(TxnDumpOptions const& opt) {
   }
 
   if (response.has_txn_result()) {
-    std::cout << "Response TxnResult: " << response.txn_result().ShortDebugString() << std::endl;
+    std::cout << "Response TxnResult: " << response.txn_result().ShortDebugString() << '\n';
   }
 
-  std::cout << "data_size: " << response.data_keys_size() << std::endl;
-  std::cout << "lock_size: " << response.lock_keys_size() << std::endl;
-  std::cout << "write_size: " << response.write_keys_size() << std::endl;
+  std::cout << "data_size: " << response.data_keys_size() << '\n';
+  std::cout << "lock_size: " << response.lock_keys_size() << '\n';
+  std::cout << "write_size: " << response.write_keys_size() << '\n';
 
   for (int i = 0; i < response.data_keys_size(); i++) {
     std::cout << "data[" << i << "] hex_key: [" << StringToHex(response.data_keys(i).key()) << "] key: ["
               << response.data_keys(i).ShortDebugString() << "], value: [" << response.data_values(i).ShortDebugString()
-              << "]" << std::endl;
+              << "]" << '\n';
   }
 
   for (int i = 0; i < response.lock_keys_size(); i++) {
     std::cout << "lock[" << i << "] hex_key: [" << StringToHex(response.lock_keys(i).key()) << "] key: ["
               << response.lock_keys(i).ShortDebugString() << "], value: [" << response.lock_values(i).ShortDebugString()
-              << "]" << std::endl;
+              << "]" << '\n';
   }
 
   for (int i = 0; i < response.write_keys_size(); i++) {
     std::cout << "write[" << i << "] hex_key: [" << StringToHex(response.write_keys(i).key()) << "] key: ["
               << response.write_keys(i).ShortDebugString() << "], value: ["
-              << response.write_values(i).ShortDebugString() << "]" << std::endl;
+              << response.write_values(i).ShortDebugString() << "]" << '\n';
   }
 }
 
@@ -3880,7 +3880,7 @@ void SendSnapshot(SnapshotOptions const& opt) {
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
               << response.error().errmsg();
   }
-  std::cout << "region " << opt.region_id << " do snapshot success " << std::endl;
+  std::cout << "region " << opt.region_id << " do snapshot success " << '\n';
 }
 
 void SendSnapshotVectorIndex(SnapshotVectorIndexOptions const& opt) {

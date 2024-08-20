@@ -1848,7 +1848,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto* mut_stream_meta = response->mutable_stream_meta();
   mut_stream_meta->set_stream_id(stream->StreamId());
-  mut_stream_meta->set_has_next(has_more);
+  mut_stream_meta->set_has_more(has_more);
 
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
@@ -2922,7 +2922,7 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
 
   auto* mut_stream_meta = response->mutable_stream_meta();
   mut_stream_meta->set_stream_id(stream->StreamId());
-  mut_stream_meta->set_has_next(has_more);
+  mut_stream_meta->set_has_more(has_more);
 
   if (!has_more) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
