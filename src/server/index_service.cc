@@ -2268,7 +2268,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   mut_stream_meta->set_stream_id(stream->StreamId());
   mut_stream_meta->set_has_more(has_more);
 
-  if (!has_more) {
+  if (!has_more || stream_meta.close()) {
     Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
 
