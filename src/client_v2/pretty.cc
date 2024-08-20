@@ -886,7 +886,7 @@ void Pretty::Show(dingodb::pb::meta::CreateIndexResponse& response) {
   if (ShowError(response.error())) {
     return;
   }
-  auto dingo_command_id = response.index_id();
+  const auto& dingo_command_id = response.index_id();
   std::vector<std::vector<ftxui::Element>> rows = {{
       ftxui::paragraph("EntityType"),
       ftxui::paragraph("ParentId"),
@@ -1016,7 +1016,7 @@ void Pretty::Show(dingodb::pb::document::DocumentGetRegionMetricsResponse& respo
   if (ShowError(response.error())) {
     return;
   }
-  auto metrics = response.metrics();
+  const auto& metrics = response.metrics();
   {
     std::vector<std::vector<ftxui::Element>> rows = {{
         ftxui::paragraph("TotalNumDocs"),
@@ -1221,7 +1221,7 @@ void Pretty::Show(dingodb::pb::meta::TsoResponse& response) {
   PrintTable(rows);
 }
 void Pretty::ShowSchemas(const std::vector<dingodb::pb::meta::Schema>& schemas) {
-  if (schemas.size() == 0) {
+  if (schemas.empty()) {
     std::cout << "Not find schema." << std::endl;
     return;
   }
@@ -1229,10 +1229,10 @@ void Pretty::ShowSchemas(const std::vector<dingodb::pb::meta::Schema>& schemas) 
       ftxui::paragraph("Id"),
       ftxui::paragraph("Name"),
       ftxui::paragraph("TenantId"),
-      ftxui::paragraph("ChildTableCount"),
-      ftxui::paragraph("ChildIndexCount"),
-      ftxui::paragraph("ChildTableIds"),
-      ftxui::paragraph("ChildIndexIds"),
+      ftxui::paragraph("TableCount"),
+      ftxui::paragraph("IndexCount"),
+      ftxui::paragraph("TableIds"),
+      ftxui::paragraph("IndexIds"),
   }};
 
   for (auto const& schema : schemas) {

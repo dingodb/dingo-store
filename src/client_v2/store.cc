@@ -1799,6 +1799,15 @@ butil::Status WhichRegionForOldTable(const dingodb::pb::meta::TableDefinition& t
 
       std::vector<std::string> origin_keys;
       dingodb::Helper::SplitString(key, ',', origin_keys);
+      for (auto& key : origin_keys) {
+        if (Helper::IsDateString(key)) {
+          int64_t timestamp = Helper::StringToTimestamp(key);
+          if (timestamp <= 0) {
+            return butil::Status(-1, fmt::format("Invalid date({})", key));
+          }
+          key = std::to_string(timestamp * 1000);
+        }
+      }
       record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
 
     } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
@@ -1857,6 +1866,16 @@ butil::Status WhichRegionForNewTable(const dingodb::pb::meta::TableDefinition& t
 
       std::vector<std::string> origin_keys;
       dingodb::Helper::SplitString(key, ',', origin_keys);
+      for (auto& key : origin_keys) {
+        if (Helper::IsDateString(key)) {
+          int64_t timestamp = Helper::StringToTimestamp(key);
+          if (timestamp <= 0) {
+            return butil::Status(-1, fmt::format("Invalid date({})", key));
+          }
+          key = std::to_string(timestamp * 1000);
+        }
+      }
+
       record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
 
     } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
