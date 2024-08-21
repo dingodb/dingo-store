@@ -1855,7 +1855,12 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
             os << "<a href=\"" << url_line[i] << line[i] << "\">" << line[i] << "</a>";
           }
         } else {
-          os << brpc::min_width(line[i], min_widths[i]);
+          if (line[i].size() <= 64) {
+            os << brpc::min_width(line[i], min_widths[i]);
+          } else {
+            os << "<div class=\"part\">" << line[i].substr(0, 64) << "..."
+               << "<span class=\"full\">" << line[i] << "</span></div>";
+          }
         }
       } else {
         os << brpc::min_width(line[i], min_widths[i]) << '\n';
