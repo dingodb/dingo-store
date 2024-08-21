@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <iomanip>
 #include <iostream>
 #include <string>
 #include <thread>
