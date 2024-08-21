@@ -24,7 +24,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <random>
@@ -45,8 +44,15 @@
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
+#include "server/server.h"
+
+// open ENABLE_GC_MOCK macro !!!!!!!!!
+
+DECLARE_string(role);
 
 namespace dingodb {
+DECLARE_bool(dingo_log_switch_txn_detail);
+DECLARE_int64(gc_delete_batch_count);
 
 static const std::vector<std::string> kAllCFs = {Constant::kTxnWriteCF, Constant::kTxnDataCF, Constant::kTxnLockCF,
                                                  Constant::kStoreDataCF};
@@ -121,12 +127,19 @@ class TxnGcTest : public testing::Test {
     config = std::make_shared<YamlConfig>();
     ASSERT_EQ(0, config->Load(kYamlConfigContent));
 
-    engine = std::make_shared<RocksRawEngine>();
-    ASSERT_TRUE(engine != nullptr);
-    ASSERT_TRUE(engine->Init(config, kAllCFs));
-
+    FLAGS_role = "store";
     ConfigManager::GetInstance().Register("store", config);
-    ConfigManager::GetInstance().Register("index", config);
+    Server::GetInstance().InitServerID();
+    Server::GetInstance().InitCoordinatorInteraction();
+    Server::GetInstance().InitTsProvider();
+    Server::GetInstance().InitRocksRawEngine();
+    Server::GetInstance().InitEngine();
+    engine = std::dynamic_pointer_cast<RocksRawEngine>(
+        Server::GetInstance().GetRawEngine(pb::common::RawEngine::RAW_ENG_ROCKSDB));
+    Server::GetInstance().InitStoreMetaManager();
+
+    FLAGS_dingo_log_switch_txn_detail = true;
+    FLAGS_gc_delete_batch_count = 3;
   }
 
   static void TearDownTestSuite() {
@@ -178,20 +191,34 @@ static void DoGcCore(bool gc_stop, int64_t safe_point_ts, bool force_gc_stop) {
   std::shared_ptr<Context> ctx;
 
   std::shared_ptr<GCSafePoint> gc_safe_point = std::make_shared<GCSafePoint>();
-  gc_safe_point->SetGcFlagAndSafePointTs(gc_stop, safe_point_ts);
-  gc_safe_point->SetForceGcStop(force_gc_stop);
+  gc_safe_point->SetGcFlagAndSafePointTs(Constant::kDefaultTenantId, gc_stop, safe_point_ts);
+  gc_safe_point->SetGcStop(force_gc_stop);
 
   int64_t region_id = 1;
 
-  store::RegionPtr region_ptr = std::make_shared<store::Region>(region_id);
   std::string region_start_key(TxnGcTest::prefix_start_key);
   std::string region_end_key(TxnGcTest::prefix_end_key);
 
+  pb::common::RegionDefinition definition;
+  definition.set_id(region_id);
+  definition.mutable_range()->set_start_key(region_start_key);
+  definition.mutable_range()->set_end_key(region_end_key);
+  definition.set_part_id(1);
+  definition.set_tenant_id(0);
+
+  store::RegionPtr region_ptr = store::Region::New(definition);
+
   ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
+#if defined(ENABLE_GC_MOCK)
+  ctx->SetWriter(TxnGcTest::engine->Writer());
+#endif
+
+  Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->AddRegion(region_ptr);
 
   status = TxnEngineHelper::DoGc(TxnGcTest::engine, raft_engine, ctx, TxnGcTest::safe_point_ts, gc_safe_point,
                                  region_start_key, region_end_key);
+  Server::GetInstance().GetStoreMetaManager()->GetStoreRegionMeta()->DeleteRegion(region_id);
 }
 
 static void DeleteRange() {
@@ -199,8 +226,8 @@ static void DeleteRange() {
   // delete range
   {
     pb::common::Range range;
-    range.set_start_key(TxnGcTest::prefix_start_key);
-    range.set_end_key(TxnGcTest::prefix_end_key);
+    range.set_start_key(mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer));
+    range.set_end_key(mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer));
 
     writer->KvDeleteRange(
         {
@@ -226,15 +253,17 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       TxnGcTest::prefix_start_key = prefix_key_array[start_index];
-      TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - end_index];
+      TxnGcTest::prefix_end_key = prefix_key_array[end_index];
 
-      for (size_t i = 0; i < std::size(prefix_key_array) - end_index; i++) {
-        // for (const auto &prefix_key : prefix_key_array) {
-        const auto &prefix_key = prefix_key_array[i];
-        for (int j = 0; j < count; j++) {
-          func(j, physical, logical, prefix_key, writer);
+      for (size_t i = 0; i < end_index; i++) {
+        if (i >= start_index) {
+          const auto &prefix_key = prefix_key_array[i];
+          for (int j = 0; j < count; j++) {
+            func(j, physical, logical++, prefix_key, writer);
+          }
         }
-        LOG(INFO);
+
+        // LOG(INFO);
         physical++;
 
         if (i == set_tso_position) {
@@ -264,14 +293,14 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+      std::string prefix_key_array[]{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
       for (size_t i = 0; i < std::size(prefix_key_array) - 1; i++) {
         // for (const auto &prefix_key : prefix_key_array) {
         const std::string &prefix_key = prefix_key_array[i];
-        for (int j = 0; j < 32768; j++) {
+        for (int j = 0; j < FLAGS_gc_delete_batch_count; j++) {
           pb::common::KeyValue kv_write;
           pb::meta::TsoTimestamp tso;
           tso.set_physical(physical);
@@ -329,7 +358,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb"};
+      std::string prefix_key_array[]{"taba", "tabb"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
@@ -396,7 +425,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       std::string prefix_key_array[]{
-          "aba", "abb", "abc", "abd", "abe", "abf", "abg",
+          "taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg",
       };
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
@@ -492,14 +521,14 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+      std::string prefix_key_array[]{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
       for (size_t i = 0; i < std::size(prefix_key_array) - 1; i++) {
         // for (const auto &prefix_key : prefix_key_array) {
         const std::string &prefix_key = prefix_key_array[i];
-        for (int j = 0; j < 32768; j++) {
+        for (int j = 0; j < FLAGS_gc_delete_batch_count; j++) {
           pb::common::KeyValue kv_write;
           pb::meta::TsoTimestamp tso;
           tso.set_physical(physical);
@@ -570,7 +599,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb"};
+      std::string prefix_key_array[]{"taba", "tabb"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
@@ -637,9 +666,9 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       std::string prefix_key_array[]{
-          "aba",
-          "abb",
-          "abc",
+          "taba",
+          "tabb",
+          "tabc",
       };
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
@@ -663,7 +692,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       std::string prefix_key_array[]{
-          "aba", "abb", "abc", "abd", "abe", "abf", "abg",
+          "taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg",
       };
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
@@ -760,8 +789,8 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       std::string prefix_key_array[]{
-          "aba",
-          "abb",
+          "taba",
+          "tabb",
       };
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
@@ -862,9 +891,9 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
     // write column
     {
       std::string prefix_key_array[]{
-          "aba",
-          "abb",
-          "abc",
+          "taba",
+          "tabb",
+          "tabc",
       };
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
@@ -957,7 +986,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb"};
+      std::string prefix_key_array[]{"taba", "tabb"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
@@ -1010,7 +1039,7 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb"};
+      std::string prefix_key_array[]{"taba", "tabb"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
@@ -1076,14 +1105,14 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 
     // write column
     {
-      std::string prefix_key_array[]{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+      std::string prefix_key_array[]{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
       TxnGcTest::prefix_start_key = prefix_key_array[0];
       TxnGcTest::prefix_end_key = prefix_key_array[std::size(prefix_key_array) - 1];
 
       for (size_t i = 0; i < std::size(prefix_key_array) - 1; i++) {
         // for (const auto &prefix_key : prefix_key_array) {
         const std::string &prefix_key = prefix_key_array[i];
-        for (int j = 0; j < 32768; j++) {
+        for (int j = 0; j < FLAGS_gc_delete_batch_count; j++) {
           pb::common::KeyValue kv_write;
           pb::meta::TsoTimestamp tso;
           tso.set_physical(physical);
@@ -1145,10 +1174,9 @@ static void PrepareData(const std::vector<std::string> &prefix_key_array, int st
 }
 
 TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
-  // PrepareDataForDoGcDataNormalNoLock();
-
+  std::vector<std::string> prefix_key_array{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
   PrepareData(
-      {"aba", "abb", "abc", "abd", "abe", "abf", "abg"}, 0, 1, 32768, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, FLAGS_gc_delete_batch_count, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1157,8 +1185,6 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1188,16 +1214,47 @@ TEST_F(TxnGcTest, DoGcDataNormalNoLock) {
       });
 
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // gc_safe_point. safe point < safe_point
 // print warning
 TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
-  // PrepareDataForDoGcDataNormalGcSafePointWarning();
-
+  std::vector<std::string> prefix_key_array{"taba", "tabb"};
   PrepareData(
-      {"aba", "abb"}, 0, 1, 3, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, FLAGS_gc_delete_batch_count, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1206,8 +1263,6 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1236,16 +1291,46 @@ TEST_F(TxnGcTest, DoGcDataNormalGcSafePointWarning) {
         // lock empty
       });
   DoGcCore(false, TxnGcTest::safe_point_ts + 10, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // no data at before
 TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
-  // PrepareDataForDoGcNoDataAtBefore();
-
-  std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
   PrepareData(
-      prefix_key_array, 0, 2, 12, (std::size(prefix_key_array) - 1) / 2,
+      prefix_key_array, 0, prefix_key_array.size() - 2, 12, (std::size(prefix_key_array) - 1) / 2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1272,10 +1357,6 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
         } else {
           write_info.set_op(::dingodb::pb::store::Op::Put);
         }
-
-        // LOG(INFO) << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
-        //                ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
-        //;
 
         kv_write.set_key(write_key);
         kv_write.set_value(write_info.SerializeAsString());
@@ -1312,15 +1393,46 @@ TEST_F(TxnGcTest, DoGcNoDataAtBefore) {
         }
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(((std::size(prefix_key_array) - 1) / 2 + 1) * 7 + 12, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(((std::size(prefix_key_array) - 1) / 2 + 1) + 2, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(prefix_key_array.size() - 2, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // gc stop at middle
 TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
-  // PrepareDataForDoGcDataNormalGcStopAtMiddle();
-  std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
   PrepareData(
-      prefix_key_array, 0, 1, 32768, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, FLAGS_gc_delete_batch_count, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1329,8 +1441,6 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1373,15 +1483,46 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtMiddle) {
         // lock empty
       });
   DoGcCore(true, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // gc stop at end
 TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
-  // PrepareDataForDoGcDataNormalGcStopAtEnd();
-  std::vector<std::string> prefix_key_array{"aba", "abb"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb"};
   PrepareData(
-      prefix_key_array, 0, 1, 3, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, FLAGS_gc_delete_batch_count, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1390,8 +1531,6 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1420,32 +1559,94 @@ TEST_F(TxnGcTest, DoGcDataNormalGcStopAtEnd) {
         // lock empty
       });
   DoGcCore(true, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // No data
 TEST_F(TxnGcTest, DoGcNoData) {
-  // PrepareDataForDoGcNoData();
   std::vector<std::string> prefix_key_array{
-      "aba",
+      "taba",
   };
   PrepareData(
-      prefix_key_array, 0, 1, 0, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, 0, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         // lock empty
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // safe point before and after has data
 // op = delete, put, rollback, PutIfAbsent, none ...
 // many keys
 TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys) {
-  // PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterManyKeys();
-  std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
   PrepareData(
-      prefix_key_array, 0, 1, 12, (std::size(prefix_key_array) - 1) / 2,
+      prefix_key_array, 0, prefix_key_array.size() - 1, 12, (std::size(prefix_key_array) - 1) / 2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1472,10 +1673,6 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
         } else {
           write_info.set_op(::dingodb::pb::store::Op::Put);
         }
-
-        // LOG(INFO) << fmt::format("key : {} op : {} start_ts ; {} commit_ts : {}", prefix_key,
-        //                          ::dingodb::pb::store::Op_Name(write_info.op()), start_ts, commit_ts)
-        //          ;
 
         kv_write.set_key(write_key);
         kv_write.set_value(write_info.SerializeAsString());
@@ -1512,16 +1709,47 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfterM
         }
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((52), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(8, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(6, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // safe point before and after has data
 // op = delete, put, rollback, PutIfAbsent, none ...
 TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter) {
-  // PrepareDataForDoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter();
-  std::vector<std::string> prefix_key_array{"aba", "abb"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb"};
   PrepareData(
-      prefix_key_array, 0, 1, 12, -2,
+      prefix_key_array, 0, prefix_key_array.size() - 1, 12, -2,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1530,8 +1758,6 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1593,19 +1819,50 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBackAndSafePointHasDataBeforeAfter)
         }
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((8), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(4, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(1, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // op = delete, put, rollback, PutIfAbsent, none ...
 TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
-  // PrepareDataForDoGcDataDeleteAndPutAndRollBack();
   std::vector<std::string> prefix_key_array{
-      "aba",
-      "abb",
-      "abc",
+      "taba",
+      "tabb",
+      "tabc",
   };
   PrepareData(
-      prefix_key_array, 0, 1, 6, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, 6, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1614,8 +1871,6 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1670,17 +1925,48 @@ TEST_F(TxnGcTest, DoGcDataDeleteAndPutAndRollBack) {
         }
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((6), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(2, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // write  -> data empty
 TEST_F(TxnGcTest, DoGcDataEmpty) {
-  // PrepareDataForDoGcDataEmpty();
   std::vector<std::string> prefix_key_array{
-      "aba",
-      "abb",
+      "taba",
+      "tabb",
   };
-  PrepareData(prefix_key_array, 0, 1, 3, -1,
+  PrepareData(prefix_key_array, 0, prefix_key_array.size() - 1, 3, -1,
               [&]([[maybe_unused]] int j, int64_t physical, int64_t logical, const std::string &prefix_key,
                   RawEngine::WriterPtr writer) {
                 pb::common::KeyValue kv_write;
@@ -1690,9 +1976,6 @@ TEST_F(TxnGcTest, DoGcDataEmpty) {
                 int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
                 tso.set_logical(++logical);
                 int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-                // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts)
-                //          ;
 
                 std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1708,17 +1991,48 @@ TEST_F(TxnGcTest, DoGcDataEmpty) {
                 // lock empty
               });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 TEST_F(TxnGcTest, DoGcDataNormal) {
-  // PrepareDataForDoGcDataNormal();
   std::vector<std::string> prefix_key_array{
-      "aba",
-      "abb",
+      "taba",
+      "tabb",
   };
   PrepareData(
-      prefix_key_array, 0, 1, 3, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, 3, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1727,8 +2041,6 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1757,15 +2069,46 @@ TEST_F(TxnGcTest, DoGcDataNormal) {
         // lock empty
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 // lock column family span too many data. not scan repeated.
 TEST_F(TxnGcTest, DoGcSpanLock) {
-  // PrepareDataForDoGcSpanLock();
-  std::vector<std::string> prefix_key_array{"aba", "abb", "abc", "abd", "abe", "abf", "abg"};
+  std::vector<std::string> prefix_key_array{"taba", "tabb", "tabc", "tabd", "tabe", "tabf", "tabg"};
   PrepareData(
-      prefix_key_array, 0, 1, 32768, -1,
+      prefix_key_array, 0, prefix_key_array.size() - 1, FLAGS_gc_delete_batch_count, -1,
       [&](int j, int64_t physical, int64_t logical, const std::string &prefix_key, RawEngine::WriterPtr writer) {
         pb::common::KeyValue kv_write;
         pb::meta::TsoTimestamp tso;
@@ -1774,8 +2117,6 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
         int64_t start_ts = TxnGcTest::Tso2Timestamp(tso);
         tso.set_logical(++logical);
         int64_t commit_ts = TxnGcTest::Tso2Timestamp(tso);
-
-        // LOG(INFO) << fmt::format("key : {} start_ts ; {} commit_ts : {}", prefix_key, start_ts, commit_ts);
 
         std::string write_key = mvcc::Codec::EncodeKey(std::string(prefix_key), commit_ts);
 
@@ -1817,7 +2158,39 @@ TEST_F(TxnGcTest, DoGcSpanLock) {
       });
   DoGcCore(false, TxnGcTest::safe_point_ts, false);
 
+#if defined(ENABLE_GC_MOCK)
+  auto reader = TxnGcTest::engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = TxnGcTest::engine->GetSnapshot();
+  int64_t count = 0;
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ((prefix_key_array.size() - 1), count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(6, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(6, count);
   DeleteRange();
+  snapshot = TxnGcTest::engine->GetSnapshot();
+  reader->KvCount(Constant::kTxnWriteCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnDataCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+  reader->KvCount(Constant::kTxnLockCF, snapshot,
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_start_key, Constant::kMaxVer),
+                  mvcc::Codec::EncodeKey(TxnGcTest::prefix_end_key, Constant::kMaxVer), count);
+  EXPECT_EQ(0, count);
+#else
+  DeleteRange();
+#endif
 }
 
 }  // namespace dingodb

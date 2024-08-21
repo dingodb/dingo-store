@@ -396,7 +396,7 @@ class StoreMetaManager {
         region_meta_(std::make_shared<StoreRegionMeta>(meta_reader, meta_writer)),
         raft_meta_(std::make_shared<StoreRaftMeta>(meta_reader, meta_writer)),
         region_change_recorder_(std::make_shared<RegionChangeRecorder>(meta_reader, meta_writer)),
-        gc_safe_point_(std::make_shared<GCSafePoint>()) {}
+        gc_safe_point_manager_(std::make_shared<GCSafePointManager>()) {}
   ~StoreMetaManager() = default;
 
   StoreMetaManager(const StoreMetaManager&) = delete;
@@ -410,7 +410,7 @@ class StoreMetaManager {
   std::shared_ptr<RegionChangeRecorder> GetRegionChangeRecorder();
 
   // get gc meta ptr
-  std::shared_ptr<GCSafePoint> GetGCSafePoint();
+  std::shared_ptr<GCSafePointManager> GetGCSafePointManager();
 
  private:
   // Store server meta data, like id/state/endpoint etc.
@@ -423,7 +423,7 @@ class StoreMetaManager {
   std::shared_ptr<RegionChangeRecorder> region_change_recorder_;
 
   // gc meta
-  std::shared_ptr<GCSafePoint> gc_safe_point_;
+  std::shared_ptr<GCSafePointManager> gc_safe_point_manager_;
 };
 
 }  // namespace dingodb

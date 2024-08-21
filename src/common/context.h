@@ -27,6 +27,16 @@
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 
+#ifndef ENABLE_GC_MOCK
+#define ENABLE_GC_MOCK
+#endif
+
+#undef ENABLE_GC_MOCK
+
+#if defined(ENABLE_GC_MOCK)
+#include "engine/raw_engine.h"
+#endif
+
 namespace dingodb {
 
 class Context;
@@ -136,6 +146,11 @@ class Context {
   DiskANNCoreState DiskANNCoreStateX() { return diskann_core_state_; };
   void SetDiskANNCoreStateX(enum DiskANNCoreState state) { diskann_core_state_ = state; }
 
+#if defined(ENABLE_GC_MOCK)
+  RawEngine::WriterPtr Writer() { return writer_; }
+  void SetWriter(RawEngine::WriterPtr writer) { writer_ = writer; }
+#endif
+
  private:
   // brpc framework free resource
   brpc::Controller* cntl_{nullptr};
@@ -174,6 +189,10 @@ class Context {
   TrackerPtr tracker_;
 
   enum DiskANNCoreState diskann_core_state_ {};
+
+#if defined(ENABLE_GC_MOCK)
+  RawEngine::WriterPtr writer_;
+#endif
 };
 
 using ContextPtr = std::shared_ptr<Context>;

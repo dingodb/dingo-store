@@ -209,30 +209,97 @@ class TxnEngineHelper {
                             int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
                             const std::string &region_start_key, const std::string &region_end_key);
 
-  static butil::Status CheckLockForGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
-                                      const std::string &start_key, const std::string &end_key, int64_t safe_point_ts,
-                                      int64_t region_id);
+  static butil::Status DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                   std::shared_ptr<Context> ctx, pb::common::RegionType type, int64_t safe_point_ts,
+                                   std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                   const std::string &region_end_key);
 
-  static butil::Status RaftEngineWriteForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-                                            const std::vector<std::string> &kv_deletes_lock,
-                                            const std::vector<std::string> &kv_deletes_data,
-                                            const std::vector<std::string> &kv_deletes_write);
+  static butil::Status DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                      std::shared_ptr<Context> ctx, pb::common::RegionType type, int64_t safe_point_ts,
+                                      std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                      const std::string &region_end_key);
 
-  static butil::Status DoFinalWorkForGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
-                                        RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
-                                        const std::string &write_key, int64_t safe_point_ts,
-                                        std::vector<std::string> &kv_deletes_lock,                    // NOLINT
-                                        std::vector<std::string> &kv_deletes_data,                    // NOLINT
-                                        std::vector<std::string> &kv_deletes_write,                   // NOLINT
-                                        std::string &lock_start_key,                                  // NOLINT
-                                        std::string &lock_end_key, std::string &last_lock_start_key,  // NOLINT
-                                        std::string &last_lock_end_key);                              // NOLINT
+  static butil::Status DoGcForStoreTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                       std::shared_ptr<Context> ctx, pb::common::RegionType type, int64_t safe_point_ts,
+                                       std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                       const std::string &region_end_key);
+
+  static butil::Status DoGcForStoreNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                          std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                          int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                          const std::string &region_start_key, const std::string &region_end_key);
+
+  static butil::Status DoGcForIndexTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                       std::shared_ptr<Context> ctx, pb::common::RegionType type, int64_t safe_point_ts,
+                                       std::shared_ptr<GCSafePoint> gc_safe_point, const std::string &region_start_key,
+                                       const std::string &region_end_key);
+
+  static butil::Status DoGcForIndexNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                          std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                          int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                          const std::string &region_start_key, const std::string &region_end_key);
+
+  static butil::Status DoGcForDocumentTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                          std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                          int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                          const std::string &region_start_key, const std::string &region_end_key);
+
+  static butil::Status DoGcForDocumentNonTxn(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                             std::shared_ptr<Context> ctx, pb::common::RegionType type,
+                                             int64_t safe_point_ts, std::shared_ptr<GCSafePoint> gc_safe_point,
+                                             const std::string &region_start_key, const std::string &region_end_key);
+
+  static butil::Status CheckLockForTxnGc(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                         const std::string &start_key, const std::string &end_key,
+                                         int64_t safe_point_ts, int64_t region_id, int64_t tenant_id,
+                                         pb::common::RegionType type);
+
+  static butil::Status RaftEngineWriteForTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                               const std::vector<std::string> &kv_deletes_lock,
+                                               const std::vector<std::string> &kv_deletes_data,
+                                               const std::vector<std::string> &kv_deletes_write, int64_t tenant_id,
+                                               pb::common::RegionType type);
+
+  static butil::Status RaftEngineWriteForNonTxnStoreAndDocumentGc(std::shared_ptr<Engine> raft_engine,
+                                                                  std::shared_ptr<Context> ctx,
+                                                                  const std::vector<std::string> &kv_deletes_default,
+                                                                  int64_t tenant_id, pb::common::RegionType type);
+
+  static butil::Status RaftEngineWriteForNonTxnIndexGc(std::shared_ptr<Engine> raft_engine,
+                                                       std::shared_ptr<Context> ctx,
+                                                       const std::vector<std::string> &kv_deletes_default,
+                                                       const std::vector<std::string> &kv_deletes_scalar,
+                                                       const std::vector<std::string> &kv_deletes_table,
+                                                       const std::vector<std::string> &kv_deletes_scalar_speedup,
+                                                       int64_t tenant_id, pb::common::RegionType type);
+
+  static butil::Status RaftEngineWrite(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                       pb::raft::TxnRaftRequest &txn_raft_request, int64_t tenant_id,
+                                       pb::common::RegionType type, const std::string &name);
+
+  static butil::Status DoFinalWorkForTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                           RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                           const std::string &write_key, int64_t tenant_id, pb::common::RegionType type,
+                                           int64_t safe_point_ts,
+                                           std::vector<std::string> &kv_deletes_lock,                    // NOLINT
+                                           std::vector<std::string> &kv_deletes_data,                    // NOLINT
+                                           std::vector<std::string> &kv_deletes_write,                   // NOLINT
+                                           std::string &lock_start_key,                                  // NOLINT
+                                           std::string &lock_end_key, std::string &last_lock_start_key,  // NOLINT
+                                           std::string &last_lock_end_key);                              // NOLINT
+
+  static butil::Status DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                              int64_t tenant_id, pb::common::RegionType type,
+                                              std::vector<std::string> &kv_deletes_default,
+                                              std::vector<std::string> &kv_deletes_scalar,
+                                              std::vector<std::string> &kv_deletes_table,
+                                              std::vector<std::string> &kv_deletes_scalar_speedup);
 
   static void RegularUpdateSafePointTsHandler(void *arg);
   static void RegularDoGcHandler(void *arg);
 
   static void GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t start_ts, int64_t for_update_ts,
-                                    int64_t lock_min_commit_ts, int64_t max_commit_ts, int64_t &final_min_commit_ts);
+                                  int64_t lock_min_commit_ts, int64_t max_commit_ts, int64_t &final_min_commit_ts);
 
   static butil::Status GenPrewriteDataAndLock(
       int64_t region_id, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,

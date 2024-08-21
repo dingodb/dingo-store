@@ -254,6 +254,9 @@ class Constant {
   inline static const float kDiskannSearchDramBudgetGbDefaultValue = 1.0f;
   inline static const float kDiskannBuildDramBudgetGbDefaultValue = 10.0f;
   inline static const int64_t kDiskannImportTimeoutSecondDefaultValue = 30;
+
+  // tenant
+  inline static const int64_t kDefaultTenantId = 0;
 };
 
 }  // namespace dingodb
