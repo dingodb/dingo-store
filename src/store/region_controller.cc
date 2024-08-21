@@ -665,10 +665,44 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   if (source_region->State() != pb::common::NORMAL) {
-    return butil::Status(pb::error::EREGION_STATE, "Source region state is not NORMAL, not allow merge.");
+    return butil::Status(pb::error::EREGION_STATE,
+                         fmt::format("Source region state({}) is not NORMAL, not allow merge.",
+                                     pb::common::StoreRegionState_Name(source_region->State())));
   }
   if (target_region->State() != pb::common::NORMAL) {
-    return butil::Status(pb::error::EREGION_STATE, "Target region state is NORMAL, not allow merge.");
+    return butil::Status(pb::error::EREGION_STATE,
+                         fmt::format("Target region state({}) is NORMAL, not allow merge.",
+                                     pb::common::StoreRegionState_Name(target_region->State())));
+  }
+
+  // Check source/target region peer state
+  for (const auto& peer : source_region->Definition().peers()) {
+    auto region_metas =
+        ServiceAccess::GetRegionInfo({source_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
+    if (region_metas.empty()) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found source peer({}) region meta.",
+                                                                     Helper::LocationToString(peer.raft_location())));
+    }
+    if (region_metas.front().state() != pb::common::NORMAL) {
+      return butil::Status(pb::error::EREGION_STATE,
+                           fmt::format("Source region peer state({}) is not NORMAL, not allow merge.",
+                                       pb::common::StoreRegionState_Name(region_metas.front().state())));
+    }
+  }
+
+  // Check target region peer state
+  for (const auto& peer : target_region->Definition().peers()) {
+    auto region_metas =
+        ServiceAccess::GetRegionInfo({source_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
+    if (region_metas.empty()) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found target peer({}) region meta.",
+                                                                     Helper::LocationToString(peer.raft_location())));
+    }
+    if (region_metas.front().state() != pb::common::NORMAL) {
+      return butil::Status(pb::error::EREGION_STATE,
+                           fmt::format("Target region peer state({}) is not NORMAL, not allow merge.",
+                                       pb::common::StoreRegionState_Name(region_metas.front().state())));
+    }
   }
 
   // Check region adjoin
