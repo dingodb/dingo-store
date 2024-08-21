@@ -76,6 +76,23 @@ void RegionImpl::default_method(google::protobuf::RpcController* controller,
          << "  .bold-text {"
          << "    font-weight: bold;"
          << "  }"
+         << "  .part .full {\n"
+         << "    visibility: hidden;\n"
+         << "    width: 500px;\n"
+         << "    background-color: gray;\n"
+         << "    color: #fff;\n"
+         << "    text-align: center;\n"
+         << "    border-radius: 6px;\n"
+         << "    padding: 5px 0;\n"
+         << "    word-wrap: break-word;\n"
+         << "    word-break:break-all;\n"
+         << "    position: absolute;\n"
+         << "    z-index: 1;\n"
+         << "  }\n"
+
+         << "  .part:hover .full {\n"
+         << "    visibility: visible;\n"
+         << "  }\n"
          << "</style>\n";
 
       os << brpc::TabsHead() << "</head><body>";
@@ -279,8 +296,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("STORE_REGION_STATE");
   table_header.push_back("LEADER_ID");
   table_header.push_back("REPLICA");
-  table_header.push_back("START_KEY");
-  table_header.push_back("END_KEY");
   table_header.push_back("SCHEMA_ID");
   table_header.push_back("TENANT_ID");
   table_header.push_back("TABLE_ID");
@@ -288,6 +303,8 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("PART_ID");
   table_header.push_back("ENGINE");
   table_header.push_back("STORE_ENGINE");
+  table_header.push_back("START_KEY");
+  table_header.push_back("END_KEY");
   table_header.push_back("CREATE_TIME");
   table_header.push_back("UPDATE_TIME");
   table_header.push_back("REGION_ID");
@@ -329,8 +346,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // STORE_REGION_STATE
   min_widths.push_back(10);  // LEADER_ID
   min_widths.push_back(10);  // REPLICA
-  min_widths.push_back(20);  // START_KEY
-  min_widths.push_back(20);  // END_KEY
   min_widths.push_back(10);  // SCHEMA_ID
   min_widths.push_back(10);  // TENANT_ID
   min_widths.push_back(10);  // TABLE_ID
@@ -338,8 +353,10 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // PART_ID
   min_widths.push_back(10);  // ENGINE
   min_widths.push_back(10);  // STOREENGINE
-  min_widths.push_back(20);  // CREATE_TIME
-  min_widths.push_back(20);  // UPDATE_TIME
+  min_widths.push_back(20);  // START_KEY
+  min_widths.push_back(20);  // END_KEY
+  min_widths.push_back(10);  // CREATE_TIME
+  min_widths.push_back(10);  // UPDATE_TIME
   min_widths.push_back(10);  // REGION_ID
   min_widths.push_back(10);  // RAFT_STATE
   min_widths.push_back(10);  // READONLY
@@ -412,18 +429,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     line.push_back(std::to_string(region.definition().peers_size()));  // REPLICA
     url_line.push_back(std::string());
 
-    std::string start_key = Helper::StringToHex(region.definition().range().start_key());
-    std::string end_key = Helper::StringToHex(region.definition().range().end_key());
-    auto plaintext_range = DecodeRangeToPlaintext(coordinator_controller_, region);
-    start_key += fmt::format("({})", plaintext_range.start_key());
-    end_key += fmt::format("({})", plaintext_range.end_key());
-
-    line.push_back(start_key);  // START_KEY
-    url_line.push_back(std::string());
-
-    line.push_back(end_key);  // END_KEY
-    url_line.push_back(std::string());
-
     line.push_back(std::to_string(region.definition().schema_id()));  // SCHEMA_ID
     url_line.push_back(std::string());
 
@@ -443,6 +448,18 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     url_line.push_back(std::string());
 
     line.push_back(pb::common::StorageEngine_Name(region.definition().store_engine()));  // STORE_ENGINE
+    url_line.push_back(std::string());
+
+    std::string start_key = Helper::StringToHex(region.definition().range().start_key());
+    std::string end_key = Helper::StringToHex(region.definition().range().end_key());
+    auto plaintext_range = DecodeRangeToPlaintext(coordinator_controller_, region);
+    start_key += fmt::format("({})", plaintext_range.start_key());
+    end_key += fmt::format("({})", plaintext_range.end_key());
+
+    line.push_back(start_key);  // START_KEY
+    url_line.push_back(std::string());
+
+    line.push_back(end_key);  // END_KEY
     url_line.push_back(std::string());
 
     line.push_back(Helper::FormatMsTime(region.create_timestamp(), "%Y-%m-%d %H:%M:%S"));  // CREATE_TIME

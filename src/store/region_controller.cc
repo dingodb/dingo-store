@@ -676,7 +676,8 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   // Check source/target region peer state
-  for (const auto& peer : source_region->Definition().peers()) {
+  auto source_definition = source_region->Definition();
+  for (const auto& peer : source_definition.peers()) {
     auto region_metas =
         ServiceAccess::GetRegionInfo({source_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
     if (region_metas.empty()) {
@@ -691,7 +692,8 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   }
 
   // Check target region peer state
-  for (const auto& peer : target_region->Definition().peers()) {
+  auto target_definition = target_region->Definition();
+  for (const auto& peer : target_definition.peers()) {
     auto region_metas =
         ServiceAccess::GetRegionInfo({source_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
     if (region_metas.empty()) {
