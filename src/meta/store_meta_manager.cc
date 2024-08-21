@@ -874,6 +874,11 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       }
       break;
     case pb::common::StoreRegionState::DELETED:
+    case pb::common::StoreRegionState::ORPHAN:
+      if (new_state == pb::common::StoreRegionState::TOMBSTONE) {
+        region->SetState(new_state);
+        successed = true;
+      }
       break;
     case pb::common::StoreRegionState::TOMBSTONE:
       break;
