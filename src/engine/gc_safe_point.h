@@ -18,6 +18,8 @@
 #include <sys/stat.h>
 
 #include <cstdint>
+#include <map>
+#include <memory>
 #include <utility>
 
 #include "bthread/types.h"
@@ -33,24 +35,61 @@ class GCSafePoint final {
   GCSafePoint(GCSafePoint &&rhs) = delete;
   GCSafePoint &operator=(GCSafePoint &&rhs) = delete;
 
-  void SetGcFlagAndSafePointTs(bool gc_stop, int64_t safe_point_ts);
+  void SetGcFlagAndSafePointTs(int64_t tenant_id, bool gc_stop, int64_t safe_point_ts);
   std::pair<bool, int64_t> GetGcFlagAndSafePointTs();
 
-  // internal
-  void SetForceGcStop(bool force_gc_stop);
-  bool GetForceGcStop();
+  void SetGcStop(bool gc_stop);
+  bool GetGcStop();
 
+  // internal
   void SetLastAccomplishedSafePointTs(int64_t last_accomplished_safe_point_ts);
   int64_t GetLastAccomplishedSafePointTs();
 
+  int64_t GetTenantId();
+
  private:
   bthread_mutex_t mutex_;
+  int64_t tenant_id_;
   volatile int64_t safe_point_ts_;
   volatile bool gc_stop_;
 
   // internal var
-  volatile bool force_gc_stop_;
   volatile int64_t last_accomplished_safe_point_ts_;
+};
+
+class GCSafePointManager final {
+ public:
+  GCSafePointManager();
+  ~GCSafePointManager();
+
+  GCSafePointManager(const GCSafePointManager &rhs) = delete;
+  GCSafePointManager &operator=(const GCSafePointManager &rhs) = delete;
+  GCSafePointManager(GCSafePointManager &&rhs) = delete;
+  GCSafePointManager &operator=(GCSafePointManager &&rhs) = delete;
+
+  void SetGcFlagAndSafePointTs(std::map<int64_t, int64_t> safe_point_ts_group, bool gc_stop);
+  std::map<int64_t, std::pair<bool, int64_t>> GetAllGcFlagAndSafePointTs();
+
+  std::pair<bool, int64_t> GetGcFlagAndSafePointTs(int64_t tenant_id);
+
+  std::shared_ptr<GCSafePoint> FindSafePoint(int64_t tenant_id);
+  void RemoveSafePoint(int64_t tenant_id);
+
+  // internal
+  void SetGcStop(int64_t tenant_id, bool gc_stop);
+  bool GetGcStop(int64_t tenant_id);
+
+  void SetLastAccomplishedSafePointTs(int64_t tenant_id, int64_t last_accomplished_safe_point_ts);
+  int64_t GetLastAccomplishedSafePointTs(int64_t tenant_id);
+
+  // debug
+  std::map<int64_t, std::pair<bool, int64_t>> GetAllGcFlagAndSafePointTsForDebug();
+  void ClearAll();
+
+ private:
+  bthread_mutex_t mutex_;
+  std::map<int64_t, std::shared_ptr<GCSafePoint>> all_safe_points_;
+  std::map<int64_t, std::shared_ptr<GCSafePoint>> active_safe_points_;
 };
 
 }  // namespace dingodb

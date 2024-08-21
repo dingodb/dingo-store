@@ -31,6 +31,7 @@
 #include "common/role.h"
 #include "common/synchronization.h"
 #include "config/config_helper.h"
+#include "engine/gc_safe_point.h"
 #include "fmt/core.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
@@ -1228,9 +1229,9 @@ std::shared_ptr<RegionChangeRecorder> StoreMetaManager::GetRegionChangeRecorder(
   return region_change_recorder_;
 }
 
-std::shared_ptr<GCSafePoint> StoreMetaManager::GetGCSafePoint() {
-  assert(gc_safe_point_ != nullptr);
-  return gc_safe_point_;
+std::shared_ptr<GCSafePointManager> StoreMetaManager::GetGCSafePointManager() {
+  assert(gc_safe_point_manager_ != nullptr);
+  return gc_safe_point_manager_;
 }
 
 }  // namespace dingodb
