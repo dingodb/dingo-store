@@ -15,9 +15,15 @@
 #include <gtest/gtest.h>
 #include <sys/types.h>
 
+#include <chrono>
+#include <ctime>
 #include <filesystem>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
 
 #include "document/codec.h"
+#include "fmt/core.h"
 #include "tantivy_search.h"
 
 static size_t log_level = 1;
@@ -44,6 +50,18 @@ const std::string kMultiTypeColumnJson =
 
 const std::string kBytesColumnJson =
     R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "bytes", "indexed": true }} })";
+
+const std::string kDateColumnJson =
+    R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "datetime", "indexed": true }} })";
+
+std::string ToRFC3339(const std::chrono::system_clock::time_point& time_point) {
+  std::time_t time_t = std::chrono::system_clock::to_time_t(time_point);
+  std::tm* tm_ptr = std::gmtime(&time_t);  // 获取UTC时间
+
+  std::ostringstream oss;
+  oss << std::put_time(tm_ptr, "%Y-%m-%dT%H:%M:%SZ");  // RFC 3339格式
+  return oss.str();
+}
 
 class DingoTantivySearchTest : public testing::Test {
  protected:
@@ -308,55 +326,55 @@ void CreateAndLoadChineseData(const std::string& index_path) {
                                          {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
                                           "刻了时代的变迁与文明的发展。",
                                           "Ancient empires rise and fall, shaping history's course."},
-                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {});
+                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
                                          {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
                                           "。",
                                           "Artistic expressions reflect diverse cultural heritages."},
-                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {});
+                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 2, text_column_names,
                                          {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
                                           "Social movements transform societies, forging new paths."},
-                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {});
+                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 3, text_column_names,
                                          {"全球经济的波动复杂多变，如同镜子反映出世界各国之间错综复杂的力量关系。",
                                           "Global economic fluctuations are complex and volatile, reflecting "
                                           "intricate power dynamics among nations."},
-                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {});
+                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 4, text_column_names,
                                          {"战略性的军事行动改变了世界的权力格局，也重新定义了国际政治的均势。",
                                           "Strategic military campaigns alter the balance of power."},
-                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {});
+                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 5, text_column_names,
                                          {"量子物理的飞跃性进展，彻底改写了我们对物理世界规律的理解和认知。",
                                           "Quantum leaps redefine understanding of physical laws."},
-                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {});
+                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 6, text_column_names,
                                          {"化学反应不仅揭开了大自然奥秘的一角，也为科学的探索提供了新的窗口。",
                                           "Chemical reactions unlock mysteries of nature."},
-                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {});
+                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 7, text_column_names,
                                          {"哲学家的辩论深入探讨了生命存在的本质，引发人们对生存意义的深刻思考。",
                                           "Philosophical debates ponder the essence of existence."},
-                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {});
+                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(
       index_path, 8, text_column_names,
       {"婚姻的融合不仅是情感的结合，更是不同传统和文化的交汇，彰显了爱的力量,是社会发展的必须。",
        "Marriages blend traditions, celebrating love's union."},
-      i64_column_names, {900}, f64_column_names, {900.0}, {}, {});
+      i64_column_names, {900}, f64_column_names, {900.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 9, text_column_names,
                                          {"勇敢的探险家发现了未知的领域，为人类的世界观增添了新的地理篇章。",
                                           "Brave explorers discover uncharted territories, expanding world maps."},
-                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {});
+                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
 
   ret = ffi_index_writer_commit(index_path);
@@ -393,56 +411,56 @@ TEST(DingoTantivySearchTest, test_multi_type_column) {
                                          {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
                                           "刻了时代的变迁与文明的发展。",
                                           "Ancient empires rise and fall, shaping history's course."},
-                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {});
+                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {}, {}, {});
   std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
                                          {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
                                           "。",
                                           "Artistic expressions reflect diverse cultural heritages."},
-                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {});
+                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 2, text_column_names,
                                          {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
                                           "Social movements transform societies, forging new paths."},
-                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {});
+                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 3, text_column_names,
                                          {"全球经济的波动复杂多变，如同镜子反映出世界各国之间错综复杂的力量关系。",
                                           "Global economic fluctuations are complex and volatile, reflecting "
                                           "intricate power dynamics among nations."},
-                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {});
+                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 4, text_column_names,
                                          {"战略性的军事行动改变了世界的权力格局，也重新定义了国际政治的均势。",
                                           "Strategic military campaigns alter the balance of power."},
-                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {});
+                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 5, text_column_names,
                                          {"量子物理的飞跃性进展，彻底改写了我们对物理世界规律的理解和认知。",
                                           "Quantum leaps redefine understanding of physical laws."},
-                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {});
+                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 6, text_column_names,
                                          {"化学反应不仅揭开了大自然奥秘的一角，也为科学的探索提供了新的窗口。",
                                           "Chemical reactions unlock mysteries of nature."},
-                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {});
+                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 7, text_column_names,
                                          {"哲学家的辩论深入探讨了生命存在的本质，引发人们对生存意义的深刻思考。",
                                           "Philosophical debates ponder the essence of existence."},
-                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {});
+                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(
       index_path, 8, text_column_names,
       {"婚姻的融合不仅是情感的结合，更是不同传统和文化的交汇，彰显了爱的力量,是社会发展的必须。",
        "Marriages blend traditions, celebrating love's union."},
-      i64_column_names, {900}, f64_column_names, {900.0}, {}, {});
+      i64_column_names, {900}, f64_column_names, {900.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 9, text_column_names,
                                          {"勇敢的探险家发现了未知的领域，为人类的世界观增添了新的地理篇章。",
                                           "Brave explorers discover uncharted territories, expanding world maps."},
-                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {});
+                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_writer_commit(index_path);
   EXPECT_EQ(ret.result, true);
@@ -585,7 +603,7 @@ TEST(DingoTantivySearchTest, test_load_multi_type_column) {
                                                  {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
                                                   "刻了时代的变迁与文明的发展。",
                                                   "Ancient empires rise and fall, shaping history's course."},
-                                                 {"col2"}, {101}, {}, {}, {}, {});
+                                                 {"col2"}, {101}, {}, {}, {}, {}, {}, {});
   if (!bool_result.result) {
     std::cout << "ffi_index_multi_type_column_docs error:" << bool_result.error_msg.c_str() << '\n';
     EXPECT_EQ(bool_result.result, true);
@@ -670,11 +688,12 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
   auto create_ret = ffi_create_index_with_parameter(index_path, column_names, kBytesColumnJson);
   EXPECT_EQ(create_ret.result, true);
 
-  auto ret = ffi_index_multi_type_column_docs(index_path, 0, {"col1", "col4"},
-                                              {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
-                                               "刻了时代的变迁与文明的发展。",
-                                               "Ancient empires rise and fall, shaping history's course."},
-                                              {"col2"}, {100}, {"col3"}, {100.0}, bytes_column_names, {"test111"});
+  auto ret =
+      ffi_index_multi_type_column_docs(index_path, 0, {"col1", "col4"},
+                                       {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
+                                        "刻了时代的变迁与文明的发展。",
+                                        "Ancient empires rise and fall, shaping history's course."},
+                                       {"col2"}, {100}, {"col3"}, {100.0}, bytes_column_names, {"test111"}, {}, {});
   std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
   EXPECT_EQ(ret.result, true);
 
@@ -682,14 +701,16 @@ TEST(DingoTantivySearchTest, test_bytes_column) {
                                          {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
                                           "。",
                                           "Artistic expressions reflect diverse cultural heritages."},
-                                         i64_column_names, {200}, f64_column_names, {200.0}, {"col5"}, {"test111"});
+                                         i64_column_names, {200}, f64_column_names, {200.0}, {"col5"}, {"test111"}, {},
+                                         {});
   std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
   EXPECT_EQ(ret.result, true);
 
   ret = ffi_index_multi_type_column_docs(index_path, 2, {"col1", "col4"},
                                          {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
                                           "Social movements transform societies, forging new paths."},
-                                         i64_column_names, {300}, f64_column_names, {300.0}, {"col5"}, {"test222"});
+                                         i64_column_names, {300}, f64_column_names, {300.0}, {"col5"}, {"test222"}, {},
+                                         {});
   std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
   EXPECT_EQ(ret.result, true);
 
@@ -954,55 +975,55 @@ TEST(DingoTantivySearchTest, test_parse_query_range) {
                                          {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
                                           "刻了时代的变迁与文明的发展。",
                                           "Ancient empires rise and fall, shaping history's course."},
-                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {});
+                                         {"col2"}, {100}, {"col3"}, {100.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
                                          {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
                                           "。",
                                           "Artistic expressions reflect diverse cultural heritages."},
-                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {});
+                                         i64_column_names, {200}, f64_column_names, {200.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 2, text_column_names,
                                          {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
                                           "Social movements transform societies, forging new paths."},
-                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {});
+                                         i64_column_names, {300}, f64_column_names, {300.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 3, text_column_names,
                                          {"全球经济的波动复杂多变，如同镜子反映出世界各国之间错综复杂的力量关系。",
                                           "Global economic fluctuations are complex and volatile, reflecting "
                                           "intricate power dynamics among nations."},
-                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {});
+                                         i64_column_names, {400}, f64_column_names, {400.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 4, text_column_names,
                                          {"战略性的军事行动改变了世界的权力格局，也重新定义了国际政治的均势。",
                                           "Strategic military campaigns alter the balance of power."},
-                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {});
+                                         i64_column_names, {500}, f64_column_names, {500.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 5, text_column_names,
                                          {"量子物理的飞跃性进展，彻底改写了我们对物理世界规律的理解和认知。",
                                           "Quantum leaps redefine understanding of physical laws."},
-                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {});
+                                         i64_column_names, {600}, f64_column_names, {600.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 6, text_column_names,
                                          {"化学反应不仅揭开了大自然奥秘的一角，也为科学的探索提供了新的窗口。",
                                           "Chemical reactions unlock mysteries of nature."},
-                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {});
+                                         i64_column_names, {700}, f64_column_names, {700.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 7, text_column_names,
                                          {"哲学家的辩论深入探讨了生命存在的本质，引发人们对生存意义的深刻思考。",
                                           "Philosophical debates ponder the essence of existence."},
-                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {});
+                                         i64_column_names, {800}, f64_column_names, {800.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(
       index_path, 8, text_column_names,
       {"婚姻的融合不仅是情感的结合，更是不同传统和文化的交汇，彰显了爱的力量,是社会发展的必须。",
        "Marriages blend traditions, celebrating love's union."},
-      i64_column_names, {900}, f64_column_names, {900.0}, {}, {});
+      i64_column_names, {900}, f64_column_names, {900.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_multi_type_column_docs(index_path, 9, text_column_names,
                                          {"勇敢的探险家发现了未知的领域，为人类的世界观增添了新的地理篇章。",
                                           "Brave explorers discover uncharted territories, expanding world maps."},
-                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {});
+                                         i64_column_names, {1000}, f64_column_names, {1000.0}, {}, {}, {}, {});
   EXPECT_EQ(ret.result, true);
   ret = ffi_index_writer_commit(index_path);
   EXPECT_EQ(ret.result, true);
@@ -1061,4 +1082,211 @@ TEST(DingoTantivySearchTest, test_parse_query_range) {
   EXPECT_EQ(ret.result, true);
   ret = ffi_free_index_writer(index_path);
   EXPECT_EQ(ret.result, true);
+}
+
+TEST(DingoTantivySearchTest, test_query_datetime_type) {
+  std::cout << __func__ << " start" << '\n';
+
+  std::filesystem::remove_all("./temp");
+  tantivy_search_log4rs_initialize("./log", "info", true, false, false);
+
+  std::string index_path{"./temp"};
+  std::vector<std::string> column_names;
+  column_names.push_back("col1");
+  column_names.push_back("col2");
+  column_names.push_back("col3");
+  column_names.push_back("col4");
+  column_names.push_back("col5");  // date column
+
+  std::vector<std::string> text_column_names;
+  text_column_names.push_back("col1");
+  text_column_names.push_back("col4");
+
+  std::vector<std::string> i64_column_names;
+  i64_column_names.push_back("col2");
+
+  std::vector<std::string> f64_column_names;
+  f64_column_names.push_back("col3");
+
+  std::vector<std::string> date_column_names;
+  date_column_names.push_back("col5");
+
+  auto now = std::chrono::system_clock::now();
+  // 转换为RFC 3339格式
+  std::string time_1 = ToRFC3339(now);
+
+  // time_1 = "2024-08-21 dsa 14:06:53";
+  //   加上10秒
+  std::chrono::seconds duration2(10);
+  auto future_time_2 = now + duration2;
+  std::string time_2 = ToRFC3339(future_time_2);
+
+  // 加上20秒
+  std::chrono::seconds duration3(30);
+  auto future_time_3 = now + duration3;
+  std::string time_3 = ToRFC3339(future_time_3);
+
+  std::chrono::seconds duration4(40);
+  auto future_time_4 = now + duration4;
+  std::string time_4 = ToRFC3339(future_time_4);
+
+  std::chrono::seconds duration5(50);
+  auto future_time_5 = now + duration5;
+  std::string time_5 = ToRFC3339(future_time_5);
+
+  std::chrono::seconds duration6(60);
+  auto future_time_6 = now + duration6;
+  std::string time_6 = ToRFC3339(future_time_6);
+
+  std::cout << "begin time: " << time_1 << "\n, time_2: " << time_2 << "\n, time_3: " << time_3 << std::endl;
+  auto create_ret = ffi_create_index_with_parameter(index_path, column_names, kDateColumnJson);
+  EXPECT_EQ(create_ret.result, true);
+
+  auto ret = ffi_index_multi_type_column_docs(index_path, 0, {"col1", "col4"},
+                                              {"古代帝国的兴衰更迭，不仅塑造了历史的进程，也铭"
+                                               "刻了时代的变迁与文明的发展。",
+                                               "Ancient empires rise and fall, shaping history's course."},
+                                              {"col2"}, {100}, {"col3"}, {100.0}, {}, {}, {"col5"}, {time_1});
+  std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
+  EXPECT_EQ(ret.result, true);
+
+  ret =
+      ffi_index_multi_type_column_docs(index_path, 1, text_column_names,
+                                       {"艺术的多样表达方式反映了不同文化的丰富遗产，展现了人类创造力的无限可能"
+                                        "。",
+                                        "Artistic expressions reflect diverse cultural heritages."},
+                                       i64_column_names, {200}, f64_column_names, {200.0}, {}, {}, {"col5"}, {time_2});
+  std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
+  EXPECT_EQ(ret.result, true);
+
+  ret =
+      ffi_index_multi_type_column_docs(index_path, 2, {"col1", "col4"},
+                                       {"社会运动如同时代的浪潮，改变着社会的面貌，为历史开辟新的道路和方向。",
+                                        "Social movements transform societies, forging new paths."},
+                                       i64_column_names, {300}, f64_column_names, {300.0}, {}, {}, {"col5"}, {time_3});
+  std::cout << "ffi_index_multi_type_column_docs ret:" << ret.result << '\n';
+  EXPECT_EQ(ret.result, true);
+
+  ret =
+      ffi_index_multi_type_column_docs(index_path, 3, text_column_names,
+                                       {"全球经济的波动复杂多变，如同镜子反映出世界各国之间错综复杂的力量关系。",
+                                        "Global economic fluctuations are complex and volatile, reflecting "
+                                        "intricate power dynamics among nations."},
+                                       i64_column_names, {400}, f64_column_names, {400.0}, {}, {}, {"col5"}, {time_4});
+  EXPECT_EQ(ret.result, true);
+  ret =
+      ffi_index_multi_type_column_docs(index_path, 4, text_column_names,
+                                       {"战略性的军事行动改变了世界的权力格局，也重新定义了国际政治的均势。",
+                                        "Strategic military campaigns alter the balance of power."},
+                                       i64_column_names, {500}, f64_column_names, {500.0}, {}, {}, {"col5"}, {time_5});
+  EXPECT_EQ(ret.result, true);
+  ret =
+      ffi_index_multi_type_column_docs(index_path, 5, text_column_names,
+                                       {"量子物理的飞跃性进展，彻底改写了我们对物理世界规律的理解和认知。",
+                                        "Quantum leaps redefine understanding of physical laws."},
+                                       i64_column_names, {600}, f64_column_names, {600.0}, {}, {}, {"col5"}, {time_6});
+  EXPECT_EQ(ret.result, true);
+
+  ret = ffi_index_writer_commit(index_path);
+  EXPECT_EQ(ret.result, true);
+
+  ret = ffi_load_index_reader(index_path);
+  EXPECT_EQ(ret.result, true);
+
+  std::vector<uint64_t> alived_ids;
+  alived_ids.push_back(0);
+  alived_ids.push_back(1);
+  alived_ids.push_back(2);
+
+  std::string query_string_1 = fmt::format("{}:\"{}\"", "col5", time_1);
+  std::cout << "query_string_1:" << query_string_1 << std::endl;
+  auto bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_1, 3, {}, false, false, 0, 0, {"col5"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 1);
+
+  // ignore column name
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_1, 3, {}, false, false, 0, 0, {});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 1);
+
+  // wrong column name
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_1, 3, {}, false, false, 0, 0, {"col1"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 1);
+
+  // wrong case
+  // query sentense ignore filed name with column name
+  std::string query_string_2 = fmt::format("\"{}\"", time_3);
+  std::cout << "query_string_2:" << query_string_2 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_2, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_NE(bm25_result.error_code, 0);
+
+  // query sentense ignore filed without column name
+  std::cout << "query_string_2:" << query_string_2 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_2, 10, {}, false, false, 0, 0, {});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 0);
+
+  // query sentense ignore filed name with wrong column name
+  std::cout << "query_string_2:" << query_string_2 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_2, 10, {}, false, false, 0, 0, {"col1"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 0);
+
+  // range query sentense with column name
+  std::string query_string_3 = fmt::format("{}:[{} TO *]", "col5", time_1);
+  std::cout << "query_string_3:" << query_string_3 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_3, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 6);
+
+  // range query sentense without column name
+  std::cout << "query_string_3:" << query_string_3 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_3, 10, {}, false, false, 0, 0, {});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 6);
+
+  // range query sentense with wrong column name
+  std::cout << "query_string_3:" << query_string_3 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_3, 10, {}, false, false, 0, 0, {"col1"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 6);
+
+  //'Unsupported query: Range query need to target a specific field.'
+  // range query sentense without filed name
+  std::string query_string_4 = fmt::format("[{} TO {}]", time_2, time_5);
+  std::cout << "query_string_4:" << query_string_4 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_4, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_NE(bm25_result.error_code, 0);
+
+  //'Unsupported query: Range query need to target a specific field.'
+  // match all
+  std::string query_string_5 = fmt::format("{}:*", "col5");
+  std::cout << "query_string_5:" << query_string_5 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_5, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_NE(bm25_result.error_code, 0);
+
+  // match all without filed name
+  std::string query_string_6 = fmt::format("*");
+  std::cout << "query_string_6:" << query_string_6 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_6, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 6);
+
+  // match all without filed name
+  time_1 = fmt::format("\"{}\"", time_1);
+  time_3 = fmt::format("\"{}\"", time_3);
+  time_5 = fmt::format("\"{}\"", time_5);
+  std::string query_string_7 = fmt::format("col5: IN [{} {} {}]", time_1, time_3, time_5);
+  std::cout << "query_string_7:" << query_string_7 << std::endl;
+  bm25_result = ffi_bm25_search_with_column_names(index_path, query_string_7, 10, {}, false, false, 0, 0, {"col5"});
+  EXPECT_EQ(bm25_result.error_code, 0);
+  EXPECT_EQ(bm25_result.result.size(), 3);
+
+  ret = ffi_free_index_reader(index_path);
+  EXPECT_EQ(ret.result, true);
+  ret = ffi_free_index_writer(index_path);
+  EXPECT_EQ(ret.result, true);
+
+  std::cout << __func__ << " done" << '\n';
 }
