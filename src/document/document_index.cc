@@ -154,6 +154,9 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
     std::vector<double> f64_column_docs;
     std::vector<std::string> bytes_column_names;
     std::vector<std::string> bytes_column_docs;
+    // todo(yangjundong)
+    std::vector<std::string> date_column_names;
+    std::vector<std::string> date_column_docs;
 
     uint64_t document_id = document_with_id.id();
 
@@ -185,9 +188,9 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
       }
     }
 
-    auto bool_result = ffi_index_multi_type_column_docs(index_path, document_id, text_column_names, text_column_docs,
-                                                        i64_column_names, i64_column_docs, f64_column_names,
-                                                        f64_column_docs, bytes_column_names, bytes_column_docs);
+    auto bool_result = ffi_index_multi_type_column_docs(
+        index_path, document_id, text_column_names, text_column_docs, i64_column_names, i64_column_docs,
+        f64_column_names, f64_column_docs, bytes_column_names, bytes_column_docs, date_column_names, date_column_docs);
     if (!bool_result.result) {
       std::string err_msg =
           fmt::format("[document_index.raw][id({})] document_id: ({}) add failed, error: {}, error_msg: {}", id,
