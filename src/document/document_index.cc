@@ -154,7 +154,6 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
     std::vector<double> f64_column_docs;
     std::vector<std::string> bytes_column_names;
     std::vector<std::string> bytes_column_docs;
-    // todo(yangjundong)
     std::vector<std::string> date_column_names;
     std::vector<std::string> date_column_docs;
 
@@ -178,6 +177,10 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
         case pb::common::ScalarFieldType::BYTES:
           bytes_column_names.push_back(field_name);
           bytes_column_docs.push_back(document_value.field_value().bytes_data());
+          break;
+        case pb::common::ScalarFieldType::DATETIME:
+          date_column_names.push_back(field_name);
+          date_column_docs.push_back(document_value.field_value().string_data());
           break;
         default:
           std::string err_msg = fmt::format("[document_index.raw][id({})] document_id: ({}) unknown field type({})", id,

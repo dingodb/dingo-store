@@ -28,6 +28,7 @@ enum TokenizerType {
   kTokenizerTypeI64 = 2,
   kTokenizerTypeF64 = 3,
   kTokenizerTypeBytes = 4,
+  kTokenizerTypeDateTime = 5,
 };
 
 class DocumentCodec {

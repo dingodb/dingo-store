@@ -991,7 +991,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
       if (field.field_type() != pb::common::ScalarFieldType::BYTES &&
           field.field_type() != pb::common::ScalarFieldType::STRING &&
           field.field_type() != pb::common::ScalarFieldType::DOUBLE &&
-          field.field_type() != pb::common::ScalarFieldType::INT64) {
+          field.field_type() != pb::common::ScalarFieldType::INT64 &&
+          field.field_type() != pb::common::ScalarFieldType::DATETIME) {
         DINGO_LOG(ERROR) << "field type is NONE";
         return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
       }
@@ -1063,6 +1064,15 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
               return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
             }
             break;
+          case pb::common::ScalarFieldType::DATETIME:
+            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeDateTime) {
+              std::string error_msg = fmt::format(
+                  "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:datetime vs {}",
+                  field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+              DINGO_LOG(ERROR) << error_msg;
+              return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+            }
+            break;
           default:
             DINGO_LOG(ERROR) << "field type is NONE";
             return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
@@ -1083,6 +1093,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
           column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeF64;
         } else if (field.field_type() == pb::common::ScalarFieldType::BYTES) {
           column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeBytes;
+        } else if (field.field_type() == pb::common::ScalarFieldType::DATETIME) {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeDateTime;
         } else {
           column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeText;
         }
