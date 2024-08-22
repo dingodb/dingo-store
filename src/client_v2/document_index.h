@@ -16,8 +16,10 @@
 #define DINGODB_CLIENT_DOCUMENT_INDEX_H_
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <ctime>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -133,6 +135,7 @@ struct DocumentGetRegionMetricsOptions {
 void SetUpDocumentGetRegionMetrics(CLI::App &app);
 void RunDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const &opt);
 
+std::string ToRFC3339(const std::chrono::system_clock::time_point& time_point);
 // document
 void SendDocumentAdd(DocumentAddOptions const &opt);
 void SendDocumentDelete(DocumentDeleteOptions const &opt);
