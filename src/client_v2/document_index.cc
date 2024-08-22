@@ -48,6 +48,15 @@ static bool SetUpStore(const std::string& url, const std::vector<std::string>& a
   return true;
 }
 
+std::string ToRFC3339(const std::chrono::system_clock::time_point& time_point) {
+  std::time_t time_t = std::chrono::system_clock::to_time_t(time_point);
+  std::tm* tm_ptr = std::gmtime(&time_t);  // Get UTC time
+
+  std::ostringstream oss;
+  oss << std::put_time(tm_ptr, "%Y-%m-%dT%H:%M:%SZ");  // RFC 3339
+  return oss.str();
+}
+
 void SendDocumentAdd(DocumentAddOptions const& opt) {
   dingodb::pb::document::DocumentAddRequest request;
   dingodb::pb::document::DocumentAddResponse response;
@@ -103,6 +112,17 @@ void SendDocumentAdd(DocumentAddOptions const& opt) {
     document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
     document_value1.mutable_field_value()->set_string_data(opt.document_text2);
     (*document_data)["col4"] = document_value1;
+  }
+
+  // col5 datetime
+  {
+    dingodb::pb::common::DocumentValue document_value1;
+    document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DATETIME);
+    auto now = std::chrono::system_clock::now();
+    std::string time_str = ToRFC3339(now);
+    document_value1.mutable_field_value()->set_string_data(time_str);
+    std::cout << "doc_id: " << opt.document_id << " ,time_str:" << time_str << std::endl;
+    (*document_data)["col5"] = document_value1;
   }
 
   if (opt.is_update) {
@@ -165,6 +185,7 @@ void SendDocumentSearch(DocumentSearchOptions const& opt) {
     std::cout << "topn is 0" << std::endl;
     return;
   }
+  std::cout << "len:" << opt.query_string.length() << ", query:" << opt.query_string << std::endl;
 
   auto* parameter = request.mutable_parameter();
   parameter->set_top_n(opt.topn);
@@ -361,7 +382,7 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const& opt) {
   }
 
   std::string multi_type_column_json =
-      R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}} })";
+      R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "datetime", "indexed": true }} })";
 
   // document index parameter
   index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
@@ -384,6 +405,9 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const& opt) {
   auto* field_col4 = scalar_schema->add_fields();
   field_col4->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
   field_col4->set_key("col4");
+  auto* field_col5 = scalar_schema->add_fields();
+  field_col5->set_field_type(::dingodb::pb::common::ScalarFieldType::DATETIME);
+  field_col5->set_key("col5");
 
   index_definition->set_version(1);
 
