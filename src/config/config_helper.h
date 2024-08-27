@@ -47,6 +47,7 @@ class ConfigHelper {
 
   static int32_t GetWorkerThreadNum();
   static double GetWorkerThreadRatio();
+  static int32_t GetRaftWorkerThreadNum();
   static double GetRaftWorkerThreadRatio();
 };
 

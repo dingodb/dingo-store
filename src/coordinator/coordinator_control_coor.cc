@@ -1556,7 +1556,8 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
     DINGO_LOG(INFO) << "Not enough stores STORE_NORMAL for create region, replica_num=" << replica_num
                     << ", resource_tag=" << resource_tag << ", store_ids.size=" << store_ids.size()
                     << ", selected_store_ids=" << selected_store_ids;
-    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE, "Not enough stores for create region");
+    return butil::Status(pb::error::Errno::EREGION_UNAVAILABLE,
+                         "Not enough stores for create region, state is not normal");
   }
 
   // check store metrics limit
