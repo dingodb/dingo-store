@@ -109,6 +109,8 @@ DEFINE_uint64(meta_service_worker_max_pending_num, 1024, "service worker num");
 DEFINE_uint32(version_service_worker_num, 32, "service worker num");
 DEFINE_uint64(version_service_worker_max_pending_num, 1024, "service worker num");
 
+const int32_t kPerGroupMinWorkerThreadNum = 5;
+
 extern "C" {
 extern void goto_set_num_threads(int num_threads);      // NOLINT
 extern void openblas_set_num_threads(int num_threads);  // NOLINT
@@ -123,7 +125,6 @@ DECLARE_int32(bvar_max_dump_multi_dimension_metric_number);
 namespace bthread {
 
 DECLARE_int32(bthread_concurrency);
-DECLARE_int32(bthread_min_concurrency);
 
 }  // namespace bthread
 
@@ -471,13 +472,20 @@ int32_t GetBthreadWorkerThreadNum() {
     }
   }
 
-  return num;
+  return std::max(num, kPerGroupMinWorkerThreadNum);
 }
 
-int32_t GetRaftBthreadWorkerThreadNum(int32_t total_worker_thread_num) {
-  double ratio = dingodb::ConfigHelper::GetRaftWorkerThreadRatio();
+int32_t GetRaftBthreadWorkerThreadNum() {
+  int32_t num = dingodb::ConfigHelper::GetRaftWorkerThreadNum();
 
-  return std::max(static_cast<int32_t>(total_worker_thread_num * ratio), 5);
+  if (num <= 0) {
+    double ratio = dingodb::ConfigHelper::GetRaftWorkerThreadRatio();
+    if (ratio > 0) {
+      num = std::round(ratio * static_cast<double>(dingodb::Helper::GetCoreNum()));
+    }
+  }
+
+  return std::max(num, kPerGroupMinWorkerThreadNum);
 }
 
 template <typename T, typename U>
@@ -645,7 +653,6 @@ int main(int argc, char *argv[]) {
 #endif
 
   brpc::ServerOptions options;
-  brpc::ServerOptions raft_options;
 
   options.h2_settings.max_concurrent_streams = FLAGS_h2_server_max_concurrent_streams;
   options.h2_settings.stream_window_size = FLAGS_h2_server_stream_window_size;
@@ -662,25 +669,13 @@ int main(int argc, char *argv[]) {
 
   // get bthread worker thread num
   int32_t worker_thread_num = GetBthreadWorkerThreadNum();
-  if (worker_thread_num <= 0) {
-    DINGO_LOG(ERROR) << "get worker_thread_num failed!";
-    return -1;
-  }
   // get raft bthread worker thread num
-  int32_t raft_worker_thread_num = 0;
-  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
-    raft_worker_thread_num = GetRaftBthreadWorkerThreadNum(worker_thread_num);
-    if (raft_worker_thread_num <= 0) {
-      DINGO_LOG(ERROR) << "get raft_worker_thread_num failed!";
-      return -1;
-    }
-  }
+  int32_t raft_worker_thread_num = GetRaftBthreadWorkerThreadNum();
 
-  DINGO_LOG(INFO) << fmt::format("worker_thread_num: {} raft_worker_thread_num: {}", worker_thread_num,
+  DINGO_LOG(INFO) << fmt::format("worker_thread_num({})  raft_worker_thread_num({})", worker_thread_num,
                                  raft_worker_thread_num);
 
-  bthread::FLAGS_bthread_concurrency = raft_worker_thread_num * 2;
-  bthread::FLAGS_bthread_min_concurrency = bthread::FLAGS_bthread_concurrency;
+  bthread::FLAGS_bthread_concurrency = kPerGroupMinWorkerThreadNum * 2;
 
   if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {
     if (!dingo_server.InitLogStorageManager()) {
@@ -835,6 +830,7 @@ int main(int argc, char *argv[]) {
     }
 
     options.bthread_tag = 1;
+    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -990,6 +986,7 @@ int main(int argc, char *argv[]) {
     }
 
     options.bthread_tag = 1;
+    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1135,6 +1132,7 @@ int main(int argc, char *argv[]) {
     }
 
     options.bthread_tag = 1;
+    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1280,6 +1278,7 @@ int main(int argc, char *argv[]) {
     }
 
     options.bthread_tag = 1;
+    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1335,6 +1334,8 @@ int main(int argc, char *argv[]) {
                   << ", pid_file:" << options.pid_file;
 
   options.bthread_tag = 0;
+  options.num_threads =
+      (role != dingodb::pb::common::ClusterRole::DISKANN) ? kPerGroupMinWorkerThreadNum : worker_thread_num;
   if (brpc_server.Start(dingo_server.ServerListenEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
@@ -1342,13 +1343,23 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "Server is running on " << brpc_server.listen_address();
 
   if (role != dingodb::pb::common::ClusterRole::DISKANN) {
-    bthread::FLAGS_bthread_concurrency = worker_thread_num;
-    bthread_setconcurrency_by_tag(worker_thread_num - raft_worker_thread_num, 0);
+    bthread::FLAGS_bthread_concurrency = worker_thread_num + raft_worker_thread_num;
+    // add server thread
+    if (worker_thread_num > kPerGroupMinWorkerThreadNum) {
+      bthread_setconcurrency_by_tag(worker_thread_num, 0);
+    }
+
+    // add raft thread
+    if (raft_worker_thread_num > kPerGroupMinWorkerThreadNum) {
+      bthread_setconcurrency_by_tag(raft_worker_thread_num, 1);
+    }
 
     sleep(1);
 
     DINGO_LOG(INFO) << fmt::format("default server concurrency: {} raft server concurrency: {}",
                                    bthread_getconcurrency_by_tag(0), bthread_getconcurrency_by_tag(1));
+  } else {
+    DINGO_LOG(INFO) << fmt::format("default server concurrency: {}", bthread_getconcurrency_by_tag(0));
   }
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service

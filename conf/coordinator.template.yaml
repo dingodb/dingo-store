@@ -7,8 +7,9 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   # worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 1 # cpu core * ratio
-  raft_worker_thread_ratio: 0.1 # max(cpu core * worker_thread_ratio * ratio, 5)
+  worker_thread_ratio: 0.8 # cpu core * ratio
+  # raft_worker_thread_num: 36 # must >4, raft_worker_thread_num priority raft_worker_thread_ratio
+  raft_worker_thread_ratio: 0.6 # cpu core * ratio
 coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1

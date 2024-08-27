@@ -209,6 +209,15 @@ double ConfigHelper::GetWorkerThreadRatio() {
   return config->GetDouble("server.worker_thread_ratio");
 }
 
+int32_t ConfigHelper::GetRaftWorkerThreadNum() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return -1;
+  }
+
+  return config->GetInt("server.raft_worker_thread_num");
+}
+
 double ConfigHelper::GetRaftWorkerThreadRatio() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
