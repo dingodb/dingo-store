@@ -82,6 +82,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpWhichRegion(app);
   SetUpQueryRegionStatusMetrics(app);
   SetUpModifyRegionMeta(app);
+  SetUpCompact(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -3918,6 +3919,10 @@ void SendCompact(const std::string& cf_name) {
   request.set_cf_name(cf_name);
 
   InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Compact", request, response);
+  if (Pretty::ShowError(response.error())) {
+    return;
+  }
+  std::cout << "Compact success." << std::endl;
 }
 
 void GetMemoryStats() {
