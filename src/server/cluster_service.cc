@@ -118,6 +118,9 @@ void ClusterStatImpl::PrintStores(std::ostream& os, bool use_html) {
     } else if (store.store_type() == pb::common::StoreType::NODE_TYPE_INDEX) {
       url_line.push_back("http://" + store.server_location().host() + ":" +
                          std::to_string(store.server_location().port()) + "/IndexService/GetMemoryInfo/");
+    } else if (store.store_type() == pb::common::StoreType::NODE_TYPE_DOCUMENT) {
+      url_line.push_back("http://" + store.server_location().host() + ":" +
+                         std::to_string(store.server_location().port()) + "/DocumentService/GetMemoryInfo/");
     } else {
       url_line.push_back(std::string());
     }
