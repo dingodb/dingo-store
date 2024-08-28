@@ -48,9 +48,12 @@
 #define SEGMENT_CLOSED_PATTERN "log_%020" PRId64 "_%020" PRId64
 #define SEGMENT_META_FILE "log_meta"
 
+namespace braft {
+DECLARE_bool(raft_sync);
+}
+
 namespace dingodb {
 
-DEFINE_bool(dingo_raft_sync_log, true, "Sync log to disk or not");
 DEFINE_bool(dingo_trace_append_entry_latency, false, "Trace append entry latency");
 
 using ::butil::RawPacker;
@@ -687,7 +690,7 @@ SegmentLogStorage::SegmentLogStorage(const std::string& path, int64_t region_id,
       init_vector_index_first_log_index_(init_vector_index_first_log_index),
       vector_index_first_log_index_(init_vector_index_first_log_index),
       checksum_type_(0),
-      enable_sync_(FLAGS_dingo_raft_sync_log) {
+      enable_sync_(braft::FLAGS_raft_sync) {
   DINGO_LOG(DEBUG) << fmt::format("[new.SegmentLogStorage][id({})]", region_id_);
 }
 

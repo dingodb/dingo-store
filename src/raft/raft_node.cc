@@ -68,7 +68,7 @@ int RaftNode::Init(store::RegionPtr region, const std::string& init_conf, const 
   node_options.snapshot_interval_s = 0;
 
   path_ = fmt::format("{}/{}", raft_path, node_id_);
-  node_options.raft_meta_uri = "local://" + path_ + "/raft_meta";
+  node_options.raft_meta_uri = "local-merged://" + raft_path + "/raft_meta";
   node_options.snapshot_uri = "local://" + path_ + "/snapshot";
   node_options.disable_cli = false;
 
