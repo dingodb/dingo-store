@@ -2576,14 +2576,6 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
     }
 
-    if (response->txn_result_size() > 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-          << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
-          << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
-          << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
-      return butil::Status::OK();
-    }
-
     // 3.check special mutation op.
     if (mutation.op() == pb::store::Op::PutIfAbsent) {
       // check if key is exist
@@ -2652,7 +2644,13 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       final_min_commit_ts = 0;
     }
   }
-
+  if (response->txn_result_size() > 0) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return txn_result,", region->Id())
+        << ", txn_result_size: " << response->txn_result_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
   if (try_one_pc) {
     auto ret4 = OnePCommit(raft_engine, ctx, region, start_ts, final_min_commit_ts, locks_for_1pc, kv_puts_data);
     if (!ret4.ok()) {
