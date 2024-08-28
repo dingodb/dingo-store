@@ -53,6 +53,12 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.SynchronousQueue;
 
 import static io.dingodb.sdk.service.entity.version.EventType.DELETE;
 import static io.dingodb.sdk.service.entity.version.EventType.NOT_EXISTS;
@@ -78,6 +84,31 @@ public class LockService {
 
     private String resourcePrefixKeyBegin;
     private String resourcePrefixKeyEnd;
+    private static final ThreadFactory threadFactory = new ThreadFactory() {
+            private final AtomicInteger index = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(@NonNull Runnable runnable) {
+                String threadName = String.format("%s-thread-%d", "Lock_watch", this.index.incrementAndGet());
+                ThreadGroup group = Thread.currentThread().getThreadGroup();
+                Thread thread = new Thread(group, runnable, threadName);
+
+                thread.setDaemon(true);
+                thread.setPriority(5);
+
+                return thread;
+            }
+        };
+
+    public static final ThreadPoolExecutor LOCK_FUTURE_POOL = new ThreadPoolExecutor(
+            5,
+            100,
+            60,
+            TimeUnit.SECONDS,
+            new SynchronousQueue<>(),
+            threadFactory,
+            new ThreadPoolExecutor.AbortPolicy()
+        );
 
     public LockService(String servers) {
         this(servers, 30);
@@ -451,7 +482,7 @@ public class LockService {
             } else {
                 watchLock(kv, task);
             }
-        });
+        }, LOCK_FUTURE_POOL);
     }
 
     public void watchAllOpLock(Kv kv, Runnable task) {
@@ -475,7 +506,7 @@ public class LockService {
             }
             task.run();
             watchAllOpLock(kv, task);
-        });
+        }, LOCK_FUTURE_POOL);
     }
 
     public void watchAllOpEvent(Kv kv, Function<String, String> function) {
@@ -496,7 +527,7 @@ public class LockService {
             }
             function.apply(typeStr);
             watchAllOpEvent(kv, function);
-        });
+        }, LOCK_FUTURE_POOL);
     }
 
 
