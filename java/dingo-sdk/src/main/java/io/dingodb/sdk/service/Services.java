@@ -3,6 +3,8 @@ package io.dingodb.sdk.service;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
+import com.google.common.util.concurrent.UncheckedExecutionException;
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.Optional;
@@ -244,9 +246,12 @@ public class Services {
             if (region != null) {
                 Range range = Optional.mapOrNull(region, ScanRegionInfo::getRange);
                 if (range != null && compare(key, range.getStartKey()) >= 0 && compare(key, range.getEndKey()) < 0) {
-                    RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
-                    if (regionProvider.isIn(key)) {
-                        return regionProvider;
+                    try {
+                        RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
+                        if (regionProvider.isIn(key)) {
+                            return regionProvider;
+                        }
+                    } catch (DingoClientException.InvalidRouteTableException | UncheckedExecutionException ignore) {
                     }
                 }
             }

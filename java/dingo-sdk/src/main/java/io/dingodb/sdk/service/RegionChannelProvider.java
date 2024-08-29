@@ -1,5 +1,6 @@
 package io.dingodb.sdk.service;
 
+import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.codec.CodecUtils;
 import io.dingodb.sdk.common.utils.ByteArrayUtils;
 import io.dingodb.sdk.common.utils.Optional;
@@ -32,6 +33,7 @@ public class RegionChannelProvider implements ChannelProvider {
     private Location location;
     private Channel channel;
     private RegionEpoch regionEpoch;
+    private boolean status = true;
 
     public RegionChannelProvider(CoordinatorService coordinatorService, long regionId) {
         this.coordinatorService = coordinatorService;
@@ -64,6 +66,9 @@ public class RegionChannelProvider implements ChannelProvider {
     }
 
     public boolean isIn(byte[] key) {
+        if (!status) {
+            throw new DingoClientException.InvalidRouteTableException("region id not found");
+        }
         if (range == null) {
             throw new RuntimeException("Not refresh!");
         }
@@ -85,7 +90,7 @@ public class RegionChannelProvider implements ChannelProvider {
                 channel = ChannelManager.getChannel(location);
                 regionEpoch = $.getRegionEpoch();
                 range = $.getRange();
-            });
+            }).ifAbsent(() -> status = false);
     }
 
     private synchronized void refreshIdKey(long trace) {
