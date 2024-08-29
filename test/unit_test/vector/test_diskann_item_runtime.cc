@@ -60,15 +60,15 @@ class DiskANNItemRuntimeTest : public testing::Test {
 };
 
 TEST_F(DiskANNItemRuntimeTest, Init) {
-  bool ret = DiskANNItemRuntime::Init(config);
+  bool ret = DiskANNItemRuntime::Init();
   EXPECT_TRUE(ret);
 }
 TEST_F(DiskANNItemRuntimeTest, Get) {
-  auto& import_worker_set = DiskANNItemRuntime::GetImportWorkerSet();
-  auto& build_worker_set = DiskANNItemRuntime::GetBuildWorkerSet();
-  auto& load_worker_set = DiskANNItemRuntime::GetLoadWorkerSet();
-  auto& search_worker_set = DiskANNItemRuntime::GetSearchWorkerSet();
-  auto& misc_worker_set = DiskANNItemRuntime::GetMiscWorkerSet();
+  auto import_worker_set = DiskANNItemRuntime::GetImportWorkerSet();
+  auto build_worker_set = DiskANNItemRuntime::GetBuildWorkerSet();
+  auto load_worker_set = DiskANNItemRuntime::GetLoadWorkerSet();
+  auto search_worker_set = DiskANNItemRuntime::GetSearchWorkerSet();
+  auto misc_worker_set = DiskANNItemRuntime::GetMiscWorkerSet();
   EXPECT_TRUE(import_worker_set);
   EXPECT_TRUE(build_worker_set);
   EXPECT_TRUE(load_worker_set);
