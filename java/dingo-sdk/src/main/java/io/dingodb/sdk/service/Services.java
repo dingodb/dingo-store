@@ -204,6 +204,10 @@ public class Services {
         ).getService();
     }
 
+    public static void invalidateVersionService(Set<Location> locations) {
+        versionCache.invalidate(locations);
+    }
+
     @SneakyThrows
     public static ChannelProvider regionChannelProvider(
         Set<Location> locations, DingoCommonId tableId, DingoCommonId regionId

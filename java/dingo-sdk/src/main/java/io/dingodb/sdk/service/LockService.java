@@ -19,6 +19,7 @@ package io.dingodb.sdk.service;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.utils.Future;
 import io.dingodb.sdk.service.entity.common.KeyValue;
+import io.dingodb.sdk.service.entity.common.Location;
 import io.dingodb.sdk.service.entity.meta.TsoOpType;
 import io.dingodb.sdk.service.entity.meta.TsoRequest;
 import io.dingodb.sdk.service.entity.meta.TsoTimestamp;
@@ -38,12 +39,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -74,7 +70,7 @@ public class LockService {
     public final long leaseTtl;
     private volatile long lease = -1;
     private final int delay;
-    private final VersionService kvService;
+    private VersionService kvService;
     private final int resourceSepIndex;
 
     public final String resource;
@@ -84,6 +80,7 @@ public class LockService {
 
     private String resourcePrefixKeyBegin;
     private String resourcePrefixKeyEnd;
+    private Set<Location> locations;
     private static final ThreadFactory threadFactory = new ThreadFactory() {
             private final AtomicInteger index = new AtomicInteger(0);
 
@@ -123,8 +120,9 @@ public class LockService {
     }
 
     public LockService(String resource, String servers, int leaseTtl) {
-        this.kvService = Services.versionService(Services.parse(servers));
-        this.tsoService = Services.tsoService(Services.parse(servers));
+        this.locations = Services.parse(servers);
+        this.kvService = Services.versionService(locations);
+        this.tsoService = Services.tsoService(locations);
         this.resource = resource;
         this.resourceSepIndex = resource.length() + 1;
         this.leaseTtl = leaseTtl;
@@ -224,6 +222,11 @@ public class LockService {
             .createRevision(createRevision)
             .modRevision(modRevision)
             .build();
+    }
+
+    public void resetVerService() {
+        Services.invalidateVersionService(locations);
+        kvService = Services.versionService(locations);
     }
 
     public void delete(long ts, String key) {
@@ -485,40 +488,17 @@ public class LockService {
         }, LOCK_FUTURE_POOL);
     }
 
-    public void watchAllOpLock(Kv kv, Runnable task) {
-        CompletableFuture.supplyAsync(() ->
-                kvService.watch(watchAllOpRequest(kv.getKv().getKey(), kv.getModRevision()))
-        ).whenCompleteAsync((r, e) -> {
-            if (e != null) {
-                if (!(e instanceof DingoClientException)) {
-                    watchAllOpLock(kv, task);
-                    return;
-                }
-                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
-                return;
-            }
-            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
-                try {
-                    Thread.sleep(1000L);
-                } catch (Exception e1) {
-
-                } 
-            }
-            task.run();
-            watchAllOpLock(kv, task);
-        }, LOCK_FUTURE_POOL);
-    }
-
     public void watchAllOpEvent(Kv kv, Function<String, String> function) {
         CompletableFuture.supplyAsync(() ->
                 kvService.watch(watchAllOpRequest(kv.getKv().getKey(), kv.getModRevision()))
         ).whenCompleteAsync((r, e) -> {
             if (e != null) {
+                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 if (!(e instanceof DingoClientException)) {
+                    resetVerService();
                     watchAllOpEvent(kv, function);
                     return;
                 }
-                log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 return;
             }
             String typeStr = "normal";
