@@ -35,7 +35,7 @@
 #include "engine/raw_engine.h"
 #include "engine/rocks_raw_engine.h"
 #include "engine/storage.h"
-#include "log/log_storage_manager.h"
+#include "log/rocks_log_storage.h"
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
@@ -76,7 +76,7 @@ class Server {
   bool InitCoordinatorInteractionForAutoIncrement();
 
   // Init log Storage manager.
-  bool InitLogStorageManager();
+  bool InitLogStorage();
 
   // Init storage engine.
   bool InitStorage();
@@ -158,7 +158,7 @@ class Server {
   std::shared_ptr<MetaReader> GetMetaReader();
   std::shared_ptr<MetaWriter> GetMetaWriter();
 
-  std::shared_ptr<LogStorageManager> GetLogStorageManager();
+  wal::LogStoragePtr GetRaftLogStorage();
 
   std::shared_ptr<Storage> GetStorage();
 
@@ -190,8 +190,9 @@ class Server {
   static std::string GetStorePath();
 
   static std::string GetRaftPath();
-
+  static std::string GetRaftMetaPath();
   static std::string GetRaftLogPath();
+  static std::string GetRaftSnapshotPath();
 
   static std::string GetVectorIndexPath();
   static std::string GetDocumentIndexPath();
@@ -294,7 +295,7 @@ class Server {
   std::shared_ptr<MetaWriter> meta_writer_;
 
   // This is log storage manager
-  std::shared_ptr<LogStorageManager> log_storage_;
+  wal::LogStoragePtr log_storage_;
 
   // This is a Storage class, deal with all about storage stuff.
   std::shared_ptr<Storage> storage_;

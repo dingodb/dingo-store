@@ -686,7 +686,7 @@ butil::Status VectorIndexManager::RebuildVectorIndexWithSave(VectorIndexWrapperP
   int64_t start_time = Helper::TimestampMs();
   int64_t vector_index_id = vector_index_wrapper->Id();
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuildsave][index_id({})][trace({})] build_vector_index_only start.",
+  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuildsave][index_id({})][trace({})] rebuild and save vector index.",
                                  vector_index_id, trace);
 
   // Build a new vector index from original data
@@ -717,8 +717,9 @@ butil::Status VectorIndexManager::RebuildVectorIndexWithSave(VectorIndexWrapperP
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("[vector_index.rebuildsave][index_id({})][trace({})] build_vector_index_only done.",
-                                 vector_index_id, trace);
+  DINGO_LOG(INFO) << fmt::format(
+      "[vector_index.rebuildsave][index_id({})][trace({})] rebuild and save vector index done.", vector_index_id,
+      trace);
 
   return butil::Status();
 }
@@ -778,7 +779,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
     return butil::Status(pb::error::Errno::ERAFT_NOT_FOUND, fmt::format("Not found node {}", vector_index->Id()));
   }
 
-  auto log_stroage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(vector_index->Id());
+  auto log_stroage = Server::GetInstance().GetRaftLogStorage();
   if (log_stroage == nullptr) {
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("Not found log stroage {}", vector_index->Id()));
   }
@@ -792,11 +793,10 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   ids.reserve(Constant::kBuildVectorIndexBatchSize);
 
   int64_t last_log_id = vector_index->ApplyLogId();
-  auto log_entrys = log_stroage->GetEntrys(start_log_id, end_log_id);
+  auto log_entrys = log_stroage->GetEntries(vector_index->Id(), start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-    butil::IOBufAsZeroCopyInputStream wrapper(log_entry->data);
-    CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
+    CHECK(raft_cmd->ParseFromString(log_entry->out_data));
     for (auto& request : *raft_cmd->mutable_requests()) {
       switch (request.cmd_type()) {
         case pb::raft::VECTOR_ADD: {
@@ -973,8 +973,8 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
       upsert_use_time += this_upsert_time;
 
       DINGO_LOG(INFO) << fmt::format(
-          "[vector_index.build][index_id({})][trace({})] Build vector index progress, speed({:.3}) count({}) elapsed "
-          "time({}/{}ms)",
+          "[vector_index.build][index_id({})][trace({})] Build vector index progress, speed({:.3}ms/pervector) "
+          "count({}) elapsed time({}/{}ms)",
           vector_index_id, trace, static_cast<double>(this_upsert_time) / vectors.size(), count, upsert_use_time,
           Helper::TimestampMs() - start_time);
 
@@ -1134,8 +1134,7 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
 }
 
 butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                                          std::shared_ptr<VectorIndex> vector_index,
-                                                          const std::string& trace) {
+                                                          VectorIndexPtr vector_index, const std::string& trace) {
   assert(vector_index_wrapper != nullptr);
   assert(vector_index != nullptr);
 
@@ -1346,7 +1345,7 @@ butil::Status VectorIndexManager::ScrubVectorIndex() {
 }
 
 // range is encode range
-butil::Status VectorIndexManager::TrainForBuild(std::shared_ptr<VectorIndex> vector_index, mvcc::ReaderPtr reader,
+butil::Status VectorIndexManager::TrainForBuild(VectorIndexPtr vector_index, mvcc::ReaderPtr reader,
                                                 const pb::common::Range& encode_range) {
   IteratorOptions options;
   options.upper_bound = encode_range.end_key();

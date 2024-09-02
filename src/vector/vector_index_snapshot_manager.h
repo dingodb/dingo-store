@@ -56,7 +56,7 @@ class VectorIndexSnapshotManager {
   static butil::Status SaveVectorIndexSnapshot(VectorIndexWrapperPtr vector_index, int64_t& snapshot_log_index);
 
   // Load vector index from snapshot.
-  static std::shared_ptr<VectorIndex> LoadVectorIndexSnapshot(VectorIndexWrapperPtr vector_index_wrapper,
+  static VectorIndexPtr LoadVectorIndexSnapshot(VectorIndexWrapperPtr vector_index_wrapper,
                                                               const pb::common::RegionEpoch& epoch);
 
   static std::string GetSnapshotParentPath(int64_t vector_index_id);

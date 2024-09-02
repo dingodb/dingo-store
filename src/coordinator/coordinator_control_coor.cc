@@ -76,6 +76,7 @@ DECLARE_int32(max_hnsw_nlinks_of_region);
 DEFINE_int32(max_send_region_cmd_per_store, 100, "max send region cmd per store");
 
 DEFINE_int64(max_region_count, 40000, "max region of dingo");
+BRPC_VALIDATE_GFLAG(max_region_count, brpc::PositiveInteger);
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,

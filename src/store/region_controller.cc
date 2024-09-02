@@ -147,11 +147,8 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
     parameter.is_restart = false;
     parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
-    auto config = ConfigManager::GetInstance().GetRoleConfig();
-    parameter.raft_path = config->GetString("raft.path");
+    parameter.raft_path = Server::GetInstance().GetRaftPath();
     parameter.election_timeout_ms = FLAGS_init_election_timeout_ms;
-    parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
-    parameter.log_path = config->GetString("raft.log_path");
 
     auto raft_meta = store::RaftMeta::New(region->Id());
     parameter.raft_meta = raft_meta;
@@ -266,7 +263,7 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     // Delete raft
     DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] delete region, delete raft node", region_id);
     raft_store_engine->DestroyNode(ctx, region_id);
-    Server::GetInstance().GetLogStorageManager()->DeleteStorage(region_id);
+    Server::GetInstance().GetRaftLogStorage()->DestroyRegionLog(region_id);
   }
 
   // Update state
@@ -605,36 +602,38 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
 
 // Check split/merge/change_peer raft log
 butil::Status CheckChangeRegionLog(int64_t region_id, int64_t min_applied_log_id) {
-  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(region_id);
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
   if (log_storage == nullptr) {
     return butil::Status(pb::error::ERAFT_NOT_FOUND_LOG_STORAGE, fmt::format("Not found log storage {}", region_id));
   }
 
-  bool has = log_storage->HasSpecificLog(min_applied_log_id, INT64_MAX, [&](const LogEntry& log_entry) -> bool {
-    if (log_entry.type == LogEntryType::kEntryTypeData) {
-      auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-      butil::IOBufAsZeroCopyInputStream wrapper(log_entry.data);
-      CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper)) << "parse raft log fail.";
-      for (const auto& request : raft_cmd->requests()) {
-        if (request.cmd_type() == pb::raft::CmdType::SPLIT || request.cmd_type() == pb::raft::CmdType::PREPARE_MERGE ||
-            request.cmd_type() == pb::raft::CmdType::COMMIT_MERGE ||
-            request.cmd_type() == pb::raft::CmdType::ROLLBACK_MERGE) {
+  bool has = log_storage->HasSpecificLog(
+      region_id, min_applied_log_id, INT64_MAX, [&](const wal::LogEntry& log_entry) -> bool {
+        if (log_entry.type == wal::LogEntryType::kEntryTypeData) {
+          auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
+          CHECK(raft_cmd->ParseFromString(log_entry.out_data)) << "parse raft log fail.";
+          for (const auto& request : raft_cmd->requests()) {
+            if (request.cmd_type() == pb::raft::CmdType::SPLIT ||
+                request.cmd_type() == pb::raft::CmdType::PREPARE_MERGE ||
+                request.cmd_type() == pb::raft::CmdType::COMMIT_MERGE ||
+                request.cmd_type() == pb::raft::CmdType::ROLLBACK_MERGE) {
+              LOG(INFO) << fmt::format(
+                               "[control.region][merge.merging][region({})] Exist split/merge/change_peer log recently",
+                               region_id)
+                        << ", min_applied_log_id: " << min_applied_log_id
+                        << ", cmd_type: " << pb::raft::CmdType_Name(request.cmd_type());
+              return true;
+            }
+          }
+        } else if (log_entry.type == wal::LogEntryType::kEntryTypeConfiguration) {
           LOG(INFO) << fmt::format(
                            "[control.region][merge.merging][region({})] Exist split/merge/change_peer log recently",
                            region_id)
-                    << ", min_applied_log_id: " << min_applied_log_id
-                    << ", cmd_type: " << pb::raft::CmdType_Name(request.cmd_type());
+                    << ", min_applied_log_id: " << min_applied_log_id << ", log_entry_type: kEntryTypeConfiguration";
           return true;
         }
-      }
-    } else if (log_entry.type == LogEntryType::kEntryTypeConfiguration) {
-      LOG(INFO) << fmt::format("[control.region][merge.merging][region({})] Exist split/merge/change_peer log recently",
-                               region_id)
-                << ", min_applied_log_id: " << min_applied_log_id << ", log_entry_type: kEntryTypeConfiguration";
-      return true;
-    }
-    return false;
-  });
+        return false;
+      });
 
   if (has) {
     return butil::Status(pb::error::ERAFT_EXIST_CHANGE_LOG,
@@ -1589,10 +1588,8 @@ butil::Status SnapshotVectorIndexTask::SaveSnapshotAsync(std::shared_ptr<Context
   }
 
   // Save vector index.
-  DINGO_LOG(INFO) << fmt::format("[control.region][vector_index.save][index_id({})] region_save_vector_index.",
-                                 region_id);
-  VectorIndexManager::LaunchSaveVectorIndex(vector_index_wrapper,
-                                            fmt::format("{}-region_save_vector_index", region_cmd->job_id()));
+  DINGO_LOG(INFO) << fmt::format("[control.region][vector_index.save][index_id({})] save vector index.", region_id);
+  VectorIndexManager::LaunchSaveVectorIndex(vector_index_wrapper, fmt::format("{}-RegionSave", region_cmd->job_id()));
 
   return butil::Status();
 }
