@@ -30,7 +30,7 @@ class LogStorageManager {
 
   void AddLogStorage(int64_t region_id, std::shared_ptr<SegmentLogStorage> log_storage);
   void DeleteStorage(int64_t region_id);
-  std::shared_ptr<SegmentLogStorage> GetLogStorage(int64_t region_id);
+  std::shared_ptr<SegmentLogStorage> GetRaftLogStorage(int64_t region_id);
 
  private:
   bthread_mutex_t mutex_;

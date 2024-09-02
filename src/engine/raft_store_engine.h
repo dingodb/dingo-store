@@ -53,8 +53,6 @@ class RaftControlAble {
 
     std::string raft_path;
     int election_timeout_ms;
-    int64_t log_max_segment_size;
-    std::string log_path;
 
     store::RaftMetaPtr raft_meta;
     store::RegionMetricsPtr region_metrics;

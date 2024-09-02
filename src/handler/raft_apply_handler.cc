@@ -412,17 +412,14 @@ store::RegionPtr CreateNewRegion(std::shared_ptr<RaftStoreEngine> raft_store_eng
   auto raft_meta = store::RaftMeta::New(region->Id());
   ADD_RAFT_META(raft_meta);
 
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
   RaftControlAble::AddNodeParameter parameter;
   parameter.role = GetRole();
   parameter.is_restart = false;
   parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
-  parameter.raft_path = config->GetString("raft.path");
+  parameter.raft_path = Server::GetInstance().GetRaftPath();
   parameter.election_timeout_ms =
       parent_node->IsLeader() ? FLAGS_init_election_timeout_ms : 30 * FLAGS_init_election_timeout_ms;
-  parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
-  parameter.log_path = config->GetString("raft.log_path");
 
   parameter.raft_meta = raft_meta;
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
@@ -669,17 +666,15 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
 
 // Get raft log entries.
 static std::vector<pb::raft::LogEntry> GetRaftLogEntries(int64_t region_id, int64_t begin_log_id, int64_t end_log_id) {
-  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(region_id);
-  auto log_entries = log_storage->GetEntrys(begin_log_id, end_log_id);
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
+  auto log_entries = log_storage->GetEntries(region_id, begin_log_id, end_log_id);
   std::vector<pb::raft::LogEntry> pb_log_entries;
   pb_log_entries.resize(log_entries.size());
   for (int i = 0; i < log_entries.size(); ++i) {
     auto &pb_log_entry = pb_log_entries[i];
     pb_log_entry.set_index(log_entries[i]->index);
     pb_log_entry.set_term(log_entries[i]->term);
-    std::string data;
-    log_entries[i]->data.copy_to(&data);
-    pb_log_entry.mutable_data()->swap(data);
+    pb_log_entry.mutable_data()->swap(log_entries[i]->out_data);
   }
 
   return pb_log_entries;

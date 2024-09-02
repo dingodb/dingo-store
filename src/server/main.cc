@@ -680,8 +680,8 @@ int main(int argc, char *argv[]) {
   bthread::FLAGS_bthread_concurrency = worker_thread_num;
 
   if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {
-    if (!dingo_server.InitLogStorageManager()) {
-      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+    if (!dingo_server.InitLogStorage()) {
+      DINGO_LOG(ERROR) << "InitLogStorage failed!";
       return -1;
     }
     if (!dingo_server.InitRocksRawEngine()) {
@@ -923,8 +923,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (!dingo_server.InitLogStorageManager()) {
-      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+    if (!dingo_server.InitLogStorage()) {
+      DINGO_LOG(ERROR) << "InitLogStorage failed!";
       return -1;
     }
     if (!dingo_server.InitRocksRawEngine()) {
@@ -1056,8 +1056,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (!dingo_server.InitLogStorageManager()) {
-      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+    if (!dingo_server.InitLogStorage()) {
+      DINGO_LOG(ERROR) << "InitLogStorage failed!";
       return -1;
     }
 
@@ -1210,8 +1210,8 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    if (!dingo_server.InitLogStorageManager()) {
-      DINGO_LOG(ERROR) << "InitLogStorageManager failed!";
+    if (!dingo_server.InitLogStorage()) {
+      DINGO_LOG(ERROR) << "InitLogStorage failed!";
       return -1;
     }
 

@@ -24,6 +24,7 @@
 #include <string>
 
 #include "common/context.h"
+#include "log/rocks_log_storage.h"
 #include "log/segment_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -38,7 +39,7 @@ struct SnapshotContext;
 class RaftNode {
  public:
   RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-           std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage);
+           std::shared_ptr<BaseStateMachine> fsm, wal::LogStoragePtr log_storage);
   ~RaftNode();
 
   int Init(store::RegionPtr region, const std::string& init_conf, const std::string& raft_path,
@@ -90,7 +91,7 @@ class RaftNode {
   uint32_t election_timeout_ms_;
 
   std::shared_ptr<BaseStateMachine> fsm_;
-  std::shared_ptr<SegmentLogStorage> log_storage_;
+  wal::LogStoragePtr log_storage_;
   std::unique_ptr<braft::Node> node_;
 
   std::atomic<bool> disable_save_snapshot_;

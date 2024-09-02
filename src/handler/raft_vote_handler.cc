@@ -24,6 +24,22 @@ namespace dingodb {
 
 DECLARE_int64(vector_fast_build_log_gap);
 
+bool IsFastLoadVectorIndex(store::RegionPtr region) {
+  if (region->Epoch().version() == 1) {
+    auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
+    int64_t applied_index = -1;
+    if (raft_meta != nullptr) {
+      applied_index = raft_meta->AppliedId();
+
+      if (applied_index < FLAGS_vector_fast_build_log_gap) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 // vector
 int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
   if (region == nullptr) {
@@ -36,21 +52,12 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
     DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                    region->Id());
   } else {
-    bool is_fast_load = false;
+    // temporary forbid follower truncate log，so set raft log index is 0.
+    auto log_storage = Server::GetInstance().GetRaftLogStorage();
+    log_storage->TruncatePrefix(wal::ClientType::kVectorIndex, vector_index_wrapper->Id(), 0);
 
-    if (region->Epoch().version() == 1) {
-      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
-      if (raft_meta != nullptr) {
-        int64_t applied_index = raft_meta->AppliedId();
-
-        if (applied_index < FLAGS_vector_fast_build_log_gap) {
-          // use fast load
-          is_fast_load = true;
-        }
-      }
-    }
-
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "beingLeader");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, IsFastLoadVectorIndex(region), 0,
+                                                     "beingLeader");
   }
 
   return 0;
@@ -87,6 +94,9 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
   }
   if (!vector_index_wrapper->IsPermanentHoldVectorIndex(vector_index_wrapper->Id()) &&
       !vector_index_wrapper->IsTempHoldVectorIndex()) {
+    // allow follower truncate log, so set raft log index is INT64_MAX.
+    auto log_storage = Server::GetInstance().GetRaftLogStorage();
+    log_storage->TruncatePrefix(wal::ClientType::kVectorIndex, vector_index_wrapper->Id(), INT64_MAX);
     return 0;
   }
 
@@ -95,22 +105,12 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
     DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] vector index already exist, don't need load again.",
                                       region->Id());
   } else {
-    bool is_fast_load = false;
+    // temporary forbid follower truncate log，so set raft log index is 0.
+    auto log_storage = Server::GetInstance().GetRaftLogStorage();
+    log_storage->TruncatePrefix(wal::ClientType::kVectorIndex, vector_index_wrapper->Id(), 0);
 
-    if (region->Epoch().version() == 1) {
-      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
-      int64_t applied_index = -1;
-      if (raft_meta != nullptr) {
-        applied_index = raft_meta->AppliedId();
-
-        if (applied_index < FLAGS_vector_fast_build_log_gap) {
-          // use fast load
-          is_fast_load = true;
-        }
-      }
-    }
-
-    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "beingFollower");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, IsFastLoadVectorIndex(region), 0,
+                                                     "beingFollower");
   }
 
   return 0;

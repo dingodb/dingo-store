@@ -36,6 +36,7 @@
 #include "common/service_access.h"
 #include "config/config_manager.h"
 #include "fmt/core.h"
+#include "log/rocks_log_storage.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/file_service.pb.h"
@@ -783,10 +784,8 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   }
 
   // Set truncate wal log index.
-  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(vector_index_id);
-  if (log_storage != nullptr) {
-    log_storage->TruncateVectorIndexPrefix(apply_log_index);
-  }
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
+  log_storage->TruncatePrefix(wal::ClientType::kVectorIndex, vector_index_id, apply_log_index);
 
   snapshot_log_index = apply_log_index;
 
@@ -798,8 +797,8 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
 }
 
 // Load vector index for already exist vector index at bootstrap.
-std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot(
-    VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch) {
+VectorIndexPtr VectorIndexSnapshotManager::LoadVectorIndexSnapshot(VectorIndexWrapperPtr vector_index_wrapper,
+                                                                   const pb::common::RegionEpoch& epoch) {
   assert(vector_index_wrapper != nullptr);
 
   int64_t start_time_ms = Helper::TimestampMs();
@@ -812,6 +811,15 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   if (last_snapshot == nullptr) {
     DINGO_LOG(WARNING) << fmt::format(
         "[vector_index.load_snapshot][index_id({})] load snapshot failed, not found snapshot.", vector_index_id);
+    return nullptr;
+  }
+
+  // check snapshot index and log stroage first_log_index
+  int64_t first_log_index = Server::GetInstance().GetRaftLogStorage()->FirstLogIndex(vector_index_id);
+  if (last_snapshot->SnapshotLogId() < first_log_index) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, not has enough log({}).",
+        vector_index_id, last_snapshot->SnapshotLogId(), first_log_index);
     return nullptr;
   }
 

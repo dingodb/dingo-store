@@ -26,6 +26,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "log/segment_log_storage.h"
 #include "metrics/store_bvar_metrics.h"
 #include "proto/common.pb.h"
@@ -37,7 +38,7 @@ DEFINE_int32(node_destroy_wait_time_ms, 3000, "wait time on node destroy");
 namespace dingodb {
 
 RaftNode::RaftNode(int64_t node_id, const std::string& raft_group_name, braft::PeerId peer_id,
-                   std::shared_ptr<BaseStateMachine> fsm, std::shared_ptr<SegmentLogStorage> log_storage)
+                   std::shared_ptr<BaseStateMachine> fsm, wal::LogStoragePtr log_storage)
     : node_id_(node_id),
       str_node_id_(std::to_string(node_id)),
       raft_group_name_(raft_group_name),
@@ -67,12 +68,12 @@ int RaftNode::Init(store::RegionPtr region, const std::string& init_conf, const 
   // Disable braft snapshot trigger
   node_options.snapshot_interval_s = 0;
 
-  path_ = fmt::format("{}/{}", raft_path, node_id_);
-  node_options.raft_meta_uri = "local-merged://" + raft_path + "/raft_meta";
-  node_options.snapshot_uri = "local://" + path_ + "/snapshot";
+  path_ = raft_path;
+  node_options.raft_meta_uri = fmt::format("local-merged://{}/meta", raft_path);
+  node_options.snapshot_uri = fmt::format("local://{}/snapshot/{}", raft_path, node_id_);
   node_options.disable_cli = false;
 
-  node_options.log_storage = new SegmentLogStorageWrapper(log_storage_);
+  node_options.log_storage = new wal::RocksLogStorageWrapper(node_id_, log_storage_);
   node_options.node_owns_log_storage = true;
 
   // coordinator's region does not have store_region_meta, so coordinator will pass nullptr to call AddNode.
@@ -105,10 +106,12 @@ void RaftNode::Destroy() {
     bthread_usleep(FLAGS_node_destroy_wait_time_ms * 1000);
   }
 
+  std::string snapshot_path = fmt::format("{}/snapshot/{}", path_, node_id_);
+
   // Delete file directory
   // Braft maybe save raft_meta file after shutdown, so retry remove.
   for (int i = 0; i < 10; ++i) {
-    if (Helper::RemoveAllFileOrDirectory(path_)) {
+    if (Helper::RemoveAllFileOrDirectory(snapshot_path)) {
       break;
     }
     bthread_usleep(100000);

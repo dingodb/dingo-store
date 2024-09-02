@@ -2164,6 +2164,7 @@ pb::common::Schema::Type Helper::TransformSchemaType(const std::string& name) {
       std::make_pair("VARCHAR", dingodb::pb::common::Schema::STRING),
       std::make_pair("ANY", dingodb::pb::common::Schema::STRING),
       std::make_pair("BINARY", dingodb::pb::common::Schema::STRING),
+      std::make_pair("VARBINARY", dingodb::pb::common::Schema::STRING),
       std::make_pair("INT", dingodb::pb::common::Schema::INTEGER),
       std::make_pair("INTEGER", dingodb::pb::common::Schema::INTEGER),
       std::make_pair("BIGINT", dingodb::pb::common::Schema::LONG),

@@ -37,6 +37,8 @@
 #include "engine/rocks_raw_engine.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
+#include "log/rocks_log_storage.h"
 #include "mvcc/ts_provider.h"
 #ifdef ENABLE_XDPROCKS
 #include "engine/xdprocks_raw_engine.h"
@@ -200,19 +202,24 @@ bool Server::InitDirectory() {
       return false;
     }
 
-    // raft data path
-    auto raft_data_path = config->GetString("raft.path");
-    ret = Helper::CreateDirectories(raft_data_path);
+    // raft meta path
+    ret = Helper::CreateDirectories(GetRaftMetaPath());
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "Create raft directory failed: " << raft_data_path;
+      DINGO_LOG(ERROR) << "Create raft directory failed: " << GetRaftMetaPath();
       return false;
     }
 
     // raft log path
-    auto raft_log_path = config->GetString("raft.log_path");
-    ret = Helper::CreateDirectories(raft_log_path);
+    ret = Helper::CreateDirectories(GetRaftLogPath());
     if (!ret.ok()) {
-      DINGO_LOG(ERROR) << "Create raft log directory failed: " << raft_log_path;
+      DINGO_LOG(ERROR) << "Create raft directory failed: " << GetRaftLogPath();
+      return false;
+    }
+
+    // raft snapshot path
+    ret = Helper::CreateDirectories(GetRaftSnapshotPath());
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create raft directory failed: " << GetRaftSnapshotPath();
       return false;
     }
   }
@@ -445,9 +452,16 @@ bool Server::InitCoordinatorInteractionForAutoIncrement() {
   }
 }
 
-bool Server::InitLogStorageManager() {
-  log_storage_ = std::make_shared<LogStorageManager>();
-  return true;
+bool Server::InitLogStorage() {
+  log_storage_ = std::make_shared<wal::RocksLogStorage>(GetRaftLogPath());
+
+  log_storage_->RegisterClientType(wal::ClientType::kRaft);
+
+  if (GetRole() == pb::common::ClusterRole::INDEX) {
+    log_storage_->RegisterClientType(wal::ClientType::kVectorIndex);
+  }
+
+  return log_storage_->Init();
 }
 
 bool Server::InitStorage() {
@@ -1012,7 +1026,7 @@ std::shared_ptr<MetaWriter> Server::GetMetaWriter() {
   return meta_writer_;
 }
 
-std::shared_ptr<LogStorageManager> Server::GetLogStorageManager() {
+wal::LogStoragePtr Server::GetRaftLogStorage() {
   CHECK(log_storage_ != nullptr) << "log storage is nullptr.";
   return log_storage_;
 }
@@ -1116,10 +1130,11 @@ std::string Server::GetRaftPath() {
   return config == nullptr ? "" : config->GetString("raft.path");
 }
 
-std::string Server::GetRaftLogPath() {
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
-  return config == nullptr ? "" : config->GetString("raft.log_path");
-}
+std::string Server::GetRaftMetaPath() { return fmt::format("{}/meta", GetRaftPath()); }
+
+std::string Server::GetRaftLogPath() { return fmt::format("{}/log", GetRaftPath()); }
+
+std::string Server::GetRaftSnapshotPath() { return fmt::format("{}/snapshot", GetRaftPath()); }
 
 std::string Server::GetVectorIndexPath() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();

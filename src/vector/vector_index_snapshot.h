@@ -41,6 +41,7 @@ class SnapshotMeta {
 
   int64_t VectorIndexId() const { return vector_index_id_; }
   int64_t SnapshotLogId() const { return snapshot_log_id_; }
+
   std::string Path() const { return path_; }
   std::string MetaPath();
   std::string IndexDataPath();
