@@ -628,8 +628,9 @@ butil::Status VectorReader::VectorLoad(std::shared_ptr<Engine::VectorReader::Con
 }
 
 butil::Status VectorReader::VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
-                                         pb::common::VectorStateParameter& vector_state_parameter) {
-  return ctx->vector_index->Status(vector_state_parameter);
+                                         pb::common::VectorStateParameter& vector_state_parameter,
+                                         pb::error::Error& internal_error) {
+  return ctx->vector_index->Status(vector_state_parameter, internal_error);
 }
 
 butil::Status VectorReader::VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,

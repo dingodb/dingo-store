@@ -210,7 +210,8 @@ class VectorIndex {
     return butil::Status::OK();
   }
 
-  virtual butil::Status Status(pb::common::VectorStateParameter& /*vector_state_parameter*/) {
+  virtual butil::Status Status(pb::common::VectorStateParameter& /*vector_state_parameter*/,
+                               pb::error::Error& /*internal_error*/) {
     return butil::Status::OK();
   }
 
@@ -431,7 +432,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
 
   butil::Status Load(const pb::common::VectorLoadParameter& parameter,
                      pb::common::VectorStateParameter& vector_state_parameter);
-  butil::Status Status(pb::common::VectorStateParameter& vector_state_parameter);
+  butil::Status Status(pb::common::VectorStateParameter& vector_state_parameter, pb::error::Error& internal_error);
   butil::Status Reset(bool delete_data_file, pb::common::VectorStateParameter& vector_state_parameter);
   butil::Status Drop();
   butil::Status Dump(bool dump_all, std::vector<std::string>& dump_datas);

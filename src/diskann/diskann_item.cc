@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "butil/status.h"
@@ -45,6 +46,7 @@ bvar::LatencyRecorder g_diskann_server_load_latency("dingo_diskann_server_load_l
 bvar::LatencyRecorder g_diskann_server_destroy_latency("dingo_diskann_server_destroy_latency");
 bvar::LatencyRecorder g_diskann_server_tryload_latency("dingo_diskann_server_tryload_latency");
 bvar::LatencyRecorder g_diskann_server_count_latency("dingo_diskann_server_count_latency");
+bvar::LatencyRecorder g_diskann_server_nodata_latency("dingo_diskann_server_nodata_latency");
 
 #ifndef ENABLE_DISKANN_ITEM_PTHREAD
 #define ENABLE_DISKANN_ITEM_PTHREAD
@@ -68,6 +70,15 @@ DiskANNItem::DiskANNItem(std::shared_ptr<Context> ctx, int64_t vector_index_id,
       last_import_time_ms_(0) {
   remote_side_ = std::string(butil::endpoint2str(ctx->Cntl()->remote_side()).c_str());
   local_side_ = std::string(butil::endpoint2str(ctx->Cntl()->local_side()).c_str());
+
+  if (IsBuildedFilesExist(vector_index_id_, vector_index_parameter_.diskann_parameter().metric_type())) {
+    state_ = DiskANNCoreState::kFakeBuilded;
+    NoDataSymbolDelete();
+  } else {
+    if (NoDataSymbolExist()) {
+      state_ = DiskANNCoreState::kNoData;
+    }
+  }
 }
 
 DiskANNItem::~DiskANNItem() {
@@ -105,6 +116,20 @@ butil::Status DiskANNItem::Import(std::shared_ptr<Context> ctx, const std::vecto
     is_error_occurred = true;
     DINGO_LOG(ERROR) << "already error occurred, ignore import.  return." << last_error_.error_cstr();
     status = last_error_;
+    return status;
+  }
+
+  if (state_.load() == DiskANNCoreState::kFakeBuilded) {
+    std::string s = fmt::format("diskann has been builded(kFakeBuilded), call load first. {}", FormatParameter());
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::Errno::EDISKANN_IMPORT_STATE_WRONG, s);
+    return status;
+  }
+
+  if (state_.load() == DiskANNCoreState::kNoData) {
+    std::string s = fmt::format("diskann is no data(kNoData). call reset first. {}", FormatParameter());
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::Errno::EDISKANN_IMPORT_STATE_WRONG, s);
     return status;
   }
 
@@ -181,6 +206,20 @@ butil::Status DiskANNItem::Build(std::shared_ptr<Context> ctx, bool force_to_bui
       is_error_occurred = true;
       DINGO_LOG(ERROR) << "already error occurred, ignore build.  return." << last_error_.error_cstr();
       status = last_error_;
+      return status;
+    }
+
+    if (state_.load() == DiskANNCoreState::kFakeBuilded) {
+      std::string s = fmt::format("diskann has been builded(kFakeBuilded), call load first. {}", FormatParameter());
+      DINGO_LOG(ERROR) << s;
+      status = butil::Status(pb::error::Errno::EDISKANN_BUILD_STATE_WRONG, s);
+      return status;
+    }
+
+    if (state_.load() == DiskANNCoreState::kNoData) {
+      std::string s = fmt::format("diskann is no data(kNoData). call reset first. {}", FormatParameter());
+      DINGO_LOG(ERROR) << s;
+      status = butil::Status(pb::error::Errno::EDISKANN_BUILD_STATE_WRONG, s);
       return status;
     }
 
@@ -273,6 +312,20 @@ butil::Status DiskANNItem::Load(std::shared_ptr<Context> ctx, const pb::common::
       return status;
     }
 
+    if (state_.load() == DiskANNCoreState::kFakeBuilded) {
+      std::string s = fmt::format("diskann has been builded(kFakeBuilded), call try load first. {}", FormatParameter());
+      DINGO_LOG(ERROR) << s;
+      status = butil::Status(pb::error::Errno::EDISKANN_LOAD_STATE_WRONG, s);
+      return status;
+    }
+
+    if (state_.load() == DiskANNCoreState::kNoData) {
+      std::string s = fmt::format("diskann is no data(kNoData). call reset first. {}", FormatParameter());
+      DINGO_LOG(ERROR) << s;
+      status = butil::Status(pb::error::Errno::EDISKANN_LOAD_STATE_WRONG, s);
+      return status;
+    }
+
     if (DiskANNCoreState::kLoaded == state_.load()) {
       std::string s = fmt::format("diskann already loaded, skip load.  {}", FormatParameter());
       DINGO_LOG(INFO) << s;
@@ -327,9 +380,16 @@ butil::Status DiskANNItem::Search(std::shared_ptr<Context> ctx, uint32_t top_n,
     return status;
   }
 
+  if (state_.load() == DiskANNCoreState::kNoData) {
+    std::string s = fmt::format("diskann is no data(kNoData). not support search now. {}", FormatParameter());
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::Errno::EDISKANN_IS_NO_DATA, s);
+    return status;
+  }
+
   if (DiskANNCoreState::kLoaded != state_.load()) {
     if (DiskANNCoreState::kBuilded == state_.load() || DiskANNCoreState::kUpdatingPath == state_.load() ||
-        DiskANNCoreState::kUpdatedPath == state_.load()) {
+        DiskANNCoreState::kUpdatedPath == state_.load() || DiskANNCoreState::kFakeBuilded == state_.load()) {
       std::string s = fmt::format("diskann not load. load first. {} ", FormatParameter());
       DINGO_LOG(ERROR) << s;
       status = butil::Status(pb::error::Errno::EDISKANN_NOT_LOAD, s);
@@ -424,8 +484,16 @@ butil::Status DiskANNItem::TryLoad(std::shared_ptr<Context> ctx, const pb::commo
       return status;
     }
 
+    if (state_.load() == DiskANNCoreState::kNoData) {
+      std::string s = fmt::format("diskann is no data(kNoData). call reset first. {}", FormatParameter());
+      DINGO_LOG(ERROR) << s;
+      status = butil::Status(pb::error::Errno::EDISKANN_TRYLOAD_STATE_WRONG, s);
+      return status;
+    }
+
     if (state_.load() == DiskANNCoreState::kLoaded) {
       std::string s = fmt::format("diskann already loaded, skip load. {}", FormatParameter());
+      DINGO_LOG(INFO) << s;
       status = butil::Status(pb::error::Errno::OK, s);
       return status;
     }
@@ -437,7 +505,7 @@ butil::Status DiskANNItem::TryLoad(std::shared_ptr<Context> ctx, const pb::commo
       return status;
     }
 
-    if (state_.load() != DiskANNCoreState::kUnknown) {
+    if (state_.load() != DiskANNCoreState::kUnknown && state_.load() != DiskANNCoreState::kFakeBuilded) {
       std::string s = fmt::format("diskann item state wrong : {}", FormatParameter());
       DINGO_LOG(ERROR) << s;
       status = butil::Status(pb::error::Errno::EDISKANN_TRYLOAD_STATE_WRONG, s);
@@ -574,6 +642,56 @@ butil::Status DiskANNItem::Count(std::shared_ptr<Context> ctx, int64_t& count) {
   return butil::Status::OK();
 }
 
+butil::Status DiskANNItem::SetNoData(std::shared_ptr<Context> ctx) {
+  DiskANNCoreState old_state;
+  butil::Status status;
+  BvarLatencyGuard bvar_guard(&g_diskann_server_nodata_latency);
+  RWLockWriteGuard guard(&rw_lock_);
+
+  SetSide(ctx);
+  bool is_error_occurred = false;
+  old_state = state_.load();
+
+  auto lambda_set_state_function = [this, &is_error_occurred, &status, ctx]() {
+    if (is_error_occurred) {
+      last_error_ = status;
+      error_local_side_ = local_side_;
+      error_remote_side_ = remote_side_;
+    }
+
+    ctx->SetStatus(last_error_);
+    ctx->SetDiskANNCoreStateX(state_);
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
+  if (!last_error_.ok()) {
+    is_error_occurred = true;
+    DINGO_LOG(ERROR) << "already error occurred, ignore import.  return." << last_error_.error_cstr();
+    status = last_error_;
+    return status;
+  }
+
+  if (state_.load() == DiskANNCoreState::kNoData) {
+    std::string s = fmt::format("diskann is no data(kNoData). ignore.");
+    DINGO_LOG(INFO) << s;
+    status = butil::Status(pb::error::Errno::OK, s);
+    return status;
+  }
+
+  if (state_.load() != DiskANNCoreState::kUnknown) {
+    std::string s = fmt::format("diskann item state wrong. {}", FormatParameter());
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::Errno::EDISKANN_NO_DATA_STATE_WRONG, s);
+    return status;
+  }
+
+  NoDataSymbolCreate();
+
+  state_ = DiskANNCoreState::kNoData;
+
+  return butil::Status::OK();
+}
+
 bool DiskANNItem::IsBuildedFilesExist(int64_t vector_index_id, pb::common::MetricType metric_type) {
   std::string data_bin_path = fmt::format("{}/{}/{}/{}", base_dir, normal_name, vector_index_id, input_name);
 #if defined(ENABLE_DISKANN_ID_MAPPING)
@@ -639,8 +757,8 @@ butil::Status DiskANNItem::DoImport(const std::vector<pb::common::Vector>& vecto
     data_path_ = data_path;
     uint32_t count = 0;
     uint32_t dim = dimension;
-    writer_.write((char*)&count, sizeof(uint32_t));
-    writer_.write((char*)&dim, sizeof(uint32_t));
+    writer_.write(reinterpret_cast<char*>(&count), sizeof(uint32_t));
+    writer_.write(reinterpret_cast<char*>(&dim), sizeof(uint32_t));
   }
 
 #if defined(ENABLE_DISKANN_ID_MAPPING)
@@ -654,9 +772,9 @@ butil::Status DiskANNItem::DoImport(const std::vector<pb::common::Vector>& vecto
     id_path_ = id_path;
     uint32_t count = 0;
     uint32_t dim = dimension;
-    id_writer_.write((char*)&count, sizeof(uint32_t));
-    id_writer_.write((char*)&dim, sizeof(uint32_t));
-    id_writer_.write((char*)&ts, sizeof(int64_t));
+    id_writer_.write(reinterpret_cast<char*>(&count), sizeof(uint32_t));
+    id_writer_.write(reinterpret_cast<char*>(&dim), sizeof(uint32_t));
+    id_writer_.write(reinterpret_cast<char*>(&ts), sizeof(int64_t));
     ts_ = ts;
     tso_ = tso;
   }
@@ -717,7 +835,7 @@ butil::Status DiskANNItem::DoImport(const std::vector<pb::common::Vector>& vecto
     }
 
     uint32_t count = already_recv_vector_count;
-    writer_.write((char*)&count, sizeof(uint32_t));
+    writer_.write(reinterpret_cast<char*>(&count), sizeof(uint32_t));
     writer_.close();
     std::string new_path = fmt::format("{}/{}/{}/{}", base_dir, normal_name, vector_index_id_, input_name);
     DiskANNUtils::CreateDir(base_dir);
@@ -731,7 +849,7 @@ butil::Status DiskANNItem::DoImport(const std::vector<pb::common::Vector>& vecto
 
 #if defined(ENABLE_DISKANN_ID_MAPPING)
     id_writer_.seekp(0, std::ios::beg);
-    id_writer_.write((char*)&count, sizeof(uint32_t));
+    id_writer_.write(reinterpret_cast<char*>(&count), sizeof(uint32_t));
     id_writer_.close();
     std::string new_id_path = fmt::format("{}/{}/{}/{}", base_dir, normal_name, vector_index_id_, id_name);
     DiskANNUtils::CreateDir(base_dir);
@@ -832,6 +950,9 @@ butil::Status DiskANNItem::DoBuildInternal(std::shared_ptr<Context> ctx, bool fo
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
+
+  // write empty nodata file
+  NoDataSymbolCreate();
 
   is_error_occurred = false;
 
@@ -975,9 +1096,9 @@ butil::Status DiskANNItem::DoTryLoadInternal(std::shared_ptr<Context> ctx,
     uint32_t count = 0;
     uint32_t dim = 0;
     ts = 0;
-    reader.read((char*)&count, sizeof(uint32_t));
-    reader.read((char*)&dim, sizeof(uint32_t));
-    reader.read((char*)&ts, sizeof(int64_t));
+    reader.read(reinterpret_cast<char*>(&count), sizeof(uint32_t));
+    reader.read(reinterpret_cast<char*>(&dim), sizeof(uint32_t));
+    reader.read(reinterpret_cast<char*>(&ts), sizeof(int64_t));
 
     if (dim != vector_index_parameter_.diskann_parameter().dimension()) {
       std::string s = fmt::format("diskann id.bin dimension is : {}  not equal to dimension : {} {}", dim,
@@ -1101,6 +1222,18 @@ butil::Status DiskANNItem::DoClose(std::shared_ptr<Context> ctx, bool is_destroy
 #if defined(ENABLE_DISKANN_ID_MAPPING)
     DiskANNUtils::Rename(normal_id_path, destroyed_id_path);
 #endif
+
+    // delete empty nodata file
+    NoDataSymbolDelete();
+  } else {  // not destroy file
+    if (IsBuildedFilesExist(vector_index_id_, vector_index_parameter_.diskann_parameter().metric_type())) {
+      state_ = DiskANNCoreState::kFakeBuilded;
+      NoDataSymbolDelete();
+    } else {
+      if (NoDataSymbolExist()) {
+        state_ = DiskANNCoreState::kNoData;
+      }
+    }
   }
 
   return butil::Status::OK();
@@ -1170,9 +1303,34 @@ void DiskANNItem::SetSide(std::shared_ptr<Context> ctx) {
   if (remote_side != remote_side_ || local_side != local_side_) {
     remote_side_ = remote_side;
     local_side_ = local_side;
-    DINGO_LOG(INFO) << "vector_index_id: " << vector_index_id_ << "remote_side: " << remote_side_
+    DINGO_LOG(INFO) << "vector_index_id: " << vector_index_id_ << " remote_side: " << remote_side_
                     << " local_side: " << local_side_;
   }
+}
+
+void DiskANNItem::NoDataSymbolCreate() {
+  DiskANNUtils::CreateDir(base_dir);
+  DiskANNUtils::CreateDir(base_dir + "/" + nodata_name);
+  std::string nodata_path = fmt::format("{}/{}/{}", base_dir, nodata_name, std::to_string(vector_index_id_));
+  std::ofstream writer_nodata;
+  diskann::open_file_to_write(writer_, nodata_path);
+  writer_nodata.close();
+}
+
+void DiskANNItem::NoDataSymbolDelete() const {
+  DiskANNUtils::CreateDir(base_dir);
+  DiskANNUtils::CreateDir(base_dir + "/" + nodata_name);
+  std::string nodata_path = fmt::format("{}/{}/{}", base_dir, nodata_name, std::to_string(vector_index_id_));
+  DiskANNUtils::RemoveFile(nodata_path);
+}
+
+bool DiskANNItem::NoDataSymbolExist() const {
+  DiskANNUtils::CreateDir(base_dir);
+  DiskANNUtils::CreateDir(base_dir + "/" + nodata_name);
+  std::string nodata_path = fmt::format("{}/{}/{}", base_dir, nodata_name, std::to_string(vector_index_id_));
+
+  butil::Status status = DiskANNUtils::FileExistsAndRegular(nodata_path);
+  return status.ok();
 }
 
 }  // namespace dingodb

@@ -37,7 +37,7 @@ enum class DiskANNCoreState : char {
   kUpdatedPath = 8,
   kLoading = 9,
   kLoaded = 10,
-  kSearing = 11,
+  kSearching = 11,
   kSearched = 12,
   kReseting = 13,
   kReset = 14,
@@ -45,7 +45,8 @@ enum class DiskANNCoreState : char {
   kDestroyed = 16,
   kIdle = 17,
   kFailed = 18,
-
+  kFakeBuilded = 19,
+  kNoData = 20,
 };
 
 class DiskANNUtils {

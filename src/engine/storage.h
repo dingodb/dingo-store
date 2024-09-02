@@ -152,7 +152,8 @@ class Storage {
                            pb::common::VectorStateParameter& vector_state_parameter);
 
   butil::Status VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
-                             pb::common::VectorStateParameter& vector_state_parameter);
+                             pb::common::VectorStateParameter& vector_state_parameter,
+                             pb::error::Error& internal_error);
 
   butil::Status VectorReset(std::shared_ptr<Engine::VectorReader::Context> ctx, bool delete_data_file,
                             pb::common::VectorStateParameter& vector_state_parameter);

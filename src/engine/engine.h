@@ -176,7 +176,8 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                      pb::common::VectorStateParameter& vector_state_parameter) = 0;
 
     virtual butil::Status VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
-                                       pb::common::VectorStateParameter& vector_state_parameter) = 0;
+                                       pb::common::VectorStateParameter& vector_state_parameter,
+                                       pb::error::Error& internal_error) = 0;
 
     virtual butil::Status VectorReset(std::shared_ptr<VectorReader::Context> ctx, bool delete_data_file,
                                       pb::common::VectorStateParameter& vector_state_parameter) = 0;

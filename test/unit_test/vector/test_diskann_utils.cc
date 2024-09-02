@@ -765,14 +765,14 @@ TEST_F(DiskANNUtilsTest, DiskANNCoreStateToString) {
   }
 
   {
-    state = DiskANNCoreState::kSearing;
-    state2 = DiskANNCoreState::kSearing;
+    state = DiskANNCoreState::kSearching;
+    state2 = DiskANNCoreState::kSearching;
 
     std::string s = DiskANNUtils::DiskANNCoreStateToString(state);
     std::string s2 = DiskANNUtils::DiskANNCoreStateToString(state2);
 
-    EXPECT_EQ(s, "DiskANNCoreState::kSearing");
-    EXPECT_EQ(s2, "DiskANNCoreState::kSearing");
+    EXPECT_EQ(s, "DiskANNCoreState::kSearching");
+    EXPECT_EQ(s2, "DiskANNCoreState::kSearching");
   }
 
   {
@@ -869,7 +869,7 @@ TEST_F(DiskANNUtilsTest, DiskANNCoreStateToPb) {
             DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kUpdatedPath));
   EXPECT_EQ(pb::common::DiskANNCoreState::LOADING, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kLoading));
   EXPECT_EQ(pb::common::DiskANNCoreState::LOADED, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kLoaded));
-  EXPECT_EQ(pb::common::DiskANNCoreState::SEARING, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kSearing));
+  EXPECT_EQ(pb::common::DiskANNCoreState::SEARCHING, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kSearching));
   EXPECT_EQ(pb::common::DiskANNCoreState::SEARCHED, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kSearched));
   EXPECT_EQ(pb::common::DiskANNCoreState::RESETING, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kReseting));
   EXPECT_EQ(pb::common::DiskANNCoreState::RESET, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kReset));
@@ -878,6 +878,9 @@ TEST_F(DiskANNUtilsTest, DiskANNCoreStateToPb) {
   EXPECT_EQ(pb::common::DiskANNCoreState::DESTROYED, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kDestroyed));
   EXPECT_EQ(pb::common::DiskANNCoreState::IDLE, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kIdle));
   EXPECT_EQ(pb::common::DiskANNCoreState::FAILED, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kFailed));
+  EXPECT_EQ(pb::common::DiskANNCoreState::FAKEBUILDED,
+            DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kFakeBuilded));
+  EXPECT_EQ(pb::common::DiskANNCoreState::NODATA, DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState::kNoData));
 }
 
 TEST_F(DiskANNUtilsTest, DiskANNCoreStateFromPb) {
@@ -907,7 +910,8 @@ TEST_F(DiskANNUtilsTest, DiskANNCoreStateFromPb) {
 
   EXPECT_EQ(DiskANNCoreState::kLoaded, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::LOADED));
 
-  EXPECT_EQ(DiskANNCoreState::kSearing, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::SEARING));
+  EXPECT_EQ(DiskANNCoreState::kSearching,
+            DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::SEARCHING));
 
   EXPECT_EQ(DiskANNCoreState::kSearched, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::SEARCHED));
 
@@ -924,6 +928,9 @@ TEST_F(DiskANNUtilsTest, DiskANNCoreStateFromPb) {
   EXPECT_EQ(DiskANNCoreState::kIdle, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::IDLE));
 
   EXPECT_EQ(DiskANNCoreState::kFailed, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::FAILED));
+  EXPECT_EQ(DiskANNCoreState::kFakeBuilded,
+            DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::FAKEBUILDED));
+  EXPECT_EQ(DiskANNCoreState::kNoData, DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreState::NODATA));
 }
 
 }  // namespace dingodb

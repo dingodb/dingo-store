@@ -534,9 +534,10 @@ butil::Status RaftStoreEngine::VectorReader::VectorLoad(std::shared_ptr<VectorRe
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
-                                                          pb::common::VectorStateParameter& vector_state_parameter) {
+                                                          pb::common::VectorStateParameter& vector_state_parameter,
+                                                          pb::error::Error& internal_error) {
   auto vector_reader = dingodb::VectorReader::New(reader_);
-  return vector_reader->VectorStatus(ctx, vector_state_parameter);
+  return vector_reader->VectorStatus(ctx, vector_state_parameter, internal_error);
 }
 
 butil::Status RaftStoreEngine::VectorReader::VectorReset(std::shared_ptr<VectorReader::Context> ctx,
