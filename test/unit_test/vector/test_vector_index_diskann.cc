@@ -46,10 +46,13 @@
 namespace dingodb {
 
 // TEST_VECTOR_INDEX_DISKANN_MOCK define in  vector/vector_index_diskann.h
+// start diskann_server first
 
 DECLARE_bool(diskann_build_sync_internal);
 
 DECLARE_bool(diskann_load_sync_internal);
+
+DECLARE_bool(diskann_reset_force_delete_file_internal);
 
 const std::string kRootPath = "./unit_test";
 const std::string kLogPath = kRootPath + "/log";
@@ -91,6 +94,9 @@ const std::string kYamlConfigContent =
     "  diskann_server_load_worker_num: 128 # the number of load worker used by diskann_service\n"
     "  diskann_server_load_worker_max_pending_num: 1024 # 0 is unlimited\n";
 
+class VectorIndexDiskannTest;
+static void DoReset(VectorIndexDiskannTest &vector_index_diskann_test);
+
 class VectorIndexDiskannTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
@@ -119,6 +125,8 @@ class VectorIndexDiskannTest : public testing::Test {
 
   void TearDown() override {}
 
+  friend void DoReset(VectorIndexDiskannTest &vector_index_diskann_test);
+
   inline static std::shared_ptr<VectorIndex> vector_index_diskann_l2;
   inline static std::shared_ptr<VectorIndex> vector_index_diskann_ip;
   inline static std::shared_ptr<VectorIndex> vector_index_diskann_cosine;
@@ -130,7 +138,7 @@ class VectorIndexDiskannTest : public testing::Test {
   inline static std::vector<float> data_base;
   inline static std::shared_ptr<Config> config;
   inline static std::shared_ptr<RocksRawEngine> engine;
-  inline static int64_t ts = 1;
+  inline static int64_t ts = 0;
 };
 
 TEST_F(VectorIndexDiskannTest, Create) {
@@ -256,31 +264,37 @@ TEST_F(VectorIndexDiskannTest, Create) {
   }
 }
 
-TEST_F(VectorIndexDiskannTest, Reset) {
+static void DoReset(VectorIndexDiskannTest &vector_index_diskann_test) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = true;
 
-  status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
+  status = vector_index_diskann_test.vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
-  status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
+  status = vector_index_diskann_test.vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
-  status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
+  status = vector_index_diskann_test.vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
+}
+
+TEST_F(VectorIndexDiskannTest, Reset) {
+  DoReset(*this);
 
   auto writer = engine->Writer();
 
   auto lambda_delete_range_function = [&writer](int64_t region_part_id) {
     pb::common::Range region_range;
-    std::string start_key =
-        VectorCodec::EncodeVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size, ts);
+    std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
     std::string end_key =
-        VectorCodec::EncodeVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size, ts);
+        VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
     region_range.set_start_key(start_key);
     region_range.set_end_key(end_key);
@@ -335,14 +349,14 @@ TEST_F(VectorIndexDiskannTest, SearchNoData) {
 }
 
 TEST_F(VectorIndexDiskannTest, BuildNoData) {
+  pb::error::Error internal_error;
   butil::Status status;
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -350,36 +364,44 @@ TEST_F(VectorIndexDiskannTest, BuildNoData) {
   pb::common::VectorBuildParameter parameter;
   pb::common::VectorStateParameter vector_state_parameter;
 
+  // FLAGS_diskann_build_sync_internal = true;
+
   status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
-        EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
+        EXPECT_EQ(pb::common::DiskANNCoreState::NODATA, vector_state_parameter.diskann().state());
         break;
       }
 
@@ -389,9 +411,9 @@ TEST_F(VectorIndexDiskannTest, BuildNoData) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
-        EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
+        EXPECT_EQ(pb::common::DiskANNCoreState::NODATA, vector_state_parameter.diskann().state());
         break;
       }
       sleep(1);
@@ -400,14 +422,33 @@ TEST_F(VectorIndexDiskannTest, BuildNoData) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
-        EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
+        EXPECT_EQ(pb::common::DiskANNCoreState::NODATA, vector_state_parameter.diskann().state());
         break;
       }
       sleep(1);
     }
   }
+
+  sleep(1);
+
+  status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
+
+  status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
+
+  status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::NODATA);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_NODATA);
+
+  DoReset(*this);
 }
 
 TEST_F(VectorIndexDiskannTest, Import) {
@@ -433,13 +474,10 @@ TEST_F(VectorIndexDiskannTest, Import) {
 
     auto lambda_writer_vector_to_rocksdb_function = [&writer](int id) {
       pb::common::Range region_range;
-      std::string range_prefix;
-      const uint8_t end_flag = 0x0f;
-      range_prefix.append(1, Constant::kVectorDataPrefix);
-      range_prefix.append("diskann");
 
-      region_range.set_start_key(range_prefix);
-      region_range.set_end_key(range_prefix + std::string(1, end_flag));
+      region_range.set_start_key(VectorCodec::PackageVectorKey(Constant::kExecutorRaw, id, 0 + data_base_size));
+      region_range.set_end_key(
+          VectorCodec::PackageVectorKey(Constant::kExecutorRaw, id, data_base_size + data_base_size));
 
       // pb::common::Range encode_range = mvcc::Codec::EncodeRange(region_range);
 
@@ -475,7 +513,8 @@ TEST_F(VectorIndexDiskannTest, Import) {
           vector.add_float_values(value);
         }
 
-        std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, ts);
+        std::string encode_key_with_ts = mvcc::Codec::EncodeKey(
+            std::string(VectorCodec::PackageVectorKey(Constant::kExecutorRaw, id, vector_id)), ts);
         // std::cout << "encode_key_with_ts : " << Helper::StringToHex(encode_key_with_ts) << ", vector_id : " <<
         // vector_id
         //           << std::endl;
@@ -493,18 +532,45 @@ TEST_F(VectorIndexDiskannTest, Import) {
     lambda_writer_vector_to_rocksdb_function(l2_id);
     lambda_writer_vector_to_rocksdb_function(ip_id);
     lambda_writer_vector_to_rocksdb_function(cosine_id);
+
+    auto reader = engine->Reader();
+    int64_t count = 0;
+
+    auto lambda_reader_vector_count_function = [&reader](int id) {
+      int64_t count = 0;
+      std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, id, 0 + data_base_size);
+      std::string end_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, id, data_base_size + data_base_size);
+      pb::common::Range region_range;
+
+      region_range.set_start_key(start_key);
+      region_range.set_end_key(end_key);
+      pb::common::Range encode_range = mvcc::Codec::EncodeRange(region_range);
+      reader->KvCount(Constant::kVectorDataCF, encode_range.start_key(), encode_range.end_key(), count);
+
+      return count;
+    };
+
+    count = lambda_reader_vector_count_function(l2_id);
+    EXPECT_EQ(count, data_base_size);
+    count = 0;
+    count = lambda_reader_vector_count_function(ip_id);
+    EXPECT_EQ(count, data_base_size);
+    count = 0;
+    count = lambda_reader_vector_count_function(cosine_id);
+    EXPECT_EQ(count, data_base_size);
+    count = 0;
   }
 }
 
 TEST_F(VectorIndexDiskannTest, Build) {
+  pb::error::Error internal_error;
   butil::Status status;
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -512,34 +578,42 @@ TEST_F(VectorIndexDiskannTest, Build) {
   pb::common::VectorBuildParameter parameter;
   pb::common::VectorStateParameter vector_state_parameter;
 
+  // FLAGS_diskann_build_sync_internal = true;
+
   status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
         break;
@@ -550,7 +624,7 @@ TEST_F(VectorIndexDiskannTest, Build) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
         break;
@@ -561,7 +635,7 @@ TEST_F(VectorIndexDiskannTest, Build) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
         break;
@@ -573,38 +647,47 @@ TEST_F(VectorIndexDiskannTest, Build) {
 
 TEST_F(VectorIndexDiskannTest, Load) {
   butil::Status status;
+  pb::error::Error internal_error;
 
   pb::common::VectorLoadParameter parameter;
   pb::common::VectorStateParameter vector_state_parameter;
+
+  // FLAGS_diskann_load_sync_internal = true;
 
   status = vector_index_diskann_l2->Load(parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_ip->Load(parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_cosine->Load(parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -615,7 +698,7 @@ TEST_F(VectorIndexDiskannTest, Load) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -626,7 +709,7 @@ TEST_F(VectorIndexDiskannTest, Load) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -749,18 +832,22 @@ TEST_F(VectorIndexDiskannTest, Search) {
 TEST_F(VectorIndexDiskannTest, Status) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
+  pb::error::Error internal_error;
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::OK);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::OK);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::OK);
 }
 
 TEST_F(VectorIndexDiskannTest, Dump) {
@@ -839,25 +926,31 @@ TEST_F(VectorIndexDiskannTest, Build1Data) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
-  std::string end_key = VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + 1);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
+  std::string end_key =
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -865,74 +958,34 @@ TEST_F(VectorIndexDiskannTest, Build1Data) {
   pb::common::VectorBuildParameter parameter;
 
   status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
-  if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
-  } else {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
-  }
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
-  if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
-  } else {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
-  }
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
-  if (FLAGS_diskann_build_sync_internal) {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
-  } else {
-    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
-    EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
-  }
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
-  if (!FLAGS_diskann_build_sync_internal) {
-    while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
-      EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW) {
-        break;
-      }
-      sleep(1);
-    }
-  }
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
-  if (!FLAGS_diskann_build_sync_internal) {
-    while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
-      EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW) {
-        break;
-      }
-      sleep(1);
-    }
-  }
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
-  if (!FLAGS_diskann_build_sync_internal) {
-    while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
-      EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW) {
-        break;
-      }
-      sleep(1);
-    }
-  }
-
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
-
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
-
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW);
-  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
@@ -945,12 +998,17 @@ TEST_F(VectorIndexDiskannTest, Build1Data) {
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+
+  FLAGS_diskann_reset_force_delete_file_internal = true;
 }
 
 TEST_F(VectorIndexDiskannTest, LoadDirect) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
@@ -996,7 +1054,7 @@ TEST_F(VectorIndexDiskannTest, LoadDirect) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -1007,7 +1065,7 @@ TEST_F(VectorIndexDiskannTest, LoadDirect) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -1018,7 +1076,7 @@ TEST_F(VectorIndexDiskannTest, LoadDirect) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
         break;
@@ -1027,15 +1085,15 @@ TEST_F(VectorIndexDiskannTest, LoadDirect) {
     }
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
@@ -1050,12 +1108,17 @@ TEST_F(VectorIndexDiskannTest, LoadDirect) {
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+
+  FLAGS_diskann_reset_force_delete_file_internal = true;
 }
 
 TEST_F(VectorIndexDiskannTest, BuildDuplicate) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  // FLAGS_diskann_build_sync_internal = true;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
@@ -1071,9 +1134,9 @@ TEST_F(VectorIndexDiskannTest, BuildDuplicate) {
 
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
-  std::string start_key = VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, l2_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, l2_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, cosine_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, cosine_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -1106,14 +1169,14 @@ TEST_F(VectorIndexDiskannTest, BuildDuplicate) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       if (pb::common::DiskANNCoreState::UNKNOWN == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
       }
       if (pb::common::DiskANNCoreState::IMPORTING == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
       }
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
+      if (internal_error.errcode() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
         break;
       }
       sleep(1);
@@ -1122,14 +1185,14 @@ TEST_F(VectorIndexDiskannTest, BuildDuplicate) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       if (pb::common::DiskANNCoreState::UNKNOWN == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
       }
       if (pb::common::DiskANNCoreState::IMPORTING == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
       }
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
+      if (internal_error.errcode() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
         break;
       }
       sleep(1);
@@ -1138,31 +1201,37 @@ TEST_F(VectorIndexDiskannTest, BuildDuplicate) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       if (pb::common::DiskANNCoreState::UNKNOWN == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::UNKNOWN, vector_state_parameter.diskann().state());
       }
       if (pb::common::DiskANNCoreState::IMPORTING == vector_state_parameter.diskann().state()) {
         EXPECT_EQ(pb::common::DiskANNCoreState::IMPORTING, vector_state_parameter.diskann().state());
       }
-      if (status.error_code() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
+      if (internal_error.errcode() == pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED) {
         break;
       }
       sleep(1);
     }
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILD_FAILED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILD_FAILED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
-  EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
+  EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  EXPECT_EQ(internal_error.errcode(), pb::error::Errno::EDISKANN_IMPORT_VECTOR_ID_DUPLICATED);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILD_FAILED);
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
@@ -1181,28 +1250,33 @@ TEST_F(VectorIndexDiskannTest, BuildMultiThread) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
 
   auto lambda_build_function = [&reader](std::shared_ptr<VectorIndex> vector_index_diskann, int64_t part_id) {
+    pb::error::Error internal_error;
     butil::Status status;
     pb::common::VectorStateParameter vector_state_parameter;
     pb::common::Range region_range;
-    std::string start_key = VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, part_id, 0 + data_base_size);
+    std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, part_id, 0 + data_base_size);
     std::string end_key =
-        VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, part_id, data_base_size + data_base_size);
+        VectorCodec::PackageVectorKey(Constant::kExecutorRaw, part_id, data_base_size + data_base_size);
 
     region_range.set_start_key(start_key);
     region_range.set_end_key(end_key);
@@ -1214,41 +1288,55 @@ TEST_F(VectorIndexDiskannTest, BuildMultiThread) {
     if (status.error_code() == pb::error::Errno::OK) {
       if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::BUILDED) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
       } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::IMPORTING) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTING);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
+      } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::IMPORTED) {
+        EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::IMPORTED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
       } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UPDATINGPATH) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATINGPATH);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
       } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UPDATEDPATH) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
       } else {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
       }
     } else {
       EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_IMPORT_TSO_NOT_MATCH);
     }
 
     while (true) {
-      status = vector_index_diskann->Status(vector_state_parameter);
+      status = vector_index_diskann->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UNKNOWN) {
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::IMPORTING) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::IMPORTED) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::BUILDING) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::BUILDED) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UPDATINGPATH) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
           continue;
         }
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1272,55 +1360,64 @@ TEST_F(VectorIndexDiskannTest, BuildMultiThread) {
     threads[i].join();
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -1331,32 +1428,39 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1365,9 +1469,10 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1376,9 +1481,10 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1388,6 +1494,7 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
   auto lambda_load_function = [](std::shared_ptr<VectorIndex> vector_index_diskann) {
     butil::Status status;
     pb::common::VectorStateParameter vector_state_parameter;
+    pb::error::Error internal_error;
 
     pb::common::VectorLoadParameter parameter;
     parameter.mutable_diskann()->set_direct_load_without_build(false);
@@ -1398,23 +1505,29 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
     if (status.error_code() == pb::error::Errno::OK) {
       if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UPDATEDPATH) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
       } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::LOADING) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
       } else {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
       }
     }
 
     while (true) {
-      status = vector_index_diskann->Status(vector_state_parameter);
+      status = vector_index_diskann->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UPDATEDPATH) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::LOADING) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
           continue;
         }
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1438,51 +1551,66 @@ TEST_F(VectorIndexDiskannTest, LoadMultiThread) {
     threads[i].join();
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, TryLoadMultiThread) {
   butil::Status status;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   auto lambda_load_function = [](std::shared_ptr<VectorIndex> vector_index_diskann) {
     butil::Status status;
     pb::common::VectorStateParameter vector_state_parameter;
+    pb::error::Error internal_error;
 
     pb::common::VectorLoadParameter parameter;
     parameter.mutable_diskann()->set_direct_load_without_build(true);
@@ -1491,25 +1619,31 @@ TEST_F(VectorIndexDiskannTest, TryLoadMultiThread) {
 
     status = vector_index_diskann->Load(parameter, vector_state_parameter);
     if (status.error_code() == pb::error::Errno::OK) {
-      if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UNKNOWN) {
-        EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+      if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::FAKEBUILDED) {
+        EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::FAKEBUILDED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
       } else if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::LOADING) {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
       } else {
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
       }
     }
 
     while (true) {
-      status = vector_index_diskann->Status(vector_state_parameter);
+      status = vector_index_diskann->Status(vector_state_parameter, internal_error);
       if (status.error_code() == pb::error::Errno::OK) {
-        if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::UNKNOWN) {
+        if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::FAKEBUILDED) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
           continue;
         }
         if (vector_state_parameter.diskann().state() == pb::common::DiskANNCoreState::LOADING) {
+          EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
           continue;
         }
         EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1533,47 +1667,59 @@ TEST_F(VectorIndexDiskannTest, TryLoadMultiThread) {
     threads[i].join();
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
+  FLAGS_diskann_reset_force_delete_file_internal = true;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscFull) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = true;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // search EDISKANN_NOT_BUILD
   {
@@ -1602,10 +1748,9 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -1617,32 +1762,42 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1651,9 +1806,10 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1662,9 +1818,10 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -1681,6 +1838,8 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
@@ -1689,24 +1848,31 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1715,9 +1881,10 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1726,9 +1893,10 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1758,48 +1926,62 @@ TEST_F(VectorIndexDiskannTest, MiscFull) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
+  FLAGS_diskann_reset_force_delete_file_internal = false;
   delete_data_file = false;
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscDirect) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
+  delete_data_file = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // search EDISKANN_NOT_LOAD
   {
@@ -1834,32 +2016,42 @@ TEST_F(VectorIndexDiskannTest, MiscDirect) {
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_ip->Load(load_parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1868,9 +2060,10 @@ TEST_F(VectorIndexDiskannTest, MiscDirect) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1879,9 +2072,10 @@ TEST_F(VectorIndexDiskannTest, MiscDirect) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -1911,47 +2105,58 @@ TEST_F(VectorIndexDiskannTest, MiscDirect) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
+  FLAGS_diskann_reset_force_delete_file_internal = true;
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = true;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // load first
   pb::common::VectorLoadParameter load_parameter;
@@ -1962,24 +2167,26 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   status = vector_index_diskann_l2->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_LOAD_STATE_WRONG);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_LOAD_STATE_WRONG);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
 
   EXPECT_EQ(status.error_code(), pb::error::Errno::EDISKANN_LOAD_STATE_WRONG);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UNKNOWN);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // build
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -1991,32 +2198,42 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2025,9 +2242,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2036,9 +2254,11 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
+
         break;
       }
       sleep(1);
@@ -2049,14 +2269,17 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   // search
   {
@@ -2090,32 +2313,42 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_ip->Load(load_parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
   if (FLAGS_diskann_load_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADING);
   }
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -2124,9 +2357,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -2135,9 +2369,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
         break;
       }
       sleep(1);
@@ -2151,27 +2386,33 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   status = vector_index_diskann_l2->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   status = vector_index_diskann_ip->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   // try load again
   status = vector_index_diskann_l2->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   status = vector_index_diskann_ip->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   status = vector_index_diskann_cosine->Load(load_parameter, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   // search again
   {
@@ -2196,15 +2437,15 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
 
@@ -2212,41 +2453,47 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder) {
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscDisorder2) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = true;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // build
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -2278,9 +2525,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder2) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2289,9 +2537,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder2) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2300,9 +2549,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder2) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2313,54 +2563,63 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder2) {
   status = vector_index_diskann_l2->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
 
   delete_data_file = false;
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = true;
+  pb::error::Error internal_error;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // build
   mvcc::ReaderPtr reader = std::make_shared<mvcc::KvReader>(engine->Reader());
   pb::common::Range region_range;
   int64_t region_part_id = l2_id;
-  std::string start_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, 0 + data_base_size);
+  std::string start_key = VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, 0 + data_base_size);
   std::string end_key =
-      VectorCodec::PackageVectorKey(Constant::kVectorDataPrefix, region_part_id, data_base_size + data_base_size);
+      VectorCodec::PackageVectorKey(Constant::kExecutorRaw, region_part_id, data_base_size + data_base_size);
 
   region_range.set_start_key(start_key);
   region_range.set_end_key(end_key);
@@ -2372,32 +2631,39 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_ip->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
   status = vector_index_diskann_cosine->Build(region_range, reader, parameter, ts, vector_state_parameter);
   if (FLAGS_diskann_build_sync_internal) {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::UPDATEDPATH);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
   } else {
     EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::BUILDING);
+    EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDING);
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2406,9 +2672,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2417,9 +2684,10 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
 
   if (!FLAGS_diskann_build_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::UPDATEDPATH == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_BUILDED);
         break;
       }
       sleep(1);
@@ -2456,9 +2724,11 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
@@ -2467,9 +2737,11 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
@@ -2478,26 +2750,31 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
     }
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   // search
   {
@@ -2523,35 +2800,45 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder3) {
   }
 
   delete_data_file = false;
+  FLAGS_diskann_reset_force_delete_file_internal = false;
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 }
 
 TEST_F(VectorIndexDiskannTest, MiscDisorder4) {
   butil::Status status, ok;
   pb::common::VectorStateParameter vector_state_parameter;
   bool delete_data_file = false;
+  pb::error::Error internal_error;
+
+  FLAGS_diskann_reset_force_delete_file_internal = false;
 
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   // try load
   pb::common::VectorLoadParameter load_parameter;
@@ -2583,9 +2870,11 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder4) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_l2->Status(vector_state_parameter);
+      status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
@@ -2594,9 +2883,11 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder4) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_ip->Status(vector_state_parameter);
+      status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
@@ -2605,26 +2896,31 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder4) {
 
   if (!FLAGS_diskann_load_sync_internal) {
     while (true) {
-      status = vector_index_diskann_cosine->Status(vector_state_parameter);
+      status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
       if (pb::common::DiskANNCoreState::LOADED == vector_state_parameter.diskann().state()) {
+        EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
+
         break;
       }
       sleep(1);
     }
   }
 
-  status = vector_index_diskann_l2->Status(vector_state_parameter);
+  status = vector_index_diskann_l2->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_ip->Status(vector_state_parameter);
+  status = vector_index_diskann_ip->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
-  status = vector_index_diskann_cosine->Status(vector_state_parameter);
+  status = vector_index_diskann_cosine->Status(vector_state_parameter, internal_error);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::LOADED);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_LOADED);
 
   // search
   {
@@ -2653,14 +2949,19 @@ TEST_F(VectorIndexDiskannTest, MiscDisorder4) {
   status = vector_index_diskann_l2->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_ip->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
 
   status = vector_index_diskann_cosine->Reset(delete_data_file, vector_state_parameter);
   EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
   EXPECT_EQ(vector_state_parameter.diskann().state(), pb::common::DiskANNCoreState::RESET);
+  EXPECT_EQ(vector_state_parameter.diskann().diskann_state(), pb::common::DiskANNState::DISKANN_INITIALIZED);
+
+  FLAGS_diskann_reset_force_delete_file_internal = true;
 }
 
 TEST_F(VectorIndexDiskannTest, Drop) {

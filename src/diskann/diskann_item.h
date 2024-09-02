@@ -19,7 +19,7 @@
 #include <xmmintrin.h>
 
 #include <cstdint>
-#include <limits>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -55,18 +55,20 @@ class DiskANNItem {
 
   butil::Status Import(std::shared_ptr<Context> ctx, const std::vector<pb::common::Vector>& vectors,
                        const std::vector<int64_t>& vector_ids, bool has_more, bool force_to_load_data_if_exist,
-                       int64_t already_send_vector_count, int64_t ts, int64_t tso, int64_t& already_recv_vector_count);
+                       int64_t already_send_vector_count, int64_t ts, int64_t tso,
+                       int64_t& already_recv_vector_count);  // NOLINT
   butil::Status Build(std::shared_ptr<Context> ctx, bool force_to_build, bool is_sync);
   butil::Status Load(std::shared_ptr<Context> ctx, const pb::common::LoadDiskAnnParam& load_param, bool is_sync);
   butil::Status Search(std::shared_ptr<Context> ctx, uint32_t top_n, const pb::common::SearchDiskAnnParam& search_param,
                        const std::vector<pb::common::Vector>& vectors,
-                       std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& ts);
+                       std::vector<pb::index::VectorWithDistanceResult>& results, int64_t& ts);  // NOLINT
   butil::Status TryLoad(std::shared_ptr<Context> ctx, const pb::common::LoadDiskAnnParam& load_param, bool is_sync);
   butil::Status Close(std::shared_ptr<Context> ctx);
   butil::Status Destroy(std::shared_ptr<Context> ctx);
   DiskANNCoreState Status(std::shared_ptr<Context> ctx);
   std::string Dump(std::shared_ptr<Context> ctx);
-  butil::Status Count(std::shared_ptr<Context> ctx, int64_t& count);
+  butil::Status Count(std::shared_ptr<Context> ctx, int64_t& count);  // NOLINT
+  butil::Status SetNoData(std::shared_ptr<Context> ctx);
 
   static void SetImportTimeout(int64_t timeout_s) { DiskANNItem::import_timeout_s = timeout_s; }
   static void SetBaseDir(const std::string& base) { DiskANNItem::base_dir = base; }
@@ -76,7 +78,7 @@ class DiskANNItem {
  private:
   butil::Status DoImport(const std::vector<pb::common::Vector>& vectors, const std::vector<int64_t>& vector_ids,
                          bool has_more, int64_t already_send_vector_count, int64_t ts, int64_t tso,
-                         int64_t& already_recv_vector_count, DiskANNCoreState& old_state);
+                         int64_t& already_recv_vector_count, DiskANNCoreState& old_state);  // NOLINT
   butil::Status DoSyncBuild(std::shared_ptr<Context> ctx, bool force_to_build, DiskANNCoreState old_state);
   butil::Status DoAsyncBuild(std::shared_ptr<Context> ctx, bool force_to_build, DiskANNCoreState old_state);
   butil::Status DoBuildInternal(std::shared_ptr<Context> ctx, bool force_to_build, DiskANNCoreState old_state);
@@ -96,6 +98,9 @@ class DiskANNItem {
   std::string FormatParameter();
   std::string MiniFormatParameter();
   void SetSide(std::shared_ptr<Context> ctx);
+  void NoDataSymbolCreate();
+  void NoDataSymbolDelete() const;
+  bool NoDataSymbolExist() const;
   int64_t vector_index_id_;
   pb::common::VectorIndexParameter vector_index_parameter_;
   uint32_t num_threads_;
@@ -130,6 +135,7 @@ class DiskANNItem {
   static inline std::string destroyed_name = "destroyed";
   static inline std::string input_name = "data.bin";
   static inline std::string build_name = "index";
+  static inline std::string nodata_name = "blackhole";
 
 #if defined(ENABLE_DISKANN_ID_MAPPING)
   static inline std::string id_name = "id.bin";

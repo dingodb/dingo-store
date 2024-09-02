@@ -295,7 +295,7 @@ butil::Status DiskAnnServiceHandle::VectorCount(std::shared_ptr<Context> ctx, in
   }
 
   int64_t count = 0;
-  item->Count(ctx, count);
+  status = item->Count(ctx, count);
 
   pb::diskann::VectorCountResponse& response = (dynamic_cast<pb::diskann::VectorCountResponse&>(*ctx->Response()));
 
@@ -304,7 +304,31 @@ butil::Status DiskAnnServiceHandle::VectorCount(std::shared_ptr<Context> ctx, in
   ServiceHelper::SetError(response.mutable_last_error(), ctx->Status().error_code(), ctx->Status().error_str());
   response.set_state(DiskANNUtils::DiskANNCoreStateToPb(ctx->DiskANNCoreStateX()));
 
-  return butil::Status::OK();
+  return status;
+}
+
+butil::Status DiskAnnServiceHandle::VectorSetNoData(std::shared_ptr<Context> ctx, int64_t vector_index_id) {
+  butil::Status status;
+  auto item = item_manager.Find(vector_index_id);
+  if (item == nullptr) {
+    std::string s = fmt::format("vector_index_id : {} not  exists", vector_index_id);
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::EINDEX_NOT_FOUND, s);
+    return status;
+  }
+
+  status = item->SetNoData(ctx);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+  }
+
+  pb::diskann::VectorSetNoDataResponse& response =
+      (dynamic_cast<pb::diskann::VectorSetNoDataResponse&>(*ctx->Response()));
+
+  ServiceHelper::SetError(response.mutable_last_error(), ctx->Status().error_code(), ctx->Status().error_str());
+  response.set_state(DiskANNUtils::DiskANNCoreStateToPb(ctx->DiskANNCoreStateX()));
+
+  return status;
 }
 
 butil::Status DiskAnnServiceHandle::VectorDump(std::shared_ptr<Context> ctx, int64_t vector_index_id) {

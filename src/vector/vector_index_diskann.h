@@ -87,7 +87,8 @@ class VectorIndexDiskANN : public VectorIndex {
   butil::Status Load(const pb::common::VectorLoadParameter& parameter,
                      pb::common::VectorStateParameter& vector_state_parameter) override;
 
-  butil::Status Status(pb::common::VectorStateParameter& vector_state_parameter) override;
+  butil::Status Status(pb::common::VectorStateParameter& vector_state_parameter,
+                       pb::error::Error& internal_error) override;
 
   butil::Status Reset(bool delete_data_file, pb::common::VectorStateParameter& vector_state_parameter) override;
 
@@ -127,6 +128,9 @@ class VectorIndexDiskANN : public VectorIndex {
   butil::Status SendVectorStatusRequestWrapper(pb::common::DiskANNCoreState& state, pb::error::Error& last_error);
   butil::Status SendVectorCountRequest(const google::protobuf::Message& request, google::protobuf::Message& response);
   butil::Status SendVectorCountRequestWrapper(int64_t& count);
+  butil::Status SendVectorSetNoDataRequest(const google::protobuf::Message& request,
+                                           google::protobuf::Message& response);
+  butil::Status SendVectorSetNoDataRequestWrapper();
   butil::Status SendVectorBuildRequest(const google::protobuf::Message& request, google::protobuf::Message& response);
   butil::Status SendVectorBuildRequestWrapper(const pb::common::VectorBuildParameter& parameter,
                                               pb::common::DiskANNCoreState& state);
@@ -152,6 +156,10 @@ class VectorIndexDiskANN : public VectorIndex {
   butil::Status SendVectorDumpRequestWrapper(std::vector<std::string>& dump_datas);
   butil::Status SendVectorDumpAllRequest(const google::protobuf::Message& request, google::protobuf::Message& response);
   butil::Status SendVectorDumpAllRequestWrapper(std::vector<std::string>& dump_datas);
+
+  static butil::Status TransToDiskANNStateFromDiskANNCoreState(const pb::common::DiskANNCoreState& state,
+                                                               pb::error::Errno error,
+                                                               pb::common::DiskANNState& diskann_state);
 
   faiss::idx_t dimension_;
 

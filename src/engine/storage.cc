@@ -755,7 +755,8 @@ butil::Status Storage::VectorLoad(std::shared_ptr<Engine::VectorReader::Context>
 }
 
 butil::Status Storage::VectorStatus(std::shared_ptr<Engine::VectorReader::Context> ctx,
-                                    pb::common::VectorStateParameter& vector_state_parameter) {
+                                    pb::common::VectorStateParameter& vector_state_parameter,
+                                    pb::error::Error& internal_error) {
   auto status = ValidateLeader(ctx->region_id);
   if (!status.ok()) {
     return status;
@@ -763,7 +764,7 @@ butil::Status Storage::VectorStatus(std::shared_ptr<Engine::VectorReader::Contex
 
   auto vector_reader = GetEngineVectorReader(ctx->store_engine_type, ctx->raw_engine_type);
 
-  status = vector_reader->VectorStatus(ctx, vector_state_parameter);
+  status = vector_reader->VectorStatus(ctx, vector_state_parameter, internal_error);
   if (!status.ok()) {
     return status;
   }

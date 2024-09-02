@@ -29,6 +29,7 @@
 
 namespace dingodb {
 
+// start diskann_server first
 class DiskANNBrpcClientTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
@@ -2187,6 +2188,144 @@ TEST_F(DiskANNBrpcClientTest, Count) {
       // Because `done'(last parameter) is NULL, this function waits until
       // the response comes back or error occurs(including timedout).
       stub.VectorCount(&cntl, &request, &response, nullptr);
+      if (!cntl.Failed()) {
+        DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
+                        << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";
+        EXPECT_EQ(response.error().errcode(), pb::error::OK);
+        DINGO_LOG(INFO) << "disk_ann_item_l2 status: " << response.DebugString();
+        break;
+      } else {
+        DINGO_LOG(ERROR) << cntl.ErrorText() << ", error : " << response.DebugString();
+      }
+      usleep(1 * 1000L);
+    }
+  }
+}
+
+TEST_F(DiskANNBrpcClientTest, NoData) {
+  butil::Status status;
+
+  //  invalid param vector_index_id == 0
+  {
+    pb::diskann::DiskAnnService_Stub stub(&channel);
+
+    while (!brpc::IsAskedToQuit()) {
+      pb::diskann::VectorSetNoDataRequest request;
+      pb::diskann::VectorSetNoDataResponse response;
+      brpc::Controller cntl;
+
+      request.set_vector_index_id(0);
+
+      // Because `done'(last parameter) is NULL, this function waits until
+      // the response comes back or error occurs(including timedout).
+      stub.VectorSetNoData(&cntl, &request, &response, nullptr);
+
+      if (!cntl.Failed()) {
+        DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
+                        << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";
+        EXPECT_EQ(response.error().errcode(), pb::error::EILLEGAL_PARAMTETERS);
+        break;
+      } else {
+        DINGO_LOG(ERROR) << cntl.ErrorText() << ", error : " << response.DebugString();
+      }
+      usleep(1 * 1000L);
+    }
+  }
+
+  //  invalid param vector_index_id == 10
+  {
+    pb::diskann::DiskAnnService_Stub stub(&channel);
+
+    while (!brpc::IsAskedToQuit()) {
+      pb::diskann::VectorSetNoDataRequest request;
+      pb::diskann::VectorSetNoDataResponse response;
+      brpc::Controller cntl;
+
+      request.set_vector_index_id(10);
+
+      // Because `done'(last parameter) is NULL, this function waits until
+      // the response comes back or error occurs(including timedout).
+      stub.VectorSetNoData(&cntl, &request, &response, nullptr);
+      if (!cntl.Failed()) {
+        DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
+                        << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";
+        EXPECT_EQ(response.error().errcode(), pb::error::EINDEX_NOT_FOUND);
+        break;
+      } else {
+        DINGO_LOG(ERROR) << cntl.ErrorText() << ", error : " << response.DebugString();
+      }
+      usleep(1 * 1000L);
+    }
+  }
+
+  //  l2 ok
+  {
+    pb::diskann::DiskAnnService_Stub stub(&channel);
+
+    while (!brpc::IsAskedToQuit()) {
+      pb::diskann::VectorSetNoDataRequest request;
+      pb::diskann::VectorSetNoDataResponse response;
+      brpc::Controller cntl;
+
+      request.set_vector_index_id(vector_index_id_l2);
+
+      // Because `done'(last parameter) is NULL, this function waits until
+      // the response comes back or error occurs(including timedout).
+      stub.VectorSetNoData(&cntl, &request, &response, nullptr);
+      if (!cntl.Failed()) {
+        DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
+                        << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";
+        EXPECT_EQ(response.error().errcode(), pb::error::OK);
+        DINGO_LOG(INFO) << "disk_ann_item_l2 status: " << response.DebugString();
+        break;
+      } else {
+        DINGO_LOG(ERROR) << cntl.ErrorText() << ", error : " << response.DebugString();
+      }
+      usleep(1 * 1000L);
+    }
+  }
+
+  //  ip ok
+  {
+    pb::diskann::DiskAnnService_Stub stub(&channel);
+
+    while (!brpc::IsAskedToQuit()) {
+      pb::diskann::VectorSetNoDataRequest request;
+      pb::diskann::VectorSetNoDataResponse response;
+      brpc::Controller cntl;
+
+      request.set_vector_index_id(vector_index_id_ip);
+
+      // Because `done'(last parameter) is NULL, this function waits until
+      // the response comes back or error occurs(including timedout).
+      stub.VectorSetNoData(&cntl, &request, &response, nullptr);
+      if (!cntl.Failed()) {
+        DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
+                        << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";
+        EXPECT_EQ(response.error().errcode(), pb::error::OK);
+        DINGO_LOG(INFO) << "disk_ann_item_l2 status: " << response.DebugString();
+        break;
+      } else {
+        DINGO_LOG(ERROR) << cntl.ErrorText() << ", error : " << response.DebugString();
+      }
+      usleep(1 * 1000L);
+    }
+  }
+
+  //  cosine ok
+  {
+    pb::diskann::DiskAnnService_Stub stub(&channel);
+
+    while (!brpc::IsAskedToQuit()) {
+      pb::diskann::VectorSetNoDataRequest request;
+      pb::diskann::VectorSetNoDataResponse response;
+      brpc::Controller cntl;
+
+      request.set_vector_index_id(vector_index_id_cosine);
+
+      // Because `done'(last parameter) is NULL, this function waits until
+      // the response comes back or error occurs(including timedout).
+      stub.VectorSetNoData(&cntl, &request, &response, nullptr);
       if (!cntl.Failed()) {
         DINGO_LOG(INFO) << "Received response from " << cntl.remote_side() << " to " << cntl.local_side() << ": "
                         << static_cast<int>(response.error().errcode()) << " latency=" << cntl.latency_us() << "us";

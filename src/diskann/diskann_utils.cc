@@ -268,8 +268,8 @@ std::string DiskANNUtils::DiskANNCoreStateToString(DiskANNCoreState state) {
       str = "DiskANNCoreState::kLoaded";
       break;
     }
-    case DiskANNCoreState::kSearing: {
-      str = "DiskANNCoreState::kSearing";
+    case DiskANNCoreState::kSearching: {
+      str = "DiskANNCoreState::kSearching";
       break;
     }
     case DiskANNCoreState::kSearched: {
@@ -298,6 +298,14 @@ std::string DiskANNUtils::DiskANNCoreStateToString(DiskANNCoreState state) {
     }
     case DiskANNCoreState::kFailed: {
       str = "DiskANNCoreState::kFailed";
+      break;
+    }
+    case DiskANNCoreState::kFakeBuilded: {
+      str = "DiskANNCoreState::kFakeBuilded";
+      break;
+    }
+    case DiskANNCoreState::kNoData: {
+      str = "DiskANNCoreState::kNoData";
       break;
     }
     default:
@@ -443,8 +451,8 @@ pb::common::DiskANNCoreState DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState
       pb_state = pb::common::DiskANNCoreState::LOADED;
       break;
     }
-    case DiskANNCoreState::kSearing: {
-      pb_state = pb::common::DiskANNCoreState::SEARING;
+    case DiskANNCoreState::kSearching: {
+      pb_state = pb::common::DiskANNCoreState::SEARCHING;
       break;
     }
     case DiskANNCoreState::kSearched: {
@@ -474,6 +482,14 @@ pb::common::DiskANNCoreState DiskANNUtils::DiskANNCoreStateToPb(DiskANNCoreState
     }
     case DiskANNCoreState::kFailed: {
       pb_state = pb::common::DiskANNCoreState::FAILED;
+      break;
+    }
+    case dingodb::DiskANNCoreState::kFakeBuilded: {
+      pb_state = pb::common::DiskANNCoreState::FAKEBUILDED;
+      break;
+    }
+    case dingodb::DiskANNCoreState::kNoData: {
+      pb_state = pb::common::DiskANNCoreState::NODATA;
       break;
     }
     default:
@@ -530,8 +546,8 @@ DiskANNCoreState DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreSta
       core_state = DiskANNCoreState::kLoaded;
       break;
     }
-    case pb::common::DiskANNCoreState::SEARING: {
-      core_state = DiskANNCoreState::kSearing;
+    case pb::common::DiskANNCoreState::SEARCHING: {
+      core_state = DiskANNCoreState::kSearching;
       break;
     }
     case pb::common::DiskANNCoreState::SEARCHED: {
@@ -560,6 +576,14 @@ DiskANNCoreState DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreSta
     }
     case pb::common::DiskANNCoreState::FAILED: {
       core_state = DiskANNCoreState::kFailed;
+      break;
+    }
+    case pb::common::DiskANNCoreState::FAKEBUILDED: {
+      core_state = dingodb::DiskANNCoreState::kFakeBuilded;
+      break;
+    }
+    case pb::common::DiskANNCoreState::NODATA: {
+      core_state = dingodb::DiskANNCoreState::kNoData;
       break;
     }
     default:

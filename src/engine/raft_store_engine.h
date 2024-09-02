@@ -181,7 +181,8 @@ class RaftStoreEngine : public Engine, public RaftControlAble {
                              const pb::common::VectorLoadParameter& parameter,
                              pb::common::VectorStateParameter& vector_state_parameter) override;
     butil::Status VectorStatus(std::shared_ptr<VectorReader::Context> ctx,
-                               pb::common::VectorStateParameter& vector_state_parameter) override;
+                               pb::common::VectorStateParameter& vector_state_parameter,
+                               pb::error::Error& internal_error) override;
     butil::Status VectorReset(std::shared_ptr<VectorReader::Context> ctx, bool delete_data_file,
                               pb::common::VectorStateParameter& vector_state_parameter) override;
     butil::Status VectorDump(std::shared_ptr<VectorReader::Context> ctx, bool dump_all,

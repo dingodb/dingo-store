@@ -64,10 +64,15 @@ class DiskAnnServiceImpl : public pb::diskann::DiskAnnService {
   void VectorStatus(google::protobuf::RpcController* controller,
                     const ::dingodb::pb::diskann::VectorStatusRequest* request,
                     ::dingodb::pb::diskann::VectorStatusResponse* response, ::google::protobuf::Closure* done) override;
-  
+
   void VectorCount(google::protobuf::RpcController* controller,
                    const ::dingodb::pb::diskann::VectorCountRequest* request,
                    ::dingodb::pb::diskann::VectorCountResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorSetNoData(google::protobuf::RpcController* controller,
+                       const ::dingodb::pb::diskann::VectorSetNoDataRequest* request,
+                       ::dingodb::pb::diskann::VectorSetNoDataResponse* response,
+                       ::google::protobuf::Closure* done) override;
 
   void VectorDump(google::protobuf::RpcController* controller, const ::dingodb::pb::diskann::VectorDumpRequest* request,
                   ::dingodb::pb::diskann::VectorDumpResponse* response, ::google::protobuf::Closure* done) override;

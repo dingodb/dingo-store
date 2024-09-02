@@ -65,6 +65,10 @@ DEFINE_bool(diskann_build_sync_internal, false, "diskann build sync internal. de
 // outside not to modify
 DEFINE_bool(diskann_load_sync_internal, false, "diskann load sync internal. default is false");
 
+// outside not to modify
+DEFINE_bool(diskann_reset_force_delete_file_internal, true,
+            "diskann reset force delete file internal. default is true");
+
 VectorIndexDiskANN::VectorIndexDiskANN(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                                        const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
                                        ThreadPoolPtr thread_pool)
@@ -269,6 +273,16 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
   pb::common::DiskANNCoreState internal_state;
 
   BvarLatencyGuard bvar_guard(&g_diskann_build_latency);
+
+  auto lambda_set_state_function = [this, &last_error, &internal_state, &vector_state_parameter]() {
+    pb::common::DiskANNState diskann_state;
+    TransToDiskANNStateFromDiskANNCoreState(internal_state, last_error.errcode(), diskann_state);
+    vector_state_parameter.mutable_diskann()->set_state(internal_state);
+    vector_state_parameter.mutable_diskann()->set_diskann_state(diskann_state);
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
+
   // rpc status
   status = SendVectorStatusRequestWrapper(internal_state, last_error);
   if (status.error_code() != pb::error::Errno::OK && status.error_code() != pb::error::Errno::EINDEX_NOT_FOUND) {
@@ -277,36 +291,6 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
                                 pb::common::DiskANNCoreState_Name(internal_state));
     DINGO_LOG(ERROR) << s;
     return status;
-  }
-
-  // check last error
-  if (last_error.errcode() != pb::error::OK) {
-    std::string s = fmt::format("VectorStatus response error, errcode: {}  errmsg: {} state: {}",
-                                pb::error::Errno_Name(last_error.errcode()), last_error.errmsg(),
-                                pb::common::DiskANNCoreState_Name(internal_state));
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(last_error.errcode(), s);
-  }
-
-  if (pb::common::DiskANNCoreState::IMPORTING == internal_state ||
-      pb::common::DiskANNCoreState::BUILDING == internal_state ||
-      pb::common::DiskANNCoreState::UPDATINGPATH == internal_state) {
-    {
-      vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::BUILDING);
-      return butil::Status::OK();
-    }
-  }
-
-  if (pb::common::DiskANNCoreState::BUILDED == internal_state) {
-    vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::BUILDED);
-    return butil::Status::OK();
-  }
-
-  if (pb::common::DiskANNCoreState::UPDATEDPATH == internal_state ||
-      pb::common::DiskANNCoreState::LOADING == internal_state ||
-      pb::common::DiskANNCoreState::LOADED == internal_state) {
-    vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UPDATEDPATH);
-    return butil::Status::OK();
   }
 
   // create index rpc
@@ -318,10 +302,62 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
       DINGO_LOG(ERROR) << s;
       return status;
     }
+
+    // rpc status again
+    internal_state = pb::common::DiskANNCoreState::UNKNOWN;
+    last_error.Clear();
+    status = SendVectorStatusRequestWrapper(internal_state, last_error);
+    if (status.error_code() != pb::error::Errno::OK) {
+      std::string s = fmt::format("VectorStatus response error, errcode: {}  errmsg: {} state: {}",
+                                  pb::error::Errno_Name(status.error_code()), status.error_str(),
+                                  pb::common::DiskANNCoreState_Name(internal_state));
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
+  }
+
+  // check last error
+  if (last_error.errcode() != pb::error::OK) {
+    std::string s = fmt::format("VectorStatus response error, errcode: {}  errmsg: {} state: {}",
+                                pb::error::Errno_Name(last_error.errcode()), last_error.errmsg(),
+                                pb::common::DiskANNCoreState_Name(internal_state));
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(last_error.errcode(), s);
+    return status;
+  }
+
+  if (pb::common::DiskANNCoreState::NODATA == internal_state) {
+    status = butil::Status::OK();
+    return status;
+  }
+
+  if (pb::common::DiskANNCoreState::IMPORTING == internal_state ||
+      pb::common::DiskANNCoreState::IMPORTED == internal_state ||
+      pb::common::DiskANNCoreState::BUILDING == internal_state ||
+      pb::common::DiskANNCoreState::BUILDED == internal_state ||
+      pb::common::DiskANNCoreState::UPDATINGPATH == internal_state) {
+    status = butil::Status::OK();
+    return status;
+  }
+
+  if (pb::common::DiskANNCoreState::UPDATEDPATH == internal_state ||
+      pb::common::DiskANNCoreState::FAKEBUILDED == internal_state) {
+    status = butil::Status::OK();
+    return status;
+  }
+
+  if (pb::common::DiskANNCoreState::LOADING == internal_state) {
+    status = butil::Status::OK();
+    return status;
+  }
+
+  if (pb::common::DiskANNCoreState::LOADED == internal_state) {
+    status = butil::Status::OK();
+    return status;
   }
 
   if (!FLAGS_diskann_build_sync_internal) {
-    vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::BUILDING);
+    internal_state = pb::common::DiskANNCoreState::BUILDING;
     auto task = std::make_shared<ServiceTask>([this, region_range, reader, parameter, ts]() {
       pb::common::DiskANNCoreState state;
       auto status = DoBuild(region_range, reader, parameter, ts, state);
@@ -332,23 +368,22 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
     if (!ret) {
       std::string s = "Build worker set is full, please wait and retry";
       DINGO_LOG(ERROR) << s;
-      return butil::Status(pb::error::EREQUEST_FULL, s);
+      status = butil::Status(pb::error::EREQUEST_FULL, s);
+      return status;
     }
 
   } else {
     status = DoBuild(region_range, reader, parameter, ts, internal_state);
     if (!status.ok()) {
-      vector_state_parameter.mutable_diskann()->set_state(internal_state);
       std::string s = fmt::format("Build failed, errcode: {}  errmsg: {}", pb::error::Errno_Name(status.error_code()),
                                   status.error_cstr());
       DINGO_LOG(ERROR) << s;
       return status;
     }
-
-    vector_state_parameter.mutable_diskann()->set_state(internal_state);
   }
 
-  return butil::Status::OK();
+  status = butil::Status::OK();
+  return status;
 }
 
 butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& parameter,
@@ -357,8 +392,19 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
   pb::common::DiskANNCoreState internal_state;
+  pb::common::VectorLoadParameter internal_parameter = parameter;
 
   BvarLatencyGuard bvar_guard(&g_diskann_load_latency);
+
+  auto lambda_set_state_function = [this, &last_error, &internal_state, &vector_state_parameter]() {
+    pb::common::DiskANNState diskann_state;
+    TransToDiskANNStateFromDiskANNCoreState(internal_state, last_error.errcode(), diskann_state);
+    vector_state_parameter.mutable_diskann()->set_state(internal_state);
+    vector_state_parameter.mutable_diskann()->set_diskann_state(diskann_state);
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
+
   // check rpc status
   status = SendVectorStatusRequestWrapper(internal_state, last_error);
   if (status.error_code() != pb::error::Errno::OK && status.error_code() != pb::error::Errno::EINDEX_NOT_FOUND) {
@@ -367,6 +413,29 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
                                 pb::common::DiskANNCoreState_Name(internal_state));
     DINGO_LOG(ERROR) << s;
     return status;
+  }
+
+  // create index rpc
+  if (status.error_code() == pb::error::Errno::EINDEX_NOT_FOUND) {
+    status = SendVectorNewRequestWrapper();
+    if (!status.ok()) {
+      std::string s = fmt::format("VectorNew request failed, errcode: {}  errmsg: {}",
+                                  pb::error::Errno_Name(status.error_code()), status.error_cstr());
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
+
+    // rpc status again
+    internal_state = pb::common::DiskANNCoreState::UNKNOWN;
+    last_error.Clear();
+    status = SendVectorStatusRequestWrapper(internal_state, last_error);
+    if (status.error_code() != pb::error::Errno::OK) {
+      std::string s = fmt::format("VectorStatus response error, errcode: {}  errmsg: {} state: {}",
+                                  pb::error::Errno_Name(status.error_code()), status.error_str(),
+                                  pb::common::DiskANNCoreState_Name(internal_state));
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
   }
 
   // check last error
@@ -378,19 +447,32 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
     return butil::Status(last_error.errcode(), s);
   }
 
-  if (parameter.diskann().direct_load_without_build()) {
+  if (pb::common::DiskANNCoreState::NODATA == internal_state) {
+    status = butil::Status(pb::error::EDISKANN_IS_NO_DATA, "DiskANN is no data");
+    return status;
+  }
+
+  // direct_load_without_build depreciated. only inner use.
+  internal_parameter.mutable_diskann()->set_direct_load_without_build(false);
+
+  // check state . if state is FAKEBUILDED,  set direct.
+  if (pb::common::DiskANNCoreState::FAKEBUILDED == internal_state) {
+    internal_parameter.mutable_diskann()->set_direct_load_without_build(true);
+  }
+
+  if (internal_parameter.diskann().direct_load_without_build()) {
     if (pb::common::DiskANNCoreState::LOADED == internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::LOADED);
-      return butil::Status::OK();
+      status = butil::Status::OK();
+      return status;
     }
 
     if (pb::common::DiskANNCoreState::LOADING == internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::LOADING);
-      return butil::Status::OK();
+      status = butil::Status::OK();
+      return status;
     }
 
-    if (pb::common::DiskANNCoreState::UNKNOWN != internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(internal_state);
+    if (pb::common::DiskANNCoreState::UNKNOWN != internal_state &&
+        pb::common::DiskANNCoreState::FAKEBUILDED != internal_state) {
       std::string s =
           fmt::format("load direct state wrong state: {}, if you want to load direct, please call reset first",
                       pb::common::DiskANNCoreState_Name(internal_state));
@@ -399,17 +481,16 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
     }
   } else {
     if (pb::common::DiskANNCoreState::LOADED == internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::LOADED);
-      return butil::Status::OK();
+      status = butil::Status::OK();
+      return status;
     }
 
     if (pb::common::DiskANNCoreState::LOADING == internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::LOADING);
-      return butil::Status::OK();
+      status = butil::Status::OK();
+      return status;
     }
 
     if (pb::common::DiskANNCoreState::UPDATEDPATH != internal_state) {
-      vector_state_parameter.mutable_diskann()->set_state(internal_state);
       std::string s = fmt::format("load state wrong state: {}, maybe try again later or forget import or build",
                                   pb::common::DiskANNCoreState_Name(internal_state));
       DINGO_LOG(ERROR) << s;
@@ -417,25 +498,16 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
     }
   }
 
-  // create index rpc
-  if (status.error_code() == pb::error::Errno::EINDEX_NOT_FOUND) {
-    status = SendVectorNewRequestWrapper();
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-  }
-
   if (!FLAGS_diskann_load_sync_internal) {
-    vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::LOADING);
-    auto task = std::make_shared<ServiceTask>([this, parameter]() {
+    internal_state = pb::common::DiskANNCoreState::LOADING;
+    auto task = std::make_shared<ServiceTask>([this, internal_parameter]() {
       pb::common::DiskANNCoreState state;
       butil::Status status;
       // load index rpc
-      if (parameter.diskann().direct_load_without_build()) {
-        status = SendVectorTryLoadRequestWrapper(parameter, state);
+      if (internal_parameter.diskann().direct_load_without_build()) {
+        status = SendVectorTryLoadRequestWrapper(internal_parameter, state);
       } else {
-        status = SendVectorLoadRequestWrapper(parameter, state);
+        status = SendVectorLoadRequestWrapper(internal_parameter, state);
       }
       if (!status.ok()) {
         LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << status.error_cstr();
@@ -450,29 +522,40 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
       return butil::Status(pb::error::EREQUEST_FULL, s);
     }
   } else {
-    if (parameter.diskann().direct_load_without_build()) {
-      status = SendVectorTryLoadRequestWrapper(parameter, internal_state);
+    if (internal_parameter.diskann().direct_load_without_build()) {
+      status = SendVectorTryLoadRequestWrapper(internal_parameter, internal_state);
     } else {
-      status = SendVectorLoadRequestWrapper(parameter, internal_state);
+      status = SendVectorLoadRequestWrapper(internal_parameter, internal_state);
     }
+
     if (!status.ok()) {
-      vector_state_parameter.mutable_diskann()->set_state(internal_state);
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
-    vector_state_parameter.mutable_diskann()->set_state(internal_state);
   }
 
-  return butil::Status::OK();
+  status = butil::Status::OK();
+  return status;
 }
 
-butil::Status VectorIndexDiskANN::Status(pb::common::VectorStateParameter& vector_state_parameter) {
+butil::Status VectorIndexDiskANN::Status(pb::common::VectorStateParameter& vector_state_parameter,
+                                         pb::error::Error& internal_error) {
   butil::Status status;
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
   pb::common::DiskANNCoreState internal_state;
 
   BvarLatencyGuard bvar_guard(&g_diskann_status_latency);
+
+  auto lambda_set_state_function = [this, &last_error, &internal_state, &vector_state_parameter, &internal_error]() {
+    pb::common::DiskANNState diskann_state;
+    TransToDiskANNStateFromDiskANNCoreState(internal_state, last_error.errcode(), diskann_state);
+    vector_state_parameter.mutable_diskann()->set_state(internal_state);
+    vector_state_parameter.mutable_diskann()->set_diskann_state(diskann_state);
+    internal_error = last_error;
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
   // rpc status
   status = SendVectorStatusRequestWrapper(internal_state, last_error);
 
@@ -486,8 +569,7 @@ butil::Status VectorIndexDiskANN::Status(pb::common::VectorStateParameter& vecto
   }
 
   if (status.error_code() == pb::error::Errno::OK) {
-    vector_state_parameter.mutable_diskann()->set_state(internal_state);
-    return butil::Status(last_error.errcode(), last_error.errmsg());
+    return status;
   }
 
   // create index rpc
@@ -512,11 +594,6 @@ butil::Status VectorIndexDiskANN::Status(pb::common::VectorStateParameter& vecto
     return status;
   }
 
-  if (status.error_code() == pb::error::Errno::OK) {
-    vector_state_parameter.mutable_diskann()->set_state(internal_state);
-    return butil::Status(last_error.errcode(), last_error.errmsg());
-  }
-
   return status;
 }
 
@@ -528,6 +605,21 @@ butil::Status VectorIndexDiskANN::Reset(bool delete_data_file,
   pb::common::DiskANNCoreState internal_state;
 
   BvarLatencyGuard bvar_guard(&g_diskann_reset_latency);
+
+  auto lambda_set_state_function = [this, &last_error, &internal_state, &vector_state_parameter]() {
+    pb::common::DiskANNState diskann_state;
+    TransToDiskANNStateFromDiskANNCoreState(internal_state, last_error.errcode(), diskann_state);
+    vector_state_parameter.mutable_diskann()->set_state(internal_state);
+    vector_state_parameter.mutable_diskann()->set_diskann_state(diskann_state);
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
+
+  // delete_data_file = false is deprecated, always delete data file
+  if (FLAGS_diskann_reset_force_delete_file_internal) {
+    delete_data_file = true;
+  }
+
   // rpc reset
   status = SendVectorResetRequestWrapper(delete_data_file, internal_state);
   if (status.error_code() != pb::error::Errno::OK && status.error_code() != pb::error::Errno::EINDEX_NOT_FOUND) {
@@ -548,8 +640,8 @@ butil::Status VectorIndexDiskANN::Reset(bool delete_data_file,
       return status;
     }
   } else {
-    vector_state_parameter.mutable_diskann()->set_state(internal_state);
-    return butil::Status::OK();
+    status = butil::Status::OK();
+    return status;
   }
 
   // rpc reset again
@@ -562,9 +654,8 @@ butil::Status VectorIndexDiskANN::Reset(bool delete_data_file,
     return status;
   }
 
-  vector_state_parameter.mutable_diskann()->set_state(internal_state);
-
-  return butil::Status::OK();
+  status = butil::Status::OK();
+  return status;
 }
 
 butil::Status VectorIndexDiskANN::Drop() {
@@ -646,6 +737,28 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
   pb::common::Range encode_range = mvcc::Codec::EncodeRange(region_range);
   IteratorOptions options;
   options.upper_bound = encode_range.end_key();
+
+  int64_t region_count = 0;
+  status = reader->KvCount(Constant::kVectorDataCF, ts, region_range.start_key(), region_range.end_key(), region_count);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  // count too small, set no data to diskann.
+  if (region_count < Constant::kDiskannMinCount) {
+    std::string s = fmt::format("region : {} vector current count {} is less than min count {}. set no data to diskann",
+                                Id(), region_count, Constant::kDiskannMinCount);
+    DINGO_LOG(WARNING) << s;
+    status = SendVectorSetNoDataRequestWrapper();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+    state = pb::common::DiskANNCoreState::NODATA;
+    return butil::Status::OK();
+  }
+
   auto iter = reader->NewIterator(Constant::kVectorDataCF, ts, options);
 
   if (!iter) {
@@ -1036,6 +1149,55 @@ butil::Status VectorIndexDiskANN::SendVectorCountRequestWrapper(int64_t& count) 
   }
 
   count = vector_count_response.count();
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexDiskANN::SendVectorSetNoDataRequest(const google::protobuf::Message& request,
+                                                             google::protobuf::Message& response) {
+  butil::Status status;
+  if (!InitChannel(diskann_server_addr)) {
+    std::string s = fmt::format("Init channel failed, addr : {}", diskann_server_addr);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  // count rpc
+  status = SendRequest("DiskAnnService", "VectorSetNoData", request, response);
+  if (!status.ok()) {
+    std::string s = fmt::format("VectorSetNoData request failed, errcode: {}  errmsg: {}",
+                                pb::error::Errno_Name(status.error_code()), status.error_cstr());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(status.error_code(), s);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexDiskANN::SendVectorSetNoDataRequestWrapper() {
+  butil::Status status;
+
+  // count rpc
+  pb::diskann::VectorSetNoDataRequest vector_set_no_data_request;
+  pb::diskann::VectorSetNoDataResponse vector_set_no_data_response;
+
+  vector_set_no_data_request.set_vector_index_id(Id());
+  status = SendVectorSetNoDataRequest(vector_set_no_data_request, vector_set_no_data_response);
+  if (!status.ok()) {
+    std::string s = fmt::format("VectorSetNoData request failed, errcode: {}  errmsg: {}",
+                                pb::error::Errno_Name(status.error_code()), status.error_cstr());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(status.error_code(), s);
+  }
+
+  if (vector_set_no_data_response.error().errcode() != pb::error::Errno::OK) {
+    std::string s = fmt::format("VectorSetNoData response error, errcode: {}  errmsg: {} state: {}",
+                                pb::error::Errno_Name(vector_set_no_data_response.error().errcode()),
+                                vector_set_no_data_response.error().errmsg(),
+                                pb::common::DiskANNCoreState_Name(vector_set_no_data_response.state()));  // state
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(vector_set_no_data_response.error().errcode(), s);
+  }
 
   return butil::Status::OK();
 }
@@ -1497,6 +1659,88 @@ butil::Status VectorIndexDiskANN::SendVectorDumpAllRequestWrapper(std::vector<st
 
   for (int i = 0; i < vector_dump_all_response.dump_datas_size(); i++) {
     dump_datas.emplace_back(vector_dump_all_response.dump_datas(i));
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexDiskANN::TransToDiskANNStateFromDiskANNCoreState(const pb::common::DiskANNCoreState& state,
+                                                                          pb::error::Errno error,
+                                                                          pb::common::DiskANNState& diskann_state) {
+  switch (state) {
+    case pb::common::RESETING:
+      [[fallthrough]];
+    case pb::common::RESET:
+      [[fallthrough]];
+    case pb::common::UNKNOWN: {
+      diskann_state = pb::common::DiskANNState::DISKANN_INITIALIZED;
+      break;
+    }
+    case pb::common::IMPORTING:
+      [[fallthrough]];
+    case pb::common::IMPORTED:
+      [[fallthrough]];
+    case pb::common::BUILDING:
+      [[fallthrough]];
+    case pb::common::BUILDED:
+      [[fallthrough]];
+    case pb::common::UPDATINGPATH: {
+      diskann_state = pb::common::DiskANNState::DISKANN_BUILDING;
+      if (error != pb::error::Errno::OK) {
+        diskann_state = pb::common::DiskANNState::DISKANN_BUILD_FAILED;
+      }
+      break;
+    }
+    case pb::common::FAKEBUILDED:
+      [[fallthrough]];
+    case pb::common::UPDATEDPATH: {
+      diskann_state = pb::common::DiskANNState::DISKANN_BUILDED;
+      if (error != pb::error::Errno::OK) {
+        diskann_state = pb::common::DiskANNState::DISKANN_BUILD_FAILED;
+      }
+      break;
+    }
+    case pb::common::LOADING: {
+      diskann_state = pb::common::DiskANNState::DISKANN_LOADING;
+      if (error != pb::error::Errno::OK) {
+        diskann_state = pb::common::DiskANNState::DISKANN_LOAD_FAILED;
+      }
+      break;
+    }
+    case pb::common::LOADED: {
+      diskann_state = pb::common::DiskANNState::DISKANN_LOADED;
+      if (error != pb::error::Errno::OK) {
+        diskann_state = pb::common::DiskANNState::DISKANN_LOAD_FAILED;
+      }
+      break;
+    }
+    case pb::common::DESTROYING:
+      [[fallthrough]];
+    case pb::common::DESTROYED:
+      [[fallthrough]];
+    case pb::common::SEARCHING:
+      [[fallthrough]];
+    case pb::common::SEARCHED:
+      [[fallthrough]];
+    case pb::common::IDLE:
+      [[fallthrough]];
+    case pb::common::FAILED:
+      [[fallthrough]];
+    case pb::common::UNINITIALIZED:
+      [[fallthrough]];
+    case pb::common::INITIALIZED: {
+      std::string s =
+          fmt::format("index receive wrong diskann server state : {}  {}  error : {}", static_cast<int>(state),
+                      pb::common::DiskANNCoreState_Name(state), pb::error::Errno_Name(error));
+      DINGO_LOG(FATAL) << s;
+    }
+    case pb::common::NODATA: {
+      diskann_state = pb::common::DiskANNState::DISKANN_NODATA;
+      break;
+    }
+    default: {
+      break;
+    }
   }
 
   return butil::Status::OK();

@@ -1631,13 +1631,15 @@ void DoVectorStatus(StoragePtr storage, google::protobuf::RpcController* control
   ctx->store_engine_type = region->GetStoreEngineType();
 
   pb::common::VectorStateParameter vector_state_parameter;
-  status = storage->VectorStatus(ctx, vector_state_parameter);
+  pb::error::Error internal_error;
+  status = storage->VectorStatus(ctx, vector_state_parameter, internal_error);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
-
+    response->mutable_internal_error()->Swap(&internal_error);
     return;
   }
 
+  response->mutable_internal_error()->Swap(&internal_error);
   response->mutable_state()->Swap(&vector_state_parameter);
 }
 
