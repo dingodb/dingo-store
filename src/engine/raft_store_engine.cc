@@ -38,6 +38,7 @@
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
 #include "glog/logging.h"
+#include "log/rocks_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "mvcc/codec.h"
 #include "mvcc/reader.h"
@@ -76,25 +77,12 @@ static bool CleanRaftDirectory(int64_t region_id, const std::string& raft_log_pa
   return Helper::RemoveAllFileOrDirectory(region_raft_log_path);
 }
 
-// check region raft complete
-static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_log_path) {
-  std::string region_raft_log_path = fmt::format("{}/{}/log_meta", raft_log_path, region_id);
-  if (!Helper::IsExistPath(region_raft_log_path)) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft log file, path: {}.", region_id,
-                                      region_raft_log_path);
-    return false;
-  }
-
-  return true;
-}
-
 // Recover raft node from region meta data.
 // Invoke when server starting.
 bool RaftStoreEngine::Recover() {
   auto store_region_meta = GET_STORE_REGION_META;
   auto store_raft_meta = Server::GetInstance().GetStoreMetaManager()->GetStoreRaftMeta();
   auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
-  auto config = ConfigManager::GetInstance().GetRoleConfig();
   auto regions = store_region_meta->GetAllRegion();
 
   // shuffle regions for balance leader on restart
@@ -125,29 +113,16 @@ bool RaftStoreEngine::Recover() {
       parameter.is_restart = true;
       parameter.raft_endpoint = Server::GetInstance().RaftEndpoint();
 
-      parameter.raft_path = config->GetString("raft.path");
+      parameter.raft_path = Server::GetInstance().GetRaftPath();
       // random election timeout for balance leader on restart
       parameter.election_timeout_ms = FLAGS_init_election_timeout_ms +
                                       Helper::GenerateRealRandomInteger(Constant::kRandomElectionTimeoutMinDeltaMs,
                                                                         Constant::kRandomElectionTimeoutMaxDeltaMs);
-      parameter.log_max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
-      parameter.log_path = config->GetString("raft.log_path");
 
       parameter.raft_meta = raft_meta;
       parameter.region_metrics = region_metrics;
       parameter.listeners = listener_factory->Build();
       parameter.apply_worker_set = Server::GetInstance().GetApplyWorkerSet();
-
-      auto is_complete = IsCompleteRaftNode(region->Id(), parameter.log_path);
-      if (!is_complete) {
-        DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] raft node is not complete.", region->Id());
-        if (!CleanRaftDirectory(region->Id(), parameter.log_path)) {
-          DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] clean region raft directory failed.",
-                                            region->Id());
-          continue;
-        }
-        parameter.is_restart = false;
-      }
 
       AddNode(region, parameter);
       if (region->NeedBootstrapDoSnapshot()) {
@@ -202,12 +177,7 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   }
 
   // Build log storage
-  std::string log_path = fmt::format("{}/{}", parameter.log_path, region->Id());
-  int64_t max_segment_size =
-      parameter.log_max_segment_size > 0 ? parameter.log_max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
-  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(), max_segment_size,
-                                                         region->Type() == pb::common::INDEX_REGION ? 0 : INT64_MAX);
-  Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
 
   // Build RaftNode
   auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
@@ -241,26 +211,23 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
 
   // Build log storage
   auto config = ConfigManager::GetInstance().GetRoleConfig();
-  std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), region->id());
-  int64_t max_segment_size = config->GetInt64("raft.segmentlog_max_segment_size");
-  max_segment_size = max_segment_size > 0 ? max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
-  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->id(), max_segment_size, INT64_MAX);
-  Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->id(), log_storage);
+  std::string raft_path = Server::GetInstance().GetRaftPath();
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
 
   std::string const meta_raft_name = fmt::format("{}-{}", region->name(), region->id());
   auto const node = std::make_shared<RaftNode>(
       region->id(), meta_raft_name, braft::PeerId(Server::GetInstance().RaftEndpoint()), state_machine, log_storage);
 
   // Build RaftNode
-  if (node->Init(nullptr, Helper::LocationsToString(Helper::ExtractRaftLocations(region->peers())),
-                 config->GetString("raft.path"), config->GetInt("raft.election_timeout_s") * 1000) != 0) {
+  int election_timeout = config->GetInt("raft.election_timeout_s");
+  if (node->Init(nullptr, Helper::LocationsToString(Helper::ExtractRaftLocations(region->peers())), raft_path,
+                 election_timeout * 1000) != 0) {
     // node->Destroy();
     // this function is only used by coordinator, and will only be called on starting.
     // so if init failed, we can just exit the process, let user to check if the config is correct.
     DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] Raft init failed. Please check raft storage!",
                                     region->id())
-                     << ", raft_path: " << config->GetString("raft.path")
-                     << ", election_timeout_ms: " << config->GetInt("raft.election_timeout_s") * 1000
+                     << ", raft_path: " << raft_path << ", election_timeout_ms: " << election_timeout * 1000
                      << ", peers: " << Helper::LocationsToString(Helper::ExtractRaftLocations(region->peers()))
                      << ", region: " << region->ShortDebugString();
 

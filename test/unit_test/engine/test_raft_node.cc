@@ -26,6 +26,7 @@
 #include "butil/strings/string_split.h"
 #include "butil/strings/stringprintf.h"
 #include "config/yaml_config.h"
+#include "log/rocks_log_storage.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
 #include "raft/raft_node.h"
@@ -137,7 +138,7 @@ std::shared_ptr<dingodb::RaftNode> LaunchRaftNode(std::shared_ptr<dingodb::Confi
   }
 
   std::string log_path = fmt::format("{}/{}", config->GetString("raft.log_path"), node_id);
-  auto log_storage = std::make_shared<dingodb::SegmentLogStorage>(log_path, node_id, 8 * 1024 * 1024, INT64_MAX);
+  auto log_storage = dingodb::wal::RocksLogStorage::New(log_path);
 
   // std::string init_conf = FormatPeers(region->Peers());
 

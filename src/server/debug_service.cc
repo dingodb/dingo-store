@@ -797,6 +797,24 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
     ts_provider_metrics->set_actual_dead_count(ts_provider->ActualDeadCount());
     ts_provider_metrics->set_dead_count(ts_provider->DeadCount());
     ts_provider_metrics->set_last_physical(ts_provider->LastPhysical());
+
+  } else if (request->type() == pb::debug::DebugType::RAFT_LOG_META) {
+    auto raft_log_storage = Server::GetInstance().GetRaftLogStorage();
+
+    std::vector<int64_t> region_ids = Helper::PbRepeatedToVector(request->region_ids());
+
+    auto index_log_metas = raft_log_storage->GetLogIndexMeta(region_ids, request->is_actual());
+    for (auto& [region_id, log_index_meta] : index_log_metas) {
+      auto* raft_log_meta = response->add_raft_log_metas();
+      raft_log_meta->set_region_id(region_id);
+      raft_log_meta->set_first_index(log_index_meta.first_index.load());
+      raft_log_meta->set_last_index(log_index_meta.last_index.load());
+      for (auto& [client_type, trucate_prefix] : log_index_meta.truncate_prefixs) {
+        auto* truncate_prefix = raft_log_meta->add_truncate_prefies();
+        truncate_prefix->set_client_type(wal::ClientTypeName(client_type));
+        truncate_prefix->set_trucate_prefix(trucate_prefix);
+      }
+    }
   }
 }
 

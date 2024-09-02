@@ -30,7 +30,7 @@ void LogStorageManager::DeleteStorage(int64_t region_id) {
   log_storages_.erase(region_id);
 }
 
-std::shared_ptr<SegmentLogStorage> LogStorageManager::GetLogStorage(int64_t region_id) {
+std::shared_ptr<SegmentLogStorage> LogStorageManager::GetRaftLogStorage(int64_t region_id) {
   BAIDU_SCOPED_LOCK(mutex_);
 
   auto it = log_storages_.find(region_id);

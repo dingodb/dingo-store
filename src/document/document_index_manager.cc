@@ -484,9 +484,7 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   CHECK(node != nullptr) << fmt::format("[document_index.replaywal][id({})] Not found raft node.",
                                         document_index->Id());
 
-  auto log_storage = Server::GetInstance().GetLogStorageManager()->GetLogStorage(document_index->Id());
-  CHECK(log_storage != nullptr) << fmt::format("[document_index.replaywal][id({})] Not found log stroage.",
-                                               document_index->Id());
+  auto log_storage = Server::GetInstance().GetRaftLogStorage();
 
   int64_t min_document_id = 0, max_document_id = 0;
   DocumentCodec::DecodeRangeToDocumentId(false, document_index->Range(false), min_document_id, max_document_id);
@@ -497,11 +495,10 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   ids.reserve(Constant::kBuildDocumentIndexBatchSize);
 
   int64_t last_log_id = document_index->ApplyLogId();
-  auto log_entrys = log_storage->GetEntrys(start_log_id, end_log_id);
+  auto log_entrys = log_storage->GetEntries(document_index->Id(), start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
-    butil::IOBufAsZeroCopyInputStream wrapper(log_entry->data);
-    CHECK(raft_cmd->ParseFromZeroCopyStream(&wrapper));
+    CHECK(raft_cmd->ParseFromString(log_entry->out_data));
     for (auto& request : *raft_cmd->mutable_requests()) {
       switch (request.cmd_type()) {
         case pb::raft::DOCUMENT_ADD: {
