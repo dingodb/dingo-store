@@ -2121,7 +2121,7 @@ void SendKvGet(KvGetOptions const& opt, std::string& value) {
   dingodb::pb::store::KvGetRequest request;
   dingodb::pb::store::KvGetResponse response;
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
-  request.set_key(opt.key);
+  request.set_key(dingodb::Helper::HexToString(opt.key));
 
   auto status = InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvGet", request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
@@ -2154,7 +2154,7 @@ int SendKvPut(KvPutOptions const& opt, std::string value) {
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
   // request.mutable_context()->mutable_region_epoch()->set_version(0);
   auto* kv = request.mutable_kv();
-  kv->set_key(opt.key);
+  kv->set_key(dingodb::Helper::HexToString(opt.key));
   kv->set_value(value.empty() ? Helper::GenRandomString(256) : value);
 
   auto status = InteractionManager::GetInstance().SendRequestWithContext("StoreService", "KvPut", request, response);
