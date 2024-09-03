@@ -480,7 +480,9 @@ public class LockService {
                 log.error("Watch locked error, or watch retry time great than lease ttl.", e);
                 return;
             }
-            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
+            if (r.getEvents() == null) {
+                watchLock(kv, task);
+            } else if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
                 task.run();
             } else {
                 watchLock(kv, task);
@@ -502,7 +504,9 @@ public class LockService {
                 return;
             }
             String typeStr = "normal";
-            if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
+            if (r.getEvents() == null) {
+                typeStr = "transferLeader";
+            } else if (r.getEvents().stream().map(Event::getType).anyMatch(type -> type == DELETE || type == NOT_EXISTS)) {
                 typeStr = "keyNone";
             }
             function.apply(typeStr);
