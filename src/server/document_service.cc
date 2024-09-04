@@ -1225,13 +1225,13 @@ static butil::Status ValidateDocumentTxnPessimisticLockRequest(
     return status;
   }
 
-  if (!region->VectorIndexWrapper()->IsReady()) {
-    if (region->VectorIndexWrapper()->IsBuildError()) {
-      return butil::Status(pb::error::EVECTOR_INDEX_BUILD_ERROR,
-                           fmt::format("Vector index {} build error, please wait for recover.", region->Id()));
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
     }
-    return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
-                         fmt::format("Vector index {} not ready, please retry.", region->Id()));
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
   }
 
   std::vector<std::string_view> keys;
