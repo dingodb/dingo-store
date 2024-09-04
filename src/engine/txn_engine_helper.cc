@@ -36,6 +36,7 @@
 #include "document/codec.h"
 #include "engine/gc_safe_point.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "glog/logging.h"
 #include "meta/store_meta_manager.h"
 #include "mvcc/codec.h"
@@ -1859,15 +1860,19 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
 bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
 
-void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t start_ts, int64_t for_update_ts,
-                                          int64_t lock_min_commit_ts, int64_t max_commit_ts,
+void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t region_max_ts, int64_t start_ts,
+                                          int64_t for_update_ts, int64_t lock_min_commit_ts, int64_t max_commit_ts,
                                           int64_t &final_min_commit_ts) {
-  int64_t min_commit_ts = std::max(start_ts, for_update_ts) + 1;
+  int64_t min_commit_ts = std::max(std::max(region_max_ts, start_ts), for_update_ts) + 1;
   final_min_commit_ts = std::max(min_commit_ts, lock_min_commit_ts);
-  if (max_commit_ts != 0 && final_min_commit_ts > max_commit_ts) {
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})]", region_id) << " GenFinalMinCommitTs, region_max_ts:" << region_max_ts
+      << " , start_ts:" << start_ts << " , for_update_ts:" << for_update_ts
+      << ", lock_min_commit_ts:" << lock_min_commit_ts << ", final_min_commit_ts:" << final_min_commit_ts;
+  if (max_commit_ts != 0 && min_commit_ts > max_commit_ts) {
     DINGO_LOG(WARNING) << fmt::format(
                               "[txn][region({})] Prewrite 1pc commit_ts({}) is too large, fallback to normal 2PC",
-                              region_id, final_min_commit_ts)
+                              region_id, min_commit_ts)
                        << ", key: " << key << ", start_ts: " << start_ts << " , for_update_ts: " << for_update_ts
                        << " , lock_min_commit_ts: " << lock_min_commit_ts << " , max_commit_ts: " << max_commit_ts;
     final_min_commit_ts = 0;
@@ -1875,13 +1880,16 @@ void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, in
 }
 
 butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
-    int64_t region_id, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
+    store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
     const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
-    int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t max_commit_ts,
-    bool need_check_pessimistic_lock, bool &try_one_pc, std::vector<pb::common::KeyValue> &kv_puts_data,
-    std::vector<pb::common::KeyValue> &kv_puts_lock,
+    int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t min_commit_ts,
+    int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc,
+    std::vector<pb::common::KeyValue> &kv_puts_data, std::vector<pb::common::KeyValue> &kv_puts_lock,
     std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
     int64_t &final_min_commit_ts) {
+  int64_t region_id = region->Id();
+  int64_t region_max_ts = region->TxnAppliedMaxTs();
+
   // do Put/Delete/PutIfAbsent
   if (mutation.op() == pb::store::Op::Put) {
     // put data
@@ -1902,6 +1910,9 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       lock_info.set_key(mutation.key());
       lock_info.set_lock_ttl(lock_ttl);
       lock_info.set_txn_size(txn_size);
+      if (lock_info.min_commit_ts() < min_commit_ts) {
+        lock_info.set_min_commit_ts(min_commit_ts);
+      }
       lock_info.set_lock_type(pb::store::Op::Put);
       if (BAIDU_UNLIKELY(mutation.value().empty())) {
         return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
@@ -1914,8 +1925,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       }
 
       if (try_one_pc) {
-        GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
-                            max_commit_ts, final_min_commit_ts);
+        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
+                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
@@ -1945,14 +1956,17 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         lock_info.set_key(mutation.key());
         lock_info.set_lock_ttl(lock_ttl);
         lock_info.set_txn_size(txn_size);
+        if (lock_info.min_commit_ts() < min_commit_ts) {
+          lock_info.set_min_commit_ts(min_commit_ts);
+        }
         lock_info.set_lock_type(pb::store::Op::PutIfAbsent);
         if (!lock_extra_data.empty()) {
           lock_info.set_extra_data(lock_extra_data);
         }
 
         if (try_one_pc) {
-          GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
-                              max_commit_ts, final_min_commit_ts);
+          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
+                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -1988,6 +2002,9 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         lock_info.set_key(mutation.key());
         lock_info.set_lock_ttl(lock_ttl);
         lock_info.set_txn_size(txn_size);
+        if (lock_info.min_commit_ts() < min_commit_ts) {
+          lock_info.set_min_commit_ts(min_commit_ts);
+        }
         lock_info.set_lock_type(pb::store::Op::Put);
         if (BAIDU_UNLIKELY(mutation.value().empty())) {
           return butil::Status(pb::error::Errno::EVALUE_EMPTY, "value is empty");
@@ -1999,8 +2016,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
           lock_info.set_extra_data(lock_extra_data);
         }
         if (try_one_pc) {
-          GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
-                              max_commit_ts, final_min_commit_ts);
+          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
+                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -2037,13 +2054,16 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       lock_info.set_key(mutation.key());
       lock_info.set_lock_ttl(lock_ttl);
       lock_info.set_txn_size(txn_size);
+      if (lock_info.min_commit_ts() < min_commit_ts) {
+        lock_info.set_min_commit_ts(min_commit_ts);
+      }
       lock_info.set_lock_type(pb::store::Op::Delete);
       if (!lock_extra_data.empty()) {
         lock_info.set_extra_data(lock_extra_data);
       }
       if (try_one_pc) {
-        GenFinalMinCommitTs(region_id, mutation.key(), start_ts, for_update_ts, prev_lock_info.min_commit_ts(),
-                            max_commit_ts, final_min_commit_ts);
+        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
+                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
@@ -2297,7 +2317,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                                         std::shared_ptr<Context> ctx, store::RegionPtr region,
                                         const std::vector<pb::store::Mutation> &mutations,
                                         const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                        int64_t txn_size, bool try_one_pc, int64_t max_commit_ts,
+                                        int64_t txn_size, bool try_one_pc, int64_t min_commit_ts, int64_t max_commit_ts,
                                         const std::vector<int64_t> &pessimistic_checks,
                                         const std::map<int64_t, int64_t> &for_update_ts_checks,
                                         const std::map<int64_t, std::string> &lock_extra_datas) {
@@ -2307,8 +2327,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size()
       << ", primary_lock: " << Helper::StringToHex(primary_lock) << ", lock_ttl: " << lock_ttl
-      << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", max_commit_ts: " << max_commit_ts
-      << ", pessimistic_checks_size: " << pessimistic_checks.size()
+      << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", min_commit_ts: " << min_commit_ts
+      << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
       << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
       << ", lock_extra_datas_size: " << lock_extra_datas.size();
 
@@ -2624,12 +2644,12 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
 
     std::string lock_extra_data = lock_extra_datas.find(i) != lock_extra_datas.end() ? lock_extra_datas.at(i) : "";
     int64_t for_update_ts = for_update_ts_checks.find(i) != for_update_ts_checks.end() ? for_update_ts_checks.at(i) : 0;
-    int64_t min_commit_ts;
+    int64_t temp_min_commit_ts;
     // 3.1 write data and lock
-    auto ret3 = GenPrewriteDataAndLock(region->Id(), mutation, prev_lock_info, write_info, primary_lock, start_ts,
-                                       for_update_ts, lock_ttl, txn_size, lock_extra_data, max_commit_ts,
+    auto ret3 = GenPrewriteDataAndLock(region, mutation, prev_lock_info, write_info, primary_lock, start_ts,
+                                       for_update_ts, lock_ttl, txn_size, lock_extra_data, min_commit_ts, max_commit_ts,
                                        need_check_pessimistic_lock, try_one_pc, kv_puts_data, kv_puts_lock,
-                                       locks_for_1pc, min_commit_ts);
+                                       locks_for_1pc, temp_min_commit_ts);
     if (!ret3.ok()) {
       if (ret3.error_code() == pb::error::Errno::EVALUE_EMPTY) {
         error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
@@ -2639,8 +2659,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       return ret3;
     }
     if (try_one_pc) {
-      if (final_min_commit_ts < min_commit_ts) {
-        final_min_commit_ts = min_commit_ts;
+      if (final_min_commit_ts < temp_min_commit_ts) {
+        final_min_commit_ts = temp_min_commit_ts;
       }
     } else {
       final_min_commit_ts = 0;
@@ -2658,6 +2678,9 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     if (!ret4.ok()) {
       return ret4;
     }
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite 1PC commit", region->Id()) << ", start_ts:" << start_ts
+        << " ,final_min_commit_ts:" << final_min_commit_ts;
     response->set_one_pc_commit_ts(final_min_commit_ts);
     return ret4;
   }

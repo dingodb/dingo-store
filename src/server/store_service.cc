@@ -27,6 +27,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/latch.h"
+#include "common/logging.h"
 #include "common/synchronization.h"
 #include "common/tracker.h"
 #include "common/version.h"
@@ -1681,7 +1682,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1791,7 +1792,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequest(request, region, uniform_range);
   if (BAIDU_UNLIKELY(!status.ok())) {
@@ -1948,7 +1949,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  
   auto status = ValidateTxnPessimisticLockRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2074,7 +2075,6 @@ void DoTxnPessimisticRollback(StoragePtr storage, google::protobuf::RpcControlle
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
   auto status = ValidateTxnPessimisticRollbackRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2194,7 +2194,6 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
   auto status = ValidateTxnPrewriteRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2242,9 +2241,10 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
     pessimistic_checks.push_back(pessimistic_check);
   }
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
-                                request->lock_ttl(), request->txn_size(), request->try_one_pc(),
-                                request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status =
+      storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
+                           request->txn_size(), request->try_one_pc(), request->min_commit_ts(),
+                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -2324,7 +2324,7 @@ void DoTxnCommit(StoragePtr storage, google::protobuf::RpcController* controller
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->commit_ts());
   auto status = ValidateTxnCommitRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2437,7 +2437,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->caller_start_ts());
   auto status = ValidateTxnCheckTxnStatusRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2546,7 +2546,7 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->commit_ts());
   auto status = ValidateTxnResolveLockRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2651,7 +2651,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

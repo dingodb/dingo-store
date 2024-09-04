@@ -176,12 +176,21 @@ class Region {
   }
   int64_t AppliedMaxTs() { return applied_max_ts_.load(std::memory_order_acquire); }
 
+  void SetTxnAppliedMaxTs(int64_t ts) {
+    if (ts > txn_applied_max_ts_.load(std::memory_order_acquire)) {
+      txn_applied_max_ts_.store(ts, std::memory_order_release);
+    }
+  }
+  int64_t TxnAppliedMaxTs() { return txn_applied_max_ts_.load(std::memory_order_acquire); }
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
 
   std::atomic<int64_t> applied_max_ts_{0};
+
+  std::atomic<int64_t> txn_applied_max_ts_{0};
 
   pb::raft::SplitStrategy split_strategy_{};
 

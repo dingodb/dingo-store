@@ -1226,7 +1226,8 @@ butil::Status Storage::TxnPessimisticRollback(std::shared_ptr<Context> ctx, stor
 butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                    const std::vector<pb::store::Mutation>& mutations, const std::string& primary_lock,
                                    int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
-                                   int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
+                                   int64_t min_commit_ts, int64_t max_commit_ts,
+                                   const std::vector<int64_t>& pessimistic_checks,
                                    const std::map<int64_t, int64_t>& for_update_ts_checks,
                                    const std::map<int64_t, std::string>& lock_extra_datas) {
   auto status = ValidateLeader(region);
@@ -1241,8 +1242,9 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc,
-                               max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status =
+      writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, min_commit_ts,
+                          max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }

@@ -2062,7 +2062,7 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2196,7 +2196,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
   if (!status.ok()) {
@@ -2383,7 +2383,6 @@ void DoIndexTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcControll
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
   auto status = ValidateIndexTxnPessimisticLockRequest(storage, request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2669,7 +2668,6 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
   auto status = ValidateIndexTxnPrewriteRequest(storage, request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2722,9 +2720,10 @@ void DoTxnPrewriteVector(StoragePtr storage, google::protobuf::RpcController* co
     pessimistic_checks.push_back(pessimistic_check);
   }
   std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
-                                request->lock_ttl(), request->txn_size(), request->try_one_pc(),
-                                request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status =
+      storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
+                           request->txn_size(), request->try_one_pc(), request->min_commit_ts(),
+                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -3098,7 +3097,7 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-
+  region->SetTxnAppliedMaxTs(request->start_ts());
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
