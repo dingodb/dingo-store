@@ -26,14 +26,14 @@
 #include "common/logging.h"
 #include "common/tracker.h"
 #include "fmt/core.h"
+#include "glog/logging.h"
 #include "meta/store_meta_manager.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
-
 namespace dingodb {
 
 DECLARE_int64(service_log_threshold_time_ns);
-
+DECLARE_uint32(log_print_max_length);
 struct LatchContext;
 using LatchContextPtr = std::shared_ptr<LatchContext>;
 
@@ -161,7 +161,7 @@ class ServiceClosure : public TrackClosure {
         request_(request),
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+                                    request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     if (BAIDU_LIKELY(need_region)) {
       int64_t region_id = request->context().region_id();
       region = Server::GetInstance().GetRegion(region_id);
@@ -238,21 +238,21 @@ void ServiceClosure<T, U, need_region>::Run() {
     DINGO_LOG(ERROR) << fmt::format(
         "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
         request_->request_info().request_id(), elapsed_time,
-        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+        response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+        request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   } else {
     if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     } else {
       DINGO_LOG(DEBUG) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     }
   }
 
@@ -276,21 +276,21 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
     DINGO_LOG(ERROR) << fmt::format(
         "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
         request_->request_info().request_id(), elapsed_time,
-        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+        response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+        request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   } else {
     if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     } else {
       DINGO_LOG(DEBUG) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     }
   }
 }
@@ -307,7 +307,7 @@ class CoordinatorServiceClosure : public TrackClosure {
         request_(request),
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+                                    request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   }
   ~CoordinatorServiceClosure() override = default;
 
@@ -341,21 +341,21 @@ void CoordinatorServiceClosure<T, U>::Run() {
     DINGO_LOG(ERROR) << fmt::format(
         "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
         request_->request_info().request_id(), elapsed_time,
-        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+        response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+        request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   } else {
     if (BAIDU_UNLIKELY(elapsed_time >= FLAGS_service_log_threshold_time_ns)) {
       DINGO_LOG(INFO) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     } else {
       DINGO_LOG(DEBUG) << fmt::format(
           "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
           request_->request_info().request_id(), elapsed_time,
-          response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-          request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+          response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+          request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     }
   }
 }
@@ -371,7 +371,7 @@ class NoContextServiceClosure : public TrackClosure {
         request_(request),
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
-                                    request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+                                    request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   }
   ~NoContextServiceClosure() override = default;
 
@@ -406,14 +406,14 @@ void NoContextServiceClosure<T, U>::Run() {
     DINGO_LOG(ERROR) << fmt::format(
         "[service.{}][request_id({})][elapsed(ns)({})] Request failed, response: {} request: {}", method_name_,
         request_->request_info().request_id(), elapsed_time,
-        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+        response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+        request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   } else {
     DINGO_LOG(DEBUG) << fmt::format(
         "[service.{}][request_id({})][elapsed(ns)({})] Request finish, response: {} request: {}", method_name_,
         request_->request_info().request_id(), elapsed_time,
-        response_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength),
-        request_->ShortDebugString().substr(0, Constant::kLogPrintMaxLength));
+        response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
+        request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
   }
 }
 
