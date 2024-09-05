@@ -3133,7 +3133,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     if (lock_info.lock_type() == pb::store::Op::Lock) {
       DINGO_LOG(WARNING) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                          << ", pessimistic lock, found locked for executor, primary_key: " << primary_key
-                         << ", lock_ts: " << lock_ts << ", lock_info: " << lock_info.ShortDebugString();
+                         << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
+                         << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+      ;
       *txn_result->mutable_locked() = lock_info;
 
       // if the lock is not expired, try to update the min_commit_ts in the next code block, so we cannot return
@@ -3213,6 +3215,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     } else {
       keys_to_rollback_without_data.push_back(primary_key);
     }
+    DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+                    << ", do rollback, primary_key: " << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
+                    << ", lock_info: " << lock_info.ShortDebugString();
     auto ret =
         DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, lock_ts);
     if (!ret.ok()) {
@@ -3687,6 +3692,14 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   }
 
   if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
+    for (auto const &key : keys_to_rollback_with_data) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
+                      << ", do rollback with data, start_ts: " << start_ts;
+    }
+    for (auto const &key : keys_to_rollback_without_data) {
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
+                      << ", do rollback without data, start_ts: " << start_ts;
+    }
     auto ret =
         DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
     if (!ret.ok()) {
@@ -3772,7 +3785,7 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
   if (lock_info.lock_ttl() >= advise_lock_ttl) {
     DINGO_LOG(WARNING)
         << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), Helper::StringToHex(primary_lock))
-        << ", lock_info.lock_ttl greater than  advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
+        << ", lock_info.lock_ttl greater than advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
         << lock_info.lock_ttl() << ", advise_lock_ttl: " << advise_lock_ttl
         << ", lock_info: " << lock_info.ShortDebugString();
     return butil::Status::OK();
