@@ -3769,6 +3769,15 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
     return butil::Status::OK();
   }
 
+  if (lock_info.lock_ttl() >= advise_lock_ttl) {
+    DINGO_LOG(WARNING)
+        << fmt::format("[txn][region({})] HeartBeat, primary_lock: {}", region->Id(), Helper::StringToHex(primary_lock))
+        << ", lock_info.lock_ttl greater than  advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
+        << lock_info.lock_ttl() << ", advise_lock_ttl: " << advise_lock_ttl
+        << ", lock_info: " << lock_info.ShortDebugString();
+    return butil::Status::OK();
+  }
+
   // update lock_info
   lock_info.set_lock_ttl(advise_lock_ttl);
 
