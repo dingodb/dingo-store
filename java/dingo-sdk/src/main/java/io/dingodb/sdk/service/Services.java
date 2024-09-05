@@ -246,9 +246,12 @@ public class Services {
             if (region != null) {
                 Range range = Optional.mapOrNull(region, ScanRegionInfo::getRange);
                 if (range != null && compare(key, range.getStartKey()) >= 0 && compare(key, range.getEndKey()) < 0) {
-                    RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
-                    if (regionProvider.isIn(key)) {
-                        return regionProvider;
+                    try {
+                        RegionChannelProvider regionProvider = regionCache.get(locations).get(region.getRegionId());
+                        if (regionProvider.isStatus() && regionProvider.isIn(key)) {
+                            return regionProvider;
+                        }
+                    } catch (DingoClientException.InvalidRouteTableException | UncheckedExecutionException ignore) {
                     }
                 }
             }
