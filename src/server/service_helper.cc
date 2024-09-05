@@ -32,6 +32,7 @@
 namespace dingodb {
 
 DEFINE_int64(service_log_threshold_time_ns, 1000000000L, "service log threshold time");
+DEFINE_uint32(log_print_max_length, 512, "log print max length");
 
 bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
 bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
