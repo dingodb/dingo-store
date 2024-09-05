@@ -2554,6 +2554,16 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
     return;
   }
 
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& key : request->keys()) {
+    keys_for_lock.push_back(key);
+  }
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
+
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
