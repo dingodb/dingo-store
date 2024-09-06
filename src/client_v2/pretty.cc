@@ -89,7 +89,7 @@ static void PrintTable(const std::vector<std::vector<std::string>>& rows) {
   if (rows.empty()) {
     return;
   }
-
+  std::cout << std::endl;
   int clounm_num = rows[0].size();
 
   auto table = ftxui::Table(rows);
@@ -1212,7 +1212,6 @@ void Pretty::Show(dingodb::pb::meta::TsoResponse& response) {
     tso.set_physical(response.start_timestamp().physical());
     tso.set_logical(response.start_timestamp().logical() + i);
     int64_t time_safe_ts = lambda_tso_2_timestamp_function(tso);
-    std::cout << "ts: " << time_safe_ts << std::endl;
     std::vector<ftxui::Element> row = {
         ftxui::paragraph(fmt::format("{}", time_safe_ts)),
     };
