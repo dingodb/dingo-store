@@ -25,7 +25,22 @@
 
 namespace client_v2 {
 
-void SetUpKVSubCommands(CLI::App& app) {}
+void SetUpKVSubCommands(CLI::App& app) {
+  SetUpKvHello(app);
+  SetUpGetRawKvIndex(app);
+  SetUpGetRawKvRev(app);
+  SetUpCoorKvPut(app);
+  SetUpCoorKvRange(app);
+  SetUpCoorKvDeleteRange(app);
+  SetUpCoorKvCompaction(app);
+  SetUpOneTimeWatch(app);
+  SetUpLock(app);
+  SetUpLeaseGrant(app);
+  SetUpLeaseRevoke(app);
+  SetUpLeaseRenew(app);
+  SetUpLeaseQuery(app);
+  SetUpListLeases(app);
+}
 
 butil::Status CoorKvRange(dingodb::CoordinatorInteractionPtr coordinator_interaction_version, const std::string& key,
                           const std::string& range_end, int64_t limit, std::vector<dingodb::pb::version::Kv>& kvs) {
@@ -58,12 +73,12 @@ void GetWatchKeyAndRevision(dingodb::CoordinatorInteractionPtr coordinator_inter
   std::vector<dingodb::pb::version::Kv> kvs;
   auto ret = CoorKvRange(coordinator_interaction_version, lock_prefix, lock_prefix + "\xFF", 0, kvs);
   if (!ret.ok()) {
-    DINGO_LOG(WARNING) << "CoorKvRange failed, ret=" << ret;
+    std::cout << "CoorKvRange failed, ret=" << ret << std::endl;
     return;
   }
 
   if (kvs.empty()) {
-    DINGO_LOG(WARNING) << "CoorKvRange failed, kvs is empty";
+    std::cout << "CoorKvRange failed, kvs is empty" << std::endl;
     return;
   }
 
@@ -227,7 +242,7 @@ butil::Status CoorWatch(dingodb::CoordinatorInteractionPtr coordinator_interacti
 
 void SetUpKvHello(CLI::App& app) {
   auto opt = std::make_shared<KvHelloOptions>();
-  auto* cmd = app.add_subcommand("KvHello", "Kv hello")->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("KvHello", "Kv hello")->group("Kv command");
   cmd->callback([opt]() { RunKvHello(*opt); });
 }
 
@@ -245,14 +260,19 @@ void RunKvHello(KvHelloOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("Hello", request, response);
-  DINGO_LOG(INFO) << "SendRequest status: " << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "kv hello failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpGetRawKvIndex(CLI::App& app) {
   auto opt = std::make_shared<GetRawKvIndexOptions>();
-  auto* cmd = app.add_subcommand("GetRawKvIndex", "Get raw kv index ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("GetRawKvIndex", "Get raw kv index ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->callback([opt]() { RunGetRawKvIndex(*opt); });
 }
 
@@ -267,19 +287,20 @@ void RunGetRawKvIndex(GetRawKvIndexOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRawKvIndex", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "GetRawKvIndex failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpGetRawKvRev(CLI::App& app) {
   auto opt = std::make_shared<GetRawKvRevOptions>();
-  auto* cmd = app.add_subcommand("GetRawKvRev", "Get raw kv rev ")->group("Coordinator Manager Commands");
-  cmd->add_option("--rversion", opt->revision, "Request parameter rversion")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--sub_rversion", opt->sub_revision, "Request parameter sub_rversion")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("GetRawKvRev", "Get raw kv rev ")->group("Kv command");
+  cmd->add_option("--rversion", opt->revision, "Request parameter rversion")->required();
+  cmd->add_option("--sub_rversion", opt->sub_revision, "Request parameter sub_rversion")->required();
   cmd->callback([opt]() { RunGetRawKvRev(*opt); });
 }
 
@@ -295,26 +316,25 @@ void RunGetRawKvRev(GetRawKvRevOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRawKvRev", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "GetRawKvRev failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpCoorKvRange(CLI::App& app) {
   auto opt = std::make_shared<CoorKvRangeOptions>();
-  auto* cmd = app.add_subcommand("CoorKvRange", "Coor kv range ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")
-      ->default_val("")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--sub_rversion", opt->limit, "Request parameter sub_rversion")
-      ->default_val(50)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--keys_only", opt->keys_only, "Request parameter keys_only")
+  auto* cmd = app.add_subcommand("CoorKvRange", "Coor kv range ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")->default_val("");
+  cmd->add_option("--sub_rversion", opt->limit, "Request parameter sub_rversion")->default_val(50);
+  cmd->add_option("--keys_only", opt->keys_only, "Request parameter keys_only")->default_val(false);
+  cmd->add_option("--count_only", opt->count_only, "Request parameter keys_count_only")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--count_only", opt->count_only, "Request parameter keys_count_only")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
+      ->default_str("false");
   cmd->callback([opt]() { RunCoorKvRange(*opt); });
 }
 
@@ -333,27 +353,30 @@ void RunCoorKvRange(CoorKvRangeOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvRange", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "KvRange failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpCoorKvPut(CLI::App& app) {
   auto opt = std::make_shared<CoorKvPutOptions>();
-  auto* cmd = app.add_subcommand("CoorKvPut", "Coor kv put ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--value", opt->value, "Request parameter value")->group("Coordinator Manager Commands");
-  cmd->add_option("--lease", opt->lease, "Request parameter lease")
-      ->default_val(0)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--ignore_lease", opt->ignore_lease, "Request parameter ignore_lease")
+  auto* cmd = app.add_subcommand("CoorKvPut", "Coor kv put ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--value", opt->value, "Request parameter value");
+  cmd->add_option("--lease", opt->lease, "Request parameter lease")->default_val(0);
+  cmd->add_option("--ignore_lease", opt->ignore_lease, "Request parameter ignore_lease")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--ignore_value", opt->ignore_value, "Request parameter ignore_value")
+      ->default_str("false");
+  cmd->add_option("--ignore_value", opt->ignore_value, "Request parameter ignore_value")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
+      ->default_str("false");
+  cmd->add_option("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
+      ->default_str("false");
   cmd->callback([opt]() { RunCoorKvPut(*opt); });
 }
 
@@ -375,20 +398,23 @@ void RunCoorKvPut(CoorKvPutOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvPut", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "KvPut failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpCoorKvDeleteRange(CLI::App& app) {
   auto opt = std::make_shared<CoorKvDeleteRangeOptions>();
-  auto* cmd = app.add_subcommand("CoorKvDeleteRange", "Coor kv delete range ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")
-      ->default_val("")
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
+  auto* cmd = app.add_subcommand("CoorKvDeleteRange", "Coor kv delete range ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")->default_val("");
+  cmd->add_option("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
+      ->default_str("false");
   cmd->callback([opt]() { RunCoorKvDeleteRange(*opt); });
 }
 
@@ -405,20 +431,21 @@ void RunCoorKvDeleteRange(CoorKvDeleteRangeOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvDeleteRange", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "KvDeleteRange failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpCoorKvCompaction(CLI::App& app) {
   auto opt = std::make_shared<CoorKvCompactionOptions>();
-  auto* cmd = app.add_subcommand("CoorKvDeleteRange", "Coor kv delete range ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")
-      ->default_val("")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--revision", opt->revision, "Request parameter revision")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("CoorKvDeleteCompaction", "Coor kv compaction ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")->default_val("");
+  cmd->add_option("--revision", opt->revision, "Request parameter revision")->required();
   cmd->callback([opt]() { RunCoorKvCompaction(*opt); });
 }
 
@@ -435,32 +462,31 @@ void RunCoorKvCompaction(CoorKvCompactionOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("KvCompaction", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "KvCompaction failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpOneTimeWatch(CLI::App& app) {
   auto opt = std::make_shared<OneTimeWatchOptions>();
-  auto* cmd = app.add_subcommand("OneTimeWatch", "One time watch ")->group("Coordinator Manager Commands");
-  cmd->add_option("--key", opt->key, "Request parameter key")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--revision", opt->revision, "Request parameter revision")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
+  auto* cmd = app.add_subcommand("OneTimeWatch", "One time watch ")->group("Kv command");
+  cmd->add_option("--key", opt->key, "Request parameter key")->required();
+  cmd->add_option("--revision", opt->revision, "Request parameter revision")->required();
+  cmd->add_option("--need_prev_kv", opt->need_prev_kv, "Request parameter need_prev_kv")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--wait_on_not_exist_key", opt->wait_on_not_exist_key, "Request parameter wait_on_not_exist_key")
+      ->default_str("false");
+  cmd->add_option("--wait_on_not_exist_key", opt->wait_on_not_exist_key, "Request parameter wait_on_not_exist_key")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--no_put", opt->no_put, "Request parameter no_put")
+      ->default_str("false");
+  cmd->add_option("--no_put", opt->no_put, "Request parameter no_put")->default_val(false)->default_str("false");
+  cmd->add_option("--no_delete", opt->no_delete, "Request parameter no_delete")
       ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_flag("--no_delete", opt->no_delete, "Request parameter no_delete")
-      ->default_val(false)
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--max_watch_count", opt->max_watch_count, "Request parameter max_watch_count")
-      ->default_val(10)
-      ->group("Coordinator Manager Commands");
+      ->default_str("false");
+  cmd->add_option("--max_watch_count", opt->max_watch_count, "Request parameter max_watch_count")->default_val(10);
   cmd->callback([opt]() { RunOneTimeWatch(*opt); });
 }
 
@@ -493,23 +519,19 @@ void RunOneTimeWatch(OneTimeWatchOptions const& opt) {
 
   for (uint32_t i = 0; i < opt.max_watch_count; i++) {
     // wait 600s for event
-    DINGO_LOG(INFO) << "SendRequest watch_count=" << i;
+    std::cout << "SendRequest watch_count=" << i << std::endl;
     auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("Watch", request,
                                                                                                 response, 600000);
-    DINGO_LOG(INFO) << "SendRequest status=" << status << ", watch_count=" << i;
-    DINGO_LOG(INFO) << response.DebugString();
+    std::cout << "SendRequest status=" << status << ", watch_count=" << i << std::endl;
+    std::cout << response.DebugString() << std::endl;
   }
 }
 
 void SetUpLock(CLI::App& app) {
   auto opt = std::make_shared<LockOptions>();
-  auto* cmd = app.add_subcommand("Lock", "Lock")->group("Coordinator Manager Commands");
-  cmd->add_option("--lock_name", opt->lock_name, "Request parameter lock_name")
-      ->required()
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--client_uuid", opt->client_uuid, "Request parameter client_uuid")
-      ->required()
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("Lock", "Lock")->group("Kv command");
+  cmd->add_option("--lock_name", opt->lock_name, "Request parameter lock_name")->required();
+  cmd->add_option("--client_uuid", opt->client_uuid, "Request parameter client_uuid")->required();
   cmd->callback([opt]() { RunLock(*opt); });
 }
 
@@ -521,14 +543,12 @@ void RunLock(LockOptions const& opt) {
   std::string lock_prefix = opt.lock_name + "_lock_";
   std::string lock_key = lock_prefix + opt.client_uuid;
 
-  DINGO_LOG(INFO) << "lock_key=" << lock_key;
-
   // create lease
   int64_t lease_id = 0;
   int64_t ttl = 3;
   auto ret = CoorLeaseGrant(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), lease_id, ttl);
   if (!ret.ok()) {
-    DINGO_LOG(WARNING) << "CoorLeaseGrant failed, ret=" << ret;
+    std::cout << "CoorLeaseGrant failed, ret=" << ret << std::endl;
     return;
   }
 
@@ -541,7 +561,7 @@ void RunLock(LockOptions const& opt) {
   ret = CoorKvPut(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), lock_key, "1", lease_id,
                   revision);
   if (!ret.ok()) {
-    DINGO_LOG(WARNING) << "CoorKvPut failed, ret=" << ret;
+    std::cout << "CoorKvPut failed, ret=" << ret << std::endl;
     return;
   }
 
@@ -563,38 +583,37 @@ void RunLock(LockOptions const& opt) {
     ret = CoorWatch(CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion(), watch_key, watch_revision,
                     true, false, false, false, events);
     if (!ret.ok()) {
-      DINGO_LOG(WARNING) << "CoorWatch failed, ret=" << ret;
+      std::cout << "CoorWatch failed, ret=" << ret << std::endl;
       return;
     }
 
     for (const auto& event : events) {
-      DINGO_LOG(INFO) << "event_type=" << event.type() << ", event_kv.key=" << event.kv().kv().key()
-                      << ", event_kv.value=" << event.kv().kv().value()
-                      << ", event_kv.create_revision=" << event.kv().create_revision()
-                      << ", event_kv.mod_revision=" << event.kv().mod_revision()
-                      << ", event_kv.version=" << event.kv().version() << ", event_kv.lease=" << event.kv().lease()
-                      << ", event_prev_kv.key=" << event.prev_kv().kv().key()
-                      << ", event_prev_kv.value=" << event.prev_kv().kv().value()
-                      << ", event_prev_kv.create_revision=" << event.prev_kv().create_revision()
-                      << ", event_prev_kv.mod_revision=" << event.prev_kv().mod_revision()
-                      << ", event_prev_kv.version=" << event.prev_kv().version()
-                      << ", event_prev_kv.lease=" << event.prev_kv().lease();
+      std::cout << "event_type=" << event.type() << ", event_kv.key=" << event.kv().kv().key()
+                << ", event_kv.value=" << event.kv().kv().value()
+                << ", event_kv.create_revision=" << event.kv().create_revision()
+                << ", event_kv.mod_revision=" << event.kv().mod_revision()
+                << ", event_kv.version=" << event.kv().version() << ", event_kv.lease=" << event.kv().lease()
+                << ", event_prev_kv.key=" << event.prev_kv().kv().key()
+                << ", event_prev_kv.value=" << event.prev_kv().kv().value()
+                << ", event_prev_kv.create_revision=" << event.prev_kv().create_revision()
+                << ", event_prev_kv.mod_revision=" << event.prev_kv().mod_revision()
+                << ", event_prev_kv.version=" << event.prev_kv().version()
+                << ", event_prev_kv.lease=" << event.prev_kv().lease() << std::endl;
     }
 
     if (events.empty()) {
       continue;
     }
-    DINGO_LOG(INFO) << "watch get event=" << events[0].DebugString();
+    std::cout << "watch get event=" << events[0].DebugString() << std::endl;
   } while (true);
 }
 
 void SetUpLeaseGrant(CLI::App& app) {
   auto opt = std::make_shared<LeaseGrantOptions>();
-  auto* cmd = app.add_subcommand("LeaseGrant", "Lease grant")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter id")->required()->group("Coordinator Manager Commands");
-  cmd->add_option("--ttl", opt->ttl, "Request parameter ttl")->required()->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("LeaseGrant", "Lease grant")->group("Kv command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter id")->required();
+  cmd->add_option("--ttl", opt->ttl, "Request parameter ttl")->required();
   cmd->callback([opt]() { RunLeaseGrant(*opt); });
 }
 
@@ -609,16 +628,20 @@ void RunLeaseGrant(LeaseGrantOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseGrant", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "LeaseGrant failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpLeaseRevoke(CLI::App& app) {
   auto opt = std::make_shared<LeaseRevokeOptions>();
-  auto* cmd = app.add_subcommand("LeaseRevoke", "Lease revoke")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter id")->required()->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("LeaseRevoke", "Lease revoke")->group("Kv command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter id")->required();
   cmd->callback([opt]() { RunLeaseRevoke(*opt); });
 }
 
@@ -633,16 +656,20 @@ void RunLeaseRevoke(LeaseRevokeOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseRevoke", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "LeaseRevoke failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpLeaseRenew(CLI::App& app) {
   auto opt = std::make_shared<LeaseRenewOptions>();
-  auto* cmd = app.add_subcommand("LeaseRenew", "Lease renew")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter id")->required()->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("LeaseRenew", "Lease renew")->group("Kv command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter id")->required();
   cmd->callback([opt]() { RunLeaseRenew(*opt); });
 }
 
@@ -656,16 +683,20 @@ void RunLeaseRenew(LeaseRenewOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseRenew", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "LeaseRenew failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpLeaseQuery(CLI::App& app) {
   auto opt = std::make_shared<LeaseQueryOptions>();
-  auto* cmd = app.add_subcommand("LeaseQuery", "Lease query")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
-  cmd->add_option("--id", opt->id, "Request parameter id")->required()->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("LeaseQuery", "Lease query")->group("Kv command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter id")->required();
   cmd->callback([opt]() { RunLeaseQuery(*opt); });
 }
 
@@ -680,15 +711,19 @@ void RunLeaseQuery(LeaseQueryOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("LeaseQuery", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "LeaseQuery failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpListLeases(CLI::App& app) {
   auto opt = std::make_shared<ListLeasesOptions>();
-  auto* cmd = app.add_subcommand("LeaseQuery", "Lease query")->group("Coordinator Manager Commands");
-  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list")
-      ->group("Coordinator Manager Commands");
+  auto* cmd = app.add_subcommand("ListLeases", "List leases")->group("Kv command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->callback([opt]() { RunListLeases(*opt); });
 }
 
@@ -701,8 +736,13 @@ void RunListLeases(ListLeasesOptions const& opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ListLeases", request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "ListLeases failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << response.DebugString() << std::endl;
 }
 
 }  // namespace client_v2
