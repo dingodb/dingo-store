@@ -434,7 +434,7 @@ butil::Status RaftStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
 
   sync_mode_cond->IncreaseWait();
 
-  if (BAIDU_UNLIKELY(ctx->Status().ok())) {
+  if (BAIDU_UNLIKELY(!ctx->Status().ok())) {
     return ctx->Status();
   }
 
