@@ -12,9 +12,9 @@ server:
   scrub_vector_index_interval_s: 60
   get_tso_interval_ms: 1000
   # worker_thread_num: 36 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 0.8 # cpu core * ratio
+  worker_thread_ratio: 1 # cpu core * ratio
   # raft_worker_thread_num: 36 # must >4, raft_worker_thread_num priority raft_worker_thread_ratio
-  raft_worker_thread_ratio: 0.6 # cpu core * ratio
+  raft_worker_thread_ratio: 2 # cpu core * ratio
 region:
   region_max_size: 536870912 # 512MB
   enable_auto_split: true
