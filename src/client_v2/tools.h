@@ -96,6 +96,12 @@ struct CoordinatorDebugOptions {
 void SetUpCoordinatorDebug(CLI::App &app);
 void RunCoordinatorDebug(CoordinatorDebugOptions const &opt);
 
+struct TransformTimeStampOptions {
+  int64_t ts;
+};
+void SetUpTransformTimeStamp(CLI::App &app);
+void RunTransformTimeStamp(TransformTimeStampOptions const &opt);
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_TOOLS_H_
