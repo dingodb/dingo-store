@@ -15,12 +15,14 @@
 
 #include "client_v2/tools.h"
 
+#include <cstdint>
 #include <iostream>
 
 #include "client_v2/helper.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
+#include "coordinator/tso_control.h"
 #include "proto/version.pb.h"
 
 namespace client_v2 {
@@ -34,6 +36,7 @@ void SetUpToolSubCommands(CLI::App &app) {
   SetUpDecodeVectorPrefix(app);
   SetUpOctalToHex(app);
   SetUpCoordinatorDebug(app);
+  SetUpTransformTimeStamp(app);
 }
 
 std::string EncodeUint64(int64_t value) {
@@ -222,6 +225,23 @@ void RunCoordinatorDebug(CoordinatorDebugOptions const &opt) {
   std::cout << "half_diff:    " << dingodb::Helper::StringToHex(std::string(half_diff.begin(), half_diff.end()))
             << std::endl;
   std::cout << "half:         " << dingodb::Helper::StringToHex(std::string(half.begin(), half.end())) << std::endl;
+}
+
+void SetUpTransformTimeStamp(CLI::App &app) {
+  auto opt = std::make_shared<TransformTimeStampOptions>();
+  auto *cmd = app.add_subcommand("TransformTS", "Transform timestamp to current time")->group("Tool Command");
+  cmd->add_option("--ts", opt->ts, "Request parameter ts")->required();
+  cmd->callback([opt]() { RunTransformTimeStamp(*opt); });
+}
+
+void RunTransformTimeStamp(TransformTimeStampOptions const &opt) {
+  int64_t timestamp = ((opt.ts >> 18) + dingodb::kBaseTimestampMs) / 1000;
+  std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(timestamp);
+  std::time_t time = std::chrono::system_clock::to_time_t(tp);
+  std::tm *tm_ptr = std::localtime(&time);
+  std::ostringstream oss;
+  oss << std::put_time(tm_ptr, "%Y-%m-%dT%H:%M:%SZ");  // RFC 3339
+  std::cout << oss.str();
 }
 
 }  // namespace client_v2
