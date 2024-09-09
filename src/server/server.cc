@@ -1167,6 +1167,10 @@ void Server::SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set) { index_servi
 
 void Server::SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set) { index_service_write_worker_set_ = worker_set; }
 
+void Server::SetApplyWorkerSet(WorkerSetPtr worker_set) { apply_worker_set_ = worker_set; }
+
+WorkerSetPtr Server::GetApplyWorkerSet() { return apply_worker_set_; }
+
 std::vector<std::vector<std::string>> Server::GetStoreServiceReadWorkerSetTrace() {
   if (store_service_read_worker_set_ == nullptr) {
     return {};

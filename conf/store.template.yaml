@@ -11,9 +11,7 @@ server:
   approximate_size_metrics_collect_interval_s: 300
   get_tso_interval_ms: 1000
   # worker_thread_num: 36 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 1 # cpu core * ratio
-  # raft_worker_thread_num: 36 # must >4, raft_worker_thread_num priority raft_worker_thread_ratio
-  raft_worker_thread_ratio: 2 # cpu core * ratio
+  worker_thread_ratio: 4 # cpu core * ratio
 region:
   region_max_size: 268435456 # 256MB
   enable_auto_split: true

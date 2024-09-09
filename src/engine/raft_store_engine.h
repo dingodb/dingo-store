@@ -21,6 +21,7 @@
 
 #include "butil/status.h"
 #include "common/meta_control.h"
+#include "common/runnable.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "engine/snapshot.h"
@@ -58,6 +59,7 @@ class RaftControlAble {
     store::RaftMetaPtr raft_meta;
     store::RegionMetricsPtr region_metrics;
     EventListenerCollectionPtr listeners;
+    WorkerSetPtr apply_worker_set;
   };
 
   virtual butil::Status AddNode(store::RegionPtr region, const AddNodeParameter& parameter) = 0;

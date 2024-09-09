@@ -212,6 +212,9 @@ class Server {
   void SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set);
   void SetIndexServiceReadWorkerSet(WorkerSetPtr worker_set);
   void SetIndexServiceWriteWorkerSet(WorkerSetPtr worker_set);
+  void SetApplyWorkerSet(WorkerSetPtr worker_set);
+
+  WorkerSetPtr GetApplyWorkerSet();
 
   std::vector<std::vector<std::string>> GetStoreServiceReadWorkerSetTrace();
   std::vector<std::vector<std::string>> GetStoreServiceWriteWorkerSetTrace();
@@ -356,6 +359,8 @@ class Server {
   WorkerSetPtr store_service_write_worker_set_{nullptr};
   WorkerSetPtr index_service_read_worker_set_{nullptr};
   WorkerSetPtr index_service_write_worker_set_{nullptr};
+
+  WorkerSetPtr apply_worker_set_{nullptr};
 
   // vector index thread pool
   ThreadPoolPtr vector_index_thread_pool_;

@@ -7,7 +7,7 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   # worker_thread_num: 128 # must >4, worker_thread_num priority worker_thread_ratio
-  worker_thread_ratio: 1 # cpu core * ratio
+  worker_thread_ratio: 4 # cpu core * ratio
 log:
   level: INFO
   path: $BASE_PATH$/log
