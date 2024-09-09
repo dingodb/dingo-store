@@ -4,7 +4,7 @@ ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
 
 RUN dnf update -y  \
-    && dnf install -y vim unzip net-tools tzdata wget git gcc gcc-c++ make automake openssl openssl-devel gcc-toolset-13* libtool patch \
+    && dnf install -y vim unzip net-tools tzdata wget git gcc gcc-c++ make automake openssl openssl-devel gcc-toolset-13* libtool patch libaio-devel boost-devel \
     && dnf clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
