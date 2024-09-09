@@ -66,25 +66,13 @@ std::shared_ptr<RaftStoreEngine> RaftStoreEngine::GetSelfPtr() {
 bool RaftStoreEngine::Init(std::shared_ptr<Config> /*config*/) { return true; }
 
 // Clean region raft directory
-static bool CleanRaftDirectory(int64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
-  std::string region_raft_path = fmt::format("{}/{}", raft_path, region_id);
-  if (!Helper::RemoveAllFileOrDirectory(region_raft_path)) {
-    return false;
-  }
-
+static bool CleanRaftDirectory(int64_t region_id, const std::string& raft_log_path) {
   std::string region_raft_log_path = fmt::format("{}/{}", raft_log_path, region_id);
   return Helper::RemoveAllFileOrDirectory(region_raft_log_path);
 }
 
 // check region raft complete
-static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_path, const std::string& raft_log_path) {
-  std::string raft_meta_path = fmt::format("{}/{}/raft_meta/raft_meta", raft_path, region_id);
-  if (!Helper::IsExistPath(raft_meta_path)) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft_meta file, path: {}.", region_id,
-                                      raft_meta_path);
-    return false;
-  }
-
+static bool IsCompleteRaftNode(int64_t region_id, const std::string& raft_log_path) {
   std::string region_raft_log_path = fmt::format("{}/{}/log_meta", raft_log_path, region_id);
   if (!Helper::IsExistPath(region_raft_log_path)) {
     DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] missing raft log file, path: {}.", region_id,
@@ -144,17 +132,14 @@ bool RaftStoreEngine::Recover() {
       parameter.region_metrics = region_metrics;
       parameter.listeners = listener_factory->Build();
 
-      auto is_complete = IsCompleteRaftNode(region->Id(), parameter.raft_path, parameter.log_path);
+      auto is_complete = IsCompleteRaftNode(region->Id(), parameter.log_path);
       if (!is_complete) {
         DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] raft node is not complete.", region->Id());
-        if (!CleanRaftDirectory(region->Id(), parameter.raft_path, parameter.log_path)) {
+        if (!CleanRaftDirectory(region->Id(), parameter.log_path)) {
           DINGO_LOG(WARNING) << fmt::format("[raft.engine][region({})] clean region raft directory failed.",
                                             region->Id());
           continue;
         }
-        raft_meta = store::RaftMeta::New(region->Id());
-        store_raft_meta->UpdateRaftMeta(raft_meta);
-        parameter.raft_meta = raft_meta;
         parameter.is_restart = false;
       }
 
