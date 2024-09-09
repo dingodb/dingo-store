@@ -4,11 +4,11 @@ ENV TZ=Asia/Shanghai \
     DEBIAN_FRONTEND=noninteractive
 SHELL ["/bin/bash", "-c"]
 
-RUN apt-get update  \
-    && apt-get install -y openjdk-8-jdk vim unzip netcat net-tools tzdata wget git gcc g++ make automake maven openssl libssl-dev cmake libtool gpg \
+RUN chmod 777 /tmp && apt-get update  \
+    && apt-get install -y openjdk-8-jdk vim unzip netcat net-tools tzdata wget git gcc g++ make automake maven openssl libssl-dev cmake libtool gpg libboost-dev libboost-program-options-dev libaio-dev \
     && wget -O- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor |  tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null \
     && echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | tee /etc/apt/sources.list.d/oneAPI.list \
-    && apt-get update && apt-get install -y intel-oneapi-mkl-devel \
+    && apt-get update && apt-get install -y intel-oneapi-mkl-devel-2024.1 \
     && unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
