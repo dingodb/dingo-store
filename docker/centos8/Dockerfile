@@ -14,7 +14,7 @@ RUN echo "gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW
 RUN mv /tmp/oneAPI.repo /etc/yum.repos.d
 
 RUN sed -i 's/mirrorlist/#mirrorlist/g' /etc/yum.repos.d/CentOS-* && sed -i 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' /etc/yum.repos.d/CentOS-* && dnf update -y  \
-    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel patch gcc-toolset-11* libtool perl-IPC-Cmd intel-oneapi-mkl-devel \
+    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel patch gcc-toolset-11* libtool perl-IPC-Cmd intel-oneapi-mkl-devel-2024.1.x86_64 libaio-devel boost-devel \
     && dnf clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \

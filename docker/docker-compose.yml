@@ -189,3 +189,19 @@ services:
       INDEX_SERVER_START_PORT: 21003
       INDEX_INSTANCE_START_ID: 1103
       <<: *shared-env
+  diskann1:
+    image: dingodatabase/dingo-store:latest
+    hostname: diskann1
+    container_name: diskann1
+    network_mode: host
+    depends_on:
+      - coordinator1
+      - coordinator2
+      - coordinator3
+    environment:
+      FLAGS_role: diskann
+      INDEX_RAFT_START_PORT: 24101
+      INDEX_SERVER_START_PORT: 24001
+      INDEX_INSTANCE_START_ID: 1301
+      <<: *shared-env  
+  
