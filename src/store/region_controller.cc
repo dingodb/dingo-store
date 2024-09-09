@@ -157,6 +157,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
     parameter.region_metrics = region_metrics;
     auto listener_factory = std::make_shared<StoreSmEventListenerFactory>();
     parameter.listeners = listener_factory->Build();
+    parameter.apply_worker_set = Server::GetInstance().GetApplyWorkerSet();
 
     status = raft_store_engine->AddNode(region, parameter);
     if (!status.ok()) {

@@ -127,7 +127,8 @@ using WorkerPtr = std::shared_ptr<Worker>;
 
 class WorkerSet {
  public:
-  WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+            bool is_inplace_run);
   virtual ~WorkerSet() = default;
 
   virtual bool Init() = 0;
@@ -200,6 +201,8 @@ class WorkerSet {
     return !is_destroied.compare_exchange_strong(expect, true);
   }
 
+  bool is_inplace_run{false};
+
   bool is_stop{false};
   std::atomic<uint32_t> stoped_count{0};
   std::atomic<bool> is_destroied{false};
@@ -212,7 +215,7 @@ using WorkerSetPtr = std::shared_ptr<WorkerSet>;
 class ExecqWorkerSet : public WorkerSet {
  public:
   ExecqWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count)
-      : WorkerSet(name, worker_num, max_pending_task_count, false) {}
+      : WorkerSet(name, worker_num, max_pending_task_count, false, false) {}
   ~ExecqWorkerSet() override = default;
 
   static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count) {
@@ -240,11 +243,13 @@ class ExecqWorkerSet : public WorkerSet {
 // Use std::queue implement
 class SimpleWorkerSet : public WorkerSet {
  public:
-  SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+                  bool is_inplace_run);
   ~SimpleWorkerSet() override;
 
-  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread) {
-    return std::make_shared<SimpleWorkerSet>(name, worker_num, max_pending_task_count, use_pthread);
+  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread,
+                          bool is_inplace_run) {
+    return std::make_shared<SimpleWorkerSet>(name, worker_num, max_pending_task_count, use_pthread, is_inplace_run);
   }
 
   bool Init() override;
@@ -268,11 +273,13 @@ class SimpleWorkerSet : public WorkerSet {
 // Use std::priority_queue implement
 class PriorWorkerSet : public WorkerSet {
  public:
-  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread);
+  PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+                 bool is_inplace_run);
   ~PriorWorkerSet() override;
 
-  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread) {
-    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count, use_pthread);
+  static WorkerSetPtr New(std::string name, uint32_t worker_num, uint32_t max_pending_task_count, bool use_pthread,
+                          bool is_inplace_run) {
+    return std::make_shared<PriorWorkerSet>(name, worker_num, max_pending_task_count, use_pthread, is_inplace_run);
   }
 
   bool Init() override;

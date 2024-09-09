@@ -96,11 +96,16 @@ DEFINE_bool(meta_worker_set_use_pthread, false, "meta worker set use pthread");
 DEFINE_bool(version_worker_set_use_pthread, false, "version worker set use pthread");
 DEFINE_bool(read_worker_set_use_pthread, false, "read worker set use pthread");
 DEFINE_bool(write_worker_set_use_pthread, false, "write worker set use pthread");
+DEFINE_bool(apply_worker_set_use_pthread, false, "apply worker set use pthread");
+
+DEFINE_bool(enable_apply_worker_inplace_run, true, "enable apply worker inplace run");
 
 DEFINE_uint32(read_worker_num, 128, "read service worker num");
 DEFINE_uint64(read_worker_max_pending_num, 1024, "read service worker num");
 DEFINE_uint32(write_worker_num, 128, "write service worker num");
 DEFINE_uint64(write_worker_max_pending_num, 1024, "write service worker num");
+DEFINE_uint32(apply_worker_num, 128, "raft apply worker num");
+DEFINE_uint64(apply_worker_max_pending_num, 1024, "raft apply worker num");
 
 DEFINE_uint32(coordinator_service_worker_num, 32, "service worker num");
 DEFINE_uint64(coordinator_service_worker_max_pending_num, 1024, "service worker num");
@@ -127,8 +132,6 @@ namespace bthread {
 DECLARE_int32(bthread_concurrency);
 
 }  // namespace bthread
-
-DECLARE_int32(task_group_ntags);
 
 // Get server location from config
 dingodb::pb::common::Location GetServerLocation(std::shared_ptr<dingodb::Config> config) {
@@ -451,9 +454,6 @@ void SetupSignalHandler() {
 
 // Modify gflag variable
 bool SetBrpcFlag() {
-  // set bthread group num
-  FLAGS_task_group_ntags = 2;
-
   // Open bvar multi dimesion metrics.
   bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number =
       std::max(bvar::FLAGS_bvar_max_dump_multi_dimension_metric_number, 20000);
@@ -467,19 +467,6 @@ int32_t GetBthreadWorkerThreadNum() {
 
   if (num <= 0) {
     double ratio = dingodb::ConfigHelper::GetWorkerThreadRatio();
-    if (ratio > 0) {
-      num = std::round(ratio * static_cast<double>(dingodb::Helper::GetCoreNum()));
-    }
-  }
-
-  return std::max(num, kPerGroupMinWorkerThreadNum);
-}
-
-int32_t GetRaftBthreadWorkerThreadNum() {
-  int32_t num = dingodb::ConfigHelper::GetRaftWorkerThreadNum();
-
-  if (num <= 0) {
-    double ratio = dingodb::ConfigHelper::GetRaftWorkerThreadRatio();
     if (ratio > 0) {
       num = std::round(ratio * static_cast<double>(dingodb::Helper::GetCoreNum()));
     }
@@ -669,13 +656,10 @@ int main(int argc, char *argv[]) {
 
   // get bthread worker thread num
   int32_t worker_thread_num = GetBthreadWorkerThreadNum();
-  // get raft bthread worker thread num
-  int32_t raft_worker_thread_num = GetRaftBthreadWorkerThreadNum();
 
-  DINGO_LOG(INFO) << fmt::format("worker_thread_num({})  raft_worker_thread_num({})", worker_thread_num,
-                                 raft_worker_thread_num);
+  DINGO_LOG(INFO) << fmt::format("worker_thread_num({})", worker_thread_num);
 
-  bthread::FLAGS_bthread_concurrency = kPerGroupMinWorkerThreadNum * 2;
+  bthread::FLAGS_bthread_concurrency = worker_thread_num;
 
   if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {
     if (!dingo_server.InitLogStorageManager()) {
@@ -726,15 +710,15 @@ int main(int argc, char *argv[]) {
 
     dingodb::WorkerSetPtr coordinator_worker_set = dingodb::SimpleWorkerSet::New(
         "coor_wkr", FLAGS_coordinator_service_worker_num, FLAGS_coordinator_service_worker_max_pending_num,
-        FLAGS_coor_worker_set_use_pthread);
+        FLAGS_coor_worker_set_use_pthread, false);
     if (!coordinator_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init CoordinatorService PriorWorkerSet failed!";
       return -1;
     }
 
-    dingodb::WorkerSetPtr meta_worker_set =
-        dingodb::SimpleWorkerSet::New("meta_wkr", FLAGS_meta_service_worker_num,
-                                      FLAGS_meta_service_worker_max_pending_num, FLAGS_meta_worker_set_use_pthread);
+    dingodb::WorkerSetPtr meta_worker_set = dingodb::SimpleWorkerSet::New("meta_wkr", FLAGS_meta_service_worker_num,
+                                                                          FLAGS_meta_service_worker_max_pending_num,
+                                                                          FLAGS_meta_worker_set_use_pthread, false);
     if (!meta_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init MetaService PriorWorkerSet failed!";
       return -1;
@@ -742,7 +726,7 @@ int main(int argc, char *argv[]) {
 
     dingodb::WorkerSetPtr version_worker_set = dingodb::SimpleWorkerSet::New(
         "version_wkr", FLAGS_version_service_worker_num, FLAGS_version_service_worker_max_pending_num,
-        FLAGS_version_worker_set_use_pthread);
+        FLAGS_version_worker_set_use_pthread, false);
     if (!version_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Init VersionService PriorWorkerSet failed!";
       return -1;
@@ -829,8 +813,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    options.bthread_tag = 1;
-    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -881,22 +863,32 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr read_worker_set = dingodb::SimpleWorkerSet::New(
-        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread);
+        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread, false);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init StoreServiceRead PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service read WorkerSet failed!";
       return -1;
     }
     store_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetStoreServiceReadWorkerSet(read_worker_set);
 
-    dingodb::WorkerSetPtr write_worker_set = dingodb::SimpleWorkerSet::New(
-        "write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num, FLAGS_write_worker_set_use_pthread);
+    dingodb::WorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_write_worker_set_use_pthread, false);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init StoreServiceWrite PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service write WorkerSet failed!";
       return -1;
     }
     store_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetStoreServiceWriteWorkerSet(write_worker_set);
+
+    dingodb::WorkerSetPtr apply_worker_set =
+        dingodb::SimpleWorkerSet::New("apply_wkr", FLAGS_apply_worker_num, FLAGS_apply_worker_max_pending_num,
+                                      FLAGS_apply_worker_set_use_pthread, FLAGS_enable_apply_worker_inplace_run);
+    if (!apply_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init raft apply WorkerSet failed!";
+      return -1;
+    }
+    dingo_server.SetApplyWorkerSet(apply_worker_set);
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
@@ -985,8 +977,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    options.bthread_tag = 1;
-    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1005,23 +995,33 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr read_worker_set = dingodb::SimpleWorkerSet::New(
-        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread);
+        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread, false);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service read PriorWorkerSet failed!";
       return -1;
     }
     index_service.SetReadWorkSet(read_worker_set);
     util_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
-    dingodb::WorkerSetPtr write_worker_set = dingodb::SimpleWorkerSet::New(
-        "write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num, FLAGS_write_worker_set_use_pthread);
+    dingodb::WorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_write_worker_set_use_pthread, false);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service write PriorWorkerSet failed!";
       return -1;
     }
     index_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
+
+    dingodb::WorkerSetPtr apply_worker_set =
+        dingodb::SimpleWorkerSet::New("apply_wkr", FLAGS_apply_worker_num, FLAGS_apply_worker_max_pending_num,
+                                      FLAGS_apply_worker_set_use_pthread, FLAGS_enable_apply_worker_inplace_run);
+    if (!apply_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init raft apply WorkerSet failed!";
+      return -1;
+    }
+    dingo_server.SetApplyWorkerSet(apply_worker_set);
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
@@ -1131,8 +1131,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    options.bthread_tag = 1;
-    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1151,23 +1149,33 @@ int main(int argc, char *argv[]) {
     }
 
     dingodb::WorkerSetPtr read_worker_set = dingodb::SimpleWorkerSet::New(
-        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread);
+        "read_wkr", FLAGS_read_worker_num, FLAGS_read_worker_max_pending_num, FLAGS_read_worker_set_use_pthread, false);
     if (!read_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceRead PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service read PriorWorkerSet failed!";
       return -1;
     }
     document_service.SetReadWorkSet(read_worker_set);
     util_service.SetReadWorkSet(read_worker_set);
     dingo_server.SetIndexServiceReadWorkerSet(read_worker_set);
 
-    dingodb::WorkerSetPtr write_worker_set = dingodb::SimpleWorkerSet::New(
-        "write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num, FLAGS_write_worker_set_use_pthread);
+    dingodb::WorkerSetPtr write_worker_set =
+        dingodb::SimpleWorkerSet::New("write_wkr", FLAGS_write_worker_num, FLAGS_write_worker_max_pending_num,
+                                      FLAGS_write_worker_set_use_pthread, false);
     if (!write_worker_set->Init()) {
-      DINGO_LOG(ERROR) << "Init IndexServiceWrite PriorWorkerSet failed!";
+      DINGO_LOG(ERROR) << "Init service write PriorWorkerSet failed!";
       return -1;
     }
     document_service.SetWriteWorkSet(write_worker_set);
     dingo_server.SetIndexServiceWriteWorkerSet(write_worker_set);
+
+    dingodb::WorkerSetPtr apply_worker_set =
+        dingodb::SimpleWorkerSet::New("apply_wkr", FLAGS_apply_worker_num, FLAGS_apply_worker_max_pending_num,
+                                      FLAGS_apply_worker_set_use_pthread, FLAGS_enable_apply_worker_inplace_run);
+    if (!apply_worker_set->Init()) {
+      DINGO_LOG(ERROR) << "Init raft apply WorkerSet failed!";
+      return -1;
+    }
+    dingo_server.SetApplyWorkerSet(apply_worker_set);
 
     if (!dingo_server.InitCoordinatorInteraction()) {
       DINGO_LOG(ERROR) << "InitCoordinatorInteraction failed!";
@@ -1277,8 +1285,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    options.bthread_tag = 1;
-    options.num_threads = kPerGroupMinWorkerThreadNum;
     if (raft_server.Start(dingo_server.RaftListenEndpoint(), &options) != 0) {
       DINGO_LOG(ERROR) << "Fail to start raft server!";
       return -1;
@@ -1333,34 +1339,12 @@ int main(int argc, char *argv[]) {
   DINGO_LOG(INFO) << "Server is going to start on " << dingo_server.ServerListenEndpoint()
                   << ", pid_file:" << options.pid_file;
 
-  options.bthread_tag = 0;
-  options.num_threads =
-      (role != dingodb::pb::common::ClusterRole::DISKANN) ? kPerGroupMinWorkerThreadNum : worker_thread_num;
   if (brpc_server.Start(dingo_server.ServerListenEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
     return -1;
   }
   DINGO_LOG(INFO) << "Server is running on " << brpc_server.listen_address();
-
-  if (role != dingodb::pb::common::ClusterRole::DISKANN) {
-    bthread::FLAGS_bthread_concurrency = worker_thread_num + raft_worker_thread_num;
-    // add server thread
-    if (worker_thread_num > kPerGroupMinWorkerThreadNum) {
-      bthread_setconcurrency_by_tag(worker_thread_num, 0);
-    }
-
-    // add raft thread
-    if (raft_worker_thread_num > kPerGroupMinWorkerThreadNum) {
-      bthread_setconcurrency_by_tag(raft_worker_thread_num, 1);
-    }
-
-    sleep(1);
-
-    DINGO_LOG(INFO) << fmt::format("default server concurrency: {} raft server concurrency: {}",
-                                   bthread_getconcurrency_by_tag(0), bthread_getconcurrency_by_tag(1));
-  } else {
-    DINGO_LOG(INFO) << fmt::format("default server concurrency: {}", bthread_getconcurrency_by_tag(0));
-  }
+  DINGO_LOG(INFO) << fmt::format("default server concurrency: {}", bthread_getconcurrency_by_tag(0));
 
   // Wait until 'CTRL-C' is pressed. then Stop() and Join() the service
   while (!brpc::IsAskedToQuit()) {

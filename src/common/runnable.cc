@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 
 namespace dingodb {
 
@@ -165,11 +166,13 @@ std::vector<std::string> Worker::GetPendingTaskTrace() {
   return traces;
 }
 
-WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread)
+WorkerSet::WorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+                     bool is_inplace_run)
     : name_(name),
       worker_num_(worker_num),
       max_pending_task_count_(max_pending_task_count),
       use_pthread_(use_pthread),
+      is_inplace_run(is_inplace_run),
       total_task_count_metrics_(fmt::format("dingo_worker_set_{}_total_task_count", name)),
       pending_task_count_metrics_(fmt::format("dingo_worker_set_{}_pending_task_count", name)),
       queue_wait_metrics_(fmt::format("dingo_worker_set_{}_queue_wait_latency", name)),
@@ -280,8 +283,8 @@ std::vector<std::vector<std::string>> ExecqWorkerSet::GetPendingTaskTrace() {
 }
 
 SimpleWorkerSet::SimpleWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count,
-                                 bool use_pthread)
-    : WorkerSet(name, worker_num, max_pending_task_count, use_pthread) {
+                                 bool use_pthread, bool is_inplace_run)
+    : WorkerSet(name, worker_num, max_pending_task_count, use_pthread, is_inplace_run) {
   bthread_mutex_init(&mutex_, nullptr);
   bthread_cond_init(&cond_, nullptr);
 }
@@ -388,12 +391,26 @@ bool SimpleWorkerSet::Execute(TaskRunnablePtr task) {
   IncPendingTaskCount();
   IncTotalTaskCount();
 
-  bthread_mutex_lock(&mutex_);
-  tasks_.push(task);
+  // if the pending task count is less than the worker number, execute the task directly
+  // else push the task to the task queue
+  // the total count of pending task will be decreased in the worker function
+  // and the total concurrency is limited by the worker number
+  if (is_inplace_run && pending_task_count < WorkerNum()) {
+    int64_t now_time_us = Helper::TimestampUs();
 
-  bthread_mutex_unlock(&mutex_);
+    task->Run();
 
-  bthread_cond_signal(&cond_);
+    QueueRunMetrics(Helper::TimestampUs() - now_time_us);
+
+    DecPendingTaskCount();
+    Notify(WorkerEventType::kFinishTask);
+
+  } else {
+    bthread_mutex_lock(&mutex_);
+    tasks_.push(task);
+    bthread_mutex_unlock(&mutex_);
+    bthread_cond_signal(&cond_);
+  }
 
   return true;
 }
@@ -404,8 +421,9 @@ bool SimpleWorkerSet::ExecuteLeastQueue(TaskRunnablePtr task) { return Execute(t
 
 bool SimpleWorkerSet::ExecuteHashByRegionId(int64_t /*region_id*/, TaskRunnablePtr task) { return Execute(task); }
 
-PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread)
-    : WorkerSet(name, worker_num, max_pending_task_count, use_pthread) {
+PriorWorkerSet::PriorWorkerSet(std::string name, uint32_t worker_num, int64_t max_pending_task_count, bool use_pthread,
+                               bool is_inplace_run)
+    : WorkerSet(name, worker_num, max_pending_task_count, use_pthread, is_inplace_run) {
   bthread_mutex_init(&mutex_, nullptr);
   bthread_cond_init(&cond_, nullptr);
 }
@@ -511,12 +529,26 @@ bool PriorWorkerSet::Execute(TaskRunnablePtr task) {
   IncPendingTaskCount();
   IncTotalTaskCount();
 
-  bthread_mutex_lock(&mutex_);
-  tasks_.push(task);
+  // if the pending task count is less than the worker number, execute the task directly
+  // else push the task to the task queue
+  // the total count of pending task will be decreased in the worker function
+  // and the total concurrency is limited by the worker number
+  if (is_inplace_run && pending_task_count < WorkerNum()) {
+    int64_t now_time_us = Helper::TimestampUs();
 
-  bthread_mutex_unlock(&mutex_);
+    task->Run();
 
-  bthread_cond_signal(&cond_);
+    QueueRunMetrics(Helper::TimestampUs() - now_time_us);
+
+    DecPendingTaskCount();
+    Notify(WorkerEventType::kFinishTask);
+
+  } else {
+    bthread_mutex_lock(&mutex_);
+    tasks_.push(task);
+    bthread_mutex_unlock(&mutex_);
+    bthread_cond_signal(&cond_);
+  }
 
   return true;
 }

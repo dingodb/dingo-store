@@ -136,6 +136,7 @@ bool RaftStoreEngine::Recover() {
       parameter.raft_meta = raft_meta;
       parameter.region_metrics = region_metrics;
       parameter.listeners = listener_factory->Build();
+      parameter.apply_worker_set = Server::GetInstance().GetApplyWorkerSet();
 
       auto is_complete = IsCompleteRaftNode(region->Id(), parameter.log_path);
       if (!is_complete) {
@@ -188,8 +189,9 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
 
   RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
   // Build StateMachine
-  auto state_machine = std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta,
-                                                           parameter.region_metrics, parameter.listeners);
+  auto state_machine =
+      std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta, parameter.region_metrics,
+                                          parameter.listeners, parameter.apply_worker_set);
   if (!state_machine->Init()) {
     return butil::Status(pb::error::ERAFT_INIT, "State machine init failed");
   }

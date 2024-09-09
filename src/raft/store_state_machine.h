@@ -53,7 +53,8 @@ class DispatchEventTask : public TaskRunnable {
 class StoreStateMachine : public BaseStateMachine {
  public:
   explicit StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
-                             store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners);
+                             store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
+                             WorkerSetPtr worker_set);
   ~StoreStateMachine() override;
 
   static bool Init();
@@ -93,6 +94,8 @@ class StoreStateMachine : public BaseStateMachine {
   store::RaftMetaPtr raft_meta_;
 
   store::RegionMetricsPtr region_metrics_;
+
+  WorkerSetPtr worker_set_;
 
   // Protect apply serial
   bthread_mutex_t apply_mutex_;

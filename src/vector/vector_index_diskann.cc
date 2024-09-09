@@ -136,8 +136,9 @@ void VectorIndexDiskANN::InitWorkSet() {
       return;
     }
 
-    diskann_server_build_worker_set = SimpleWorkerSet::New("diskann_build", FLAGS_diskann_server_build_worker_num,
-                                                           FLAGS_diskann_server_build_worker_max_pending_num, false);
+    diskann_server_build_worker_set =
+        SimpleWorkerSet::New("diskann_build", FLAGS_diskann_server_build_worker_num,
+                             FLAGS_diskann_server_build_worker_max_pending_num, false, false);
     if (!diskann_server_build_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Failed to init build worker set";
       return;
@@ -158,8 +159,9 @@ void VectorIndexDiskANN::InitWorkSet() {
       return;
     }
 
-    diskann_server_load_worker_set = SimpleWorkerSet::New("diskann_load", FLAGS_diskann_server_load_worker_num,
-                                                          FLAGS_diskann_server_load_worker_max_pending_num, false);
+    diskann_server_load_worker_set =
+        SimpleWorkerSet::New("diskann_load", FLAGS_diskann_server_load_worker_num,
+                             FLAGS_diskann_server_load_worker_max_pending_num, false, false);
     if (!diskann_server_load_worker_set->Init()) {
       DINGO_LOG(ERROR) << "Failed to init load worker set";
       return;
