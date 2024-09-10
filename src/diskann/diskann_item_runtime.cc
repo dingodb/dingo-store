@@ -40,9 +40,9 @@ namespace dingodb {
 
 bool DiskANNItemRuntime::Init() {
   // init import worker set
-  import_worker_set =
-      SimpleWorkerSet::New("diskann_import", FLAGS_diskann_import_worker_num,
-                           FLAGS_diskann_import_worker_max_pending_num, FLAGS_use_pthread_diskann_import_worker_set);
+  import_worker_set = SimpleWorkerSet::New("diskann_import", FLAGS_diskann_import_worker_num,
+                                           FLAGS_diskann_import_worker_max_pending_num,
+                                           FLAGS_use_pthread_diskann_import_worker_set, false);
   if (!import_worker_set->Init()) {
     DINGO_LOG(ERROR) << "Failed to init import worker set";
     return false;
@@ -53,7 +53,7 @@ bool DiskANNItemRuntime::Init() {
   // init build worker set
   build_worker_set =
       SimpleWorkerSet::New("diskann_build", FLAGS_diskann_build_worker_num, FLAGS_diskann_build_worker_max_pending_num,
-                           FLAGS_use_pthread_diskann_build_worker_set);
+                           FLAGS_use_pthread_diskann_build_worker_set, false);
   if (!build_worker_set->Init()) {
     DINGO_LOG(ERROR) << "Failed to init build worker set";
     return false;
@@ -63,7 +63,7 @@ bool DiskANNItemRuntime::Init() {
   // init load worker set
   load_worker_set =
       SimpleWorkerSet::New("diskann_load", FLAGS_diskann_load_worker_num, FLAGS_diskann_load_worker_max_pending_num,
-                           FLAGS_use_pthread_diskann_load_worker_set);
+                           FLAGS_use_pthread_diskann_load_worker_set, false);
   if (!load_worker_set->Init()) {
     DINGO_LOG(ERROR) << "Failed to init load worker set";
     return false;
@@ -72,9 +72,9 @@ bool DiskANNItemRuntime::Init() {
   num_bthreads += (FLAGS_use_pthread_diskann_load_worker_set ? 0 : FLAGS_diskann_load_worker_num);
 
   // init search worker Set
-  search_worker_set =
-      SimpleWorkerSet::New("diskann_search", FLAGS_diskann_search_worker_num,
-                           FLAGS_diskann_search_worker_max_pending_num, FLAGS_use_pthread_diskann_search_worker_set);
+  search_worker_set = SimpleWorkerSet::New("diskann_search", FLAGS_diskann_search_worker_num,
+                                           FLAGS_diskann_search_worker_max_pending_num,
+                                           FLAGS_use_pthread_diskann_search_worker_set, false);
   if (!search_worker_set->Init()) {
     DINGO_LOG(ERROR) << "Failed to init search worker set";
     return false;
@@ -84,7 +84,7 @@ bool DiskANNItemRuntime::Init() {
   // init misc worker set
   misc_worker_set =
       SimpleWorkerSet::New("diskann_misc", FLAGS_diskann_misc_worker_num, FLAGS_diskann_misc_worker_max_pending_num,
-                           FLAGS_use_pthread_diskann_misc_worker_set);
+                           FLAGS_use_pthread_diskann_misc_worker_set, false);
   if (!misc_worker_set->Init()) {
     DINGO_LOG(ERROR) << "Failed to init misc worker set";
     return false;

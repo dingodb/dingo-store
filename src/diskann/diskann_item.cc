@@ -951,8 +951,8 @@ butil::Status DiskANNItem::DoBuildInternal(std::shared_ptr<Context> ctx, bool fo
     return status;
   }
 
-  // write empty nodata file
-  NoDataSymbolCreate();
+  // delete empty nodata file
+  NoDataSymbolDelete();
 
   is_error_occurred = false;
 
