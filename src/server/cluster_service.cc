@@ -152,6 +152,7 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
   table_header.push_back("RESOURCE_TAG");
   table_header.push_back("CREATE_TIME");
   table_header.push_back("UPDATE_TIME");
+  table_header.push_back("CLUSTER_NAME");
 
   std::vector<int32_t> min_widths;
 
@@ -162,13 +163,13 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
   min_widths.push_back(15);  // RESOURCE_TAG
   min_widths.push_back(20);  // CREATE_TIME
   min_widths.push_back(30);  // UPDATE_TIME
-
+  min_widths.push_back(30);  // CLUSTER_NAME
   std::vector<std::vector<std::string>> table_contents;
   std::vector<std::vector<std::string>> table_urls;
 
   pb::common::ExecutorMap executor_map;
   // means all executors
-  std::string cluster_name = "";  
+  std::string cluster_name = "";
   coordinator_controller_->GetExecutorMap(executor_map, cluster_name);
 
   for (const auto& executor : executor_map.executors()) {
@@ -185,7 +186,7 @@ void ClusterStatImpl::PrintExecutors(std::ostream& os, bool use_html) {
     }
     line.push_back(Helper::FormatMsTime(executor.create_timestamp(), "%Y-%m-%d %H:%M:%S"));
     line.push_back(Helper::FormatMsTime(executor.last_seen_timestamp(), "%Y-%m-%d %H:%M:%S"));
-
+    line.push_back(executor.cluster_name());
     table_contents.push_back(line);
   }
 
