@@ -41,6 +41,7 @@
 namespace dingodb {
 
 DEFINE_int32(executor_heartbeat_timeout, 30, "executor heartbeat timeout in seconds");
+DEFINE_int32(executor_delete_after_heartbeat_timeout, 300, "delete executor after heartbeat timeout in seconds");
 DEFINE_int32(store_heartbeat_timeout, 30, "store heartbeat timeout in seconds");
 DEFINE_int32(region_heartbeat_timeout, 30, "region heartbeat timeout in seconds");
 DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after deleted time in seconds");
@@ -395,6 +396,9 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   pb::common::ExecutorMap executor_map_temp;
   // means all executors
   std::string cluster_name = "";
+
+  int64_t cluster_id = 1;
+  pb::coordinator_internal::MetaIncrement meta_increment;
   coordinator_control->GetExecutorMap(executor_map_temp, cluster_name);
   for (const auto& it : executor_map_temp.executors()) {
     if (it.state() == pb::common::ExecutorState::EXECUTOR_NORMAL) {
@@ -404,10 +408,23 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
         continue;
       }
     } else {
-      continue;
+      if (it.state() == pb::common::ExecutorState::EXECUTOR_OFFLINE) {
+        if (it.last_seen_timestamp() + (FLAGS_executor_delete_after_heartbeat_timeout * 1000) <
+            butil::gettimeofday_ms()) {
+          DINGO_LOG(INFO) << "CoordinatorUpdateState... delete executor " << it.id();
+          auto status = coordinator_control->DeleteExecutor(cluster_id, it, meta_increment);
+          if (!status.ok()) {
+            DINGO_LOG(WARNING) << "CoordinatorUpdateState... delete executor " << it.id()
+                               << " failed, error_msg:" << status.error_str();
+          }
+          continue;
+        }
+      }
     }
   }
-
+  if (meta_increment.ByteSizeLong() > 0) {
+    coordinator_control->SubmitMetaIncrementSync(meta_increment);
+  }
   // RegionHeartbeatState will deprecated in future
   // coordinator_control->UpdateRegionState();
 
