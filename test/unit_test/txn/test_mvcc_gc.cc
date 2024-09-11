@@ -43,6 +43,7 @@
 #include "server/server.h"
 
 // open ENABLE_GC_MOCK macro !!!!!!!!!
+// ENABLE_GC_MOCK macro in common/context.h
 
 DECLARE_string(role);
 

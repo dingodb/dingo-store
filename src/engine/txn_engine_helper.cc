@@ -59,6 +59,7 @@ DEFINE_int64(max_pessimistic_count, 4096, "max pessimistic count");
 DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
 DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
+DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
@@ -3867,7 +3868,7 @@ butil::Status TxnEngineHelper::DeleteRange(RawEnginePtr /*raw_engine*/, std::sha
 
 butil::Status TxnEngineHelper::Gc(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, int64_t safe_point_ts) {
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
       << fmt::format("[txn_gc][region({})] Gc, safe_point_ts: {}", ctx->RegionId(), safe_point_ts)
       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString();
 
@@ -3951,9 +3952,10 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
   int64_t start_time_ms = Helper::TimestampMs();
   int64_t end_time_ms = 0;
   int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
   int64_t region_id = ctx->RegionId();
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][txn] start region start_key: {} end_key: {} "
       "safe_point_ts : {}",
       gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
@@ -3997,6 +3999,7 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
   std::string last_write_key;
 
   while (write_iter->Valid()) {
+    total_iter_count++;
     std::string_view write_iter_key = write_iter->Key();
     std::string_view write_iter_value = write_iter->Value();
 
@@ -4080,7 +4083,7 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
                   gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type),
                   Helper::StringToHex(data_key), Helper::StringToHex(write_key), write_info.start_ts(),
                   status.error_cstr(), write_info.ShortDebugString());
-              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << s;
+              DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
             } else {  // other error
               std::string s = fmt::format(
                   "[txn_gc][data][tenant({})][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
@@ -4136,7 +4139,7 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
     if ((kv_deletes_lock.size() + kv_deletes_write.size() + kv_deletes_data.size()) >= FLAGS_gc_delete_batch_count) {
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})][type({})][txn] gc_stop set stop.  start_key : {} end_key : {}. return",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
             Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
@@ -4144,7 +4147,7 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
       }
 
       if (safe_point_ts < internal_safe_point_ts) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
             "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
@@ -4156,7 +4159,6 @@ butil::Status TxnEngineHelper::DoGcCoreTxn(RawEnginePtr raw_engine, std::shared_
                           safe_point_ts, kv_deletes_lock, kv_deletes_data, kv_deletes_write, lock_start_key,
                           lock_end_key, last_lock_start_key, last_lock_end_key);
     }
-
     write_iter->Next();
   }
 
@@ -4164,14 +4166,14 @@ _interrupt1:
 
   auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
   if (internal_gc_stop) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
         << fmt::format("[txn_gc][tenant({})][region({})][type({})][txn] set internal_gc_stop stop, return",
                        gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
     goto _interrupt2;
   }
 
   if (safe_point_ts < internal_safe_point_ts) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
         "[txn_gc][tenant({})][region({})][type({})][txn] current safe_point_ts : {}. newest safe_point_ts : {}. "
         "Don't worry, we'll deal with it next time. ignore.",
         gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
@@ -4186,11 +4188,12 @@ _interrupt1:
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][txn] end region start_key: {} end_key: {} safe_point_ts "
-      ": {} time consuming : {} ms total_delete_count : {}",
+      ": {} time consuming : {} ms total_delete_count : {} total_iter_count : {} ",
       gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
-      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count);
+      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count,
+      total_iter_count);
 
   return butil::Status();
 }
@@ -4210,9 +4213,10 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
   int64_t start_time_ms = Helper::TimestampMs();
   int64_t end_time_ms = 0;
   int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
   int64_t region_id = ctx->RegionId();
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
       "safe_point_ts : {}",
       gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
@@ -4280,6 +4284,7 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
   };
 
   while (default_iter->Valid()) {
+    total_iter_count++;
     std::string_view default_iter_key = default_iter->Key();
     std::string_view default_iter_value = default_iter->Value();
     int64_t default_ts = 0;
@@ -4382,7 +4387,7 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
          kv_deletes_scalar_speedup.size()) >= FLAGS_gc_delete_batch_count) {
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})][type({})][nontxn] gc_stop set stop.  start_key : {} end_key : {}. return",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
             Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
@@ -4390,7 +4395,7 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
       }
 
       if (safe_point_ts < internal_safe_point_ts) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : {}. "
             "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
@@ -4410,7 +4415,7 @@ _interrupt1:
 
   auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
   if (internal_gc_stop) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
         << fmt::format("[txn_gc][tenant({})][region({})][type({})][nontxn] set internal_gc_stop stop, return",
                        gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type));
 
@@ -4418,7 +4423,7 @@ _interrupt1:
   }
 
   if (safe_point_ts < internal_safe_point_ts) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
         "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : {}. "
         "Don't worry, we'll deal with it next time. ignore.",
         gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
@@ -4433,12 +4438,13 @@ _interrupt1:
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
       "[txn_gc][statics][tenant({})][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
       "safe_point_ts "
-      ": {} time  consuming : {} ms total_delete_count : {}",
+      ": {} time  consuming : {} ms total_delete_count : {} total_iter_count : {}",
       gc_safe_point->GetTenantId(), region_id, pb::common::RegionType_Name(type), Helper::StringToHex(region_start_key),
-      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count);
+      Helper::StringToHex(region_end_key), safe_point_ts, (end_time_ms - start_time_ms), total_delete_count,
+      total_iter_count);
 
   return butil::Status();
 }
@@ -4587,7 +4593,7 @@ butil::Status TxnEngineHelper::CheckLockForTxnGc(RawEngine::ReaderPtr reader, st
       "safe_point_ts : {} total : {} success : {} failed : {}",
       tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(start_key),
       Helper::StringToHex(end_key), safe_point_ts, total_count, (total_count - failed_count), failed_count);
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << s;
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << s;
 
   return butil::Status();
 }
@@ -4870,7 +4876,7 @@ void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
   static std::atomic<bool> g_regular_update_safe_point_ts_handler_running(false);
 
   if (g_regular_update_safe_point_ts_handler_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
         << "RegularUpdateSafePointTsHandler... g_regular_update_safe_point_ts_handler_running is true, return";
     return;
   }
@@ -4896,7 +4902,7 @@ void TxnEngineHelper::RegularUpdateSafePointTsHandler(void * /*arg*/) {
     return;
   }
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
       << fmt::format("[GetGCSafePoint] response size({}) elapsed time({} ms) response : {}", response.ByteSizeLong(),
                      Helper::TimestampMs() - start_time, response.ShortDebugString());
 
@@ -4934,12 +4940,15 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   static std::atomic<bool> g_regular_do_gc_handler_running(false);
 
   if (g_regular_do_gc_handler_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
         << "RegularUpdateSafePointTsHandler... g_regular_do_gc_handler_running is true, return";
     return;
   }
 
   AtomicGuard guard(g_regular_do_gc_handler_running);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task start.");
+
   std::shared_ptr<StoreMetaManager> store_meta_manager = Server::GetInstance().GetStoreMetaManager();
 
   std::shared_ptr<GCSafePointManager> gc_safe_point_manager = store_meta_manager->GetGCSafePointManager();
@@ -4955,17 +4964,23 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   }
 
   if (all_gc_stop) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn_gc] set gc_flag stop, return.");
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] set gc_flag stop, return.");
     for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
           "[txn_gc][tenant({})][safe_point_ts({})] set gc_flag stop, return.", tenant_id, safe_point_ts_pair.second);
     }
     return;
   }
 
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] tenant size : {}", safe_point_ts_group.size());
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] =====================================");
+
   for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
     if (iter->second.second <= 0) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
           "[txn_gc][tenant({})][safe_point_ts({})] <= 0, ignore. return.", iter->first, iter->second.second);
       gc_safe_point_manager->RemoveSafePoint(iter->first);
       iter = safe_point_ts_group.erase(iter);
@@ -4975,17 +4990,19 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   }
 
   for (auto [tenant_id, safe_point_ts_pair] : safe_point_ts_group) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
         << fmt::format("[txn_gc][tenant({})][safe_point_ts({})] gc task start.", tenant_id, safe_point_ts_pair.second);
     gc_safe_point_manager->SetGcStop(tenant_id, false);
   }
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
+      << fmt::format("[txn_gc] =====================================");
 
 #if defined(ENABLE_TXN_GC_REMEMBER_LAST_ACCOMPLISHED_SAFE_POINT_TS)
   for (auto iter = safe_point_ts_group.begin(); iter != safe_point_ts_group.end();) {
     auto gc_safe_point = gc_safe_point_manager->FindSafePoint(iter->first);
     int64_t last_accomplished_safe_point_ts = gc_safe_point->GetLastAccomplishedSafePointTs();
     if (last_accomplished_safe_point_ts >= safe_point_ts_pair.second) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
           << fmt::format("[txn_gc][tenant({})][safe_point_ts({})] already accomplished. ignore", iter->first,
                          safe_point_ts_pair.second);
       gc_safe_point_manager->RemoveSafePoint(iter->first);
@@ -4997,7 +5014,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 #endif
 
   if (safe_point_ts_group.empty()) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn_gc] tenant_ids empty, return.");
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] tenant_ids empty, return.");
     return;
   }
 
@@ -5030,7 +5047,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
        });
 
   for (auto &region_ptr : leader_region_ptrs) {
-    if (FLAGS_dingo_log_switch_txn_detail) {
+    if (FLAGS_dingo_log_switch_txn_gc_detail) {
       auto definition = region_ptr->Definition();
       int64_t tenant_id = definition.tenant_id();
       DINGO_LOG(INFO) << fmt::format("[txn_gc][tenant({})][region({})]  start_key : {} end_key : {}", tenant_id,
@@ -5049,14 +5066,14 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
     status = storage->ValidateLeader(region_ptr);
     if (!status.ok()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
           << fmt::format("[txn_gc][tenant({})][region({})]  is not leader yet. start_key : {} end_key : {}. ignore.",
                          tenant_id, region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
                          Helper::StringToHex(region_ptr->Range().end_key()));
       continue;
     } else {
       if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
-        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
             "[txn_gc][tenant({})][region({})] is leader. but state is not normal : {}.  start_key : {} end_key : {}.  "
             "ignore.",
             tenant_id, region_ptr->Id(), static_cast<int>(region_ptr->State()),
@@ -5069,7 +5086,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     auto gc_safe_point = gc_safe_point_manager->FindSafePoint(tenant_id);
 
     if (internal_gc_stop) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
           "[txn_gc][tenant({})][region({})] set internal_gc_stop stop,  start_key : {} end_key : {} ignore.", tenant_id,
           region_ptr->Id(), Helper::StringToHex(region_ptr->Range().start_key()),
           Helper::StringToHex(region_ptr->Range().end_key()));
@@ -5080,7 +5097,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     auto safe_point_ts = safe_point_ts_group[tenant_id].second;
 
     if (safe_point_ts < internal_safe_point_ts) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
           "[txn_gc][tenant({})][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll "
           "deal with it next time. ignore.",
           tenant_id, region_ptr->Id(), safe_point_ts, internal_safe_point_ts);
@@ -5102,7 +5119,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     status = writer->TxnGc(ctx, safe_point_ts);
 
     if (gc_safe_point->GetGcStop()) {
-      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail)
           << fmt::format("[txn_gc][tenant({})][region({})]  gc_stop stopped,  start_key : {} end_key : {}. ignore.",
                          tenant_id, ctx->RegionId(), Helper::StringToHex(region_ptr->Range().start_key()),
                          Helper::StringToHex(region_ptr->Range().end_key()));
@@ -5114,7 +5131,7 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 #endif
   }
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format("[txn_gc] gc task end.");
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task end.");
 }
 
 }  // namespace dingodb
