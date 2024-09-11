@@ -4049,12 +4049,13 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
                                                             // raft_location & state
 
         // only update server_location & raft_location & state &
-        // last_seen_timestamp
+        // last_seen_timestamp & cluster_name & leaeder_id
         *(executor_increment_executor->mutable_server_location()) = executor.server_location();
         executor_increment_executor->set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
         executor_increment_executor->set_last_seen_timestamp(butil::gettimeofday_ms());
         executor_increment_executor->set_create_timestamp(butil::gettimeofday_ms());
         executor_increment_executor->set_cluster_name(executor.cluster_name());
+        executor_increment_executor->set_leader_id(executor.leader_id());
       } else {
         // this is normall heartbeat,
         // so only need to update state & last_seen_timestamp, no need to
@@ -4078,6 +4079,7 @@ int64_t CoordinatorControl::UpdateExecutorMap(const pb::common::Executor& execut
         executor_to_update.set_state(pb::common::ExecutorState::EXECUTOR_NORMAL);
         executor_to_update.set_last_seen_timestamp(butil::gettimeofday_ms());
         executor_to_update.set_cluster_name(executor.cluster_name());
+        executor_to_update.set_leader_id(executor.leader_id());
         executor_map_.Put(executor.id(), executor_to_update);
       }
     } else {

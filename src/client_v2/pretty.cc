@@ -1378,6 +1378,7 @@ void Pretty::Show(dingodb::pb::coordinator::GetExecutorMapResponse& response) {
       ftxui::paragraph("CreateTime"),
       ftxui::paragraph("LastSeenTime"),
       ftxui::paragraph("ClusterName"),
+      ftxui::paragraph("LeaderId"),
   }};
   const auto& executor_map = response.executormap().executors();
   if (response.executormap().executors_size() == 0) {
@@ -1394,6 +1395,7 @@ void Pretty::Show(dingodb::pb::coordinator::GetExecutorMapResponse& response) {
         ftxui::paragraph(dingodb::Helper::FormatMsTime(executor.create_timestamp())),
         ftxui::paragraph(dingodb::Helper::FormatMsTime(executor.last_seen_timestamp())),
         ftxui::paragraph(fmt::format("{}", executor.cluster_name())),
+        ftxui::paragraph(fmt::format("{}", executor.leader_id())),
     };
     rows.push_back(row);
   }
