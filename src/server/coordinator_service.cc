@@ -1272,6 +1272,18 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     return;
   }
 
+  // validate index definition,only check index_parameter
+  if (region_type == pb::common::RegionType::INDEX_REGION || region_type == pb::common::RegionType::DOCUMENT_REGION) {
+    auto status = coordinator_control->ValidateRegionDefinition(region_name, index_parameter);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "CreateRegion failed ValidateRegionDefinition, error code=" << status.error_code()
+                       << ", error str=" << status.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(pb::error::Errno::EILLEGAL_PARAMTETERS));
+      response->mutable_error()->set_errmsg(status.error_str());
+      return;
+    }
+  }
+
   butil::Status ret = butil::Status::OK();
   if (split_from_region_id > 0) {
     ret = coordinator_control->CreateRegionForSplit(region_name, region_type, resource_tag, range, split_from_region_id,
