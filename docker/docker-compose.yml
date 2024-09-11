@@ -203,5 +203,6 @@ services:
       INDEX_RAFT_START_PORT: 24101
       INDEX_SERVER_START_PORT: 24001
       INDEX_INSTANCE_START_ID: 1301
+      DEFAULT_REPLICA_NUM: 1
       <<: *shared-env  
   
