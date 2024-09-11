@@ -19,7 +19,7 @@ jobs:
     container: dingodatabase/dingo-store-rocky-9-dev:latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set Safe Dir
       run: git config --global --add safe.directory $PWD

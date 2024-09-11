@@ -19,7 +19,7 @@ jobs:
     container: dingodatabase/dingo-store-rocky-8-dev:latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set Safe Dir
       run: git config --global --add safe.directory $PWD
@@ -44,7 +44,7 @@ jobs:
         tar -czvf dingo-store.tar.gz  scripts build/bin/dingodb* conf/ 
 
     - name: copy artifactory to another workflow
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
           name: dingo-store.tar.gz
           path: ./dingo-store.tar.gz
