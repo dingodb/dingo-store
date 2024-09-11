@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -43,6 +44,7 @@
 #include "proto/meta.pb.h"
 #include "server/server.h"
 #include "tantivy_search.h"
+#include "vector/vector_index_hnsw.h"
 #include "vector/vector_index_utils.h"
 
 namespace dingodb {
@@ -1013,14 +1015,22 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
 
       // check if json_parameter is consistent with scalar_schema
       for (const auto& field : scalar_schema.fields()) {
+        // compatible executor
+        std::string lower_str = field.key();
+        std::transform(lower_str.begin(), lower_str.end(), lower_str.begin(),
+                       [](char const& c) { return std::tolower(c); });
+
         if (column_tokenizer_parameter.find(field.key()) == column_tokenizer_parameter.end()) {
-          std::string error_msg =
-              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}", field.key());
-          DINGO_LOG(ERROR) << error_msg;
-          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+          if (column_tokenizer_parameter.find(lower_str) == column_tokenizer_parameter.end()) {
+            std::string error_msg =
+                fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}", field.key());
+            DINGO_LOG(ERROR) << error_msg;
+            return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+          }
         }
 
-        if (column_tokenizer_parameter[field.key()] == dingodb::TokenizerType::kTokenizerTypeUnknown) {
+        if ((column_tokenizer_parameter[field.key()] == dingodb::TokenizerType::kTokenizerTypeUnknown) &&
+            (column_tokenizer_parameter[lower_str] == dingodb::TokenizerType::kTokenizerTypeUnknown)) {
           std::string error_msg = fmt::format(
               "json_parameter is not consistent with scalar_schema, field_name:{}, type unknown", field.key());
           DINGO_LOG(ERROR) << error_msg;
@@ -1029,7 +1039,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
 
         switch (field.field_type()) {
           case pb::common::ScalarFieldType::BYTES:
-            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeBytes) {
+            if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeBytes) &&
+                (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeBytes)) {
               std::string error_msg = fmt::format(
                   "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:BYTES vs {}",
                   field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
@@ -1038,7 +1049,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
             }
             break;
           case pb::common::ScalarFieldType::STRING:
-            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeText) {
+            if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeText) &&
+                (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeText)) {
               std::string error_msg = fmt::format(
                   "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:STRING vs {}",
                   field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
@@ -1047,7 +1059,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
             }
             break;
           case pb::common::ScalarFieldType::INT64:
-            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeI64) {
+            if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeI64) &&
+                (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeI64)) {
               std::string error_msg = fmt::format(
                   "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:INT64 vs {}",
                   field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
@@ -1056,7 +1069,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
             }
             break;
           case pb::common::ScalarFieldType::DOUBLE:
-            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeF64) {
+            if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeF64) &&
+                (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeF64)) {
               std::string error_msg = fmt::format(
                   "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:DOUBLE vs {}",
                   field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
@@ -1065,7 +1079,8 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
             }
             break;
           case pb::common::ScalarFieldType::DATETIME:
-            if (column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeDateTime) {
+            if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeDateTime) &&
+                (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeDateTime)) {
               std::string error_msg = fmt::format(
                   "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:datetime vs {}",
                   field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
@@ -1120,6 +1135,26 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
   return butil::Status::OK();
 }
 
+butil::Status CoordinatorControl::ValidateRegionDefinition(const std::string& region_name,
+                                                           pb::common::IndexParameter& index_parameter) {
+  if (index_parameter.vector_index_parameter().vector_index_type() ==
+      pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW) {
+    auto* hnsw_parameter = index_parameter.mutable_vector_index_parameter()->mutable_hnsw_parameter();
+    auto ret1 = VectorIndexHnsw::CheckAndSetHnswParameter(*hnsw_parameter);
+    if (!ret1.ok()) {
+      return ret1;
+    }
+  }
+
+  pb::meta::TableDefinition table_definition;
+  table_definition.set_name(region_name);
+  *(table_definition.mutable_index_parameter()) = index_parameter;
+  auto status = ValidateIndexDefinition(table_definition);
+  if (!status.ok()) {
+    return status;
+  }
+  return butil::Status::OK();
+}
 // CreateIndex
 // in: schema_id, table_definition
 // out: new_index_id, new_region_ids meta_increment

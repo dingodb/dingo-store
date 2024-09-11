@@ -382,6 +382,8 @@ class CoordinatorControl : public MetaControl {
   // return: errno
   static butil::Status ValidateIndexDefinition(pb::meta::TableDefinition &table_definition);
   static butil::Status ValidateScalarIndexParameter(const pb::common::ScalarIndexParameter &scalar_index_parameter);
+  static butil::Status ValidateRegionDefinition(const std::string &region_name,
+                                                pb::common::IndexParameter &index_parameter);
 
   butil::Status ValidateMaxTableCount();
   butil::Status ValidateMaxIndexCount();
