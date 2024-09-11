@@ -399,6 +399,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
 
   int64_t cluster_id = 1;
   pb::coordinator_internal::MetaIncrement meta_increment;
+
   coordinator_control->GetExecutorMap(executor_map_temp, cluster_name);
   for (const auto& it : executor_map_temp.executors()) {
     if (it.state() == pb::common::ExecutorState::EXECUTOR_NORMAL) {
@@ -411,12 +412,12 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
       if (it.state() == pb::common::ExecutorState::EXECUTOR_OFFLINE) {
         if (it.last_seen_timestamp() + (FLAGS_executor_delete_after_heartbeat_timeout * 1000) <
             butil::gettimeofday_ms()) {
-          DINGO_LOG(INFO) << "CoordinatorUpdateState... delete executor " << it.id();
           auto status = coordinator_control->DeleteExecutor(cluster_id, it, meta_increment);
           if (!status.ok()) {
             DINGO_LOG(WARNING) << "CoordinatorUpdateState... delete executor " << it.id()
                                << " failed, error_msg:" << status.error_str();
           }
+          DINGO_LOG(INFO) << "CoordinatorUpdateState... delete executor " << it.id();
           continue;
         }
       }
