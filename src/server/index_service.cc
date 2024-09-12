@@ -2211,6 +2211,11 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   auto stream_meta = request->stream_meta();
   if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
   auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ESTREAM_EXPIRED,
+                            fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+    return;
+  }
 
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
