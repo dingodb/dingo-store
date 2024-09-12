@@ -25,7 +25,7 @@
 
 namespace dingodb {
 
-DEFINE_uint32(stream_expire_interval_ms, 10000, "stream expire interval");
+DEFINE_uint32(stream_expire_interval_ms, 60000, "stream expire interval");
 DEFINE_int64(stream_message_max_bytes, 60 * 1024 * 1024, "stream message max bytes");
 DEFINE_int64(stream_message_max_limit_size, 40960, "stream message max line size");
 
@@ -100,6 +100,8 @@ StreamPtr StreamManager::GetOrNew(const pb::stream::StreamRequestMeta& stream_me
   auto stream = GetStream(stream_meta.stream_id());
   if (stream != nullptr) {
     return stream;
+  } else if (!stream_meta.stream_id().empty()) {
+    return nullptr;
   }
 
   stream = Stream::New(stream_meta.limit());

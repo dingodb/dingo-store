@@ -1806,6 +1806,11 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   auto stream_meta = request->stream_meta();
   if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
   auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ESTREAM_EXPIRED,
+                            fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+    return;
+  }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
@@ -2895,6 +2900,11 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   auto stream_meta = request->stream_meta();
   if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
   auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ESTREAM_EXPIRED,
+                            fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+    return;
+  }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
