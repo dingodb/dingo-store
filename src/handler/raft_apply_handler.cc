@@ -289,7 +289,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
   to_region->SetParentId(from_region->Id());
   // Set apply max ts
-  to_region->SetAppliedMaxTs(from_region->AppliedMaxTs());
+  to_region->SetRawAppliedMaxTs(from_region->RawAppliedMaxTs());
 
   // Set txn apply max ts
   to_region->SetTxnAppliedMaxTs(from_region->TxnAppliedMaxTs());
@@ -530,7 +530,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
   child_region->SetParentId(parent_region->Id());
   // Set apply max ts
-  child_region->SetAppliedMaxTs(parent_region->AppliedMaxTs());
+  child_region->SetRawAppliedMaxTs(parent_region->RawAppliedMaxTs());
 
   // Set txn apply max ts
   child_region->SetTxnAppliedMaxTs(parent_region->TxnAppliedMaxTs());
@@ -917,8 +917,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   }
 
   // Set apply max ts
-  int64_t max_ts = std::max(target_region->AppliedMaxTs(), source_region->AppliedMaxTs());
-  target_region->SetAppliedMaxTs(max_ts);
+  int64_t raw_max_ts = std::max(target_region->RawAppliedMaxTs(), source_region->RawAppliedMaxTs());
+  target_region->SetRawAppliedMaxTs(raw_max_ts);
 
   // Set apply max ts
   int64_t txn_max_ts = std::max(target_region->TxnAppliedMaxTs(), source_region->TxnAppliedMaxTs());

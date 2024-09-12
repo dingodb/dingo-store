@@ -169,12 +169,12 @@ class Region {
     statistics_.last_serving_time_s.store(Helper::Timestamp(), std::memory_order_relaxed);
   }
 
-  void SetAppliedMaxTs(int64_t ts) {
-    if (ts > applied_max_ts_.load(std::memory_order_acquire)) {
-      applied_max_ts_.store(ts, std::memory_order_release);
+  void SetRawAppliedMaxTs(int64_t ts) {
+    if (ts > raw_applied_max_ts_.load(std::memory_order_acquire)) {
+      raw_applied_max_ts_.store(ts, std::memory_order_release);
     }
   }
-  int64_t AppliedMaxTs() { return applied_max_ts_.load(std::memory_order_acquire); }
+  int64_t RawAppliedMaxTs() { return raw_applied_max_ts_.load(std::memory_order_acquire); }
 
   void SetTxnAppliedMaxTs(int64_t ts) {
     if (ts > txn_applied_max_ts_.load(std::memory_order_acquire)) {
@@ -188,7 +188,7 @@ class Region {
   pb::store_internal::Region inner_region_;
   std::atomic<pb::common::StoreRegionState> state_;
 
-  std::atomic<int64_t> applied_max_ts_{0};
+  std::atomic<int64_t> raw_applied_max_ts_{0};
 
   std::atomic<int64_t> txn_applied_max_ts_{0};
 
