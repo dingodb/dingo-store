@@ -128,7 +128,7 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     // update apply max ts
     for (const auto& request : raft_cmd->requests()) {
       if (BAIDU_LIKELY(request.ts() > 0)) {
-        region_->SetAppliedMaxTs(request.ts());
+        region_->SetRawAppliedMaxTs(request.ts());
       }
     }
 
