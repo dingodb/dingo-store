@@ -6,6 +6,7 @@
 
 NUM_FILE=1048576
 NUM_PROC=4194304
+NUM_MAX_MAP_COUNT=655360
 
 nr_open=$(sysctl fs.nr_open|awk '{print $3}')
 echo "nr_open="${nr_open}
@@ -55,6 +56,42 @@ then
     echo "new pid_max="${pid_max}
 
     if [ ${pid_max} -lt ${NUM_PROC} ]
+    then
+        echo "increase faild, exit!"
+        exit -1
+    fi
+fi
+
+max_map_count=$(sysctl vm.max_map_count|awk '{print $3}')
+echo "max_map_count="${max_map_count}
+
+if [ ${max_map_count} -lt ${NUM_MAX_MAP_COUNT} ]
+then
+    echo "try to increase max_map_count"
+    echo "vm.max_map_count = ${NUM_MAX_MAP_COUNT}" >>  /etc/sysctl.conf
+    sysctl -p
+    max_map_count=$(sysctl vm.max_map_count|awk '{print $3}')
+    echo "new max_map_count="${max_map_count}
+
+    if [ ${max_map_count} -lt ${NUM_MAX_MAP_COUNT} ]
+    then
+        echo "increase faild, exit!"
+        exit -1
+    fi
+fi
+
+overcommit_memory=$(sysctl vm.overcommit_memory|awk '{print $3}')
+echo "overcommit_memory="${overcommit_memory}
+
+if [ ${overcommit_memory} -ne 1 ]
+then
+    echo "try to increase overcommit_memory"
+    echo "vm.overcommit_memory = 1" >>  /etc/sysctl.conf
+    sysctl -p
+    overcommit_memory=$(sysctl vm.overcommit_memory|awk '{print $3}')
+    echo "new overcommit_memory="${overcommit_memory}
+
+    if [ ${overcommit_memory} -lt ${NUM_PROC} ]
     then
         echo "increase faild, exit!"
         exit -1

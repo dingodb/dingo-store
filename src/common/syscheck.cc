@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 
 #include "common/logging.h"
@@ -58,7 +59,43 @@ static std::string ReadSysfsLine(char *path) {
   return ret_value;
 }
 
-/* Check if overcommit is enabled.
+/**
+ * Check if the max_map_count value in the system is sufficient.
+ * The max_map_count value determines the maximum number of memory map areas a process may have.
+ * This function ensures that the value is not less than 655360.
+ */
+int CheckMaxMapCount(std::string &error_msg) {
+  const std::string max_map_count_path = "/proc/sys/vm/max_map_count";
+  const int required_value = 655360;
+  int max_map_count = 0;
+
+  std::ifstream file(max_map_count_path);
+  if (!file.is_open()) {
+    DINGO_LOG(ERROR) << "Error: Unable to open " << max_map_count_path;
+    error_msg = "Unable to open " + max_map_count_path;
+    return 0;
+  }
+
+  file >> max_map_count;
+  if (file.fail()) {
+    DINGO_LOG(ERROR) << "Error: Unable to read value from " << max_map_count_path;
+    error_msg = "Unable to read value from " + max_map_count_path;
+    return 0;
+  }
+
+  if (max_map_count < required_value) {
+    DINGO_LOG(ERROR) << "Error: max_map_count (" << max_map_count << ") is less than the required value ("
+                     << required_value << ")";
+    error_msg = "max_map_count (" + std::to_string(max_map_count) + ") is less than the required value (" +
+                std::to_string(required_value) + ")";
+    return -1;
+  }
+
+  DINGO_LOG(INFO) << "max_map_count is sufficient: " << max_map_count;
+  return 1;
+}
+
+/* Check if overcommit memory is enabled.
  * When overcommit memory is disabled Linux will kill the forked child of a background save
  * if we don't have enough free memory to satisfy double the current memory usage even though
  * the forked child uses copy-on-write to reduce its actual memory usage. */
@@ -186,6 +223,7 @@ using SysCheckFunctions = struct {
 
 SysCheckFunctions sys_check_functions[] = {
 #ifdef __linux__
+    {.name = "mapmapcount", .CheckFunction = CheckMaxMapCount},
     {.name = "overcommit", .CheckFunction = CheckOvercommit},
     {.name = "THP", .CheckFunction = CheckThpEnabled},
     {.name = "nofile", .CheckFunction = CheckNofile},
