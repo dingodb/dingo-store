@@ -659,6 +659,7 @@ int main(int argc, char *argv[]) {
 
   DINGO_LOG(INFO) << fmt::format("worker_thread_num({})", worker_thread_num);
 
+  options.num_threads = worker_thread_num;
   bthread::FLAGS_bthread_concurrency = worker_thread_num;
 
   if (role == dingodb::pb::common::ClusterRole::COORDINATOR) {

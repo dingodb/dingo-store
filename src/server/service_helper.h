@@ -16,6 +16,7 @@
 #define DINGODB_SERVER_SERVICE_HELPER_H_
 
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <string_view>
 
@@ -33,7 +34,9 @@
 namespace dingodb {
 
 DECLARE_int64(service_log_threshold_time_ns);
-DECLARE_uint32(log_print_max_length);
+DECLARE_int32(log_print_max_length);
+DECLARE_bool(enable_dump_service_message);
+
 struct LatchContext;
 using LatchContextPtr = std::shared_ptr<LatchContext>;
 
@@ -82,6 +85,9 @@ class ServiceHelper {
 
   static void LatchesAcquire(LatchContext& latch_ctx, bool is_txn);
   static void LatchesRelease(LatchContext& latch_ctx);
+
+  static void DumpRequest(const std::string& name, int64_t id, const google::protobuf::Message* request);
+  static void DumpResponse(const std::string& name, int64_t id, const google::protobuf::Message* response);
 };
 
 template <typename T>
@@ -146,6 +152,7 @@ class TrackClosure : public google::protobuf::Closure {
   store::RegionPtr GetRegion() { return region; }
 
  protected:
+  int64_t dump_id;
   TrackerPtr tracker;
   store::RegionPtr region;
 };
@@ -172,7 +179,14 @@ class ServiceClosure : public TrackClosure {
         region->IncServingRequestCount();
       }
     }
+
+    // dump request
+    if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+      dump_id = Helper::TimestampNs();
+      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+    }
   }
+
   ~ServiceClosure() override = default;
 
   void Run() override;
@@ -256,6 +270,10 @@ void ServiceClosure<T, U, need_region>::Run() {
     }
   }
 
+  if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+  }
+
   if (region) {
     region->DecServingRequestCount();
     region->UpdateLastServingTime();
@@ -293,6 +311,10 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
           request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     }
   }
+
+  if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+  }
 }
 
 // Wrapper brpc service closure for log.
@@ -308,6 +330,12 @@ class CoordinatorServiceClosure : public TrackClosure {
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
+
+    // dump request
+    if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+      dump_id = Helper::TimestampNs();
+      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+    }
   }
   ~CoordinatorServiceClosure() override = default;
 
@@ -358,6 +386,10 @@ void CoordinatorServiceClosure<T, U>::Run() {
           request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
     }
   }
+
+  if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+  }
 }
 
 template <typename T, typename U>
@@ -372,6 +404,12 @@ class NoContextServiceClosure : public TrackClosure {
         response_(response) {
     DINGO_LOG(DEBUG) << fmt::format("[service.{}] Receive request: {}", method_name_,
                                     request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
+
+    // dump request
+    if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+      dump_id = Helper::TimestampNs();
+      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+    }
   }
   ~NoContextServiceClosure() override = default;
 
@@ -414,6 +452,10 @@ void NoContextServiceClosure<T, U>::Run() {
         request_->request_info().request_id(), elapsed_time,
         response_->ShortDebugString().substr(0, FLAGS_log_print_max_length),
         request_->ShortDebugString().substr(0, FLAGS_log_print_max_length));
+  }
+
+  if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
+    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
   }
 }
 

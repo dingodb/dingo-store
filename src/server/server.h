@@ -133,6 +133,7 @@ class Server {
   int64_t Id() const;
   std::string Keyring() const;
 
+  const std::string& ServiceDumpDir();
   std::string LogDir();
   std::string PidFilePath();
   std::string ServerAddr();
@@ -337,6 +338,9 @@ class Server {
 
   // log directory
   std::string log_dir_;
+
+  // service request/response dump directory
+  std::string service_dump_dir_;
 
   // Pre split checker
   std::shared_ptr<PreSplitChecker> pre_split_checker_;
