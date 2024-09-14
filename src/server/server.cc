@@ -253,6 +253,13 @@ bool Server::InitDirectory() {
     return false;
   }
 
+  service_dump_dir_ = fmt::format("{}/dump", log_dir_);
+  ret = Helper::CreateDirectories(service_dump_dir_);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "Create service dump directory failed: " << service_dump_dir_;
+    return false;
+  }
+
   return true;
 }
 
@@ -934,6 +941,8 @@ std::string Server::Keyring() const { return keyring_; }
 std::string Server::ServerAddr() { return server_addr_; }
 
 std::string Server::LogDir() { return log_dir_; }
+
+const std::string& Server::ServiceDumpDir() { return service_dump_dir_; }
 
 std::string Server::PidFilePath() { return Helper::ConcatPath(log_dir_, FLAGS_pid_file_name); }
 

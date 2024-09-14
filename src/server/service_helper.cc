@@ -25,14 +25,21 @@
 #include "document/codec.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "google/protobuf/util/json_util.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
 #include "vector/codec.h"
 
 namespace dingodb {
 
-DEFINE_int64(service_log_threshold_time_ns, 1000000000L, "service log threshold time");
-DEFINE_uint32(log_print_max_length, 512, "log print max length");
+DEFINE_int64(service_log_threshold_time_ns, 1000000000L, "service log threshold time ns");
+BRPC_VALIDATE_GFLAG(service_log_threshold_time_ns, brpc::PositiveInteger);
+
+DEFINE_int32(log_print_max_length, 512, "log print max length");
+BRPC_VALIDATE_GFLAG(log_print_max_length, brpc::PositiveInteger);
+
+DEFINE_bool(enable_dump_service_message, false, "dump service request/response");
+BRPC_VALIDATE_GFLAG(enable_dump_service_message, brpc::PassValidate);
 
 bvar::LatencyRecorder g_raw_latches_recorder("dingo_latches_raw");
 bvar::LatencyRecorder g_txn_latches_recorder("dingo_latches_txn");
@@ -296,6 +303,42 @@ void ServiceHelper::LatchesAcquire(LatchContext& latch_ctx, bool is_txn) {
 void ServiceHelper::LatchesRelease(LatchContext& latch_ctx) {
   store::RegionPtr region = latch_ctx.GetRegion();
   region->LatchesRelease(latch_ctx.GetLock(), latch_ctx.Cid());
+}
+
+void ServiceHelper::DumpRequest(const std::string& name, int64_t id, const google::protobuf::Message* request) {
+  if (request == nullptr) return;
+
+  const auto& dump_dir = Server::GetInstance().ServiceDumpDir();
+
+  std::string path = fmt::format("{}/{}_{}_request", dump_dir, name, id);
+  std::ofstream out;
+  out.open(path, std::ios::out);
+
+  std::string json_str;
+  google::protobuf::util::JsonOptions options;
+  google::protobuf::util::MessageToJsonString(*request, &json_str, options);
+
+  out << json_str;
+
+  out.close();
+}
+
+void ServiceHelper::DumpResponse(const std::string& name, int64_t id, const google::protobuf::Message* response) {
+  if (response == nullptr) return;
+
+  const auto& dump_dir = Server::GetInstance().ServiceDumpDir();
+
+  std::string path = fmt::format("{}/{}_{}_response", dump_dir, name, id);
+  std::ofstream out;
+  out.open(path, std::ios::out);
+
+  std::string json_str;
+  google::protobuf::util::JsonOptions options;
+  google::protobuf::util::MessageToJsonString(*response, &json_str, options);
+
+  out << json_str;
+
+  out.close();
 }
 
 }  // namespace dingodb
