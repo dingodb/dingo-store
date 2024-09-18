@@ -131,6 +131,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       handler->Handle(add_ctx, region, engine, raft_request_for_vector_add, region_metrics, term_id, log_id);
       if (!add_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(add_ctx->Status());
+        return;
       }
     }
 
@@ -161,6 +162,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
       if (!del_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(del_ctx->Status());
+        return;
       }
     }
   }
@@ -198,6 +200,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       handler->Handle(add_ctx, region, engine, raft_request_for_document_add, region_metrics, term_id, log_id);
       if (!add_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(add_ctx->Status());
+        return;
       }
     }
 
@@ -228,6 +231,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       handler->Handle(del_ctx, region, engine, raft_request_for_document_del, region_metrics, term_id, log_id);
       if (!del_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(del_ctx->Status());
+        return;
       }
     }
   }
