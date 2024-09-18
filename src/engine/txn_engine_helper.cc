@@ -2603,6 +2603,10 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       // check if key is exist
       if (write_info.op() == pb::store::Op::Put) {
         response->add_keys_already_exist()->set_key(mutation.key());
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] Prewrite", region->Id()) << ", put_if_absent, start_ts: " << start_ts
+            << ", key: " << Helper::StringToHex(mutation.key()) << ", write_info: " << write_info.ShortDebugString();
+        break;
       }
     } else if (mutation.op() == pb::store::Op::CheckNotExists) {
       // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key
@@ -2673,6 +2677,14 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
         << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
     return butil::Status::OK();
   }
+  if (response->keys_already_exist_size() > 0) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << fmt::format("[txn][region({})] Prewrite return already_exist,", region->Id())
+        << ", already_exist_size: " << response->keys_already_exist_size() << ", start_ts: " << start_ts
+        << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", mutations_size: " << mutations.size();
+    return butil::Status::OK();
+  }
+
   if (try_one_pc) {
     auto ret4 = OnePCommit(raft_engine, ctx, region, start_ts, final_min_commit_ts, locks_for_1pc, kv_puts_data);
     if (!ret4.ok()) {
