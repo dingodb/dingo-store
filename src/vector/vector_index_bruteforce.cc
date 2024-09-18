@@ -87,8 +87,9 @@ int32_t VectorIndexBruteforce::GetDimension() { return this->dimension_; }
 
 pb::common::MetricType VectorIndexBruteforce::GetMetricType() { return this->metric_type_; }
 
-butil::Status VectorIndexBruteforce::GetCount(int64_t& /*count*/) {
-  return butil::Status(pb::error::EVECTOR_NOT_SUPPORT, "not support");
+butil::Status VectorIndexBruteforce::GetCount(int64_t& count) {
+  count = 0;
+  return butil::Status::OK();
 }
 
 butil::Status VectorIndexBruteforce::GetDeletedCount(int64_t& deleted_count) {
