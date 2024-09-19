@@ -23,7 +23,7 @@ set(ROCKSDB_LIBRARIES
     CACHE FILEPATH "rocksdb library." FORCE)
 
 set(prefix_path
-    "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags"
+    "${THIRD_PARTY_PATH}/install/snappy|${THIRD_PARTY_PATH}/install/zlib|${THIRD_PARTY_PATH}/install/lz4|${THIRD_PARTY_PATH}/install/zstd|${THIRD_PARTY_PATH}/install/gflags|${THIRD_PARTY_PATH}/install/liburing"
 )
 message(STATUS "rocksdb search prefix_path in ${prefix_path}")
 
@@ -67,6 +67,7 @@ ExternalProject_Add(
              -DWITH_CORE_TOOLS=OFF
              -DWITH_TOOLS=OFF
              -DWITH_TRACE_TOOLS=OFF
+             -DWITH_LIBURING=${WITH_LIBURING}
              ${EXTERNAL_OPTIONAL_ARGS}
   LIST_SEPARATOR |
   CMAKE_CACHE_ARGS -DCMAKE_INSTALL_PREFIX:PATH=${ROCKSDB_INSTALL_DIR} -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON

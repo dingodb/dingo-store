@@ -91,3 +91,6 @@
 [submodule "contrib/FTXUI"]
 	path = contrib/FTXUI
 	url = https://github.com/ArthurSonzogni/FTXUI.git
+[submodule "contrib/liburing"]
+	path = contrib/liburing
+	url = https://github.com/axboe/liburing.git

@@ -40,6 +40,7 @@ option(BUILD_GOOGLE_SANITIZE "Enable google sanitize" OFF)
 option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
+option(WITH_LIBURING "Build with liburing" ON)
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -216,6 +217,7 @@ include(protobuf)
 include(yaml-cpp)
 include(libunwind)
 include(libbacktrace)
+include(liburing)
 include(ftxui)
 include(hnswlib)
 include(rapidjson)
@@ -226,6 +228,7 @@ include(brpc)
 include(braft)
 include(nlohmann)
 include(tantivy-search)
+
 message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
 message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
 message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
@@ -272,12 +275,16 @@ add_custom_target(
   COMMENT "generate message target"
   VERBATIM)
 
+
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/serial/src/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libexpr/src/)
 include_directories(${ZSTD_INCLUDE_DIR})
 include_directories(${ZLIB_INCLUDE_DIR})
+if(WITH_LIBURING)
+  include_directories(${LIBURING_INCLUDE_DIR})
+endif()
 include_directories(${BRAFT_INCLUDE_DIR})
 include_directories(${BRPC_INCLUDE_DIR})
 include_directories(${GLOG_INCLUDE_DIR})
@@ -337,6 +344,10 @@ set(DYNAMIC_LIB ${DYNAMIC_LIB} dl Threads::Threads)
 
 if(ENABLE_COVERAGE)
   set(DYNAMIC_LIB ${DYNAMIC_LIB} gcov)
+endif()
+
+if(WITH_LIBURING)
+  set(DYNAMIC_LIB ${DYNAMIC_LIB} liburing)
 endif()
 
 set(DEPEND_LIBS
@@ -468,6 +479,10 @@ if(LINK_TCMALLOC)
     set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_MINIMAL_LIBRARIES})
   endif()
   set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
+endif()
+
+if(WITH_LIBURING)
+  set(DEPEND_LIBS ${DEPEND_LIBS} liburing)
 endif()
 
 # source file
