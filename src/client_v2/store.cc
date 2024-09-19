@@ -78,6 +78,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpTxnPessimisticRollback(app);
   SetUpTxnBatchGet(app);
   SetUpTxnDump(app);
+  SetUpTxnGC(app);
 
   SetUpWhichRegion(app);
   SetUpQueryRegionStatusMetrics(app);
@@ -1110,7 +1111,7 @@ void SetUpTxnGC(CLI::App& app) {
   auto* cmd = app.add_subcommand("TxnGC", "Txn gc ")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--rc", opt->rc, "read commit")->default_val(false)->default_str("false");
   cmd->add_option("--safe_point_ts", opt->safe_point_ts, "Request parameter safe_point_ts")->required();
   cmd->callback([opt]() { RunTxnGC(*opt); });
 }
@@ -3127,11 +3128,18 @@ void SendTxnGc(TxnGCOptions const& opt) {
   }
   request.set_safe_point_ts(opt.safe_point_ts);
 
-  DINGO_LOG(INFO) << "Request: " << request.DebugString();
-
   InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnGc", request, response);
-
-  DINGO_LOG(INFO) << "Response: " << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "txn gc failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  if (response.has_txn_result()) {
+    std::cout << "txn_result: " << response.txn_result().DebugString() << std::endl;
+  } else {
+    std::cout << "txn gc success." << std::endl;
+  }
 }
 
 void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {

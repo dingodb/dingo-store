@@ -41,7 +41,7 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpSplitRegion(app);
   SetUpMergeRegion(app);
   SetUpQueryRegion(app);
-
+  SetUpTransferLeaderRegion(app);
   // executor
   SetUpCreateExecutor(app);
   SetUpDeleteExecutor(app);
@@ -1948,10 +1948,9 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
 
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "QueryRegion", query_request, query_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   if (query_response.region().definition().peers_size() == 0) {
-    DINGO_LOG(ERROR) << "region not found";
+    std::cout << "region not found" << std::endl;
     return;
   }
 
@@ -1965,7 +1964,7 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
   }
 
   if (!found) {
-    DINGO_LOG(ERROR) << "store_id not found";
+    std::cout << "store_id not found" << std::endl;
     return;
   }
 
@@ -1976,18 +1975,14 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
   transfer_leader_request.set_region_id(opt.region_id);
   transfer_leader_request.set_leader_store_id(opt.store_id);
 
-  DINGO_LOG(INFO) << "transfer leader: region_id=" << opt.region_id << ", store_id=" << opt.store_id;
-
   auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status2;
-  DINGO_LOG(INFO) << transfer_leader_response.DebugString();
 
   if (transfer_leader_response.has_error() &&
       transfer_leader_response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    DINGO_LOG(ERROR) << "transfer leader error: " << transfer_leader_response.error().DebugString();
+    std::cout << "transfer leader error: " << transfer_leader_response.error().DebugString() << std::endl;
   } else {
-    DINGO_LOG(INFO) << "transfer leader success";
+    std::cout << "transfer leader success" << std::endl;
   }
 }
 
