@@ -1146,10 +1146,10 @@ void SetUpTxnDump(CLI::App& app) {
   auto* cmd = app.add_subcommand("TxnDump", "Txn dump")->group("Region Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
-  cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);
+  cmd->add_option("--rc", opt->rc, "read commit")->default_val(false)->default_str("false");
   cmd->add_option("--start_key", opt->start_key, "Request parameter start_key")->required();
   cmd->add_option("--end_key", opt->end_key, "Request parameter end_key")->required();
-  cmd->add_flag("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(false);
+  cmd->add_option("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true)->default_str("true");
   cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->required();
   cmd->add_option("--end_ts", opt->end_ts, "Request parameter end_ts")->required();
   cmd->callback([opt]() { RunTxnDump(*opt); });
