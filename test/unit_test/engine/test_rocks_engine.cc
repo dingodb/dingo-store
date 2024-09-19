@@ -1607,6 +1607,36 @@ TEST_F(RawRocksEngineTest, Iterator) {
   EXPECT_GE(count, 1);
 }
 
+TEST_F(RawRocksEngineTest, IteratorPerf) {
+  GTEST_SKIP() << "Skip perf test";
+
+  auto writer = RawRocksEngineTest::engine->Writer();
+
+  int64_t num = 1000 * 1000;
+  std::string prefix = "PERF";
+  for (int64_t i = 0; i < num; ++i) {
+    pb::common::KeyValue kv;
+    kv.set_key(prefix + GenRandomString(64));
+    kv.set_value(GenRandomString(256));
+    writer->KvPut(kDefaultCf, kv);
+  }
+
+  int64_t start_time = dingodb::Helper::TimestampUs();
+
+  int64_t count = 0;
+  IteratorOptions options;
+  options.upper_bound = dingodb::Helper::PrefixNext(prefix);
+  auto iter = RawRocksEngineTest::engine->Reader()->NewIterator(kDefaultCf, options);
+  for (iter->Seek(prefix); iter->Valid(); iter->Next()) {
+    ++count;
+  }
+
+  std::cout << fmt::format("scan elapsed time: {}us count: {}", dingodb::Helper::TimestampUs() - start_time, count)
+            << std::endl;
+
+  EXPECT_GE(count, 1);
+}
+
 // TEST_F(RawRocksEngineTest, Checkpoint) {
 //   auto writer = RawRocksEngineTest::engine->Writer();
 
