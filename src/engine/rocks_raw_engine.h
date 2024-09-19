@@ -82,7 +82,11 @@ class Iterator : public dingodb::Iterator {
       : options_(options), iter_(iter), snapshot_(nullptr) {}
   explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter, std::shared_ptr<Snapshot> snapshot)
       : options_(options), iter_(iter), snapshot_(snapshot) {}
-  ~Iterator() override = default;
+  ~Iterator() override {
+    if (options_.extension != nullptr) {
+      delete (rocksdb::Slice*)options_.extension;
+    }
+  }
 
   std::string GetName() override { return "RawRocks"; }
   IteratorType GetID() override { return IteratorType::kRawRocksEngine; }

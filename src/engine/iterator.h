@@ -37,6 +37,8 @@ enum class IteratorType {
 struct IteratorOptions {
   std::string lower_bound;
   std::string upper_bound;
+
+  void* extension{nullptr};
 };
 
 class Iterator {

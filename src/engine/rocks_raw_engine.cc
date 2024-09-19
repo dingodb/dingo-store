@@ -352,7 +352,11 @@ butil::Status Reader::KvScan(ColumnFamilyPtr column_family, std::shared_ptr<ding
 
   rocksdb::ReadOptions read_option;
   read_option.auto_prefix_mode = true;
+  read_option.async_io = true;
+  read_option.adaptive_readahead = true;
   read_option.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  rocksdb::Slice upper_bound(end_key);
+  read_option.iterate_upper_bound = &upper_bound;
 
   std::string_view end_key_view(end_key);
   rocksdb::Iterator* it = GetDB()->NewIterator(read_option, column_family->GetHandle());
@@ -393,7 +397,11 @@ butil::Status Reader::KvCount(ColumnFamilyPtr column_family, dingodb::SnapshotPt
 
   rocksdb::ReadOptions read_options;
   read_options.auto_prefix_mode = true;
+  read_options.async_io = true;
+  read_options.adaptive_readahead = true;
   read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
+  rocksdb::Slice upper_bound(end_key);
+  read_options.iterate_upper_bound = &upper_bound;
 
   std::string_view end_key_view(end_key.data(), end_key.size());
   rocksdb::Iterator* it = GetDB()->NewIterator(read_options, column_family->GetHandle());
@@ -417,13 +425,18 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
 
 dingodb::IteratorPtr Reader::NewIterator(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot,
                                          IteratorOptions options) {
-  // Correct free iterate_upper_bound
-  // auto slice = std::make_unique<rocksdb::Slice>(options.upper_bound);
   rocksdb::ReadOptions read_options;
   if (snapshot != nullptr) {
     read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
   }
   read_options.auto_prefix_mode = true;
+  read_options.async_io = true;
+  read_options.adaptive_readahead = true;
+  if (!options.upper_bound.empty()) {
+    options.extension = new rocksdb::Slice(options.upper_bound);
+    read_options.iterate_upper_bound = (rocksdb::Slice*)options.extension;
+  }
+  read_options.async_io = true;
 
   return std::make_shared<Iterator>(options, GetDB()->NewIterator(read_options, column_family->GetHandle()), snapshot);
 }
