@@ -78,13 +78,13 @@ using ColumnFamilyMap = std::map<std::string, ColumnFamilyPtr>;
 
 class Iterator : public dingodb::Iterator {
  public:
-  explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter)
+  explicit Iterator(IteratorOptionsPtr options, rocksdb::Iterator* iter)
       : options_(options), iter_(iter), snapshot_(nullptr) {}
-  explicit Iterator(IteratorOptions options, rocksdb::Iterator* iter, std::shared_ptr<Snapshot> snapshot)
+  explicit Iterator(IteratorOptionsPtr options, rocksdb::Iterator* iter, std::shared_ptr<Snapshot> snapshot)
       : options_(options), iter_(iter), snapshot_(snapshot) {}
   ~Iterator() override {
-    if (options_.extension != nullptr) {
-      delete (rocksdb::Slice*)options_.extension;
+    if (options_ != nullptr && options_->extension != nullptr) {
+      delete (rocksdb::Slice*)options_->extension;
     }
   }
 
@@ -110,7 +110,7 @@ class Iterator : public dingodb::Iterator {
   butil::Status Status() const override;
 
  private:
-  IteratorOptions options_;
+  IteratorOptionsPtr options_;
   std::unique_ptr<rocksdb::Iterator> iter_;
   std::shared_ptr<Snapshot> snapshot_;
 };

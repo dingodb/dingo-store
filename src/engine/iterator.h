@@ -38,8 +38,14 @@ struct IteratorOptions {
   std::string lower_bound;
   std::string upper_bound;
 
+  // for rocksdb::Slice
   void* extension{nullptr};
+
+  IteratorOptions() = default;
+  IteratorOptions(const std::string& lower_bound, const std::string& upper_bound)
+      : lower_bound(lower_bound), upper_bound(upper_bound) {}
 };
+using IteratorOptionsPtr = std::shared_ptr<IteratorOptions>;
 
 class Iterator {
  public:

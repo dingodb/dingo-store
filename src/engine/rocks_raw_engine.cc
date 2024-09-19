@@ -91,14 +91,14 @@ bool Iterator::Valid() const {
     return false;
   }
 
-  if (!options_.upper_bound.empty()) {
-    auto upper_bound = rocksdb::Slice(options_.upper_bound);
+  if (!options_->upper_bound.empty()) {
+    auto upper_bound = rocksdb::Slice(options_->upper_bound);
     if (upper_bound.compare(iter_->key()) <= 0) {
       return false;
     }
   }
-  if (!options_.lower_bound.empty()) {
-    auto lower_bound = rocksdb::Slice(options_.lower_bound);
+  if (!options_->lower_bound.empty()) {
+    auto lower_bound = rocksdb::Slice(options_->lower_bound);
     if (lower_bound.compare(iter_->key()) > 0) {
       return false;
     }
@@ -425,6 +425,8 @@ butil::Status Reader::KvCount(const std::string& cf_name, dingodb::SnapshotPtr s
 
 dingodb::IteratorPtr Reader::NewIterator(ColumnFamilyPtr column_family, dingodb::SnapshotPtr snapshot,
                                          IteratorOptions options) {
+  IteratorOptionsPtr inner_option = std::make_shared<IteratorOptions>(options.lower_bound, options.upper_bound);
+
   rocksdb::ReadOptions read_options;
   if (snapshot != nullptr) {
     read_options.snapshot = static_cast<const rocksdb::Snapshot*>(snapshot->Inner());
@@ -432,13 +434,13 @@ dingodb::IteratorPtr Reader::NewIterator(ColumnFamilyPtr column_family, dingodb:
   read_options.auto_prefix_mode = true;
   read_options.async_io = true;
   read_options.adaptive_readahead = true;
-  if (!options.upper_bound.empty()) {
-    options.extension = new rocksdb::Slice(options.upper_bound);
-    read_options.iterate_upper_bound = (rocksdb::Slice*)options.extension;
+  if (!inner_option->upper_bound.empty()) {
+    inner_option->extension = new rocksdb::Slice(inner_option->upper_bound);
+    read_options.iterate_upper_bound = (rocksdb::Slice*)inner_option->extension;
   }
-  read_options.async_io = true;
 
-  return std::make_shared<Iterator>(options, GetDB()->NewIterator(read_options, column_family->GetHandle()), snapshot);
+  return std::make_shared<Iterator>(inner_option, GetDB()->NewIterator(read_options, column_family->GetHandle()),
+                                    snapshot);
 }
 
 dingodb::IteratorPtr Reader::NewIterator(const std::string& cf_name, IteratorOptions options) {
@@ -1060,8 +1062,8 @@ butil::Status RocksRawEngine::MergeCheckpointFiles(const std::string& path, cons
     DINGO_LOG(INFO) << fmt::format("[rocksdb] open checkpoint success, path: {} cf_name: {}", path, cf_names[i]);
 
     // Create iterator
-    IteratorOptions iter_options;
-    iter_options.upper_bound = range.end_key();
+    IteratorOptionsPtr iter_options = std::make_shared<IteratorOptions>();
+    iter_options->upper_bound = range.end_key();
 
     rocksdb::ReadOptions read_options;
     read_options.auto_prefix_mode = true;
