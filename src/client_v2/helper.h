@@ -625,7 +625,8 @@ class Helper {
       return -1;
     }
 
-    return static_cast<int64_t>(timestamp);
+    // add 8 hour
+    return static_cast<int64_t>(timestamp + 28800);
   }
 };
 

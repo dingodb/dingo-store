@@ -220,6 +220,7 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
   *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
   request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
   request.mutable_context()->add_resolved_locks(resolve_locks);
+  request.mutable_request_info()->set_request_id(1111111111);
 
   dingodb::pb::common::RangeWithOptions range_with_option;
   range_with_option.mutable_range()->CopyFrom(range);
@@ -234,6 +235,7 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
   request.set_key_only(key_only);
   request.mutable_stream_meta()->set_limit(kBatchSize);
 
+  static int temp_id = 1;
   for (;;) {
     dingodb::pb::store::TxnScanResponse sub_response;
 
@@ -284,6 +286,8 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
       break;
     }
   }
+
+  ++temp_id;
 
   return response;
 }
