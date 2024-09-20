@@ -20,6 +20,7 @@ import io.dingodb.sdk.service.caller.RpcCaller;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
 import io.dingodb.sdk.service.entity.common.RequestInfo;
+import io.dingodb.sdk.service.util.OnlineDdlLogUtils;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
@@ -162,7 +163,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void before(REQ req, CallOptions options, long trace) {
-        if (Before.log.isDebugEnabled() && logger.isDebugEnabled()) {
+        if (Before.log.isDebugEnabled() && logger.isDebugEnabled() && OnlineDdlLogUtils.onlineDdlReq(req)) {
             logger.debug(
                 toJson(method.getFullMethodName(), trace, req, null, options)
             );
@@ -175,7 +176,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void rBefore(REQ req, CallOptions options, String remote, long trace) {
-        if (RBefore.log.isDebugEnabled() && logger.isDebugEnabled()) {
+        if (RBefore.log.isDebugEnabled() && logger.isDebugEnabled() && OnlineDdlLogUtils.onlineDdlReq(req)) {
             logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, null, options)
             );
@@ -187,7 +188,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void after(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (After.log.isDebugEnabled() && logger.isDebugEnabled()) {
+        if (After.log.isDebugEnabled() && logger.isDebugEnabled() && OnlineDdlLogUtils.onlineDdlReq(req)) {
             logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
@@ -199,7 +200,7 @@ public class ServiceCallCycles<REQ extends Request, RES extends Response>
 
     @Override
     public void rAfter(REQ req, RES res, CallOptions options, String remote, long trace) {
-        if (RAfter.log.isDebugEnabled() && logger.isDebugEnabled()) {
+        if (RAfter.log.isDebugEnabled() && logger.isDebugEnabled() && OnlineDdlLogUtils.onlineDdlReq(req)) {
             logger.debug(
                 toJson(remote, method.getFullMethodName(), trace, req, res, options)
             );
