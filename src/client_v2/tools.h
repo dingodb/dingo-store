@@ -102,6 +102,14 @@ struct TransformTimeStampOptions {
 void SetUpTransformTimeStamp(CLI::App &app);
 void RunTransformTimeStamp(TransformTimeStampOptions const &opt);
 
+struct GenPlainKeyOptions {
+  std::string coor_url;
+  int64_t id;
+  std::string key;
+};
+void SetUpGenPlainKey(CLI::App &app);
+void RunGenPlainKey(GenPlainKeyOptions const &opt);
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_TOOLS_H_

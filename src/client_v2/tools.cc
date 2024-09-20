@@ -19,12 +19,21 @@
 #include <iostream>
 
 #include "client_v2/helper.h"
+#include "client_v2/meta.h"
+#include "client_v2/pretty.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/version.h"
 #include "coordinator/tso_control.h"
+#include "coprocessor/utils.h"
+#include "document/codec.h"
+#include "mvcc/codec.h"
 #include "proto/version.pb.h"
-
+#include "serial/buf.h"
+#include "serial/record_decoder.h"
+#include "serial/record_encoder.h"
+#include "serial/schema/long_schema.h"
+#include "vector/codec.h"
 namespace client_v2 {
 
 void SetUpToolSubCommands(CLI::App &app) {
@@ -37,6 +46,7 @@ void SetUpToolSubCommands(CLI::App &app) {
   SetUpOctalToHex(app);
   SetUpCoordinatorDebug(app);
   SetUpTransformTimeStamp(app);
+  SetUpGenPlainKey(app);
 }
 
 std::string EncodeUint64(int64_t value) {
@@ -242,6 +252,113 @@ void RunTransformTimeStamp(TransformTimeStampOptions const &opt) {
   std::ostringstream oss;
   oss << std::put_time(tm_ptr, "%Y-%m-%dT%H:%M:%SZ");  // RFC 3339
   std::cout << oss.str();
+}
+
+butil::Status GenPlainKey(GenPlainKeyOptions const &opt) {
+  if (opt.id <= 0) {
+    return butil::Status(-1, "Param id is error");
+  }
+  if (opt.key.empty()) {
+    return butil::Status(-1, "Param key is empty");
+  }
+  dingodb::pb::meta::TableDefinition table_definition;
+  auto status = GetTableOrIndexDefinition(opt.id, table_definition);
+  if (!status.ok()) {
+    return status;
+  }
+  if (table_definition.name().empty()) {
+    return butil::Status(-1, "Not found table/index");
+  }
+  if (table_definition.table_partition().strategy() == dingodb::pb::meta::PT_STRATEGY_HASH) {
+    return butil::Status(-1, "Not support hash partition table/index");
+  }
+  std::string key = opt.key;
+  std::map<int64_t, int64_t> region_partition_map;
+  std::vector<dingodb::pb::coordinator::ScanRegionInfo> region_infos;
+  for (const auto &partition : table_definition.table_partition().partitions()) {
+    auto tmp_region_infos = GetRegionsByRange(partition.range());
+    for (const auto &region_info : tmp_region_infos) {
+      region_infos.push_back(region_info);
+      region_partition_map[region_info.region_id()] = partition.id().entity_id();
+    }
+  }
+
+  std::sort(region_infos.begin(), region_infos.end(),
+            [](dingodb::pb::coordinator::ScanRegionInfo &r1, dingodb::pb::coordinator::ScanRegionInfo &r2) -> bool {
+              return r1.range().start_key() > r2.range().start_key();
+            });
+
+  const auto index_type = table_definition.index_parameter().index_type();
+
+  for (auto &region_info : region_infos) {
+    int64_t partition_id = region_partition_map[region_info.region_id()];
+    const auto &range = region_info.range();
+    const char perfix = dingodb::Helper::GetKeyPrefix(range.start_key());
+
+    std::string plain_key;
+    if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      auto serial_schema = dingodb::Utils::GenSerialSchema(table_definition);
+      auto record_encoder = std::make_shared<dingodb::RecordEncoder>(1, serial_schema, partition_id);
+
+      std::vector<std::string> origin_keys;
+      dingodb::Helper::SplitString(key, ',', origin_keys);
+      for (auto &key : origin_keys) {
+        if (Helper::IsDateString(key)) {
+          int64_t timestamp = Helper::StringToTimestamp(key);
+          if (timestamp <= 0) {
+            return butil::Status(-1, fmt::format("Invalid date({})", key));
+          }
+          key = std::to_string(timestamp * 1000);
+        }
+      }
+
+      record_encoder->EncodeKeyPrefix(perfix, origin_keys, plain_key);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      int64_t vector_id = dingodb::Helper::StringToInt64(key);
+
+      plain_key = dingodb::VectorCodec::PackageVectorKey(perfix, partition_id, vector_id);
+
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      int64_t document_id = dingodb::Helper::StringToInt64(key);
+
+      plain_key = dingodb::DocumentCodec::PackageDocumentKey(perfix, partition_id, document_id);
+    }
+
+    DINGO_LOG(INFO) << fmt::format("key: {} region: {} range: {}", dingodb::Helper::StringToHex(plain_key),
+                                   region_info.region_id(), dingodb::Helper::RangeToString(range));
+
+    if (plain_key >= range.start_key() && plain_key < range.end_key()) {
+      // std::cout << fmt::format("key({}) in region({}).", key, region_info.region_id()) << '\n';
+      std::cout << fmt::format("plain key({}).", dingodb::Helper::StringToHex(plain_key)) << '\n';
+      return butil::Status::OK();
+    }
+  }
+
+  std::cout << "Not found key in any region." << '\n';
+
+  return butil::Status();
+}
+
+void SetUpGenPlainKey(CLI::App &app) {
+  auto opt = std::make_shared<GenPlainKeyOptions>();
+  auto *cmd = app.add_subcommand("GenPlainKey", "Generate plain key")->group("Tool Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Number of table_id/index_id")->required();
+  cmd->add_option("--key", opt->key, "Param key, e.g. primary key")->required();
+  cmd->callback([opt]() { RunGenPlainKey(*opt); });
+}
+
+void RunGenPlainKey(GenPlainKeyOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+
+  auto status = GenPlainKey(opt);
+  if (!status.ok()) {
+    Pretty::ShowError(status);
+    return;
+  }
 }
 
 }  // namespace client_v2
