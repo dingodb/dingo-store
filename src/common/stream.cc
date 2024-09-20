@@ -32,11 +32,17 @@ DEFINE_int64(stream_message_max_limit_size, 40960, "stream message max line size
 // generate stream id, use uuid
 static std::string GenStreamId() { return butil::GenerateGUID(); }
 
+Stream::Stream(std::string stream_id, uint32_t limit) : stream_id_(stream_id), limit_(limit) {
+  last_time_ms_ = Helper::TimestampMs();
+}
+
 StreamPtr Stream::New(uint32_t limit) { return std::make_shared<Stream>(GenStreamId(), limit); }
 
 bool Stream::Check(size_t size, size_t bytes) const {
   return (size >= limit_ || size >= FLAGS_stream_message_max_limit_size || bytes >= FLAGS_stream_message_max_bytes);
 }
+
+void Stream::RenewLastTime() { last_time_ms_ = Helper::TimestampMs(); }
 
 StreamSet::StreamSet() { bthread_mutex_init(&mutex_, nullptr); }
 StreamSet::~StreamSet() { bthread_mutex_destroy(&mutex_); }
@@ -99,6 +105,7 @@ void StreamManager::RemoveStream(StreamPtr stream) {
 StreamPtr StreamManager::GetOrNew(const pb::stream::StreamRequestMeta& stream_meta) {
   auto stream = GetStream(stream_meta.stream_id());
   if (stream != nullptr) {
+    stream->RenewLastTime();
     return stream;
   } else if (!stream_meta.stream_id().empty()) {
     return nullptr;
@@ -111,10 +118,13 @@ StreamPtr StreamManager::GetOrNew(const pb::stream::StreamRequestMeta& stream_me
 }
 
 void StreamManager::RecycleExpireStream() {
-  int64_t now_time = Helper::TimestampMs() - FLAGS_stream_expire_interval_ms;
+  int64_t expired_time = Helper::TimestampMs() - FLAGS_stream_expire_interval_ms;
   auto streams = stream_set_->GetAllStreams();
   for (auto& stream : streams) {
-    if (stream->LastTimeMs() < now_time) {
+    if (stream->LastTimeMs() < expired_time) {
+      DINGO_LOG(INFO) << fmt::format("recyle stream({}) last_time({}ms) expired_time({}ms) interval({}ms)",
+                                     stream->StreamId(), stream->LastTimeMs(), expired_time,
+                                     FLAGS_stream_expire_interval_ms);
       RemoveStream(stream);
     }
   }

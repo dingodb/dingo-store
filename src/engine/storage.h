@@ -80,12 +80,13 @@ class Storage {
   butil::Status TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys,
                             const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info,
                             std::vector<pb::common::KeyValue>& kvs);
-  butil::Status TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range, int64_t limit,
-                        bool key_only, bool is_reverse, const std::set<int64_t>& resolved_locks,
-                        pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
-                        bool& has_more, std::string& end_scan_key, bool disable_coprocessor,
-                        const pb::common::CoprocessorV2& coprocessor);
-  butil::Status TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const pb::common::Range& range, int64_t limit,
+  butil::Status TxnScan(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
+                        int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only, bool is_reverse,
+                        const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info,
+                        std::vector<pb::common::KeyValue>& kvs, bool& has_more, std::string& end_scan_key,
+                        bool disable_coprocessor, const pb::common::CoprocessorV2& coprocessor);
+  butil::Status TxnScanLock(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
+                            int64_t max_ts, const pb::common::Range& range, int64_t limit,
                             pb::store::TxnResultInfo& txn_result_info, std::vector<pb::store::LockInfo>& lock_infos,
                             bool& has_more, std::string& end_scan_key);
   butil::Status TxnDump(std::shared_ptr<Context> ctx, const std::string& start_key, const std::string& end_key,

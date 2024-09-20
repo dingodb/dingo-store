@@ -1803,15 +1803,6 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
-  auto stream_meta = request->stream_meta();
-  if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
-  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
-  if (stream == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::ESTREAM_EXPIRED,
-                            fmt::format("stream({}) is expired.", stream_meta.stream_id()));
-    return;
-  }
-
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -1820,7 +1811,6 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetStream(stream);
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1833,7 +1823,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   std::string end_key{};
 
   auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
-  status = storage->TxnScan(ctx, request->start_ts(), correction_range, request->limit(), request->key_only(),
+  status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(), request->key_only(),
                             request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
                             !request->has_coprocessor(), request->coprocessor());
 
@@ -1852,12 +1842,11 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   response->set_end_key(end_key);
   response->set_has_more(has_more);
 
-  auto* mut_stream_meta = response->mutable_stream_meta();
-  mut_stream_meta->set_stream_id(stream->StreamId());
-  mut_stream_meta->set_has_more(has_more);
-
-  if (!has_more || stream_meta.close()) {
-    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+  auto stream = ctx->Stream();
+  if (stream != nullptr) {
+    auto* mut_stream_meta = response->mutable_stream_meta();
+    mut_stream_meta->set_stream_id(stream->StreamId());
+    mut_stream_meta->set_has_more(has_more);
   }
 
   tracker->SetReadStoreTime();
@@ -1954,7 +1943,7 @@ void DoTxnPessimisticLock(StoragePtr storage, google::protobuf::RpcController* c
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  
+
   auto status = ValidateTxnPessimisticLockRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2897,15 +2886,6 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
-  auto stream_meta = request->stream_meta();
-  if (stream_meta.limit() == 0) stream_meta.set_limit(request->limit());
-  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
-  if (stream == nullptr) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::ESTREAM_EXPIRED,
-                            fmt::format("stream({}) is expired.", stream_meta.stream_id()));
-    return;
-  }
-
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -2914,7 +2894,6 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-  ctx->SetStream(stream);
 
   pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::store::LockInfo> locks;
@@ -2924,8 +2903,8 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   range.set_start_key(request->start_key());
   range.set_end_key(request->end_key());
 
-  status =
-      storage->TxnScanLock(ctx, request->max_ts(), range, request->limit(), txn_result_info, locks, has_more, end_key);
+  status = storage->TxnScanLock(ctx, request->stream_meta(), request->max_ts(), range, request->limit(),
+                                txn_result_info, locks, has_more, end_key);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -2940,12 +2919,11 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   response->set_has_more(has_more);
   response->set_end_key(end_key);
 
-  auto* mut_stream_meta = response->mutable_stream_meta();
-  mut_stream_meta->set_stream_id(stream->StreamId());
-  mut_stream_meta->set_has_more(has_more);
-
-  if (!has_more || stream_meta.close()) {
-    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+  auto stream = ctx->Stream();
+  if (stream != nullptr) {
+    auto* mut_stream_meta = response->mutable_stream_meta();
+    mut_stream_meta->set_stream_id(stream->StreamId());
+    mut_stream_meta->set_has_more(has_more);
   }
 
   tracker->SetReadStoreTime();

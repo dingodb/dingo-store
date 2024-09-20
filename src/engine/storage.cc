@@ -1145,8 +1145,9 @@ butil::Status Storage::TxnBatchGet(std::shared_ptr<Context> ctx, int64_t start_t
   return butil::Status();
 }
 
-butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, const pb::common::Range& range,
-                               int64_t limit, bool key_only, bool is_reverse, const std::set<int64_t>& resolved_locks,
+butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
+                               int64_t start_ts, const pb::common::Range& range, int64_t limit, bool key_only,
+                               bool is_reverse, const std::set<int64_t>& resolved_locks,
                                pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
                                bool& has_more, std::string& end_scan_key, bool disable_coprocessor,
                                const pb::common::CoprocessorV2& coprocessor) {
@@ -1154,6 +1155,15 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
+
+  // after validate leader
+  auto stream_meta = req_stream_meta;
+  if (stream_meta.limit() == 0) stream_meta.set_limit(limit);
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    return butil::Status(pb::error::ESTREAM_EXPIRED, fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+  }
+  ctx->SetStream(stream);
 
   DINGO_LOG(DEBUG) << "TxnScan region_id: " << ctx->RegionId() << ", range: " << Helper::RangeToString(range)
                    << ", limit: " << limit << ", start_ts: " << start_ts << ", key_only: " << key_only
@@ -1171,7 +1181,13 @@ butil::Status Storage::TxnScan(std::shared_ptr<Context> ctx, int64_t start_ts, c
       return butil::Status::OK();
     }
 
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+
     return status;
+  }
+
+  if (!has_more || stream_meta.close()) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
 
   return butil::Status();
@@ -1331,14 +1347,24 @@ butil::Status Storage::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t st
   return butil::Status();
 }
 
-butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts, const pb::common::Range& range,
-                                   int64_t limit, pb::store::TxnResultInfo& txn_result_info,
+butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta,
+                                   int64_t max_ts, const pb::common::Range& range, int64_t limit,
+                                   pb::store::TxnResultInfo& txn_result_info,
                                    std::vector<pb::store::LockInfo>& lock_infos, bool& has_more,
                                    std::string& end_scan_key) {
   auto status = ValidateLeader(ctx->RegionId());
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
+
+  // after validate leader
+  auto stream_meta = req_stream_meta;
+  if (stream_meta.limit() == 0) stream_meta.set_limit(limit);
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    return butil::Status(pb::error::ESTREAM_EXPIRED, fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+  }
+  ctx->SetStream(stream);
 
   DINGO_LOG(DEBUG) << "TxnScanLock max_ts : " << max_ts << " range: " << Helper::RangeToString(range)
                    << " limit : " << limit << " txn_result_info : " << txn_result_info.ShortDebugString()
@@ -1348,7 +1374,12 @@ butil::Status Storage::TxnScanLock(std::shared_ptr<Context> ctx, int64_t max_ts,
 
   status = reader->TxnScanLock(ctx, 0, max_ts, range, limit, lock_infos, has_more, end_scan_key);
   if (BAIDU_UNLIKELY(!status.ok())) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
     return status;
+  }
+
+  if (!has_more || stream_meta.close()) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
   }
 
   return butil::Status();

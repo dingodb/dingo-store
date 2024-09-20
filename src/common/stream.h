@@ -46,7 +46,7 @@ using StreamStatePtr = std::shared_ptr<StreamState>;
 
 class Stream {
  public:
-  Stream(std::string stream_id, uint32_t limit) : stream_id_(stream_id), limit_(limit) {}
+  Stream(std::string stream_id, uint32_t limit);
   ~Stream() = default;
 
   static StreamPtr New(uint32_t limit);
@@ -69,6 +69,7 @@ class Stream {
   StreamStatePtr StreamState() const { return stream_state_; }
 
   int64_t LastTimeMs() const { return last_time_ms_; }
+  void RenewLastTime();
 
   bool Check(size_t size, size_t bytes) const;
 
