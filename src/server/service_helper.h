@@ -86,8 +86,8 @@ class ServiceHelper {
   static void LatchesAcquire(LatchContext& latch_ctx, bool is_txn);
   static void LatchesRelease(LatchContext& latch_ctx);
 
-  static void DumpRequest(const std::string& name, int64_t id, const google::protobuf::Message* request);
-  static void DumpResponse(const std::string& name, int64_t id, const google::protobuf::Message* response);
+  static void DumpRequest(const std::string& name, const google::protobuf::Message* request);
+  static void DumpResponse(const std::string& name, const google::protobuf::Message* response);
 };
 
 template <typename T>
@@ -152,7 +152,7 @@ class TrackClosure : public google::protobuf::Closure {
   store::RegionPtr GetRegion() { return region; }
 
  protected:
-  int64_t dump_id;
+  std::string dump_name;
   TrackerPtr tracker;
   store::RegionPtr region;
 };
@@ -182,8 +182,8 @@ class ServiceClosure : public TrackClosure {
 
     // dump request
     if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-      dump_id = Helper::TimestampNs();
-      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+      dump_name = fmt::format("{}_{}_{}", method_name_, region ? region->Id() : 0, Helper::TimestampNs());
+      ServiceHelper::DumpRequest(dump_name, request_);
     }
   }
 
@@ -271,7 +271,7 @@ void ServiceClosure<T, U, need_region>::Run() {
   }
 
   if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+    ServiceHelper::DumpResponse(dump_name, response_);
   }
 
   if (region) {
@@ -313,7 +313,7 @@ inline void ServiceClosure<pb::index::VectorCalcDistanceRequest, pb::index::Vect
   }
 
   if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+    ServiceHelper::DumpResponse(dump_name, response_);
   }
 }
 
@@ -333,8 +333,8 @@ class CoordinatorServiceClosure : public TrackClosure {
 
     // dump request
     if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-      dump_id = Helper::TimestampNs();
-      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+      dump_name = fmt::format("{}_{}_{}", method_name_, region ? region->Id() : 0, Helper::TimestampNs());
+      ServiceHelper::DumpRequest(dump_name, request_);
     }
   }
   ~CoordinatorServiceClosure() override = default;
@@ -388,7 +388,7 @@ void CoordinatorServiceClosure<T, U>::Run() {
   }
 
   if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+    ServiceHelper::DumpResponse(dump_name, response_);
   }
 }
 
@@ -407,8 +407,8 @@ class NoContextServiceClosure : public TrackClosure {
 
     // dump request
     if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-      dump_id = Helper::TimestampNs();
-      ServiceHelper::DumpRequest(method_name_, dump_id, request_);
+      dump_name = fmt::format("{}_{}_{}", method_name_, region ? region->Id() : 0, Helper::TimestampNs());
+      ServiceHelper::DumpRequest(dump_name, request_);
     }
   }
   ~NoContextServiceClosure() override = default;
@@ -455,7 +455,7 @@ void NoContextServiceClosure<T, U>::Run() {
   }
 
   if (BAIDU_UNLIKELY(FLAGS_enable_dump_service_message)) {
-    ServiceHelper::DumpResponse(method_name_, dump_id, response_);
+    ServiceHelper::DumpResponse(dump_name, response_);
   }
 }
 

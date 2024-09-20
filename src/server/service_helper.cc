@@ -305,12 +305,12 @@ void ServiceHelper::LatchesRelease(LatchContext& latch_ctx) {
   region->LatchesRelease(latch_ctx.GetLock(), latch_ctx.Cid());
 }
 
-void ServiceHelper::DumpRequest(const std::string& name, int64_t id, const google::protobuf::Message* request) {
+void ServiceHelper::DumpRequest(const std::string& name, const google::protobuf::Message* request) {
   if (request == nullptr) return;
 
   const auto& dump_dir = Server::GetInstance().ServiceDumpDir();
 
-  std::string path = fmt::format("{}/{}_{}_request", dump_dir, name, id);
+  std::string path = fmt::format("{}/{}_request", dump_dir, name);
   std::ofstream out;
   out.open(path, std::ios::out);
 
@@ -323,12 +323,12 @@ void ServiceHelper::DumpRequest(const std::string& name, int64_t id, const googl
   out.close();
 }
 
-void ServiceHelper::DumpResponse(const std::string& name, int64_t id, const google::protobuf::Message* response) {
+void ServiceHelper::DumpResponse(const std::string& name, const google::protobuf::Message* response) {
   if (response == nullptr) return;
 
   const auto& dump_dir = Server::GetInstance().ServiceDumpDir();
 
-  std::string path = fmt::format("{}/{}_{}_response", dump_dir, name, id);
+  std::string path = fmt::format("{}/{}_response", dump_dir, name);
   std::ofstream out;
   out.open(path, std::ios::out);
 

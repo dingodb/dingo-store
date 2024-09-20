@@ -1823,9 +1823,9 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   std::string end_key{};
 
   auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
-  status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(), request->key_only(),
-                            request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more, end_key,
-                            !request->has_coprocessor(), request->coprocessor());
+  status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
+                            request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
+                            end_key, !request->has_coprocessor(), request->coprocessor());
 
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -1843,11 +1843,11 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   response->set_has_more(has_more);
 
   auto stream = ctx->Stream();
-  if (stream != nullptr) {
-    auto* mut_stream_meta = response->mutable_stream_meta();
-    mut_stream_meta->set_stream_id(stream->StreamId());
-    mut_stream_meta->set_has_more(has_more);
-  }
+  CHECK(stream != nullptr) << fmt::format("[region({})] stream is nullptr.", region_id);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_more(has_more);
 
   tracker->SetReadStoreTime();
 }
@@ -2920,11 +2920,11 @@ void DoTxnScanLock(StoragePtr storage, google::protobuf::RpcController* controll
   response->set_end_key(end_key);
 
   auto stream = ctx->Stream();
-  if (stream != nullptr) {
-    auto* mut_stream_meta = response->mutable_stream_meta();
-    mut_stream_meta->set_stream_id(stream->StreamId());
-    mut_stream_meta->set_has_more(has_more);
-  }
+  CHECK(stream != nullptr) << fmt::format("[region({})] stream is nullptr.", region_id);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_more(has_more);
 
   tracker->SetReadStoreTime();
 }

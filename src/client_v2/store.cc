@@ -235,7 +235,6 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
   request.set_key_only(key_only);
   request.mutable_stream_meta()->set_limit(kBatchSize);
 
-  static int temp_id = 1;
   for (;;) {
     dingodb::pb::store::TxnScanResponse sub_response;
 
@@ -286,8 +285,6 @@ dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common:
       break;
     }
   }
-
-  ++temp_id;
 
   return response;
 }

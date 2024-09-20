@@ -2262,11 +2262,11 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   response->set_has_more(has_more);
 
   auto stream = ctx->Stream();
-  if (stream != nullptr) {
-    auto* mut_stream_meta = response->mutable_stream_meta();
-    mut_stream_meta->set_stream_id(stream->StreamId());
-    mut_stream_meta->set_has_more(has_more);
-  }
+  CHECK(stream != nullptr) << fmt::format("[region({})] stream is nullptr.", region_id);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_more(has_more);
 
   tracker->SetReadStoreTime();
 }
