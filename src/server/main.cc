@@ -506,6 +506,18 @@ bool SetDefaultConfAndCoorList(const dingodb::pb::common::ClusterRole &role) {
   return true;
 }
 
+bool GeneratePidFile(const std::string &filepath) {
+  int64_t pid = dingodb::Helper::GetPid();
+  if (pid <= 0) {
+    DINGO_LOG(ERROR) << "get pid fail.";
+    return false;
+  }
+
+  DINGO_LOG(INFO) << "generate pid file: " << filepath;
+
+  return dingodb::Helper::SaveFile(filepath, std::to_string(pid));
+}
+
 int main(int argc, char *argv[]) {
   if (dingodb::Helper::IsExistPath("conf/gflags.conf")) {
     google::SetCommandLineOption("flagfile", "conf/gflags.conf");
@@ -572,6 +584,11 @@ int main(int argc, char *argv[]) {
 
   if (!dingo_server.InitServerID()) {
     DINGO_LOG(ERROR) << "InitServerID failed!";
+    return -1;
+  }
+
+  if (!GeneratePidFile(dingo_server.PidFilePath())) {
+    DINGO_LOG(ERROR) << "GeneratePidFile failed!";
     return -1;
   }
 
@@ -1333,12 +1350,6 @@ int main(int argc, char *argv[]) {
       return -1;
     }
   }
-
-  // Start server after raft server started.
-  options.pid_file = dingo_server.PidFilePath();
-
-  DINGO_LOG(INFO) << "Server is going to start on " << dingo_server.ServerListenEndpoint()
-                  << ", pid_file:" << options.pid_file;
 
   if (brpc_server.Start(dingo_server.ServerListenEndpoint(), &options) != 0) {
     DINGO_LOG(ERROR) << "Fail to start server!";
