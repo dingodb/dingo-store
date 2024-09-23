@@ -652,6 +652,9 @@ void SetUpGetTenant(CLI::App &app) {
   auto opt = std::make_shared<GetTenantOptions>();
   auto *cmd = app.add_subcommand("GetTenant", "Get tenant")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--source", opt->source, "tenant source 0 means from coordinator, 1 means from executor")
+      ->default_val(0);
+  cmd->add_option("--tenant_id", opt->tenant_id, "tenant id, 0 means query all tenants")->default_val(0);
   cmd->callback([opt]() { RunGetTenant(*opt); });
 }
 
@@ -660,30 +663,41 @@ void RunGetTenant(GetTenantOptions const &opt) {
     exit(-1);
   }
 
-  std::vector<MetaItem> metas;
-  auto status = GetSqlMeta(metas);
-  if (!status.ok()) {
-    Pretty::ShowError(status);
-    return;
-  }
-
-  std::vector<Pretty::TenantInfo> tenants;
-  for (const auto &meta : metas) {
-    if (meta.type == "tenant") {
-      // {"id":0,"name":"root","comment":null,"createTimestamp":0,"updateTimestamp":0}
-      auto tenant_json = nlohmann::json::parse(meta.value);
-      auto name = tenant_json["name"].is_null() ? "" : tenant_json["name"].get<std::string>();
-      auto comment = tenant_json["comment"].is_null() ? "" : tenant_json["comment"].get<std::string>();
-      auto crate_time = tenant_json["createTimestamp"].is_null() ? 0 : tenant_json["createTimestamp"].get<int64_t>();
-      auto update_time = tenant_json["updateTimestamp"].is_null() ? 0 : tenant_json["updateTimestamp"].get<int64_t>();
-      tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
-    } else if (meta.type == "DB") {
-      // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
-      auto schema_json = nlohmann::json::parse(meta.value);
+  if (opt.source == 1) {
+    std::vector<MetaItem> metas;
+    auto status = GetSqlMeta(metas);
+    if (!status.ok()) {
+      Pretty::ShowError(status);
+      return;
     }
-  }
+    std::vector<Pretty::TenantInfo> tenants;
+    for (const auto &meta : metas) {
+      if (meta.type == "tenant") {
+        // {"id":0,"name":"root","comment":null,"createTimestamp":0,"updateTimestamp":0}
+        auto tenant_json = nlohmann::json::parse(meta.value);
+        auto name = tenant_json["name"].is_null() ? "" : tenant_json["name"].get<std::string>();
+        auto comment = tenant_json["comment"].is_null() ? "" : tenant_json["comment"].get<std::string>();
+        auto crate_time = tenant_json["createTimestamp"].is_null() ? 0 : tenant_json["createTimestamp"].get<int64_t>();
+        auto update_time = tenant_json["updateTimestamp"].is_null() ? 0 : tenant_json["updateTimestamp"].get<int64_t>();
+        tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
+      } else if (meta.type == "DB") {
+        // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
+        auto schema_json = nlohmann::json::parse(meta.value);
+      }
+    }
 
-  Pretty::Show(tenants);
+    Pretty::Show(tenants);
+  } else {
+    dingodb::pb::meta::GetTenantsRequest request;
+    dingodb::pb::meta::GetTenantsResponse response;
+
+    if (opt.tenant_id > 0) {
+      request.add_tenant_ids(opt.tenant_id);
+    }
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("GetTenants",
+                                                                                                    request, response);
+    Pretty::Show(response);
+  }
 }
 
 void SetUpGetSchema(CLI::App &app) {

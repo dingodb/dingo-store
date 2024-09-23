@@ -41,7 +41,7 @@ dingodb::pb::meta::TableDefinitionWithId SendGetTable(int64_t table_id);
 dingodb::pb::meta::TableRange SendGetTableRange(int64_t table_id);
 dingodb::pb::meta::IndexRange SendGetIndexRange(int64_t table_id);
 
-butil::Status SendGetSchema(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema& schema);
+butil::Status SendGetSchema(int64_t tenant_id, int64_t schema_id, dingodb::pb::meta::Schema &schema);
 butil::Status SendGetSchemas(int64_t tenant_id, std::vector<dingodb::pb::meta::Schema> &schemas);
 
 int GetCreateTableId(int64_t &table_id);
@@ -76,6 +76,8 @@ void RunMetaHello(MetaHelloOptions const &opt);
 
 struct GetTenantOptions {
   std::string coor_url;
+  int32_t source;
+  int64_t tenant_id;
 };
 void SetUpGetTenant(CLI::App &app);
 void RunGetTenant(GetTenantOptions const &opt);
