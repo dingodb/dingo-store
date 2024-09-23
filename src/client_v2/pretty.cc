@@ -1522,4 +1522,28 @@ void Pretty::Show(dingodb::pb::index::VectorGetRegionMetricsResponse& response) 
   rows.push_back(row);
   PrintTable(rows);
 }
+void Pretty::Show(dingodb::pb::meta::GetTenantsResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("ID"),
+      ftxui::paragraph("Name"),
+      ftxui::paragraph("CreateTime"),
+      ftxui::paragraph("UpdateTime"),
+      ftxui::paragraph("Comment"),
+  }};
+  for (auto const& tenant : response.tenants()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", tenant.id())),
+        ftxui::paragraph(fmt::format("{}", tenant.name())),
+        ftxui::paragraph(fmt::format("{}", dingodb::Helper::FormatMsTime(tenant.create_timestamp()))),
+        ftxui::paragraph(fmt::format("{}", dingodb::Helper::FormatMsTime(tenant.update_timestamp()))),
+        ftxui::paragraph(fmt::format("{}", tenant.comment())),
+
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
 }  // namespace client_v2

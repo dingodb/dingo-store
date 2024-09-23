@@ -83,6 +83,7 @@ class Pretty {
   static void ShowTotalCount(int64_t total_count);
   static void Show(dingodb::pb::index::VectorCalcDistanceResponse &response);
   static void Show(dingodb::pb::index::VectorGetRegionMetricsResponse &response);
+  static void Show(dingodb::pb::meta::GetTenantsResponse &response);
 };
 
 }  // namespace client_v2
