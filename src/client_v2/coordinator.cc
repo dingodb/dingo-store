@@ -32,7 +32,6 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpGetCoordinatorMap(app);
   SetUpGetStoreMap(app);
   SetUpGetRegionMap(app);
-  SetUpGetGCSafePoint(app);
   SetUpGetTaskList(app);
   SetUpCleanTaskList(app);
   // region commands
@@ -47,6 +46,10 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpDeleteExecutor(app);
   SetUpExecutorHeartbeat(app);
   SetUpGetExecutorMap(app);
+
+  // gc
+  SetUpUpdateGCSafePoint(app);
+  SetUpGetGCSafePoint(app);
 }
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
@@ -2438,7 +2441,7 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
     request.set_gc_flag(
         ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_STOP);
   } else {
-    DINGO_LOG(ERROR) << "gc_flag is invalid, must be start or stop";
+    std::cout << "gc_flag is invalid, must be start or stop" << std::endl;
     return;
   }
 
@@ -2448,19 +2451,24 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
     request.mutable_tenant_safe_points()->insert({opt.tenant_id, opt.safe_point2});
   }
 
-  DINGO_LOG(INFO) << "UpdateGCSafePoint request: " << request.DebugString();
-
   auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateGCSafePoint",
                                                                                               request, response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "update gc safe point failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << "update gc safe point success." << std::endl;
 }
 
 void SetUpGetGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<GetGCSafePointOptions>();
   auto *cmd = app.add_subcommand("GetGCSafePoint", "Get GC safepoint ")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_flag("--get_all_tenant", opt->get_all_tenant, "Request parameter get_all_tenant")->default_val(false);
+  cmd->add_option("--get_all_tenant", opt->get_all_tenant, "Request parameter get_all_tenant")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant_id");
 
   cmd->callback([opt]() { RunGetGCSafePoint(*opt); });
