@@ -347,7 +347,7 @@ void DebugServiceImpl::Compact(google::protobuf::RpcController* controller, cons
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(svr_done);
 
-  auto raw_engine = Server::GetInstance().GetRawEngine(pb::common::RawEngine::RAW_ENG_ROCKSDB);
+  auto raw_engine = Server::GetInstance().GetRawEngine(request->raw_engine());
   if (raw_engine == nullptr) {
     response->mutable_error()->set_errcode(pb::error::ERAW_ENGINE_NOT_FOUND);
     response->mutable_error()->set_errmsg("Not found raw engine.");

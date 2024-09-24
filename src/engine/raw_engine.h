@@ -89,8 +89,7 @@ class RawEngine : public std::enable_shared_from_this<RawEngine> {
       for (const auto& cf_name : cf_names) {
         delete_range_map[cf_name].push_back(range);
       }
-      KvBatchDeleteRange(delete_range_map);
-      return butil::Status::OK();
+      return KvBatchDeleteRange(delete_range_map);
     }
   };
 
