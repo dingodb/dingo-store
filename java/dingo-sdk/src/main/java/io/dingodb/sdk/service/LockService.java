@@ -19,7 +19,6 @@ package io.dingodb.sdk.service;
 import io.dingodb.sdk.common.DingoClientException;
 import io.dingodb.sdk.common.utils.Future;
 import io.dingodb.sdk.service.entity.common.KeyValue;
-import io.dingodb.sdk.service.entity.common.Location;
 import io.dingodb.sdk.service.entity.meta.TsoOpType;
 import io.dingodb.sdk.service.entity.meta.TsoRequest;
 import io.dingodb.sdk.service.entity.meta.TsoTimestamp;
@@ -39,48 +38,52 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.LockSupport;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.Optional;
+import java.util.List;
+import java.util.UUID;
+import java.util.Comparator;
+import java.util.Objects;
+import java.util.Collections;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.RejectedExecutionHandler;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.SynchronousQueue;
 
 import static io.dingodb.sdk.service.entity.version.EventType.DELETE;
 import static io.dingodb.sdk.service.entity.version.EventType.NOT_EXISTS;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 @Slf4j
-public class LockService {
+public class LockService extends WatchService {
 
-    private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService executors = Executors.newScheduledThreadPool(4);
     private final MetaService tsoService;
     private ScheduledFuture<?> renewFuture;
+    private ScheduledFuture<?> expireFuture;
 
     public final long leaseTtl;
     private volatile long lease = -1;
     private final int delay;
-    private VersionService kvService;
-    private final int resourceSepIndex;
-
     public final String resource;
+    public volatile long ttlRefreshTime;
 
     public final String resourcePrefixBegin;
     public final String resourcePrefixEnd;
 
     private String resourcePrefixKeyBegin;
     private String resourcePrefixKeyEnd;
-    private Set<Location> locations;
+
+    public List<Lock> ownerLockList = new ArrayList<>();
     private static final ThreadFactory threadFactory = new ThreadFactory() {
             private final AtomicInteger index = new AtomicInteger(0);
 
@@ -120,11 +123,9 @@ public class LockService {
     }
 
     public LockService(String resource, String servers, int leaseTtl) {
-        this.locations = Services.parse(servers);
-        this.kvService = Services.versionService(locations);
-        this.tsoService = Services.tsoService(locations);
+        super(servers);
+        this.tsoService = Services.tsoService(this.locations);
         this.resource = resource;
-        this.resourceSepIndex = resource.length() + 1;
         this.leaseTtl = leaseTtl;
         this.resourcePrefixBegin = resource + "|0|";
         this.resourcePrefixEnd = resource + "|1|";
@@ -133,6 +134,7 @@ public class LockService {
     }
 
     private synchronized void grantLease() {
+        long grantLeaseStart = System.currentTimeMillis();
         do {
             try {
                 long ts = lease;
@@ -151,10 +153,28 @@ public class LockService {
                 }
             }
         } while (lease == -1);
+        log.info("grantLease done, lease:{}, resource:{}, cost:{}",
+             lease, resource, (System.currentTimeMillis() - grantLeaseStart));
         resourcePrefixKeyBegin = (resourcePrefixBegin + lease() + "|0|");
         resourcePrefixKeyEnd = (resourcePrefixBegin + lease() + "|1|");
         if (renewFuture == null) {
             renewFuture = executors.scheduleWithFixedDelay(this::renewLease, delay, delay, TimeUnit.MILLISECONDS);
+            expireFuture = executors.scheduleWithFixedDelay(this::expireCheck, delay, 1000, TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void expireCheck() {
+        if (ttlRefreshTime > 0) {
+            long sub = System.currentTimeMillis() - ttlRefreshTime;
+            if ((sub / 1000) > leaseTtl && !ownerLockList.isEmpty()) {
+                log.info("expire lease ttl. resource:" + resource);
+                ownerLockList.forEach(lock -> {
+                    if (lock.locked()) {
+                        lock.destroy();
+                    }
+                });
+                ownerLockList.clear();
+            }
         }
     }
 
@@ -162,10 +182,17 @@ public class LockService {
         if (lease == -1) {
             return;
         }
+        long start = System.currentTimeMillis();
         try {
             kvService.leaseRenew(LeaseRenewRequest.builder().iD(lease()).build());
+            ttlRefreshTime = System.currentTimeMillis();
+            long sub = System.currentTimeMillis() - start;
+            if (sub > leaseTtl) {
+                log.error("renew rpc cost:{}, resource:{}", sub, resource);
+            }
         } catch (Exception e) {
-            log.error("Renew lease {} error, grant again.", lease, e);
+            log.error("Renew lease {} error, cost:{}, resource:{}, grant again.",
+                lease, (System.currentTimeMillis() - start), resource, e);
             grantLease();
         }
     }
@@ -209,6 +236,19 @@ public class LockService {
         }
     }
 
+    public void cancel() {
+        try {
+            if (renewFuture != null && !renewFuture.isCancelled()) {
+                renewFuture.cancel(true);
+            }
+            if (expireFuture != null && !expireFuture.isCancelled()) {
+                expireFuture.cancel(true);
+            }
+        } catch (Exception e) {
+            log.error("cancel lock service error", e);
+        }
+    }
+
     public Kv put(long ts, String key, String value) {
         PutRequest request = putRequest(key, value);
         PutResponse putResponse = kvService.kvPut(ts, request);
@@ -222,11 +262,6 @@ public class LockService {
             .createRevision(createRevision)
             .modRevision(modRevision)
             .build();
-    }
-
-    public void resetVerService() {
-        Services.invalidateVersionService(locations);
-        kvService = Services.versionService(locations);
     }
 
     public void delete(long ts, String key) {
@@ -277,10 +312,13 @@ public class LockService {
         }
 
         private synchronized void destroy() {
+            log.info("destroy start, locked:{}, destroy done:{}", locked, destroyFuture.isDone());
             if (locked == 0) {
+                log.info("destroy locked return, resource:{}", resource);
                 return;
             }
-            if (destroyFuture.isDone()) {
+            if (!destroyFuture.isDone()) {
+                log.info("destroy complete, resource:{}", resource);
                 destroyFuture.complete(null);
             }
             CompletableFuture
@@ -293,6 +331,8 @@ public class LockService {
                     if (e != null) {
                         log.error("Delete {} error when reset.", resourceKey, e);
                         destroy();
+                    } else {
+                        log.info("destroy kv delete range done, resource:{}", resource);
                     }
                 });
         }
@@ -347,9 +387,13 @@ public class LockService {
         @Override
         public synchronized void lock() {
             if (locked()) {
+                if (!ownerLockList.contains(this)) {
+                    ownerLockList.add(this);
+                }
                 return;
             }
             while (true) {
+                long start = System.currentTimeMillis();
                 try {
                     PutResponse response = kvService.kvPut(putRequest(resourceKey, resourceValue));
                     long revision = getCreateRevision(response);
@@ -372,11 +416,16 @@ public class LockService {
                     } catch (Exception ignored) {
                     }
                 } catch (Exception e) {
-                    log.error("Lock {} error, id: {}", resourceKey, lockId, e);
+                    log.error("Lock {} error, id: {}, cost:{}",
+                        resourceKey, lockId, (System.currentTimeMillis() - start), e);
                 }
             }
             if (destroyFuture.isDone()) {
                 throw new RuntimeException("Destroyed!");
+            }
+            ttlRefreshTime = System.currentTimeMillis();
+            if (!ownerLockList.contains(this)) {
+                ownerLockList.add(this);
             }
         }
 
