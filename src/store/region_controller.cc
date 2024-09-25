@@ -32,6 +32,7 @@
 #include "engine/raft_store_engine.h"
 #include "event/store_state_machine_event.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
 #include "meta/store_meta_manager.h"
@@ -696,11 +697,12 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   auto target_definition = target_region->Definition();
   for (const auto& peer : target_definition.peers()) {
     auto region_metas =
-        ServiceAccess::GetRegionInfo({source_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
+        ServiceAccess::GetRegionInfo({target_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
     if (region_metas.empty()) {
       return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found target peer({}) region meta.",
                                                                      Helper::LocationToString(peer.raft_location())));
     }
+
     if (region_metas.front().state() != pb::common::NORMAL) {
       return butil::Status(pb::error::EREGION_STATE,
                            fmt::format("Target region peer state({}) is not NORMAL, not allow merge.",
