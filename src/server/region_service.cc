@@ -293,7 +293,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   table_header.push_back("REGION_STATE");
   table_header.push_back("BRAFT_STATUS");
   table_header.push_back("REPLICA_STATUS");
-  table_header.push_back("STORE_REGION_STATE");
   table_header.push_back("LEADER_ID");
   table_header.push_back("REPLICA");
   table_header.push_back("SCHEMA_ID");
@@ -343,7 +342,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
   min_widths.push_back(10);  // REGION_STATE
   min_widths.push_back(10);  // BRAFT_STATUS
   min_widths.push_back(10);  // REPLICA_STATUS
-  min_widths.push_back(10);  // STORE_REGION_STATE
   min_widths.push_back(10);  // LEADER_ID
   min_widths.push_back(10);  // REPLICA
   min_widths.push_back(10);  // SCHEMA_ID
@@ -418,9 +416,6 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
     }
 
     line.push_back(pb::common::ReplicaStatus_Name(region.status().replica_status()));  // REPLICA_STATUS
-    url_line.push_back(std::string());
-
-    line.push_back(pb::common::StoreRegionState_Name(region.metrics().store_region_state()));  // STORE_REGION_STATE
     url_line.push_back(std::string());
 
     line.push_back(std::to_string(region.leader_store_id()));  // LEADER_ID

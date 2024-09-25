@@ -4128,9 +4128,9 @@ pb::common::RegionState CoordinatorControl::GenRegionState(
                              pb::common::RegionState_Name(old_state), pb::common::RegionState_Name(new_state));
   });
 
-  if (region_internal.state() == pb::common::RegionState::REGION_DELETE ||
-      region_internal.state() == pb::common::RegionState::REGION_DELETING ||
-      region_internal.state() == pb::common::RegionState::REGION_DELETED) {
+  if (old_state == pb::common::RegionState::REGION_DELETE ||
+      old_state == pb::common::RegionState::REGION_DELETING ||
+      old_state == pb::common::RegionState::REGION_DELETED) {
     if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
       new_state = pb::common::RegionState::REGION_DELETED;
       return new_state;
