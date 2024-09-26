@@ -515,12 +515,6 @@ void CalculateTableMetricsTask::CalculateTableMetrics(std::shared_ptr<Coordinato
 // this is for coordinator
 static std::atomic<bool> g_coordinator_lease_running(false);
 void LeaseTask::ExecLeaseTask(std::shared_ptr<KvControl> kv_control) {
-  if (!kv_control->IsLeader()) {
-    // DINGO_LOG(INFO) << "ExecLeaseTask... this is follower";
-    return;
-  }
-  DINGO_LOG(DEBUG) << "ExecLeaseTask... this is leader";
-
   if (g_coordinator_lease_running.load(std::memory_order_relaxed)) {
     DINGO_LOG(INFO) << "ExecLeaseTask... g_coordinator_lease_running is true, return";
     return;

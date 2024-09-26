@@ -75,8 +75,9 @@ void KvControl::OnLeaderStart(int64_t term) {
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
-  // build lease_to_key_map_temp_
-  BuildLeaseToKeyMap();
+  // build lease_to_key_map_
+  // BuildLeaseToKeyMap();
+  // this above operation may cause dead lock, so we do this build process in LeaseTask
 
   // clear one time watch map
   one_time_watch_closure_status_map_.Clear();
@@ -85,9 +86,7 @@ void KvControl::OnLeaderStart(int64_t term) {
     one_time_watch_map_.clear();
     one_time_watch_closure_map_.clear();
   }
-
-  DINGO_LOG(INFO) << "OnLeaderStart init lease_to_key_map_temp_ finished, term=" << term
-                  << " count=" << lease_to_key_map_temp_.size();
+  DINGO_LOG(INFO) << "OnLeaderStart clear one_time_watch_map_, term=" << term;
 
   DINGO_LOG(INFO) << "OnLeaderStart finished, term=" << term;
 }
@@ -106,6 +105,7 @@ void KvControl::OnLeaderStop() {
     one_time_watch_map_.clear();
     one_time_watch_closure_map_.clear();
   }
+  DINGO_LOG(INFO) << "OnLeaderStop clear one_time_watch_map_";
 
   DINGO_LOG(INFO) << "OnLeaderStop finished";
 }
@@ -291,10 +291,12 @@ bool KvControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::MetaSnapshotF
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
-  // build lease_to_key_map_temp_
-  BuildLeaseToKeyMap();
+  // only leader need to build lease_to_key_map_
+  // follower will always clear lease_to_key_map_ in LeaseTask
+  // build lease_to_key_map_
+  // BuildLeaseToKeyMap();
 
-  DINGO_LOG(INFO) << "LoadSnapshot lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
+  DINGO_LOG(INFO) << "LoadSnapshot lease_to_key_map, count=" << lease_to_key_map_.size();
 
   return true;
 }
