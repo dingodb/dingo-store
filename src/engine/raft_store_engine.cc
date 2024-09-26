@@ -233,7 +233,7 @@ butil::Status RaftStoreEngine::AddNode(std::shared_ptr<pb::common::RegionDefinit
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->id());
 
   // Build StatMachine
-  auto state_machine = std::make_shared<MetaStateMachine>(meta_control, is_volatile);
+  auto state_machine = std::make_shared<MetaStateMachine>(region->id(), meta_control, is_volatile);
 
   // Build log storage
   auto config = ConfigManager::GetInstance().GetRoleConfig();

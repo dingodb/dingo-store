@@ -94,9 +94,9 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   auto writer = engine->Writer();
   auto status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
   if (!status.ok()) {
-    DINGO_LOG(FATAL) << fmt::format("[txn][region({})] HandleMultiCfPutAndDelete, term: {} apply_log_id: {}",
-                                    region->Id(), term_id, log_id)
-                     << ", write failed, request: " << request.ShortDebugString();
+    DINGO_LOG(FATAL) << fmt::format(
+        "[txn][region({})] HandleMultiCfPutAndDelete fail, term: {} apply_log_id: {}, error: {} request: {}.",
+        region->Id(), term_id, log_id, status.error_str(), request.ShortDebugString());
   }
 
   // check if need to commit to vector index
@@ -110,9 +110,9 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
       auto handler = std::make_shared<VectorAddHandler>();
       if (handler == nullptr) {
-        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] DoTxnCommit, term: {} apply_log_id: {}", region->Id(),
-                                        term_id, log_id)
-                         << ", new vector add handler failed, vector add count: " << vector_add.vectors_size();
+        DINGO_LOG(FATAL) << fmt::format(
+            "[txn][region({})] DoTxnCommit fail, term: {} apply_log_id: {}, vector add count: {}.", region->Id(),
+            term_id, log_id, vector_add.vectors_size());
       }
 
       auto add_ctx = std::make_shared<Context>();

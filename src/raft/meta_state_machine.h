@@ -28,7 +28,8 @@ namespace dingodb {
 
 class MetaStateMachine : public BaseStateMachine {
  public:
-  MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile = false);
+  MetaStateMachine(int64_t node_id, std::shared_ptr<MetaControl> meta_control, bool is_volatile = false);
+
   void on_apply(braft::Iterator& iter) override;
   void on_shutdown() override;
   void on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) override;
@@ -56,6 +57,8 @@ class MetaStateMachine : public BaseStateMachine {
   int64_t applied_term_;
   int64_t applied_index_;
   int64_t last_snapshot_index_;
+
+  int64_t node_id_;
 };
 
 }  // namespace dingodb

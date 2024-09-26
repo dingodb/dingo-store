@@ -21,17 +21,22 @@
 #include <cstdint>
 #include <memory>
 
+#include "bthread/bthread.h"
 #include "common/logging.h"
 #include "common/meta_control.h"
 #include "engine/snapshot.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
 
-MetaStateMachine::MetaStateMachine(std::shared_ptr<MetaControl> meta_control, bool is_volatile)
-    : meta_control_(meta_control), is_volatile_state_machine_(is_volatile), last_snapshot_index_(0) {}
+MetaStateMachine::MetaStateMachine(int64_t node_id, std::shared_ptr<MetaControl> meta_control, bool is_volatile)
+    : node_id_(node_id),
+      meta_control_(meta_control),
+      is_volatile_state_machine_(is_volatile),
+      last_snapshot_index_(0) {}
 
 void MetaStateMachine::DispatchRequest(bool is_leader, int64_t term, int64_t index,
                                        const pb::raft::RaftCmdRequest& raft_cmd, google::protobuf::Message* response) {
@@ -79,8 +84,9 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
       CHECK(raft_cmd.ParseFromZeroCopyStream(&wrapper));
     }
 
-    DINGO_LOG(DEBUG) << fmt::format("raft apply log on region[{}-term:{}-index:{}] cmd:[{}]",
-                                    raft_cmd.header().region_id(), iter.term(), iter.index(), raft_cmd.DebugString());
+    DINGO_LOG(DEBUG) << fmt::format("[raft.sm][node({})] raft apply log on region[{}-term:{}-index:{}] cmd:[{}]",
+                                    node_id_, raft_cmd.header().region_id(), iter.term(), iter.index(),
+                                    raft_cmd.DebugString());
 
     DispatchRequest(is_leader, iter.term(), iter.index(), raft_cmd, response);
 
@@ -89,9 +95,10 @@ void MetaStateMachine::on_apply(braft::Iterator& iter) {
   }
 }
 
-void MetaStateMachine::on_shutdown() { DINGO_LOG(INFO) << "on_shutdown..."; }
+void MetaStateMachine::on_shutdown() { DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_shutdown...", node_id_); }
 
 struct SnapshotArg {
+  int64_t node_id;
   int64_t value;
   std::shared_ptr<MetaControl> control;
   std::shared_ptr<Snapshot> snapshot;
@@ -105,7 +112,8 @@ static void* SaveSnapshot(void* arg) {
   // Serialize StateMachine to the snapshot
   brpc::ClosureGuard done_guard(sa->done);
   std::string snapshot_path = sa->writer->get_path() + "/data";
-  DINGO_LOG(INFO) << "Saving snapshot to " << snapshot_path;
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] save snapshot to {}", sa->node_id, snapshot_path);
+
   // Use protobuf to store the snapshot for backward compatibility.
   pb::coordinator_internal::MetaSnapshotFile s;
   bool ret = sa->control->LoadMetaToSnapshotFile(sa->snapshot, s);
@@ -114,45 +122,61 @@ static void* SaveSnapshot(void* arg) {
     return nullptr;
   }
 
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] save snapshot, generate metafile.", sa->node_id);
+
   braft::ProtoBufFile pb_file(snapshot_path);
   if (pb_file.save(&s, true) != 0) {
     sa->done->status().set_error(EIO, "Fail to save pb_file");
     return nullptr;
   }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] save snapshot, save metafile..", sa->node_id);
+
   // Snapshot is a set of files in raft. Add the only file into the
   // writer here.
   if (sa->writer->add_file("data") != 0) {
     sa->done->status().set_error(EIO, "Fail to add file to writer");
     return nullptr;
   }
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] save snapshot, finish.", sa->node_id);
+
   return nullptr;
 }
 
 void MetaStateMachine::on_snapshot_save(braft::SnapshotWriter* writer, braft::Closure* done) {
-  DINGO_LOG(INFO) << "on_snapshot_save...";
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_snapshot_save...", node_id_);
   // Save current StateMachine in memory and starts a new bthread to avoid
   // blocking StateMachine since it's a bit slow to write data to disk
   // file.
   SnapshotArg* arg = new SnapshotArg;
+  arg->node_id = node_id_;
   // arg->value = _value.load(butil::memory_order_relaxed);
   arg->control = this->meta_control_;
   arg->snapshot = this->meta_control_->PrepareRaftSnapshot();
   arg->writer = writer;
   arg->done = done;
+
   bthread_t tid;
-  bthread_start_urgent(&tid, nullptr, SaveSnapshot, arg);
+  if (bthread_start_background(&tid, nullptr, SaveSnapshot, arg) != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][node({})] create bthread fail.", node_id_);
+    SaveSnapshot(arg);
+  }
 
   last_snapshot_index_ = applied_index_;
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_snapshot_save end...", node_id_);
 }
 
 int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
-  DINGO_LOG(INFO) << "on_snapshot_load...";
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_snapshot_load...", node_id_);
+
   // Load snasphot from reader, replacing the running StateMachine
   if (!is_volatile_state_machine_) {
     CHECK(!this->meta_control_->IsLeader()) << "Leader is not supposed to load snapshot";
   }
   if (reader->get_file_meta("data", nullptr) != 0) {
-    DINGO_LOG(ERROR) << "Fail to find `data' on " << reader->get_path();
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][node({})] fail to find data on path({})", node_id_, reader->get_path());
     return -1;
   }
 
@@ -160,7 +184,8 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   braft::SnapshotMeta snapshot_meta;
   auto ret = reader->load_meta(&snapshot_meta);
   if (ret < 0) {
-    DINGO_LOG(ERROR) << "Fail to load snapshot meta from " << reader->get_path();
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][node({})] fail to load snapshot meta from path({})", node_id_,
+                                    reader->get_path());
     return -1;
   }
 
@@ -170,21 +195,19 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   int64_t index = 0;
   ret = this->meta_control_->GetAppliedTermAndIndex(term, index);
   if (ret < 0) {
-    DINGO_LOG(WARNING) << "Fail to GetAppliedTermAndIndex, need snapshot install, when load snapshot from "
-                       << reader->get_path();
+    DINGO_LOG(WARNING) << fmt::format(
+        "[raft.sm][node({})] fail to GetAppliedTermAndIndex, need snapshot install, when load snapshot from path({})",
+        node_id_, reader->get_path());
   }
 
-  DINGO_LOG(INFO) << "on_snapshot_load last_include_index:" << snapshot_meta.last_included_index()
-                  << " last_applied_index:" << index << " last_include_term:" << snapshot_meta.last_included_term()
-                  << " last_applied_term:" << term;
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_snapshot_load last_include({}/{}) last_applied({}/{}).",
+                                 node_id_, snapshot_meta.last_included_term(), snapshot_meta.last_included_index(),
+                                 term, index);
 
   if (term >= snapshot_meta.last_included_term() && index >= snapshot_meta.last_included_index()) {
-    DINGO_LOG(WARNING) << "skip to load snapshot from " << reader->get_path()
-                       << " because last_include_index"
-                          " < last_applied_index and last_include_term < last_applied_term";
-    DINGO_LOG(WARNING) << "skip to load snapshot last_include_index:" << snapshot_meta.last_included_index()
-                       << " last_applied_index:" << index << " last_include_term:" << snapshot_meta.last_included_term()
-                       << " last_applied_term:" << term;
+    DINGO_LOG(WARNING) << fmt::format(
+        "[raft.sm][node({})] skip to load snapshot last_include({}/{}) last_applied({}/{}).", node_id_,
+        snapshot_meta.last_included_term(), snapshot_meta.last_included_index(), term, index);
     return 0;
   }
 
@@ -192,51 +215,57 @@ int MetaStateMachine::on_snapshot_load(braft::SnapshotReader* reader) {
   braft::ProtoBufFile pb_file(snapshot_path);
   pb::coordinator_internal::MetaSnapshotFile s;
   if (pb_file.load(&s) != 0) {
-    DINGO_LOG(ERROR) << "Fail to load snapshot from " << snapshot_path;
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][node({})] fail to load snapshot from path({})", node_id_, snapshot_path);
     return -1;
   }
 
   bool bool_ret = this->meta_control_->LoadMetaFromSnapshotFile(s);
   if (!bool_ret) {
-    DINGO_LOG(ERROR) << "Fail to load snapshot from " << snapshot_path << " LoadMetaFromSnapshotFile return false";
+    DINGO_LOG(ERROR) << fmt::format("[raft.sm][node({})] fail to load snapshot from path({}).", node_id_,
+                                    snapshot_path);
     return -1;
   }
 
   applied_term_ = snapshot_meta.last_included_term();
   applied_index_ = snapshot_meta.last_included_index();
   last_snapshot_index_ = snapshot_meta.last_included_index();
+
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_snapshot_load end...", node_id_);
   return 0;
 }
 
 void MetaStateMachine::on_leader_start(int64_t term) {
-  DINGO_LOG(INFO) << "on_leader_start term: " << term;
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_leader_start, term({})", node_id_, term);
+
   meta_control_->SetLeaderTerm(term);
   meta_control_->OnLeaderStart(term);
 }
 
 void MetaStateMachine::on_leader_stop(const butil::Status& status) {
-  DINGO_LOG(INFO) << "on_leader_stop: " << status.error_code() << " " << status.error_str();
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_leader_stop, error: {} {}", node_id_, status.error_code(),
+                                 status.error_str());
+
   meta_control_->SetLeaderTerm(-1);
   meta_control_->OnLeaderStop();
 }
 
 void MetaStateMachine::on_error(const ::braft::Error& e) {
-  DINGO_LOG(INFO) << fmt::format("on_error type({}) {} {}", static_cast<int>(e.type()), e.status().error_code(),
-                                 e.status().error_str());
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_error type({}) {} {}", node_id_, static_cast<int>(e.type()),
+                                 e.status().error_code(), e.status().error_str());
 }
 
 void MetaStateMachine::on_configuration_committed(const ::braft::Configuration& /*conf*/) {
-  DINGO_LOG(INFO) << "on_configuration_committed...";
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_configuration_committed...", node_id_);
   // std::vector<braft::PeerId> peers;
   // conf.list_peers(&peers);
 }
 
 void MetaStateMachine::on_start_following(const ::braft::LeaderChangeContext& /*ctx*/) {
-  DINGO_LOG(INFO) << "on_start_following...";
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_start_following...", node_id_);
 }
 
 void MetaStateMachine::on_stop_following(const ::braft::LeaderChangeContext& /*ctx*/) {
-  DINGO_LOG(INFO) << "on_stop_following...";
+  DINGO_LOG(INFO) << fmt::format("[raft.sm][node({})] on_stop_following...", node_id_);
 }
 
 int64_t MetaStateMachine::GetAppliedIndex() const { return applied_index_; }

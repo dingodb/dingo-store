@@ -37,6 +37,8 @@
 
 namespace dingodb {
 
+DECLARE_bool(async_hello);
+
 void VersionSetError(pb::error::Error* error, int errcode, const std::string& errmsg) {
   error->set_errcode(static_cast<pb::error::Errno>(errcode));
   error->set_errmsg(errmsg);
@@ -1117,6 +1119,11 @@ void VersionServiceProtoImpl::GetMemoryInfo(google::protobuf::RpcController* con
   DINGO_LOG(DEBUG) << "Hello request: " << request->hello();
 
   auto* svr_done = new CoordinatorServiceClosure("Hello", done_guard.release(), request, response);
+
+  if (!FLAGS_async_hello) {
+    DoKvHello(controller, request, response, svr_done, kv_control_, engine_, true);
+    return;
+  }
 
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {

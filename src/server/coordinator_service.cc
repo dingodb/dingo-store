@@ -48,8 +48,13 @@
 namespace dingodb {
 
 DEFINE_int32(max_create_id_count, 2048, "max create id count");
+BRPC_VALIDATE_GFLAG(max_create_id_count, brpc::PositiveInteger);
+
 DEFINE_bool(async_hello, true, "async hello");
+BRPC_VALIDATE_GFLAG(async_hello, brpc::PassValidate);
+
 DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
+BRPC_VALIDATE_GFLAG(hello_latency_ms, brpc::NonNegativeInteger);
 
 void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
                         pb::coordinator::HelloResponse *response, TrackClosure *done,
