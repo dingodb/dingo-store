@@ -951,10 +951,7 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
-  // build lease_to_key_map_temp_
-  // BuildLeaseToKeyMap();
-
-  // DINGO_LOG(INFO) << "LoadSnapshot lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
+  DINGO_LOG(INFO) << "Coordinator LoadMetaFromSnapshotFile success";
 
   return true;
 }

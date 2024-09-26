@@ -220,6 +220,9 @@ class KvControl : public MetaControl {
   // lease timeout/revoke task
   void LeaseTask();
 
+  // is lease_to_key_map_ inited
+  bool IsLeaseToKeyMapInited();
+
   // lease timeout/revoke task
   void CompactionTask();
 
@@ -346,9 +349,10 @@ class KvControl : public MetaControl {
   // 14.lease
   DingoSafeMap<int64_t, pb::coordinator_internal::LeaseInternal> kv_lease_map_;
   MetaMemMapFlat<pb::coordinator_internal::LeaseInternal> *kv_lease_meta_;
-  std::map<int64_t, KvLeaseWithKeys>
-      lease_to_key_map_temp_;  // storage lease_id to key map, this map is built in on_leader_start
-  bthread_mutex_t lease_to_key_map_temp_mutex_;
+  // storage lease_id to key map, this map is built in on_leader_start
+  std::map<int64_t, KvLeaseWithKeys> lease_to_key_map_;
+  bthread_mutex_t lease_to_key_map_mutex_;
+  butil::atomic<int64_t> lease_to_key_map_init_term_{0};
 
   // 15.version kv with lease
   DingoSafeStdMap<std::string, pb::coordinator_internal::KvIndexInternal> kv_index_map_;

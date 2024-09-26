@@ -40,7 +40,7 @@ KvControl::KvControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<Me
                      std::shared_ptr<RawEngine> raw_engine_of_meta)
     : meta_reader_(meta_reader), meta_writer_(meta_writer), leader_term_(-1), raw_engine_of_meta_(raw_engine_of_meta) {
   // init bthread mutex
-  bthread_mutex_init(&lease_to_key_map_temp_mutex_, nullptr);
+  bthread_mutex_init(&lease_to_key_map_mutex_, nullptr);
   bthread_mutex_init(&one_time_watch_map_mutex_, nullptr);
   leader_term_.store(-1, butil::memory_order_release);
 
@@ -144,9 +144,11 @@ bool KvControl::Recover() {
   // build id_epoch, schema_name, table_name, index_name maps
   BuildTempMaps();
 
-  // build version_lease_to_key_map_temp_
-  BuildLeaseToKeyMap();
-  DINGO_LOG(INFO) << "Recover lease_to_key_map_temp, count=" << lease_to_key_map_temp_.size();
+  // only leader need to build lease_to_key_map_
+  // follower will always clear lease_to_key_map_ in LeaseTask
+  // build version_lease_to_key_map_
+  // BuildLeaseToKeyMap();
+  // DINGO_LOG(INFO) << "Recover lease_to_key_map, count=" << lease_to_key_map_.size();
 
   std::map<std::string, pb::coordinator_internal::KvRevInternal> kv_rev_map;
   kv_rev_meta_->GetAllIdElements(kv_rev_map);
