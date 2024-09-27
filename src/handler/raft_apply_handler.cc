@@ -1287,9 +1287,11 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
             vector_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
-          ctx->SetStatus(status);
-          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                            vector_index_id, request.ids().size(), Helper::PrintStatus(status));
+          if (status.error_code() != pb::error::Errno::EVECTOR_INVALID) {
+            ctx->SetStatus(status);
+            DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
+                                              vector_index_id, request.ids().size(), Helper::PrintStatus(status));
+          }
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
