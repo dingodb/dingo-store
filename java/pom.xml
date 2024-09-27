@@ -13,7 +13,7 @@
         <sl4j.api.verion>1.7.36</sl4j.api.verion>
         <sl4j.log4j12.verion>1.7.30</sl4j.log4j12.verion>
         <junit.version>4.12</junit.version>
-        <protostuff.java.version>3.21.7</protostuff.java.version>
+        <protostuff.java.version>3.25.5</protostuff.java.version>
         <grpc.version>1.53.0</grpc.version>
         <jackson.version>2.13.4</jackson.version>
         <lombok.version>1.18.16</lombok.version>
