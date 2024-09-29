@@ -1612,9 +1612,8 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
     response->mutable_error()->set_errmsg("region_id or leader_store_id is illegal");
     return;
   }
-
   auto ret = coordinator_control->TransferLeaderRegionWithTaskList(request->region_id(), request->leader_store_id(),
-                                                                   meta_increment);
+                                                                   request->is_force(), meta_increment);
 
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));

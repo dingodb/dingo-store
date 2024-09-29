@@ -313,7 +313,7 @@ class CoordinatorControl : public MetaControl {
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // transfer leader region
-  butil::Status TransferLeaderRegionWithTaskList(int64_t region_id, int64_t new_leader_store_id,
+  butil::Status TransferLeaderRegionWithTaskList(int64_t region_id, int64_t new_leader_store_id, bool is_force,
                                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
@@ -836,7 +836,7 @@ class CoordinatorControl : public MetaControl {
                          const pb::common::RegionDefinition &region_definition,
                          pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddTransferLeaderTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                             const pb::common::Peer &new_leader_peer,
+                             const pb::common::Peer &new_leader_peer, bool is_force,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddMergeTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t merge_from_region_id,
                     int64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
