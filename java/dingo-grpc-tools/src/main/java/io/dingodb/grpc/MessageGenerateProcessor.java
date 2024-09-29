@@ -285,6 +285,9 @@ public class MessageGenerateProcessor {
             ) {
                 continue;
             }
+            if (name.equalsIgnoreCase("bitField0_")) {
+                continue;
+            }
             String fieldName = name.substring(0, name.length() - 1);
 
             TypeMirror fieldElement = elements.get(name).asType();
