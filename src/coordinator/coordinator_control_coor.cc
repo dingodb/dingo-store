@@ -3319,7 +3319,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
 }
 
 butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
-    int64_t region_id, int64_t new_leader_store_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+    int64_t region_id, int64_t new_leader_store_id, bool is_force,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
   // check region_id exists
   pb::coordinator_internal::RegionInternal region;
   int ret = region_map_.Get(region_id, region);
@@ -3403,7 +3404,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
   auto* increment_task_list = CreateTaskList(meta_increment, "TransferLeader");
 
   // this transfer leader task
-  AddTransferLeaderTask(increment_task_list, leader_store_id, region_id, new_leader_peer, meta_increment);
+  AddTransferLeaderTask(increment_task_list, leader_store_id, region_id, new_leader_peer, is_force, meta_increment);
 
   return butil::Status::OK();
 }
@@ -4128,8 +4129,7 @@ pb::common::RegionState CoordinatorControl::GenRegionState(
                              pb::common::RegionState_Name(old_state), pb::common::RegionState_Name(new_state));
   });
 
-  if (old_state == pb::common::RegionState::REGION_DELETE ||
-      old_state == pb::common::RegionState::REGION_DELETING ||
+  if (old_state == pb::common::RegionState::REGION_DELETE || old_state == pb::common::RegionState::REGION_DELETING ||
       old_state == pb::common::RegionState::REGION_DELETED) {
     if (region_metrics.store_region_state() == pb::common::StoreRegionState::DELETED) {
       new_state = pb::common::RegionState::REGION_DELETED;
@@ -5064,7 +5064,7 @@ void CoordinatorControl::AddChangePeerTask(pb::coordinator::TaskList* task_list,
 
 void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_list, int64_t store_id,
                                                int64_t region_id, const pb::common::Peer& new_leader_peer,
-                                               pb::coordinator_internal::MetaIncrement& meta_increment) {
+                                               bool is_force, pb::coordinator_internal::MetaIncrement& meta_increment) {
   // this is transfer_leader task
   auto* new_task = task_list->add_tasks();
   auto* store_operation_transfer = new_task->add_store_operations();
@@ -5078,6 +5078,7 @@ void CoordinatorControl::AddTransferLeaderTask(pb::coordinator::TaskList* task_l
   region_cmd_to_transfer->set_is_notify(true);  // notify store to do immediately heartbeat
 
   *(region_cmd_to_transfer->mutable_transfer_leader_request()->mutable_peer()) = new_leader_peer;
+  region_cmd_to_transfer->mutable_transfer_leader_request()->set_is_force(is_force);
 }
 
 void CoordinatorControl::AddMergeTask(pb::coordinator::TaskList* task_list, int64_t store_id,

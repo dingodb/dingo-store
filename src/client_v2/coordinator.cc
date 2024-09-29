@@ -1935,6 +1935,7 @@ void SetUpTransferLeaderRegion(CLI::App &app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
+  cmd->add_option("--force", opt->is_force, "Request parameter is_force")->default_val(false)->default_str("false");
   cmd->callback([opt]() { RunTransferLeaderRegion(*opt); });
 }
 
@@ -1977,7 +1978,7 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
 
   transfer_leader_request.set_region_id(opt.region_id);
   transfer_leader_request.set_leader_store_id(opt.store_id);
-
+  transfer_leader_request.set_is_force(opt.is_force);
   auto status2 = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
       "TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
 

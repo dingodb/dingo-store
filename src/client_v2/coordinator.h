@@ -372,6 +372,7 @@ struct TransferLeaderRegionOption {
   std::string coor_url;
   int64_t store_id;
   int64_t region_id;
+  bool is_force;
 };
 void SetUpTransferLeaderRegion(CLI::App &app);
 void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt);
