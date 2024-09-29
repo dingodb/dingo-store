@@ -49,6 +49,8 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
 
   // gc
   SetUpUpdateGCSafePoint(app);
+  SetUpUpdateTenantGCSafePoint(app);
+  SetUpUpdateGCFlag(app);
   SetUpGetGCSafePoint(app);
 }
 
@@ -2421,8 +2423,8 @@ void SetUpUpdateGCSafePoint(CLI::App &app) {
   auto opt = std::make_shared<UpdateGCSafePointOptions>();
   auto *cmd = app.add_subcommand("UpdateGCSafePoint", "Update GC safepoint ")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--safe_point", opt->safe_point, "Request parameter safe point")->required();
-  cmd->add_option("--gc_flag", opt->gc_flag, "Request parameter gc_flag must be start|stop")->required();
+  cmd->add_option("--safe_point", opt->safe_point, "Request parameter safe point");
+  cmd->add_option("--gc_flag", opt->gc_flag, "Request parameter gc_flag be start|stop");
   cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id");
   cmd->add_option("--safe_point2", opt->safe_point2, "Request parameter safe_point2 ");
   cmd->callback([opt]() { RunUpdateGCSafePoint(*opt); });
@@ -2442,8 +2444,8 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
     request.set_gc_flag(
         ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_STOP);
   } else {
-    std::cout << "gc_flag is invalid, must be start or stop" << std::endl;
-    return;
+    request.set_gc_flag(
+        ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_NONE);
   }
 
   request.set_safe_point(opt.safe_point);
@@ -2461,6 +2463,80 @@ void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt) {
     return;
   }
   std::cout << "update gc safe point success." << std::endl;
+}
+
+void SetUpUpdateTenantGCSafePoint(CLI::App &app) {
+  auto opt = std::make_shared<UpdateTenantGCSafePointOptions>();
+  auto *cmd =
+      app.add_subcommand("UpdateTenantGCSafePoint", "Update tenant gc safepoint ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--safe_point", opt->safe_point, "Request parameter safe point")->required();
+  cmd->add_option("--tenant_id", opt->tenant_id, "Request parameter tenant id");
+  cmd->callback([opt]() { RunUpdateTenantGCSafePoint(*opt); });
+}
+
+void RunUpdateTenantGCSafePoint(UpdateTenantGCSafePointOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::UpdateGCSafePointRequest request;
+  dingodb::pb::coordinator::UpdateGCSafePointResponse response;
+
+  request.set_gc_flag(
+      ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_NONE);
+
+  if (opt.tenant_id > 0) {
+    request.mutable_tenant_safe_points()->insert({opt.tenant_id, opt.safe_point});
+  } else {
+    request.set_safe_point(opt.safe_point);
+  }
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateGCSafePoint",
+                                                                                              request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "update tenant gc safe point failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << "update tenant gc safe point success." << std::endl;
+}
+
+void SetUpUpdateGCFlag(CLI::App &app) {
+  auto opt = std::make_shared<UpdateGCFlagOptions>();
+  auto *cmd = app.add_subcommand("UpdateGCFlag", "Update GC flag")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--gc_flag", opt->gc_flag, "Request parameter gc_flag be start|stop")->required();
+  cmd->callback([opt]() { RunUpdateGCFlag(*opt); });
+}
+
+void RunUpdateGCFlag(UpdateGCFlagOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::UpdateGCSafePointRequest request;
+  dingodb::pb::coordinator::UpdateGCSafePointResponse response;
+
+  if (opt.gc_flag == "start") {
+    request.set_gc_flag(
+        ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_START);
+  } else if (opt.gc_flag == "stop") {
+    request.set_gc_flag(
+        ::dingodb::pb::coordinator::UpdateGCSafePointRequest_GcFlagType::UpdateGCSafePointRequest_GcFlagType_GC_STOP);
+  } else {
+    std::cout << "gc_flag is invalid, must be start or stop" << std::endl;
+    return;
+  }
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("UpdateGCSafePoint",
+                                                                                              request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "update gc flag failed, error: "
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg() << std::endl;
+    return;
+  }
+  std::cout << "update gc flag success." << std::endl;
 }
 
 void SetUpGetGCSafePoint(CLI::App &app) {
