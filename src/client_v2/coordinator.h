@@ -507,6 +507,22 @@ struct UpdateGCSafePointOptions {
 void SetUpUpdateGCSafePoint(CLI::App &app);
 void RunUpdateGCSafePoint(UpdateGCSafePointOptions const &opt);
 
+struct UpdateTenantGCSafePointOptions {
+  std::string coor_url;
+  int64_t safe_point;
+  int64_t tenant_id;
+};
+void SetUpUpdateTenantGCSafePoint(CLI::App &app);
+void RunUpdateTenantGCSafePoint(UpdateTenantGCSafePointOptions const &opt);
+
+struct UpdateGCFlagOptions {
+  std::string coor_url;
+  int64_t safe_point;
+  std::string gc_flag;
+};
+void SetUpUpdateGCFlag(CLI::App &app);
+void RunUpdateGCFlag(UpdateGCFlagOptions const &opt);
+
 struct GetGCSafePointOptions {
   std::string coor_url;
   bool get_all_tenant;
