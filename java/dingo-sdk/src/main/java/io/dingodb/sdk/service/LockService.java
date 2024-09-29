@@ -187,7 +187,7 @@ public class LockService extends WatchService {
             kvService.leaseRenew(LeaseRenewRequest.builder().iD(lease()).build());
             ttlRefreshTime = System.currentTimeMillis();
             long sub = System.currentTimeMillis() - start;
-            if (sub > leaseTtl) {
+            if ((sub / 1000) > leaseTtl) {
                 log.error("renew rpc cost:{}, resource:{}", sub, resource);
             }
         } catch (Exception e) {
