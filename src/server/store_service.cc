@@ -32,6 +32,7 @@
 #include "common/tracker.h"
 #include "common/version.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "meta/store_meta_manager.h"
 #include "proto/common.pb.h"
@@ -1886,7 +1887,8 @@ static butil::Status ValidateTxnPessimisticLockRequest(const dingodb::pb::store:
   }
 
   if (request->mutations_size() > FLAGS_max_prewrite_count) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("mutations size is too large, max={}", FLAGS_max_prewrite_count));
   }
 
   if (request->primary_lock().empty()) {
@@ -2027,7 +2029,8 @@ static butil::Status ValidateTxnPessimisticRollbackRequest(
   }
 
   if (request->keys_size() > FLAGS_max_prewrite_count) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "keys size is too large, max=1024");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("keys size is too large, max={}", FLAGS_max_prewrite_count));
   }
 
   if (request->start_ts() == 0) {
@@ -2139,7 +2142,8 @@ static butil::Status ValidateTxnPrewriteRequest(const dingodb::pb::store::TxnPre
   }
 
   if (request->mutations_size() > FLAGS_max_prewrite_count) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "mutations size is too large, max=1024");
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("mutations size is too large, max={}", FLAGS_max_prewrite_count));
   }
 
   if (request->primary_lock().empty()) {

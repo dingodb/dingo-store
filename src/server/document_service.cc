@@ -43,8 +43,8 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-DEFINE_int64(document_max_batch_count, 1024, "document max batch count in one request");
-DEFINE_int64(document_max_request_size, 8388608, "document max batch count in one request");
+DEFINE_int64(document_max_batch_count, 4096, "document max batch count in one request");
+DEFINE_int64(document_max_request_size, 33554432, "document max batch count in one request");
 DEFINE_bool(enable_async_document_search, true, "enable async document search");
 DEFINE_bool(enable_async_document_count, true, "enable async document count");
 DEFINE_bool(enable_async_document_operation, true, "enable async document operation");

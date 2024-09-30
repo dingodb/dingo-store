@@ -46,8 +46,8 @@ using dingodb::pb::error::Errno;
 
 namespace dingodb {
 
-DEFINE_int64(vector_max_batch_count, 1024, "vector max batch count in one request");
-DEFINE_int64(vector_max_request_size, 8388608, "vector max batch count in one request");
+DEFINE_int64(vector_max_batch_count, 4096, "vector max batch count in one request");
+DEFINE_int64(vector_max_request_size, 33554432, "vector max batch count in one request");
 DEFINE_bool(enable_async_vector_search, true, "enable async vector search");
 DEFINE_bool(enable_async_vector_count, true, "enable async vector count");
 DEFINE_bool(enable_async_vector_operation, true, "enable async vector operation");
