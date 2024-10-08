@@ -1937,7 +1937,9 @@ void SetUpTransferLeaderRegion(CLI::App &app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--store_id", opt->store_id, "Request parameter store id ")->required();
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id ")->required();
-  cmd->add_option("--force", opt->is_force, "Request parameter is_force")->default_val(false)->default_str("false");
+  cmd->add_option("--force", opt->is_force, "Request parameter is force, transfer leader even if the region is busy.")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunTransferLeaderRegion(*opt); });
 }
 
@@ -1988,7 +1990,7 @@ void RunTransferLeaderRegion(TransferLeaderRegionOption const &opt) {
       transfer_leader_response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "transfer leader error: " << transfer_leader_response.error().DebugString() << std::endl;
   } else {
-    std::cout << "transfer leader success" << std::endl;
+    std::cout << "transfer leader task success, manuaily check whether the region transfer is successful." << std::endl;
   }
 }
 
