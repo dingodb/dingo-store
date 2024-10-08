@@ -413,6 +413,7 @@ struct GetTaskListOptions {
   bool include_archive;
   int64_t start_id;
   int64_t limit;
+  bool json_type;
 };
 void SetUpGetTaskList(CLI::App &app);
 void RunGetTaskList(GetTaskListOptions const &opt);
