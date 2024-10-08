@@ -679,7 +679,11 @@ void RunGetTenant(GetTenantOptions const &opt) {
         auto comment = tenant_json["comment"].is_null() ? "" : tenant_json["comment"].get<std::string>();
         auto crate_time = tenant_json["createTimestamp"].is_null() ? 0 : tenant_json["createTimestamp"].get<int64_t>();
         auto update_time = tenant_json["updateTimestamp"].is_null() ? 0 : tenant_json["updateTimestamp"].get<int64_t>();
-        tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
+        if (opt.tenant_id == 0) {
+          tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
+        } else if (opt.tenant_id == tenant_json["id"].get<int64_t>()) {
+          tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
+        }
       } else if (meta.type == "DB") {
         // {"tenantId":0,"name":"MYSQL","schemaId":50001,"schemaState":"PUBLIC"}
         auto schema_json = nlohmann::json::parse(meta.value);

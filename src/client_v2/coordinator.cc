@@ -2120,9 +2120,13 @@ void SetUpGetTaskList(CLI::App &app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter task id");
   cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
-  cmd->add_flag("--include_archive", opt->include_archive, "Request parameter include history archive")
-      ->default_val(false);
+  cmd->add_option("--include_archive", opt->include_archive, "Request parameter include history archive")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--limit", opt->limit, "Request parameter limit ");
+  cmd->add_option("--json_type", opt->json_type, "Request parameter json_type")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunGetTaskList(*opt); });
 }
 
@@ -2140,7 +2144,17 @@ void RunGetTaskList(GetTaskListOptions const &opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetTaskList", request, response);
-  Pretty::Show(response);
+  if (opt.json_type) {
+    if (response.error().errcode() != 0) {
+      std::cout << "Get task list failed, error:" << response.error().ShortDebugString() << std::endl;
+      return;
+    }
+    for (const auto &task_list : response.task_lists()) {
+      std::cout << "task_list: " << task_list.DebugString() << std::endl;
+    }
+  } else {
+    Pretty::Show(response);
+  }
 }
 
 void SetUpCleanTaskList(CLI::App &app) {
