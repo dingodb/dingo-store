@@ -3431,9 +3431,9 @@ butil::Status CoordinatorControl::GetRegionsByTableInternal(
 // Tenant operations
 void CoordinatorControl::GetDefaultTenant(pb::coordinator_internal::TenantInternal& tenant_internal) {
   tenant_internal.set_id(0);
-  tenant_internal.set_name("default");
-  tenant_internal.set_create_timestamp(butil::gettimeofday_ms());
-  tenant_internal.set_update_timestamp(butil::gettimeofday_ms());
+  tenant_internal.set_name("root");
+  tenant_internal.set_create_timestamp(kBaseTimestampMs);
+  tenant_internal.set_update_timestamp(kBaseTimestampMs);
 
   tenant_internal.set_safe_point_ts(GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT));
 }
@@ -3449,13 +3449,8 @@ butil::Status CoordinatorControl::CreateTenant(pb::meta::Tenant& tenant,
   pb::coordinator_internal::TenantInternal tenant_internal;
 
   if (tenant.id() == 0) {
-    // get new tenant_id
-    auto new_tenant_id = GetNextId(pb::coordinator::IdEpochType::ID_NEXT_TENANT, meta_increment);
-    if (new_tenant_id <= 0) {
-      DINGO_LOG(ERROR) << "ERRROR: GetNextId failed, new_tenant_id=" << new_tenant_id;
-      return butil::Status(pb::error::Errno::EINTERNAL, "GetNextId failed");
-    }
-    tenant.set_id(new_tenant_id);
+    DINGO_LOG(INFO) << " Create tenant_id equal 0, just return";
+    return butil::Status::OK();
   }
 
   int ret = tenant_map_.Get(tenant.id(), tenant_internal);
