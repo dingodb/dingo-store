@@ -60,7 +60,7 @@ bvar::LatencyRecorder g_hnsw_range_search_latency("dingo_hnsw_range_search_laten
 bvar::LatencyRecorder g_hnsw_delete_latency("dingo_hnsw_delete_latency");
 bvar::LatencyRecorder g_hnsw_load_latency("dingo_hnsw_load_latency");
 
-// Filter vecotr id used by region range.
+// Filter vector id used by region range.
 class HnswRangeFilterFunctor : public hnswlib::BaseFilterFunctor {
  public:
   HnswRangeFilterFunctor(std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters) : filters_(filters) {}

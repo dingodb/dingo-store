@@ -24,7 +24,7 @@ namespace dingodb {
 
 class VectorCodec {
  public:
-  // package vecotr plain key
+  // package vector plain key
   static std::string PackageVectorKey(char prefix, int64_t partition_id);
   static std::string PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id);
   static std::string PackageVectorKey(char prefix, int64_t partition_id, int64_t vector_id,

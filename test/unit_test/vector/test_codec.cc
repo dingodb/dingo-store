@@ -46,20 +46,20 @@ TEST_F(VectorCodecTest, packageAndUnPackage) {
   }
 
   {
-    int64_t vecotr_id = 789654;
-    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, vecotr_id);
+    int64_t document_id = 789654;
+    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, document_id);
     ASSERT_EQ(17, plain_key.size());
     ASSERT_EQ(partition_id, VectorCodec::UnPackagePartitionId(plain_key));
-    ASSERT_EQ(vecotr_id, VectorCodec::UnPackageVectorId(plain_key));
+    ASSERT_EQ(document_id, VectorCodec::UnPackageVectorId(plain_key));
   }
 
   {
-    int64_t vecotr_id = 789654;
+    int64_t document_id = 789654;
     const std::string scalar_key = "hello world";
-    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, vecotr_id, scalar_key);
+    std::string plain_key = VectorCodec::PackageVectorKey(kPrefix, partition_id, document_id, scalar_key);
     ASSERT_EQ(28, plain_key.size());
     ASSERT_EQ(partition_id, VectorCodec::UnPackagePartitionId(plain_key));
-    ASSERT_EQ(vecotr_id, VectorCodec::UnPackageVectorId(plain_key));
+    ASSERT_EQ(document_id, VectorCodec::UnPackageVectorId(plain_key));
     ASSERT_EQ(scalar_key, VectorCodec::UnPackageScalarKey(plain_key));
   }
 }
