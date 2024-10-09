@@ -1432,7 +1432,7 @@ butil::Status DocumentIndexManager::LoadDocumentIndex(DocumentIndexWrapperPtr do
   // try to load document index from snapshot
   auto document_index = DocumentIndexSnapshotManager::LoadDocumentIndexSnapshot(document_index_wrapper, epoch);
   if (document_index == nullptr) {
-    return butil::Status(pb::error::EDOCUMENT_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
+    return butil::Status(pb::error::EDOCUMENT_INDEX_LOAD_SNAPSHOT, "load document snapshot failed");
   }
 
   DINGO_LOG(INFO) << fmt::format(

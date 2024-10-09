@@ -1183,7 +1183,9 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
             vector_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
-          ctx->SetStatus(status);
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
                                             vector_index_id, vector_with_ids.size(), Helper::PrintStatus(status));
         }
@@ -1288,7 +1290,9 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           }
         } else {
           if (status.error_code() != pb::error::Errno::EVECTOR_INVALID) {
-            ctx->SetStatus(status);
+            if (ctx) {
+              ctx->SetStatus(status);
+            }
             DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
                                               vector_index_id, request.ids().size(), Helper::PrintStatus(status));
           }
@@ -1409,7 +1413,9 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
             document_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
-          ctx->SetStatus(status);
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
                                             document_index_id, document_with_ids.size(), Helper::PrintStatus(status));
         }
@@ -1498,7 +1504,9 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
             document_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
-          ctx->SetStatus(status);
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
                                             vector_index_id, request.ids().size(), Helper::PrintStatus(status));
         }

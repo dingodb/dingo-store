@@ -1374,7 +1374,7 @@ butil::Status VectorIndexManager::LoadVectorIndex(VectorIndexWrapperPtr vector_i
   // try to load vector index from snapshot
   auto vector_index = VectorIndexSnapshotManager::LoadVectorIndexSnapshot(vector_index_wrapper, epoch);
   if (vector_index == nullptr) {
-    return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vecotr snapshot failed");
+    return butil::Status(pb::error::EVECTOR_INDEX_LOAD_SNAPSHOT, "load vector snapshot failed");
   }
 
   DINGO_LOG(INFO) << fmt::format(
