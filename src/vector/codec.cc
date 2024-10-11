@@ -287,7 +287,7 @@ std::string VectorCodec::DebugRange(bool is_encode, const pb::common::Range& ran
 void VectorCodec::DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key,
                              std::string& end_key) {
   start_key = DebugKey(is_encode, range.start_key());
-  end_key = DebugKey(is_encode, range.start_key());
+  end_key = DebugKey(is_encode, range.end_key());
 }
 
 void VectorCodec::DecodeRangeToVectorId(bool is_encode, const pb::common::Range& range, int64_t& begin_vector_id,

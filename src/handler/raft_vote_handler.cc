@@ -23,7 +23,6 @@
 namespace dingodb {
 
 DECLARE_int64(vector_fast_build_log_gap);
-DECLARE_int64(document_fast_build_log_gap);
 
 // vector
 int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
@@ -121,112 +120,11 @@ int VectorIndexFollowerStopHandler::Handle(store::RegionPtr /*region*/, const br
   return 0;
 }
 
-// document
-int DocumentIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
-  if (region == nullptr) {
-    return 0;
-  }
-
-  // Load document index.
-  auto document_index_wrapper = region->DocumentIndexWrapper();
-  if (document_index_wrapper->IsReady()) {
-    DINGO_LOG(INFO) << fmt::format("[raft.handle][region({})] document index already exist, don't need load again.",
-                                   region->Id());
-  } else {
-    bool is_fast_load = false;
-
-    if (region->Epoch().version() == 1) {
-      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
-      if (raft_meta != nullptr) {
-        int64_t applied_index = raft_meta->AppliedId();
-
-        if (applied_index < FLAGS_document_fast_build_log_gap) {
-          // use fast load
-          is_fast_load = true;
-        }
-      }
-    }
-
-    DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, is_fast_load, 0,
-                                                            "being leader");
-  }
-
-  return 0;
-}
-
-int DocumentIndexLeaderStopHandler::Handle(store::RegionPtr region, butil::Status) {
-  if (region == nullptr) {
-    return 0;
-  }
-  auto document_index_wrapper = region->DocumentIndexWrapper();
-  if (document_index_wrapper == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] document index wrapper is null.", region->Id());
-    return -1;
-  }
-  if (document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /* ||
-      document_index_wrapper->IsTempHoldDocumentIndex()*/) {
-    return 0;
-  }
-
-  // Delete document index.
-  region->DocumentIndexWrapper()->ClearDocumentIndex("stop leader");
-
-  return 0;
-}
-
-int DocumentIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft::LeaderChangeContext &) {
-  if (region == nullptr) {
-    return 0;
-  }
-  auto document_index_wrapper = region->DocumentIndexWrapper();
-  if (document_index_wrapper == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.handle][region({})] document index wrapper is null.", region->Id());
-    return -1;
-  }
-  if (!document_index_wrapper->IsPermanentHoldDocumentIndex(document_index_wrapper->Id()) /* &&
-      !document_index_wrapper->IsTempHoldDocumentIndex()*/) {
-    return 0;
-  }
-
-  // Load document index.
-  if (document_index_wrapper->IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.handle][region({})] document index already exist, don't need load again.",
-                                      region->Id());
-  } else {
-    bool is_fast_load = false;
-
-    if (region->Epoch().version() == 1) {
-      auto raft_meta = Server::GetInstance().GetRaftMeta(region->Id());
-      int64_t applied_index = -1;
-      if (raft_meta != nullptr) {
-        applied_index = raft_meta->AppliedId();
-
-        if (applied_index < FLAGS_document_fast_build_log_gap) {
-          // use fast load
-          is_fast_load = true;
-        }
-      }
-    }
-
-    DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, is_fast_load, 0,
-                                                            "being follower");
-  }
-
-  return 0;
-}
-
-int DocumentIndexFollowerStopHandler::Handle(store::RegionPtr /*region*/, const braft::LeaderChangeContext & /*ctx*/) {
-  return 0;
-}
-
 std::shared_ptr<HandlerCollection> LeaderStartHandlerFactory::Build() {
   // vector
   auto handler_collection = std::make_shared<HandlerCollection>();
   if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStartHandler>());
-  }
-  if (GetRole() == pb::common::DOCUMENT) {
-    handler_collection->Register(std::make_shared<DocumentIndexLeaderStartHandler>());
   }
 
   return handler_collection;
@@ -237,9 +135,6 @@ std::shared_ptr<HandlerCollection> LeaderStopHandlerFactory::Build() {
   if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexLeaderStopHandler>());
   }
-  if (GetRole() == pb::common::DOCUMENT) {
-    handler_collection->Register(std::make_shared<DocumentIndexLeaderStopHandler>());
-  }
 
   return handler_collection;
 }
@@ -249,9 +144,6 @@ std::shared_ptr<HandlerCollection> FollowerStartHandlerFactory::Build() {
   if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStartHandler>());
   }
-  if (GetRole() == pb::common::DOCUMENT) {
-    handler_collection->Register(std::make_shared<DocumentIndexFollowerStartHandler>());
-  }
 
   return handler_collection;
 }
@@ -260,9 +152,6 @@ std::shared_ptr<HandlerCollection> FollowerStopHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   if (GetRole() == pb::common::INDEX) {
     handler_collection->Register(std::make_shared<VectorIndexFollowerStopHandler>());
-  }
-  if (GetRole() == pb::common::DOCUMENT) {
-    handler_collection->Register(std::make_shared<DocumentIndexFollowerStopHandler>());
   }
 
   return handler_collection;

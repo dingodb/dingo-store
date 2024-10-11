@@ -48,6 +48,9 @@
 
 namespace dingodb {
 
+DEFINE_int64(vector_catchup_log_min_gap, 8, "vector catch up log min gap");
+BRPC_VALIDATE_GFLAG(vector_catchup_log_min_gap, brpc::PositiveInteger);
+
 DEFINE_int32(vector_background_worker_num, 16, "vector index background worker num");
 DEFINE_int32(vector_fast_background_worker_num, 8, "vector index fast background worker num");
 DEFINE_int64(vector_fast_build_log_gap, 50, "vector index fast build log gap");
@@ -1416,41 +1419,81 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
     return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found region.");
   }
 
-  if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-    // diskann index need not catch up log !!!
-    if (pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN != vector_index_wrapper->Type()) {
-      auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
-      {
-        start_time = Helper::TimestampMs();
+  if (region->GetStoreEngineType() != pb::common::STORE_ENG_RAFT_STORE ||
+      pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN == vector_index_wrapper->Type()) {
+    // stop write index
+    vector_index_wrapper->SetIsSwitchingVectorIndex(true);
+    DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
+          bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
 
-        DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
-              bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
+    pb::common::RegionEpoch epoch;
+    pb::common::Range range;
+    region->GetEpochAndRange(epoch, range);
+    vector_index->SetEpochAndRange(epoch, range);
 
-        int64_t start_log_id = vector_index->ApplyLogId() + 1;
-        int64_t end_log_id = raft_meta->AppliedId();
-        // second ground replay wal
-        auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
-        if (!status.ok()) {
-          vector_index_wrapper->SetRebuildError();
-          return status;
-        }
+    vector_index_wrapper->UpdateVectorIndex(vector_index, trace);
+    vector_index_wrapper->SetRebuildSuccess();
 
-        DINGO_LOG(INFO) << fmt::format(
-            "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success.", vector_index_id,
-            trace, start_log_id, end_log_id);
-      }
-    }
-  } else if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
-  } else {
-    return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
+    return butil::Status();
   }
-  pb::common::RegionEpoch epoch;
-  pb::common::Range range;
-  region->GetEpochAndRange(epoch, range);
-  vector_index->SetEpochAndRange(epoch, range);
 
-  vector_index_wrapper->UpdateVectorIndex(vector_index, trace);
-  vector_index_wrapper->SetRebuildSuccess();
+  auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
+  for (int i = 0;; ++i) {
+    int64_t start_log_id = vector_index->ApplyLogId() + 1;
+    int64_t end_log_id = raft_meta->AppliedId();
+    if (end_log_id - start_log_id < FLAGS_vector_catchup_log_min_gap) {
+      break;
+    }
+
+    auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
+    if (!status.ok()) {
+      vector_index_wrapper->SetRebuildError();
+      return butil::Status(pb::error::Errno::EINTERNAL,
+                           fmt::format("Catch up {}-round({}-{}) failed", i, start_log_id, end_log_id));
+    }
+
+    DINGO_LOG(INFO) << fmt::format("[vector_index.catchup][index_id({})][trace({})] Catch up {}-round({}-{}) success.",
+                                   vector_index_id, trace, i, start_log_id, end_log_id);
+
+    // Check vector index is stop
+    if (vector_index_wrapper->IsStop()) {
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.catchup][index_id({})][trace({})] vector index is stop.",
+                                        vector_index_id, trace);
+      return butil::Status();
+    }
+  }
+  bvar_vector_index_catchup_latency_first_rounds << (Helper::TimestampMs() - start_time);
+
+  {
+    start_time = Helper::TimestampMs();
+
+    // stop write index
+    vector_index_wrapper->SetIsSwitchingVectorIndex(true);
+    DEFER(vector_index_wrapper->SetIsSwitchingVectorIndex(false);
+          bvar_vector_index_catchup_latency_last_round << (Helper::TimestampMs() - start_time););
+
+    int64_t start_log_id = vector_index->ApplyLogId() + 1;
+    int64_t end_log_id = raft_meta->AppliedId();
+    // second ground replay wal
+    auto status = ReplayWalToVectorIndex(vector_index, start_log_id, end_log_id);
+    if (!status.ok()) {
+      vector_index_wrapper->SetRebuildError();
+      return status;
+    }
+
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.catchup][index_id({})][trace({})] Catch up last-round({}-{}) success, elapsed time({}ms).",
+        vector_index_id, trace, start_log_id, end_log_id, Helper::TimestampMs() - start_time);
+
+    pb::common::RegionEpoch epoch;
+    pb::common::Range range;
+    region->GetEpochAndRange(epoch, range);
+    vector_index->SetEpochAndRange(epoch, range);
+
+    vector_index_wrapper->UpdateVectorIndex(vector_index, trace);
+    vector_index_wrapper->SetRebuildSuccess();
+  }
+
   return butil::Status();
 }
 

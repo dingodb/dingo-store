@@ -25,7 +25,6 @@
 #include "butil/status.h"
 #include "common/runnable.h"
 #include "common/synchronization.h"
-#include "document/document_index_snapshot.h"
 #include "proto/common.pb.h"
 
 namespace dingodb {
@@ -39,6 +38,7 @@ class DocumentIndex {
                 const pb::common::DocumentIndexParameter& document_index_parameter,
                 const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
 
+  static std::string GetIndexPath(int64_t document_index_id, const pb::common::RegionEpoch& epoch);
   static butil::Status RemoveIndexFiles(int64_t id, const std::string& index_path);
 
   ~DocumentIndex();
@@ -74,23 +74,14 @@ class DocumentIndex {
   void LockWrite();
   void UnlockWrite();
 
-  bool NeedToRebuild() { return false; }                                               // NOLINT
-  bool NeedTrain() { return false; }                                                   // NOLINT
-  bool IsTrained() { return true; }                                                    // NOLINT
-  bool NeedToSave(int64_t last_save_log_behind) { return last_save_log_behind > 10; }  // NOLINT
-  bool SupportSave() { return false; }                                                 // NOLINT
+  uint32_t WriteOpParallelNum() const { return 1; }  // NOLINT
 
-  uint32_t WriteOpParallelNum() { return 1; }  // NOLINT
+  int64_t Id() const { return id_; }
 
-  int64_t Id() const { return id; }
-
-  pb::common::DocumentIndexParameter DocumentIndexParameter() { return document_index_parameter; }
+  pb::common::DocumentIndexParameter DocumentIndexParameter() const { return document_index_parameter_; }
 
   int64_t ApplyLogId() const;
   void SetApplyLogId(int64_t apply_log_id);
-
-  int64_t SnapshotLogId() const;
-  void SetSnapshotLogId(int64_t snapshot_log_id);
 
   pb::common::RegionEpoch Epoch() const;
   pb::common::Range Range(bool is_encode) const;
@@ -107,26 +98,27 @@ class DocumentIndex {
     return is_destroyed_;
   }
 
-  std::string IndexPath() { return index_path; }
+  std::string IndexPath() const { return index_path_; }
 
- protected:
-  // document index id
-  int64_t id;
-
-  // tantivy index path
-  std::string index_path;
-
-  // apply max log id
-  std::atomic<int64_t> apply_log_id;
-  // last snapshot log id
-  std::atomic<int64_t> snapshot_log_id;
-
-  pb::common::RegionEpoch epoch;
-  pb::common::Range range;
-
-  pb::common::DocumentIndexParameter document_index_parameter;
+  butil::Status SaveMeta(int64_t apply_log_id);
+  static std::shared_ptr<DocumentIndex> LoadIndex(int64_t id, const pb::common::RegionEpoch& epoch,
+                                                  const pb::common::DocumentIndexParameter& param);
 
  private:
+  // document index id
+  int64_t id_;
+
+  // tantivy index path
+  std::string index_path_;
+
+  // apply max log id
+  std::atomic<int64_t> apply_log_id_;
+
+  pb::common::RegionEpoch epoch_;
+  pb::common::Range range_;
+
+  pb::common::DocumentIndexParameter document_index_parameter_;
+
   RWLock rw_lock_;
   bool is_destroyed_{false};
 };
@@ -135,8 +127,7 @@ using DocumentIndexPtr = std::shared_ptr<DocumentIndex>;
 
 class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWrapper> {
  public:
-  DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter,
-                       int64_t save_snapshot_threshold_write_key_num);
+  DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter);
   ~DocumentIndexWrapper();
 
   static std::shared_ptr<DocumentIndexWrapper> New(int64_t id, pb::common::DocumentIndexParameter index_parameter);
@@ -159,28 +150,24 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t LastBuildEpochVersion();
 
   bool IsReady() { return ready_.load(); }
-  bool IsDestoryed() { return destoryed_.load(); }
+  bool IsDestoryed() { return destroyed_.load(); }
   bool IsOwnReady() { return GetOwnDocumentIndex() != nullptr; }
 
   bool IsBuildError() { return build_error_.load(); }
-
-  bool IsRebuildError() { return rebuild_error_.load(); }
-
   bool SetBuildError() {
     build_error_.store(true);
     return build_error_.load();
   }
-
   bool SetBuildSuccess() {
     build_error_.store(false);
     return build_error_.load();
   }
 
+  bool IsRebuildError() { return rebuild_error_.load(); }
   bool SetRebuildError() {
     rebuild_error_.store(true);
     return rebuild_error_.load();
   }
-
   bool SetRebuildSuccess() {
     rebuild_error_.store(false);
     return rebuild_error_.load();
@@ -188,28 +175,14 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
 
   pb::common::DocumentIndexParameter IndexParameter() { return index_parameter_; }
 
-  int64_t ApplyLogId();
+  int64_t ApplyLogId() const;
   void SetApplyLogId(int64_t apply_log_id);
-  void SaveApplyLogId(int64_t apply_log_id);
-
-  int64_t SnapshotLogId();
-  void SetSnapshotLogId(int64_t snapshot_log_id);
-  void SaveSnapshotLogId(int64_t snapshot_log_id);
 
   bool IsSwitchingDocumentIndex();
   void SetIsSwitchingDocumentIndex(bool is_switching);
 
-  // void SetIsTempHoldDocumentIndex(bool need);
-
-  // check temp hold vector index
-  // bool IsTempHoldDocumentIndex() const;
   // check permanent hold vector index
   static bool IsPermanentHoldDocumentIndex(int64_t region_id);
-
-  document_index::SnapshotMetaSetPtr SnapshotSet() {
-    BAIDU_SCOPED_LOCK(document_index_mutex_);
-    return snapshot_set_;
-  }
 
   void UpdateDocumentIndex(DocumentIndexPtr document_index, const std::string& trace);
   void ClearDocumentIndex(const std::string& trace);
@@ -237,29 +210,16 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   void IncRebuildingNum();
   void DecRebuildingNum();
 
-  int32_t SavingNum();
-  void IncSavingNum();
-  void DecSavingNum();
-
   butil::Status GetDocCount(int64_t& count);
   butil::Status GetTokenCount(int64_t& count);
   butil::Status GetMetaJson(std::string& json);
   butil::Status GetJsonParameter(std::string& json);
-
-  bool NeedToRebuild();
-  bool NeedToSave(std::string& reason);
-  bool SupportSave();
 
   butil::Status Add(const std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status Delete(const std::vector<int64_t>& delete_ids);
   butil::Status Search(const pb::common::Range& region_range, const pb::common::DocumentSearchParameter& parameter,
                        std::vector<pb::common::DocumentWithScore>& results);
-
-  // static butil::Status SetDocumentIndexRangeFilter(
-  //     DocumentIndexPtr document_index,
-  //     std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,  // NOLINT
-  //     int64_t min_document_id, int64_t max_document_id);
 
  private:
   // document index id
@@ -268,8 +228,8 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   int64_t version_{0};
   // document index is ready
   std::atomic<bool> ready_;
-  // destory document index
-  std::atomic<bool> destoryed_;
+  // destroy document index
+  std::atomic<bool> destroyed_;
   // document index build status
   std::atomic<bool> build_error_{false};
   // document index rebuild status
@@ -277,11 +237,6 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
 
   // document index definition parameter
   pb::common::DocumentIndexParameter index_parameter_;
-
-  // apply max log id
-  std::atomic<int64_t> apply_log_id_;
-  // last snapshot log id
-  std::atomic<int64_t> snapshot_log_id_;
 
   // Indicate switching document index.
   std::atomic<bool> is_switching_document_index_;
@@ -296,25 +251,15 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   // Protect document_index_/share_document_index_
   bthread_mutex_t document_index_mutex_;
 
-  // Snapshot set
-  document_index::SnapshotMetaSetPtr snapshot_set_;
+  std::atomic<int64_t> apply_log_id_{0};
+
+  std::atomic<int64_t> last_save_apply_log_id_{0};
 
   std::atomic<int32_t> pending_task_num_;
   // document index loadorbuilding num
   std::atomic<int32_t> loadorbuilding_num_;
   // document index rebuilding num
   std::atomic<int32_t> rebuilding_num_;
-  // document index saving num
-  std::atomic<int32_t> saving_num_;
-
-  // write(add/update/delete) key count
-  int64_t write_key_count_{0};
-  int64_t last_save_write_key_count_{0};
-  // save snapshot threshold write key num
-  int64_t save_snapshot_threshold_write_key_num_;
-
-  // need hold document index
-  // std::atomic<bool> is_hold_document_index_;
 };
 
 using DocumentIndexWrapperPtr = std::shared_ptr<DocumentIndexWrapper>;

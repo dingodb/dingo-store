@@ -227,18 +227,6 @@ class VectorIndexScrubTask : public TaskRunnable {
   static void ScrubVectorIndex();
 };
 
-class DocumentIndexScrubTask : public TaskRunnable {
- public:
-  DocumentIndexScrubTask() = default;
-  ~DocumentIndexScrubTask() override = default;
-
-  std::string Type() override { return "DOCUMENT_INDEX_SCRUB"; }
-
-  void Run() override { ScrubDocumentIndex(); }
-
-  static void ScrubDocumentIndex();
-};
-
 class BalanceLeaderTask : public TaskRunnable {
  public:
   BalanceLeaderTask() = default;
@@ -271,7 +259,6 @@ class Heartbeat {
   static void TriggerKvRemoveOneTimeWatch(void*);
   static void TriggerCalculateTableMetrics(void*);
   static void TriggerScrubVectorIndex(void*);
-  static void TriggerScrubDocumentIndex(void*);
   static void TriggerLeaseTask(void*);
   static void TriggerCompactionTask(void*);
   static void TriggerBalanceLeader(void*);

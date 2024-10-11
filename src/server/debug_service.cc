@@ -606,7 +606,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
       vector_index_wrapper->GetMemorySize(memory_size);
       entry->set_memory_size(memory_size);
 
-      // raw vector index
+      // own vector index
       {
         auto vector_index = vector_index_wrapper->GetOwnVectorIndex();
         if (vector_index != nullptr) {
@@ -637,6 +637,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         }
       }
 
+      // share vector index
       {
         auto vector_index = vector_index_wrapper->ShareVectorIndex();
         if (vector_index != nullptr) {
@@ -666,6 +667,7 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         }
       }
 
+      // sibling vector index
       {
         auto vector_index = vector_index_wrapper->SiblingVectorIndex();
         if (vector_index != nullptr) {
@@ -695,6 +697,94 @@ void DebugServiceImpl::Debug(google::protobuf::RpcController* controller,
         }
       }
     }
+  } else if (request->type() == pb::debug::DebugType::DOCUMENT_INDEX_METRICS) {
+    auto store_region_meta = GET_STORE_REGION_META;
+    std::vector<store::RegionPtr> regions;
+    if (request->region_ids().empty()) {
+      regions = store_region_meta->GetAllAliveRegion();
+    } else {
+      for (auto region_id : request->region_ids()) {
+        auto region = store_region_meta->GetRegion(region_id);
+        if (region != nullptr) {
+          regions.push_back(region);
+        }
+      }
+    }
+
+    for (auto& region : regions) {
+      auto document_index_wrapper = region->DocumentIndexWrapper();
+      if (document_index_wrapper == nullptr || !document_index_wrapper->IsReady()) {
+        continue;
+      }
+
+      auto* entry = response->mutable_document_index_metrics()->add_entries();
+
+      entry->set_id(document_index_wrapper->Id());
+      entry->set_version(document_index_wrapper->Version());
+      entry->set_last_build_epoch_version(document_index_wrapper->LastBuildEpochVersion());
+      entry->set_apply_log_index(document_index_wrapper->ApplyLogId());
+
+      // own document index
+      {
+        auto document_index = document_index_wrapper->GetOwnDocumentIndex();
+        if (document_index != nullptr) {
+          auto* document_index_state = entry->add_entries();
+          document_index_state->set_id(document_index->Id());
+
+          document_index_state->set_apply_log_id(document_index->ApplyLogId());
+          *document_index_state->mutable_epoch() = document_index->Epoch();
+
+          std::string start_key, end_key;
+          DocumentCodec::DebugRange(false, document_index->Range(false), start_key, end_key);
+          document_index_state->set_start_key(start_key);
+          document_index_state->set_end_key(end_key);
+
+          *document_index_state->mutable_parameter() = document_index->DocumentIndexParameter();
+          document_index_state->set_comment("own index");
+        }
+      }
+
+      // share document index
+      {
+        auto document_index = document_index_wrapper->ShareDocumentIndex();
+        if (document_index != nullptr) {
+          auto* document_index_state = entry->add_entries();
+          document_index_state->set_id(document_index->Id());
+
+          document_index_state->set_apply_log_id(document_index->ApplyLogId());
+          *document_index_state->mutable_epoch() = document_index->Epoch();
+
+          std::string start_key, end_key;
+          DocumentCodec::DebugRange(false, document_index->Range(false), start_key, end_key);
+          document_index_state->set_start_key(start_key);
+          document_index_state->set_end_key(end_key);
+
+          *document_index_state->mutable_parameter() = document_index->DocumentIndexParameter();
+          document_index_state->set_comment("share index");
+        }
+      }
+
+      // sibling document index
+      {
+        auto document_index = document_index_wrapper->SiblingDocumentIndex();
+        if (document_index != nullptr) {
+          auto* document_index_state = entry->add_entries();
+          document_index_state->set_id(document_index->Id());
+
+          document_index_state->set_apply_log_id(document_index->ApplyLogId());
+          *document_index_state->mutable_epoch() = document_index->Epoch();
+
+          std::string start_key, end_key;
+          DocumentCodec::DebugRange(false, document_index->Range(false), start_key, end_key);
+          document_index_state->set_start_key(start_key);
+          document_index_state->set_end_key(end_key);
+
+          *document_index_state->mutable_parameter() = document_index->DocumentIndexParameter();
+          document_index_state->set_comment("sibling index");
+        }
+      }
+    }
+
   } else if (request->type() == pb::debug::DebugType::TS_PROVIDER_METRICS) {
     auto ts_provider = Server::GetInstance().GetTsProvider();
     auto* ts_provider_metrics = response->mutable_ts_provider_metrics();

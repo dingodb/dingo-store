@@ -292,7 +292,7 @@ std::string DocumentCodec::DebugRange(bool is_encode, const pb::common::Range& r
 void DocumentCodec::DebugRange(bool is_encode, const pb::common::Range& range, std::string& start_key,
                                std::string& end_key) {
   start_key = DebugKey(is_encode, range.start_key());
-  end_key = DebugKey(is_encode, range.start_key());
+  end_key = DebugKey(is_encode, range.end_key());
 }
 
 void DocumentCodec::DecodeRangeToDocumentId(bool is_encode, const pb::common::Range& range, int64_t& begin_document_id,

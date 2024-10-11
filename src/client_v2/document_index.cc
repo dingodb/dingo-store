@@ -14,13 +14,18 @@
 
 #include "client_v2/document_index.h"
 
+#include <cstdint>
+
 #include "client_v2/pretty.h"
+#include "common/helper.h"
+#include "fmt/format.h"
 
 namespace client_v2 {
 
 void SetUpDocumentIndexSubCommands(CLI::App& app) {
   SetUpCreateDocumentIndex(app);
   SetUpDocumentAdd(app);
+  SetUpDocumentBatchAdd(app);
   SetUpDocumentDelete(app);
   SetUpDocumentSearch(app);
   SetUpDocumentBatchQuery(app);
@@ -145,6 +150,110 @@ void SendDocumentAdd(DocumentAddOptions const& opt) {
   }
 
   std::cout << "Document add success. success_count: " << success_count << std::endl;
+}
+
+void SendDocumentBatchAdd(DocumentBatchAddOptions const& opt) {
+  int64_t total_count = 0;
+  int64_t total_fail_count = 0;
+  for (int64_t i = 0; i < opt.total_size; i += opt.batch_size) {
+    dingodb::pb::document::DocumentAddRequest request;
+    dingodb::pb::document::DocumentAddResponse response;
+
+    if (opt.start_document_id <= 0) {
+      std::cout << "document_id is invalid" << std::endl;
+      return;
+    }
+
+    *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+    for (int64_t j = 0; j < opt.batch_size; ++j) {
+      int64_t document_id = opt.start_document_id + i + j;
+      auto* document = request.add_documents();
+      document->set_id(document_id);
+      auto* document_data = document->mutable_document()->mutable_document_data();
+
+      // col1 text
+      {
+        dingodb::pb::common::DocumentValue document_value1;
+        document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+        document_value1.mutable_field_value()->set_string_data(opt.text_prefix + Helper::GenRandomString(64));
+        (*document_data)["col1"] = document_value1;
+      }
+
+      // col2 int64
+      {
+        dingodb::pb::common::DocumentValue document_value1;
+        document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::INT64);
+        document_value1.mutable_field_value()->set_long_data(document_id);
+        (*document_data)["col2"] = document_value1;
+      }
+
+      // col3 double
+      {
+        dingodb::pb::common::DocumentValue document_value1;
+        document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DOUBLE);
+        document_value1.mutable_field_value()->set_double_data(document_id * 1.0);
+        (*document_data)["col3"] = document_value1;
+      }
+
+      // col4 text
+      {
+        dingodb::pb::common::DocumentValue document_value1;
+        document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::STRING);
+        document_value1.mutable_field_value()->set_string_data(opt.text_prefix + Helper::GenRandomString(64));
+        (*document_data)["col4"] = document_value1;
+      }
+
+      // col5 datetime
+      {
+        dingodb::pb::common::DocumentValue document_value1;
+        document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DATETIME);
+        auto now = std::chrono::system_clock::now();
+        std::string time_str = ToRFC3339(now);
+        document_value1.mutable_field_value()->set_string_data(time_str);
+        (*document_data)["col5"] = document_value1;
+      }
+    }
+
+    if (opt.is_update) {
+      request.set_is_update(true);
+    }
+
+    butil::Status status =
+        InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentAdd", request, response);
+    if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+      std::cout << fmt::format(
+                       "Document add failed, error: {} {}",
+                       dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name(),
+                       response.error().errmsg())
+                << std::endl;
+      return;
+    }
+
+    int fail_count = 0;
+    for (auto key_state : response.key_states()) {
+      if (!key_state) {
+        ++fail_count;
+      }
+    }
+
+    total_count += request.documents_size();
+    total_fail_count += fail_count;
+
+    if (fail_count > 0) {
+      std::cout << "Document add fail, fail_count: " << fail_count << std::endl;
+    }
+
+    if (total_count % 1000 == 0) {
+      std::cout << fmt::format("schedule: {}/{}", total_count, opt.total_size) << std::endl;
+    }
+
+    if (opt.wait_time_ms > 0) {
+      bthread_usleep(opt.wait_time_ms * 1000L);
+    }
+  }
+
+  std::cout << fmt::format("Total document count: {} fail count: {}", total_count, total_fail_count) << std::endl;
 }
 
 void SendDocumentDelete(DocumentDeleteOptions const& opt) {
@@ -435,7 +544,7 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const& opt) {
 
 void SetUpDocumentDelete(CLI::App& app) {
   auto opt = std::make_shared<DocumentDeleteOptions>();
-  auto* cmd = app.add_subcommand("DocumentDelete", "Document delete ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentDelete", "Document delete")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start id")->required();
@@ -452,7 +561,7 @@ void RunDocumentDelete(DocumentDeleteOptions const& opt) {
 
 void SetUpDocumentAdd(CLI::App& app) {
   auto opt = std::make_shared<DocumentAddOptions>();
-  auto* cmd = app.add_subcommand("DocumentAdd", "Document add ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentAdd", "Document add")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--document_id", opt->document_id, "Request parameter document_id")->required();
@@ -471,9 +580,32 @@ void RunDocumentAdd(DocumentAddOptions const& opt) {
   client_v2::SendDocumentAdd(opt);
 }
 
+void SetUpDocumentBatchAdd(CLI::App& app) {
+  auto opt = std::make_shared<DocumentBatchAddOptions>();
+  auto* cmd = app.add_subcommand("DocumentBatchAdd", "Document batch add")->group("Document Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--start_document_id", opt->start_document_id, "Request parameter start document id")->default_val(1);
+  cmd->add_option("--total_size", opt->total_size, "Request parameter total size")->default_val(INT64_MAX);
+  cmd->add_option("--batch_size", opt->batch_size, "Request parameter batch size")->default_val(1);
+  cmd->add_option("--wait_time_ms", opt->batch_size, "Request parameter wait time(ms)")->default_val(0);
+  cmd->add_option("--text_prefix", opt->text_prefix, "Request parameter text prefix")->required();
+  cmd->add_option("--is_update", opt->is_update, "Request parameter is_update")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->callback([opt]() { RunDocumentBatchAdd(*opt); });
+}
+
+void RunDocumentBatchAdd(DocumentBatchAddOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
+    exit(-1);
+  }
+  client_v2::SendDocumentBatchAdd(opt);
+}
+
 void SetUpDocumentSearch(CLI::App& app) {
   auto opt = std::make_shared<DocumentSearchOptions>();
-  auto* cmd = app.add_subcommand("DocumentSearch", "Document search ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentSearch", "Document search")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--query_string", opt->query_string, "Request parameter query_string")->required();
@@ -493,7 +625,7 @@ void RunDocumentSearch(DocumentSearchOptions const& opt) {
 
 void SetUpDocumentBatchQuery(CLI::App& app) {
   auto opt = std::make_shared<DocumentBatchQueryOptions>();
-  auto* cmd = app.add_subcommand("DocumentBatchQuery", "Document batch query ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentBatchQuery", "Document batch query")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--document_id", opt->document_id, "Request parameter document id")->required();
@@ -513,7 +645,7 @@ void RunDocumentBatchQuery(DocumentBatchQueryOptions const& opt) {
 
 void SetUpDocumentScanQuery(CLI::App& app) {
   auto opt = std::make_shared<DocumentScanQueryOptions>();
-  auto* cmd = app.add_subcommand("DocumentScanQuery", "Document scan query ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentScanQuery", "Document scan query")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start id")->required();
@@ -538,7 +670,7 @@ void RunDocumentScanQuery(DocumentScanQueryOptions const& opt) {
 
 void SetUpDocumentGetMaxId(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetMaxIdOptions>();
-  auto* cmd = app.add_subcommand("DocumentGetMaxId", "Document get max id ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentGetMaxId", "Document get max id")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunDocumentGetMaxId(*opt); });
@@ -553,7 +685,7 @@ void RunDocumentGetMaxId(DocumentGetMaxIdOptions const& opt) {
 
 void SetUpDocumentGetMinId(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetMinIdOptions>();
-  auto* cmd = app.add_subcommand("DocumentGetMinId", "Document get min id ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentGetMinId", "Document get min id")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunDocumentGetMinId(*opt); });
@@ -568,7 +700,7 @@ void RunDocumentGetMinId(DocumentGetMinIdOptions const& opt) {
 
 void SetUpDocumentCount(CLI::App& app) {
   auto opt = std::make_shared<DocumentCountOptions>();
-  auto* cmd = app.add_subcommand("DocumentCount", "Document count ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentCount", "Document count")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
@@ -585,8 +717,7 @@ void RunDocumentCount(DocumentCountOptions const& opt) {
 
 void SetUpDocumentGetRegionMetrics(CLI::App& app) {
   auto opt = std::make_shared<DocumentGetRegionMetricsOptions>();
-  auto* cmd =
-      app.add_subcommand("DocumentGetRegionMetrics", "Document get region metrics ")->group("Document Commands");
+  auto* cmd = app.add_subcommand("DocumentGetRegionMetrics", "Document get region metrics")->group("Document Commands");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->callback([opt]() { RunDocumentGetRegionMetrics(*opt); });

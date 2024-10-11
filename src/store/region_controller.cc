@@ -168,11 +168,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   } else if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (GetRole() == pb::common::INDEX) {
       auto vector_index_wrapper = region->VectorIndexWrapper();
-      VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, true, 0, "region create");
-    }
-    if (GetRole() == pb::common::DOCUMENT) {
-      auto document_index_wrapper = region->DocumentIndexWrapper();
-      DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, true, 0, "region create");
+      VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, true, 0, "creating");
     }
   } else {
     // not support
@@ -187,6 +183,11 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
+  }
+
+  if (GetRole() == pb::common::DOCUMENT) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, true, 0, "creating");
   }
 
   return butil::Status();
