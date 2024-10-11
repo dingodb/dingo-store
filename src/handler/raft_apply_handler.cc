@@ -340,7 +340,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
     // Rebuild vector index
     if (VectorIndexWrapper::IsPermanentHoldVectorIndex(to_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(to_region->VectorIndexWrapper(), request.job_id(), false, false,
-                                                   true, "child split");
+                                                   true, "splitChild");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
@@ -349,7 +349,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       auto vector_index_wrapper = to_region->VectorIndexWrapper();
       vector_index_wrapper->SetIsTempHoldVectorIndex(false);
       if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
-        vector_index_wrapper->ClearVectorIndex("child split");
+        vector_index_wrapper->ClearVectorIndex("splitChild");
       }
 
       store_region_meta->UpdateTemporaryDisableChange(to_region, false);
@@ -359,7 +359,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
     if (VectorIndexWrapper::IsPermanentHoldVectorIndex(from_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(from_region->VectorIndexWrapper(), request.job_id(), false, false,
-                                                   true, "parent split");
+                                                   true, "splitParent");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] parent follower not need rebuild vector index.",
@@ -368,7 +368,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
       auto vector_index_wrapper = from_region->VectorIndexWrapper();
       vector_index_wrapper->SetIsTempHoldVectorIndex(false);
       if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
-        vector_index_wrapper->ClearVectorIndex("parent split");
+        vector_index_wrapper->ClearVectorIndex("splitParent");
       }
 
       store_region_meta->UpdateTemporaryDisableChange(from_region, false);
@@ -387,11 +387,11 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
     // Rebuild document index
-    DocumentIndexManager::LaunchRebuildDocumentIndex(to_region->DocumentIndexWrapper(), request.job_id(), false, false,
-                                                     true, "child split");
+    DocumentIndexManager::LaunchRebuildDocumentIndex(to_region->DocumentIndexWrapper(), request.job_id(), true,
+                                                     "splitChild");
 
-    DocumentIndexManager::LaunchRebuildDocumentIndex(from_region->DocumentIndexWrapper(), request.job_id(), false,
-                                                     false, true, "parent split");
+    DocumentIndexManager::LaunchRebuildDocumentIndex(from_region->DocumentIndexWrapper(), request.job_id(), true,
+                                                     "splitParent");
   }
 
   Heartbeat::TriggerStoreHeartbeat({from_region->Id(), to_region->Id()}, true);
@@ -574,7 +574,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     // Rebuild vector index
     if (VectorIndexWrapper::IsPermanentHoldVectorIndex(child_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(child_region->VectorIndexWrapper(), request.job_id(), false, false,
-                                                   true, "child split");
+                                                   true, "splitChild");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] child follower not need rebuild vector index.", request.job_id(),
@@ -583,7 +583,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       auto vector_index_wrapper = child_region->VectorIndexWrapper();
       vector_index_wrapper->SetIsTempHoldVectorIndex(false);
       if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
-        vector_index_wrapper->ClearVectorIndex("child split");
+        vector_index_wrapper->ClearVectorIndex("splitChild");
       }
 
       store_region_meta->UpdateTemporaryDisableChange(child_region, false);
@@ -593,7 +593,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
     if (VectorIndexWrapper::IsPermanentHoldVectorIndex(parent_region)) {
       VectorIndexManager::LaunchRebuildVectorIndex(parent_region->VectorIndexWrapper(), request.job_id(), false, false,
-                                                   true, "parent split");
+                                                   true, "splitParent");
     } else {
       DINGO_LOG(INFO) << fmt::format(
           "[split.spliting][job_id({}).region({}->{})] parent follower not need rebuild vector index.",
@@ -601,7 +601,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
       auto vector_index_wrapper = parent_region->VectorIndexWrapper();
       vector_index_wrapper->SetIsTempHoldVectorIndex(false);
       if (!VectorIndexWrapper::IsPermanentHoldVectorIndex(vector_index_wrapper->Id())) {
-        vector_index_wrapper->ClearVectorIndex("parent split");
+        vector_index_wrapper->ClearVectorIndex("splitParent");
       }
 
       store_region_meta->UpdateTemporaryDisableChange(parent_region, false);
@@ -620,11 +620,11 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
     // Rebuild document index
-    DocumentIndexManager::LaunchRebuildDocumentIndex(child_region->DocumentIndexWrapper(), request.job_id(), false,
-                                                     false, true, "child split");
+    DocumentIndexManager::LaunchRebuildDocumentIndex(child_region->DocumentIndexWrapper(), request.job_id(), true,
+                                                     "splitChild");
 
-    DocumentIndexManager::LaunchRebuildDocumentIndex(parent_region->DocumentIndexWrapper(), request.job_id(), false,
-                                                     false, true, "parent split");
+    DocumentIndexManager::LaunchRebuildDocumentIndex(parent_region->DocumentIndexWrapper(), request.job_id(), true,
+                                                     "splitParent");
   }
 
   Heartbeat::TriggerStoreHeartbeat({parent_region->Id(), child_region->Id()}, true);
@@ -980,8 +980,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild document index");
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
     // Rebuild document index
-    DocumentIndexManager::LaunchRebuildDocumentIndex(target_region->DocumentIndexWrapper(), request.job_id(), false,
-                                                     false, true, "merge");
+    DocumentIndexManager::LaunchRebuildDocumentIndex(target_region->DocumentIndexWrapper(), request.job_id(), true,
+                                                     "merge");
   } else {
     store_region_meta->UpdateTemporaryDisableChange(target_region, false);
     ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Apply target region CommitMerge finish");

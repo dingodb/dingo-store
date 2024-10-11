@@ -70,14 +70,14 @@ bool MonoStoreEngine::Recover() {
         auto vector_index_wrapper = region->VectorIndexWrapper();
         VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0,
                                                             "rocks engine recover");
-        ++count;
       }
       if (GetRole() == pb::common::DOCUMENT) {
         auto document_index_wrapper = region->DocumentIndexWrapper();
-        DocumentIndexManager::LaunchLoadAsyncBuildDocumentIndex(document_index_wrapper, false, false, 0,
-                                                                "rocks engine recover");
-        ++count;
+        DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, false, 0,
+                                                             "rocks engine recover");
       }
+
+      ++count;
     }
   }
 
@@ -124,15 +124,15 @@ butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
   }
   // CAUTION: sync mode cannot pass Done here
   if (ctx->Done()) {
-    DINGO_LOG(FATAL) << fmt::format("[raft.engine][region({})] sync mode cannot pass Done here.", ctx->RegionId());
+    DINGO_LOG(FATAL) << fmt::format("[mono.engine][region({})] sync mode cannot pass Done here.", ctx->RegionId());
   }
   auto store_region_metrics = GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto region_metrics = store_region_metrics->GetMetrics(region->Id());
   if (region_metrics == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[rock.engine][region({})] metrics not found.", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[mono.engine][region({})] metrics not found.", region->Id());
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region metrics {}", region->Id()));
   }
-  DINGO_LOG(INFO) << fmt::format("[rock.engine][region({})] rocksengine write.", region->Id());
+  DINGO_LOG(INFO) << fmt::format("[mono.engine][region({})] rocksengine write.", region->Id());
   RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
   auto event = std::make_shared<SmApplyEvent>();
   auto raft_cmd = dingodb::GenRaftCmdRequest(ctx, write_data);
@@ -144,7 +144,7 @@ butil::Status MonoStoreEngine::Write(std::shared_ptr<Context> ctx, std::shared_p
   event->term_id = -1;
   event->log_id = -1;
   if (DispatchEvent(EventType::kSmApply, event) != 0) {
-    DINGO_LOG(ERROR) << fmt::format("[rock.engine][region({})] rocksengine write failed.", region->Id());
+    DINGO_LOG(ERROR) << fmt::format("[mono.engine][region({})] rocksengine write failed.", region->Id());
     return butil::Status(pb::error::EROCKS_ENGINE_UPDATE, "Update in place failed");
   }
 
@@ -172,10 +172,10 @@ butil::Status MonoStoreEngine::AsyncWrite(std::shared_ptr<Context> ctx, std::sha
   auto store_region_metrics = Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics();
   auto region_metrics = store_region_metrics->GetMetrics(region->Id());
   if (region_metrics == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[rock.engine][region({})] metrics not found.", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[mono.engine][region({})] metrics not found.", region->Id());
     return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found region metrics {}", region->Id()));
   }
-  DINGO_LOG(INFO) << fmt::format("[rock.engine][region({})] rocksengine async write.", region->Id());
+  DINGO_LOG(INFO) << fmt::format("[mono.engine][region({})] rocksengine async write.", region->Id());
   ctx->SetWriteCb(write_cb);
   RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
   auto event = std::make_shared<SmApplyEvent>();

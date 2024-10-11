@@ -33,14 +33,9 @@ namespace dingodb {
 // Rebuild document index task
 class RebuildDocumentIndexTask : public TaskRunnable {
  public:
-  RebuildDocumentIndexTask(DocumentIndexWrapperPtr document_index_wrapper, int64_t job_id, bool is_double_check,
-                           bool is_force, bool is_clear, const std::string& trace)
-      : document_index_wrapper_(document_index_wrapper),
-        is_double_check_(is_double_check),
-        is_force_(is_force),
-        is_clear_(is_clear),
-        job_id_(job_id),
-        trace_(trace) {
+  RebuildDocumentIndexTask(DocumentIndexWrapperPtr document_index_wrapper, int64_t job_id, bool is_clear,
+                           const std::string& trace)
+      : document_index_wrapper_(document_index_wrapper), is_clear_(is_clear), job_id_(job_id), trace_(trace) {
     start_time_ = Helper::TimestampMs();
   }
   ~RebuildDocumentIndexTask() override = default;
@@ -54,32 +49,9 @@ class RebuildDocumentIndexTask : public TaskRunnable {
  private:
   DocumentIndexWrapperPtr document_index_wrapper_;
 
-  bool is_double_check_;
-  bool is_force_;
   bool is_clear_;
 
   int64_t job_id_{0};
-  std::string trace_;
-  int64_t start_time_;
-};
-
-// Save document index task
-class SaveDocumentIndexTask : public TaskRunnable {
- public:
-  SaveDocumentIndexTask(DocumentIndexWrapperPtr document_index_wrapper, const std::string& trace)
-      : document_index_wrapper_(document_index_wrapper), trace_(trace) {
-    start_time_ = Helper::TimestampMs();
-  }
-  ~SaveDocumentIndexTask() override = default;
-
-  std::string Type() override { return "SAVE_DOCUMENT_INDEX"; }
-
-  void Run() override;
-
-  std::string Trace() override;
-
- private:
-  DocumentIndexWrapperPtr document_index_wrapper_;
   std::string trace_;
   int64_t start_time_;
 };
@@ -111,62 +83,6 @@ class LoadOrBuildDocumentIndexTask : public TaskRunnable {
   int64_t start_time_;
 };
 
-class LoadAsyncBuildDocumentIndexTask : public TaskRunnable {
- public:
-  LoadAsyncBuildDocumentIndexTask(DocumentIndexWrapperPtr document_index_wrapper, bool is_temp_hold_document_index,
-                                  bool is_fast_load, int64_t job_id, const std::string& trace)
-      : document_index_wrapper_(document_index_wrapper),
-        is_temp_hold_document_index_(is_temp_hold_document_index),
-        is_fast_load_(is_fast_load),
-        job_id_(job_id),
-        trace_(trace) {
-    start_time_ = Helper::TimestampMs();
-  }
-  ~LoadAsyncBuildDocumentIndexTask() override = default;
-
-  std::string Type() override { return "LOAD_ASYNC_BUILD_DOCUMENT_INDEX"; }
-
-  void Run() override;
-
-  std::string Trace() override;
-
- private:
-  DocumentIndexWrapperPtr document_index_wrapper_;
-  bool is_temp_hold_document_index_;
-  bool is_fast_load_;
-  int64_t job_id_;
-  std::string trace_;
-  int64_t start_time_;
-};
-
-class BuildDocumentIndexTask : public TaskRunnable {
- public:
-  BuildDocumentIndexTask(DocumentIndexWrapperPtr document_index_wrapper, bool is_temp_hold_document_index,
-                         bool is_fast_build, int64_t job_id, const std::string& trace)
-      : document_index_wrapper_(document_index_wrapper),
-        is_temp_hold_document_index_(is_temp_hold_document_index),
-        is_fast_build_(is_fast_build),
-        job_id_(job_id),
-        trace_(trace) {
-    start_time_ = Helper::TimestampMs();
-  }
-  ~BuildDocumentIndexTask() override = default;
-
-  std::string Type() override { return "LOAD_ASYNC_BUILD_DOCUMENT_INDEX"; }
-
-  void Run() override;
-
-  std::string Trace() override;
-
- private:
-  DocumentIndexWrapperPtr document_index_wrapper_;
-  bool is_temp_hold_document_index_;
-  bool is_fast_build_;
-  int64_t job_id_;
-  std::string trace_;
-  int64_t start_time_;
-};
-
 // Manage document index, e.g. build/rebuild/save/load document index.
 class DocumentIndexManager {
  public:
@@ -182,41 +98,19 @@ class DocumentIndexManager {
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
   static butil::Status LoadOrBuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
                                                 const pb::common::RegionEpoch& epoch, const std::string& trace);
-  static butil::Status LoadDocumentIndexOnly(DocumentIndexWrapperPtr document_index_wrapper,
-                                             const pb::common::RegionEpoch& epoch, const std::string& trace);
-  static butil::Status BuildDocumentIndexOnly(DocumentIndexWrapperPtr document_index_wrapper,
-                                              const pb::common::RegionEpoch& epoch, const std::string& trace);
 
   // LaunchLoadOrBuildDocumentIndex is unused now.
   static void LaunchLoadOrBuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
-                                             bool is_temp_hold_document_index, int64_t job_id,
+                                             bool is_temp_hold_document_index, bool is_fast, int64_t job_id,
                                              const std::string& trace);
-  static void LaunchLoadAsyncBuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
-                                                bool is_temp_hold_document_index, bool is_fast_load, int64_t job_id,
-                                                const std::string& trace);
-
-  // Parallel load or build document index at server bootstrap.
-  static butil::Status ParallelLoadOrBuildDocumentIndex(std::vector<store::RegionPtr> regions, int concurrency,
-                                                        const std::string& trace);
-
-  // Save document index snapshot.
-  static butil::Status SaveDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, const std::string& trace);
-  // Launch save document index at execute queue.
-  static void LaunchSaveDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, const std::string& trace);
-
   // Invoke when server running.
   static butil::Status RebuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, const std::string& trace);
   // Launch rebuild document index at execute queue.
-  static void LaunchRebuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, int64_t job_id,
-                                         bool is_double_check, bool is_force, bool is_clear, const std::string& trace);
-  static void LaunchBuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, bool is_temp_hold_document_index,
-                                       bool is_fast_build, int64_t job_id, const std::string& trace);
-
-  static butil::Status ScrubDocumentIndex();
+  static void LaunchRebuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, int64_t job_id, bool is_clear,
+                                         const std::string& trace);
 
   static bvar::Adder<uint64_t> bvar_document_index_task_running_num;
   static bvar::Adder<uint64_t> bvar_document_index_rebuild_task_running_num;
-  static bvar::Adder<uint64_t> bvar_document_index_save_task_running_num;
   static bvar::Adder<uint64_t> bvar_document_index_loadorbuild_task_running_num;
   static bvar::Adder<uint64_t> bvar_document_index_fast_load_task_running_num;
   static bvar::Adder<uint64_t> bvar_document_index_slow_load_task_running_num;
@@ -227,7 +121,6 @@ class DocumentIndexManager {
 
   static bvar::Adder<uint64_t> bvar_document_index_task_total_num;
   static bvar::Adder<uint64_t> bvar_document_index_rebuild_task_total_num;
-  static bvar::Adder<uint64_t> bvar_document_index_save_task_total_num;
   static bvar::Adder<uint64_t> bvar_document_index_loadorbuild_task_total_num;
   static bvar::Adder<uint64_t> bvar_document_index_fast_load_task_total_num;
   static bvar::Adder<uint64_t> bvar_document_index_slow_load_task_total_num;
@@ -240,7 +133,6 @@ class DocumentIndexManager {
 
   static std::atomic<int> document_index_task_running_num;
   static std::atomic<int> document_index_rebuild_task_running_num;
-  static std::atomic<int> document_index_save_task_running_num;
   static std::atomic<int> document_index_loadorbuild_task_running_num;
   static std::atomic<int> document_index_fast_load_task_running_num;
   static std::atomic<int> document_index_slow_load_task_running_num;
@@ -254,10 +146,6 @@ class DocumentIndexManager {
   static int GetDocumentIndexRebuildTaskRunningNum();
   static void IncDocumentIndexRebuildTaskRunningNum();
   static void DecDocumentIndexRebuildTaskRunningNum();
-
-  static int GetDocumentIndexSaveTaskRunningNum();
-  static void IncDocumentIndexSaveTaskRunningNum();
-  static void DecDocumentIndexSaveTaskRunningNum();
 
   static int GetDocumentIndexLoadorbuildTaskRunningNum();
   static void IncDocumentIndexLoadorbuildTaskRunningNum();
@@ -282,6 +170,8 @@ class DocumentIndexManager {
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
   bool ExecuteTaskFast(int64_t region_id, TaskRunnablePtr task);
 
+  static bool ExecuteTask(int64_t region_id, TaskRunnablePtr task, bool is_fast_task);
+
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
   uint64_t GetBackgroundPendingTaskCount();
@@ -291,22 +181,16 @@ class DocumentIndexManager {
                                          const pb::common::RegionEpoch& epoch, const std::string& trace);
   // Build document index with original data(rocksdb).
   // Invoke when server starting.
-  static std::shared_ptr<DocumentIndex> BuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
-                                                           const std::string& trace);
+  static DocumentIndexPtr BuildDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper, const std::string& trace);
   // Catch up document index.
   static butil::Status CatchUpLogToDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
-                                                 std::shared_ptr<DocumentIndex> document_index,
-                                                 const std::string& trace);
+                                                 DocumentIndexPtr document_index, const std::string& trace);
   // Replay log to document index.
-  static butil::Status ReplayWalToDocumentIndex(std::shared_ptr<DocumentIndex> document_index, int64_t start_log_id,
+  static butil::Status ReplayWalToDocumentIndex(DocumentIndexPtr document_index, int64_t start_log_id,
                                                 int64_t end_log_id);
-
-  static butil::Status TrainForBuild(std::shared_ptr<DocumentIndex> document_index, std::shared_ptr<Iterator> iter,
-                                     const std::string& start_key, [[maybe_unused]] const std::string& end_key);
-
   // Execute all document index load/build/rebuild/save task.
-  WorkerSetPtr background_workers_;
-  WorkerSetPtr fast_background_workers_;
+  WorkerSetPtr workers_;
+  WorkerSetPtr fast_workers_;
 };
 
 using DocumentIndexManagerPtr = std::shared_ptr<DocumentIndexManager>;

@@ -160,6 +160,11 @@ bool RaftStoreEngine::Recover() {
         }
       }
 
+      if (GetRole() == pb::common::DOCUMENT) {
+        auto document_index_wrapper = region->DocumentIndexWrapper();
+        DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, false, 0, "recover");
+      }
+
       ++count;
     }
   }
@@ -200,9 +205,8 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   std::string log_path = fmt::format("{}/{}", parameter.log_path, region->Id());
   int64_t max_segment_size =
       parameter.log_max_segment_size > 0 ? parameter.log_max_segment_size : Constant::kSegmentLogDefaultMaxSegmentSize;
-  auto log_storage = std::make_shared<SegmentLogStorage>(
-      log_path, region->Id(), max_segment_size,
-      region->Type() == pb::common::INDEX_REGION || region->Type() == pb::common::DOCUMENT_REGION ? 0 : INT64_MAX);
+  auto log_storage = std::make_shared<SegmentLogStorage>(log_path, region->Id(), max_segment_size,
+                                                         region->Type() == pb::common::INDEX_REGION ? 0 : INT64_MAX);
   Server::GetInstance().GetLogStorageManager()->AddLogStorage(region->Id(), log_storage);
 
   // Build RaftNode

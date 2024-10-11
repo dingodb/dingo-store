@@ -87,17 +87,14 @@ TEST(DingoDocumentIndexTest, test_default_create) {
   dingodb::pb::common::RegionEpoch region_epoch;
   dingodb::pb::common::Range range;
 
-  butil::Status tmp_status;
   {
-    auto document_index = dingodb::DocumentIndexFactory::CreateIndex(1, index_path, document_index_parameter,
-                                                                     region_epoch, range, true, tmp_status);
-    std::cout << "status: " << tmp_status.error_code() << ", " << tmp_status.error_str() << '\n';
+    auto document_index =
+        dingodb::DocumentIndexFactory::CreateIndex(1, index_path, document_index_parameter, region_epoch, range, true);
     ASSERT_TRUE(document_index != nullptr);
   }
 
-  auto document_index = dingodb::DocumentIndexFactory::LoadIndex(1, index_path, document_index_parameter, region_epoch,
-                                                                 range, tmp_status);
-  std::cout << "status: " << tmp_status.error_code() << ", " << tmp_status.error_str() << '\n';
+  auto document_index =
+      dingodb::DocumentIndexFactory::LoadIndex(1, index_path, document_index_parameter, region_epoch, range);
   ASSERT_TRUE(document_index != nullptr);
 
   std::vector<dingodb::pb::common::DocumentWithId> document_with_ids;
@@ -202,10 +199,8 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
   dingodb::pb::common::RegionEpoch region_epoch;
   dingodb::pb::common::Range range;
 
-  butil::Status tmp_status;
-  auto document_index = dingodb::DocumentIndexFactory::LoadOrCreateIndex(1, index_path, document_index_parameter,
-                                                                         region_epoch, range, tmp_status);
-  std::cout << "status: " << tmp_status.error_code() << ", " << tmp_status.error_str() << '\n';
+  auto document_index =
+      dingodb::DocumentIndexFactory::CreateIndex(1, index_path, document_index_parameter, region_epoch, range, true);
   ASSERT_TRUE(document_index != nullptr);
 
   std::vector<dingodb::pb::common::DocumentWithId> document_with_ids;
@@ -367,10 +362,8 @@ TEST(DingoDocumentIndexTest, test_upsert) {
   dingodb::pb::common::RegionEpoch region_epoch;
   dingodb::pb::common::Range range;
 
-  butil::Status tmp_status;
-  auto document_index = dingodb::DocumentIndexFactory::LoadOrCreateIndex(1, index_path, document_index_parameter,
-                                                                         region_epoch, range, tmp_status);
-  std::cout << "status: " << tmp_status.error_code() << ", " << tmp_status.error_str() << '\n';
+  auto document_index =
+      dingodb::DocumentIndexFactory::CreateIndex(1, index_path, document_index_parameter, region_epoch, range, true);
   ASSERT_TRUE(document_index != nullptr);
 
   std::vector<dingodb::pb::common::DocumentWithId> document_with_ids;

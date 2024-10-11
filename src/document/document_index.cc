@@ -14,18 +14,20 @@
 
 #include "document/document_index.h"
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "braft/protobuf_file.h"
 #include "bthread/bthread.h"
 #include "butil/status.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "document/codec.h"
-#include "document/document_index_snapshot_manager.h"
+#include "document/document_index_factory.h"
 #include "fmt/core.h"
 #include "mvcc/codec.h"
 #include "proto/common.pb.h"
@@ -34,6 +36,9 @@
 #include "tantivy_search.h"
 
 namespace dingodb {
+
+DEFINE_int32(document_index_save_log_gap, 10, "document index save log gap");
+BRPC_VALIDATE_GFLAG(document_index_save_log_gap, brpc::PositiveInteger);
 
 butil::Status DocumentIndex::RemoveIndexFiles(int64_t id, const std::string& index_path) {
   DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] remove index files, path: {}", id, index_path);
@@ -44,70 +49,137 @@ butil::Status DocumentIndex::RemoveIndexFiles(int64_t id, const std::string& ind
 DocumentIndex::DocumentIndex(int64_t id, const std::string& index_path,
                              const pb::common::DocumentIndexParameter& document_index_parameter,
                              const pb::common::RegionEpoch& epoch, const pb::common::Range& range)
-    : id(id),
-      index_path(index_path),
-      apply_log_id(0),
-      snapshot_log_id(0),
-      document_index_parameter(document_index_parameter),
-      epoch(epoch),
-      range(range) {
-  DINGO_LOG(DEBUG) << fmt::format("[new.DocumentIndex][id({})]", id);
-}
+    : id_(id),
+      index_path_(index_path),
+      apply_log_id_(0),
+      document_index_parameter_(document_index_parameter),
+      epoch_(epoch),
+      range_(range) {}
 
 DocumentIndex::~DocumentIndex() {
-  DINGO_LOG(INFO) << fmt::format("[delete.DocumentIndex][id({})]", id);
-
   RWLockReadGuard guard(&rw_lock_);
 
-  auto bool_result = ffi_free_index_writer(index_path);
+  auto bool_result = ffi_free_index_writer(index_path_);
   if (!bool_result.result) {
     DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] free index writer failed, error: {}, error_msg: {}",
-                                    id, bool_result.error_code, bool_result.error_msg.c_str());
+                                    id_, bool_result.error_code, bool_result.error_msg.c_str());
   }
-  bool_result = ffi_free_index_reader(index_path);
+  bool_result = ffi_free_index_reader(index_path_);
   if (!bool_result.result) {
     DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] free index reader failed, error: {}, error_msg: {}",
-                                    id, bool_result.error_code, bool_result.error_msg.c_str());
+                                    id_, bool_result.error_code, bool_result.error_msg.c_str());
   }
 
   if (is_destroyed_) {
     DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] document index is destroyed, will remove all files",
-                                   id);
-    RemoveIndexFiles(id, index_path);
+                                   id_);
+    RemoveIndexFiles(id_, index_path_);
   }
 }
 
-void DocumentIndex::SetSnapshotLogId(int64_t snapshot_log_id) {
-  this->snapshot_log_id.store(snapshot_log_id, std::memory_order_relaxed);
-}
-
-int64_t DocumentIndex::ApplyLogId() const { return apply_log_id.load(std::memory_order_relaxed); }
+int64_t DocumentIndex::ApplyLogId() const { return apply_log_id_.load(std::memory_order_relaxed); }
 
 void DocumentIndex::SetApplyLogId(int64_t apply_log_id) {
-  this->apply_log_id.store(apply_log_id, std::memory_order_relaxed);
+  this->apply_log_id_.store(apply_log_id, std::memory_order_relaxed);
 }
 
-int64_t DocumentIndex::SnapshotLogId() const { return snapshot_log_id.load(std::memory_order_relaxed); }
-
-pb::common::RegionEpoch DocumentIndex::Epoch() const { return epoch; };
+pb::common::RegionEpoch DocumentIndex::Epoch() const { return epoch_; };
 
 pb::common::Range DocumentIndex::Range(bool is_encode) const {
-  return is_encode ? mvcc::Codec::EncodeRange(range) : range;
+  return is_encode ? mvcc::Codec::EncodeRange(range_) : range_;
 }
 
-std::string DocumentIndex::RangeString() const { return DocumentCodec::DebugRange(false, range); }
+std::string DocumentIndex::RangeString() const { return DocumentCodec::DebugRange(false, range_); }
 
 void DocumentIndex::SetEpochAndRange(const pb::common::RegionEpoch& epoch, const pb::common::Range& range) {
-  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] set epoch({}->{}) and range({}->{})", id,
-                                 Helper::RegionEpochToString(this->epoch), Helper::RegionEpochToString(epoch),
-                                 Helper::RangeToString(this->range), Helper::RangeToString(range));
-  this->epoch = epoch;
-  this->range = range;
+  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] set epoch({}->{}) and range({}->{})", id_,
+                                 Helper::RegionEpochToString(epoch_), Helper::RegionEpochToString(epoch),
+                                 Helper::RangeToString(range_), Helper::RangeToString(range));
+  epoch_ = epoch;
+  range_ = range;
 }
 
 void DocumentIndex::LockWrite() { rw_lock_.LockWrite(); }
 
 void DocumentIndex::UnlockWrite() { rw_lock_.UnlockWrite(); }
+
+butil::Status DocumentIndex::SaveMeta(int64_t apply_log_id) {
+  LockWrite();
+
+  SetApplyLogId(apply_log_id);
+
+  // Write meta to meta_file
+  pb::store_internal::DocumentIndexSnapshotMeta meta;
+  meta.set_document_index_id(id_);
+  meta.set_apply_log_id(apply_log_id);
+  *(meta.mutable_range()) = Range(false);
+  *(meta.mutable_epoch()) = Epoch();
+
+  std::string meta_filepath = fmt::format("{}/meta", IndexPath());
+
+  braft::ProtoBufFile pb_file_meta(meta_filepath);
+  if (pb_file_meta.save(&meta, true) != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] save meta file fail.", id_);
+    return butil::Status(pb::error::EINTERNAL, "save meta fail");
+  }
+
+  UnlockWrite();
+
+  return butil::Status::OK();
+}
+
+std::string DocumentIndex::GetIndexPath(int64_t document_index_id, const pb::common::RegionEpoch& epoch) {
+  return fmt::format("{}/{}/epoch_{}", Server::GetInstance().GetDocumentIndexPath(), document_index_id,
+                     epoch.version());
+}
+
+std::shared_ptr<DocumentIndex> DocumentIndex::LoadIndex(int64_t id, const pb::common::RegionEpoch& epoch,
+                                                        const pb::common::DocumentIndexParameter& param) {
+  auto path = GetIndexPath(id, epoch);
+
+  if (!Helper::IsExistPath(path)) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] not found index dir, path: {}.", id, path);
+    return nullptr;
+  }
+
+  auto meta_path = fmt::format("{}/meta", path);
+  if (!Helper::IsExistPath(meta_path)) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] not found meta file, path: {}.", id, meta_path);
+    return nullptr;
+  }
+
+  pb::store_internal::DocumentIndexSnapshotMeta meta;
+  braft::ProtoBufFile pb_file_meta(meta_path);
+  if (pb_file_meta.load(&meta) != 0) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] load meta fail, index_path: {}", id, path);
+    return nullptr;
+  }
+
+  if (meta.document_index_id() != id) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] load meta fail, id not match, path: {}.", id, path);
+    return nullptr;
+  }
+
+  if (meta.epoch().version() != epoch.version()) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[document_index.raw][id({})] load meta fail, epoch version not match, path: {} version({}/{}).", id, path,
+        meta.epoch().version(), epoch.version());
+    return nullptr;
+  }
+
+  auto document_index = DocumentIndexFactory::LoadIndex(id, path, param, meta.epoch(), meta.range());
+  if (document_index == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] load meta fail, index_path: {}", id, path);
+    return nullptr;
+  }
+
+  document_index->SetApplyLogId(meta.apply_log_id());
+
+  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] load meta finish, epoch({}) apply_id({})", id,
+                                 meta.epoch().version(), meta.apply_log_id());
+
+  return document_index;
+}
 
 butil::Status DocumentIndex::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids,
                                     bool reload_reader) {
@@ -131,7 +203,7 @@ butil::Status DocumentIndex::Upsert(const std::vector<pb::common::DocumentWithId
 }
 
 butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids, bool reload_reader) {
-  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] add document count({})", id, document_with_ids.size());
+  DINGO_LOG(DEBUG) << fmt::format("[document_index.raw][id({})] add document count({})", id_, document_with_ids.size());
 
   if (document_with_ids.empty()) {
     return butil::Status::OK();
@@ -140,7 +212,7 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
   RWLockWriteGuard guard(&rw_lock_);
 
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
@@ -183,8 +255,9 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
           date_column_docs.push_back(document_value.field_value().string_data());
           break;
         default:
-          std::string err_msg = fmt::format("[document_index.raw][id({})] document_id: ({}) unknown field type({})", id,
-                                            document_id, pb::common::ScalarFieldType_Name(document_value.field_type()));
+          std::string err_msg =
+              fmt::format("[document_index.raw][id({})] document_id: ({}) unknown field type({})", id_, document_id,
+                          pb::common::ScalarFieldType_Name(document_value.field_type()));
           DINGO_LOG(ERROR) << err_msg;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
           break;
@@ -192,29 +265,29 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
     }
 
     auto bool_result = ffi_index_multi_type_column_docs(
-        index_path, document_id, text_column_names, text_column_docs, i64_column_names, i64_column_docs,
+        index_path_, document_id, text_column_names, text_column_docs, i64_column_names, i64_column_docs,
         f64_column_names, f64_column_docs, bytes_column_names, bytes_column_docs, date_column_names, date_column_docs);
     if (!bool_result.result) {
       std::string err_msg =
-          fmt::format("[document_index.raw][id({})] document_id: ({}) add failed, error: {}, error_msg: {}", id,
+          fmt::format("[document_index.raw][id({})] document_id: ({}) add failed, error: {}, error_msg: {}", id_,
                       document_id, bool_result.error_code, bool_result.error_msg.c_str());
       DINGO_LOG(ERROR) << err_msg;
       return butil::Status(pb::error::EINTERNAL, err_msg);
     }
   }
 
-  auto bool_result = ffi_index_writer_commit(index_path);
+  auto bool_result = ffi_index_writer_commit(index_path_);
   if (!bool_result.result) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] commit failed, error: {}, error_msg: {}", id,
+    std::string err_msg = fmt::format("[document_index.raw][id({})] commit failed, error: {}, error_msg: {}", id_,
                                       bool_result.error_code, bool_result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
   }
 
   if (reload_reader) {
-    bool_result = ffi_index_reader_reload(index_path);
+    bool_result = ffi_index_reader_reload(index_path_);
     if (!bool_result.result) {
-      std::string err_msg = fmt::format("[document_index.raw][id({})] reload failed, error: {}, error_msg: {}", id,
+      std::string err_msg = fmt::format("[document_index.raw][id({})] reload failed, error: {}, error_msg: {}", id_,
                                         bool_result.error_code, bool_result.error_msg.c_str());
       DINGO_LOG(ERROR) << err_msg;
       return butil::Status(pb::error::EINTERNAL, err_msg);
@@ -225,7 +298,7 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
 }
 
 butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
-  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] delete document count({})", id, delete_ids.size());
+  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] delete document count({})", id_, delete_ids.size());
 
   if (delete_ids.empty()) {
     return butil::Status::OK();
@@ -234,7 +307,7 @@ butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
   RWLockWriteGuard guard(&rw_lock_);
 
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
@@ -244,12 +317,12 @@ butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
   for (const auto& delete_id : delete_ids) {
     if (delete_id < 0) {
       std::string err_msg =
-          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) < 0", id, delete_id);
+          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) < 0", id_, delete_id);
       DINGO_LOG(ERROR) << err_msg;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
     } else if (delete_id >= INT64_MAX) {
       std::string err_msg =
-          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) >= INT64_MAX", id, delete_id);
+          fmt::format("[document_index.raw][id({})] delete failed, error: delete_id({}) >= INT64_MAX", id_, delete_id);
       DINGO_LOG(ERROR) << err_msg;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
     }
@@ -257,9 +330,9 @@ butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
     delete_ids_uint64.push_back(delete_id);
   }
 
-  auto bool_result = ffi_delete_row_ids(index_path, delete_ids_uint64);
+  auto bool_result = ffi_delete_row_ids(index_path_, delete_ids_uint64);
   if (!bool_result.result) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] delete failed, error: {}, error_msg: {}", id,
+    std::string err_msg = fmt::format("[document_index.raw][id({})] delete failed, error: {}, error_msg: {}", id_,
                                       bool_result.error_code, bool_result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
@@ -276,7 +349,7 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
   RWLockReadGuard guard(&rw_lock_);
 
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
@@ -298,7 +371,7 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
   //   }
   // }
 
-  auto search_result = ffi_bm25_search_with_column_names(index_path, query_string, topk, alive_ids, use_id_filter,
+  auto search_result = ffi_bm25_search_with_column_names(index_path_, query_string, topk, alive_ids, use_id_filter,
                                                          use_range_filter, start_id, end_id, column_names);
 
   if (search_result.error_code == 0) {
@@ -308,13 +381,13 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
       result_doc.set_score(row_id_with_score.score);
       results.push_back(result_doc);
 
-      DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] search result, row_id({}) score({})", id,
+      DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] search result, row_id({}) score({})", id_,
                                      row_id_with_score.row_id, row_id_with_score.score);
     }
 
     return butil::Status::OK();
   } else {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] search failed, error: {}, error_msg: {}", id,
+    std::string err_msg = fmt::format("[document_index.raw][id({})] search failed, error: {}, error_msg: {}", id_,
                                       search_result.error_code, search_result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
@@ -323,11 +396,11 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
 
 butil::Status DocumentIndex::Save(const std::string& /*path*/) {
   // Save need the caller to do LockWrite() and UnlockWrite()
-  auto result = ffi_index_writer_commit(index_path);
+  auto result = ffi_index_writer_commit(index_path_);
   if (result.result) {
     return butil::Status::OK();
   } else {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] save failed, error: {}, error_msg: {}", id,
+    std::string err_msg = fmt::format("[document_index.raw][id({})] save failed, error: {}, error_msg: {}", id_,
                                       result.error_code, result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
@@ -335,11 +408,11 @@ butil::Status DocumentIndex::Save(const std::string& /*path*/) {
 }
 
 butil::Status DocumentIndex::Load(const std::string& /*path*/) {
-  auto result = ffi_index_reader_reload(index_path);
+  auto result = ffi_index_reader_reload(index_path_);
   if (result.result) {
     return butil::Status::OK();
   } else {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] load failed, error: {}, error_msg: {}", id,
+    std::string err_msg = fmt::format("[document_index.raw][id({})] load failed, error: {}, error_msg: {}", id_,
                                       result.error_code, result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
@@ -349,39 +422,39 @@ butil::Status DocumentIndex::Load(const std::string& /*path*/) {
 butil::Status DocumentIndex::GetDocCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
 
-  count = ffi_get_indexed_doc_counts(index_path);
+  count = ffi_get_indexed_doc_counts(index_path_);
   return butil::Status::OK();
 }
 
 butil::Status DocumentIndex::GetTokenCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
 
-  count = ffi_get_total_num_tokens(index_path);
+  count = ffi_get_total_num_tokens(index_path_);
   return butil::Status::OK();
 }
 
 butil::Status DocumentIndex::GetMetaJson(std::string& json) {
   RWLockReadGuard guard(&rw_lock_);
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
 
-  auto string_result = ffi_get_index_meta_json(index_path);
+  auto string_result = ffi_get_index_meta_json(index_path_);
   if (string_result.error_code != 0) {
     std::string err_msg = fmt::format("ffi_get_index_meta_json faild for ({}), error_code: ({}), error_msg: ({})",
-                                      index_path, string_result.error_code, string_result.error_msg.c_str());
+                                      index_path_, string_result.error_code, string_result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
   }
@@ -394,15 +467,15 @@ butil::Status DocumentIndex::GetMetaJson(std::string& json) {
 butil::Status DocumentIndex::GetJsonParameter(std::string& json) {
   RWLockReadGuard guard(&rw_lock_);
   if (is_destroyed_) {
-    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id);
+    std::string err_msg = fmt::format("[document_index.raw][id({})] document index is destroyed", id_);
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
 
-  auto string_result = ffi_get_index_json_parameter(index_path);
+  auto string_result = ffi_get_index_json_parameter(index_path_);
   if (string_result.error_code != 0) {
     std::string err_msg = fmt::format("ffi_get_index_json_parameter faild for ({}), error_code: ({}), error_msg: ({})",
-                                      index_path, string_result.error_code, string_result.error_msg.c_str());
+                                      index_path_, string_result.error_code, string_result.error_msg.c_str());
     DINGO_LOG(ERROR) << err_msg;
     return butil::Status(pb::error::EINTERNAL, err_msg);
   }
@@ -412,20 +485,15 @@ butil::Status DocumentIndex::GetJsonParameter(std::string& json) {
   return butil::Status::OK();
 }
 
-DocumentIndexWrapper::DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter,
-                                           int64_t save_snapshot_threshold_write_key_num)
+DocumentIndexWrapper::DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter)
     : id_(id),
       ready_(false),
-      destoryed_(false),
+      destroyed_(false),
       is_switching_document_index_(false),
-      apply_log_id_(0),
-      snapshot_log_id_(0),
       index_parameter_(index_parameter),
       pending_task_num_(0),
       loadorbuilding_num_(0),
-      rebuilding_num_(0),
-      saving_num_(0),
-      save_snapshot_threshold_write_key_num_(save_snapshot_threshold_write_key_num) {
+      rebuilding_num_(0) {
   bthread_mutex_init(&document_index_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.DocumentIndexWrapper][id({})]", id_);
 }
@@ -434,34 +502,16 @@ DocumentIndexWrapper::~DocumentIndexWrapper() {
   ClearDocumentIndex("destruct");
 
   bthread_mutex_destroy(&document_index_mutex_);
-  DINGO_LOG(INFO) << fmt::format("[delete.DocumentIndexWrapper][id({})]", id_);
+  DINGO_LOG(DEBUG) << fmt::format("[delete.DocumentIndexWrapper][id({})]", id_);
 
   if (IsDestoryed()) {
-    // remove document index dir from disk
-    auto region_document_index_path = DocumentIndexSnapshotManager::GetSnapshotParentPath(id_);
-    if (!region_document_index_path.empty()) {
-      auto ret = Helper::RemoveAllFileOrDirectory(region_document_index_path);
-      if (!ret) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[document_index.wrapper][index_id({})] remove document index dir failed, dir: ({}).", Id(),
-            region_document_index_path);
-      } else {
-        DINGO_LOG(INFO) << fmt::format(
-            "[document_index.wrapper][index_id({})] remove document index dir success, dir: ({}).", Id(),
-            region_document_index_path);
-      }
-    } else {
-      DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] get document index dir failed.", Id());
-    }
-
     RemoveMeta();
   }
 }
 
 std::shared_ptr<DocumentIndexWrapper> DocumentIndexWrapper::New(int64_t id,
                                                                 pb::common::DocumentIndexParameter index_parameter) {
-  auto document_index_wrapper = std::make_shared<DocumentIndexWrapper>(
-      id, index_parameter, Constant::kDocumentIndexSaveSnapshotThresholdWriteKeyNum);
+  auto document_index_wrapper = std::make_shared<DocumentIndexWrapper>(id, index_parameter);
   if (document_index_wrapper != nullptr) {
     if (!document_index_wrapper->Init()) {
       return nullptr;
@@ -476,10 +526,10 @@ std::shared_ptr<DocumentIndexWrapper> DocumentIndexWrapper::GetSelf() { return s
 bool DocumentIndexWrapper::Init() { return true; }  // NOLINT
 
 void DocumentIndexWrapper::Destroy() {
-  DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] document index destroy.", Id());
-  destoryed_.store(true);
+  DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] document index destroy.", Id());
+  destroyed_.store(true);
 
-  // destory document index
+  // destroy document index
   auto own_index = GetOwnDocumentIndex();
   if (own_index != nullptr) {
     own_index->SetDestroyed();
@@ -489,8 +539,8 @@ void DocumentIndexWrapper::Destroy() {
 bool DocumentIndexWrapper::Recover() {
   auto status = LoadMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] document index recover failed, error: {}",
-                                    Id(), status.error_str());
+    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][id({})] document index recover failed, error: {}", Id(),
+                                    status.error_str());
     return false;
   }
 
@@ -510,8 +560,6 @@ butil::Status DocumentIndexWrapper::SaveMeta() {
   pb::store_internal::DocumentIndexMeta meta;
   meta.set_id(id_);
   meta.set_version(version_);
-  meta.set_apply_log_id(ApplyLogId());
-  meta.set_snapshot_log_id(SnapshotLogId());
 
   auto kv = std::make_shared<pb::common::KeyValue>();
   kv->set_key(GenMetaKeyDocument(id_));
@@ -530,7 +578,7 @@ butil::Status DocumentIndexWrapper::RemoveMeta() const {
   }
 
   if (!meta_writer->Delete(GenMetaKeyDocument(id_))) {
-    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] delete document index meta failed.", Id());
+    DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][id({})] delete document index meta failed.", Id());
     return butil::Status(pb::error::EINTERNAL, "Delete document index meta failed.");
   }
 
@@ -555,32 +603,35 @@ butil::Status DocumentIndexWrapper::LoadMeta() {
   pb::store_internal::DocumentIndexMeta meta;
   if (meta.ParsePartialFromArray(kv->value().data(), kv->value().size())) {
     version_ = meta.version();
-    SetApplyLogId(meta.apply_log_id());
-    SetSnapshotLogId(meta.snapshot_log_id());
   } else {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] prase document index meta failed.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] prase document index meta failed.", Id());
   }
 
   return butil::Status();
 }
 
-int64_t DocumentIndexWrapper::LastBuildEpochVersion() { return 0; }  // NOLINT
-
-int64_t DocumentIndexWrapper::ApplyLogId() { return apply_log_id_.load(); }
-
-void DocumentIndexWrapper::SetApplyLogId(int64_t apply_log_id) { apply_log_id_.store(apply_log_id); }
-
-void DocumentIndexWrapper::SaveApplyLogId(int64_t apply_log_id) {
-  SetApplyLogId(apply_log_id);
-  SaveMeta();
+int64_t DocumentIndexWrapper::LastBuildEpochVersion() {
+  auto document_index = GetOwnDocumentIndex();
+  return (document_index != nullptr) ? document_index->Epoch().version() : 0;
 }
 
-int64_t DocumentIndexWrapper::SnapshotLogId() { return snapshot_log_id_.load(); }
+int64_t DocumentIndexWrapper::ApplyLogId() const { return apply_log_id_.load(std::memory_order_acquire); }
 
-void DocumentIndexWrapper::SetSnapshotLogId(int64_t snapshot_log_id) { snapshot_log_id_.store(snapshot_log_id); }
-void DocumentIndexWrapper::SaveSnapshotLogId(int64_t snapshot_log_id) {
-  SetSnapshotLogId(snapshot_log_id);
-  SaveMeta();
+void DocumentIndexWrapper::SetApplyLogId(int64_t apply_log_id) {
+  // update inner document index apply log id
+  if (apply_log_id - last_save_apply_log_id_.load(std::memory_order_relaxed) > FLAGS_document_index_save_log_gap) {
+    last_save_apply_log_id_.store(apply_log_id, std::memory_order_relaxed);
+
+    auto document_index = GetOwnDocumentIndex();
+    if (document_index != nullptr) {
+      auto status = document_index->SaveMeta(apply_log_id);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[document_index.raw][id({})] save meta fail.", id_);
+      }
+    }
+  }
+
+  apply_log_id_.store(apply_log_id, std::memory_order_release);
 }
 
 bool DocumentIndexWrapper::IsSwitchingDocumentIndex() { return is_switching_document_index_.load(); }
@@ -591,22 +642,23 @@ void DocumentIndexWrapper::SetIsSwitchingDocumentIndex(bool is_switching) {
 
 void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, const std::string& trace) {
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.wrapper][index_id({})][trace({})] update document index, epoch({}) range({})", Id(), trace,
+      "[document_index.wrapper][id({})][trace({})] update document index, epoch({}) range({})", Id(), trace,
       Helper::RegionEpochToString(document_index->Epoch()), document_index->RangeString());
+
   // Check document index is stop
   if (IsDestoryed()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is stop.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is stop.", Id());
     return;
   }
 
   {
     BAIDU_SCOPED_LOCK(document_index_mutex_);
 
-    auto old_index = document_index_;
+    auto old_document_index = document_index_;
 
     // for document index, after update, the old index should be destroyed explicitly
-    if (old_index != nullptr) {
-      old_index->SetDestroyed();
+    if (old_document_index != nullptr) {
+      old_document_index->SetDestroyed();
     }
 
     document_index_ = document_index;
@@ -622,28 +674,18 @@ void DocumentIndexWrapper::UpdateDocumentIndex(DocumentIndexPtr document_index, 
 
     ready_.store(true);
 
-    int64_t apply_log_id = ApplyLogId();
-    int64_t snapshot_log_id = SnapshotLogId();
-    int64_t apply_log_id_new = document_index->ApplyLogId();
-
     DINGO_LOG(INFO) << fmt::format(
-        "[document_index.wrapper][index_id({})][trace({})] update document index, apply_log_id({}/{}) "
-        "snapshot_log_id({}/{}).",
-        Id(), trace, apply_log_id, apply_log_id_new, snapshot_log_id, document_index->SnapshotLogId());
-    if (apply_log_id < apply_log_id_new) {
-      SetApplyLogId(apply_log_id_new);
-    }
-    if (snapshot_log_id < document_index->SnapshotLogId()) {
-      SetSnapshotLogId(document_index->SnapshotLogId());
-    }
+        "[document_index.wrapper][id({})][trace({})] update document index, apply_log_id({}/{}).", Id(), trace,
+        apply_log_id_.load(std::memory_order_acquire), document_index->ApplyLogId());
+
+    apply_log_id_.store(document_index->ApplyLogId(), std::memory_order_release);
 
     SaveMeta();
   }
 }
 
 void DocumentIndexWrapper::ClearDocumentIndex(const std::string& trace) {
-  DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})][trace({})] Clear all document index", Id(),
-                                 trace);
+  DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})][trace({})] Clear all document index", Id(), trace);
 
   BAIDU_SCOPED_LOCK(document_index_mutex_);
 
@@ -716,10 +758,6 @@ int32_t DocumentIndexWrapper::RebuildingNum() { return rebuilding_num_.load(std:
 void DocumentIndexWrapper::IncRebuildingNum() { rebuilding_num_.fetch_add(1, std::memory_order_relaxed); }
 void DocumentIndexWrapper::DecRebuildingNum() { rebuilding_num_.fetch_sub(1, std::memory_order_relaxed); }
 
-int32_t DocumentIndexWrapper::SavingNum() { return saving_num_.load(std::memory_order_relaxed); }
-void DocumentIndexWrapper::IncSavingNum() { saving_num_.fetch_add(1, std::memory_order_relaxed); }
-void DocumentIndexWrapper::DecSavingNum() { saving_num_.fetch_sub(1, std::memory_order_relaxed); }
-
 butil::Status DocumentIndexWrapper::GetDocCount(int64_t& count) {
   auto document_index = GetOwnDocumentIndex();
   if (document_index == nullptr) {
@@ -788,65 +826,6 @@ butil::Status DocumentIndexWrapper::GetJsonParameter(std::string& json) {
   return document_index->GetJsonParameter(json);
 }
 
-bool DocumentIndexWrapper::NeedToRebuild() {
-  auto document_index = GetOwnDocumentIndex();
-  if (document_index == nullptr) {
-    return false;
-  }
-
-  return document_index->NeedToRebuild();
-}
-
-bool DocumentIndexWrapper::SupportSave() {
-  auto document_index = GetOwnDocumentIndex();
-  if (document_index == nullptr) {
-    return false;
-  }
-
-  return document_index->SupportSave();
-}
-
-bool DocumentIndexWrapper::NeedToSave(std::string& reason) {
-  auto document_index = GetOwnDocumentIndex();
-  if (document_index == nullptr) {
-    return false;
-  }
-
-  if (Helper::InvalidRange(document_index->Range(false))) {
-    reason = "range invalid";
-    last_save_write_key_count_ = write_key_count_;
-    return true;
-  }
-
-  if (SnapshotLogId() == 0) {
-    reason = "no snapshot";
-    last_save_write_key_count_ = write_key_count_;
-    return true;
-  }
-
-  int64_t last_save_log_behind = ApplyLogId() - SnapshotLogId();
-  bool ret = document_index->NeedToSave(last_save_log_behind);
-  if (ret) {
-    reason = fmt::format("raft log gap({}) exceed threshold", last_save_log_behind);
-    last_save_write_key_count_ = write_key_count_;
-
-    return ret;
-  }
-
-  if ((write_key_count_ - last_save_write_key_count_) >= save_snapshot_threshold_write_key_num_) {
-    reason = fmt::format("write key gap({}) exceed threshold({})", write_key_count_ - last_save_write_key_count_,
-                         save_snapshot_threshold_write_key_num_);
-    last_save_write_key_count_ = write_key_count_;
-    return true;
-  }
-
-  DINGO_LOG(INFO) << fmt::format(
-      "[document_index.wrapper][index_id({})] not need save, last_save_log_behind={} write_key_count={}/{}/{}", Id(),
-      last_save_log_behind, write_key_count_, last_save_write_key_count_, save_snapshot_threshold_write_key_num_);
-
-  return false;
-}
-
 // Filter document id by range
 static std::vector<int64_t> FilterDocumentId(const std::vector<pb::common::DocumentWithId>& document_with_ids,
                                              const pb::common::Range& range) {
@@ -903,21 +882,21 @@ static std::vector<pb::common::DocumentWithId> FilterDocumentWithId(
 
 butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::DocumentWithId>& document_with_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
   // Waiting switch document index
   int count = 0;
   while (IsSwitchingDocumentIndex()) {
-    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] waiting document index switch, count({})",
-                                   Id(), ++count);
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] waiting document index switch, count({})", Id(),
+                                   ++count);
     bthread_usleep(1000 * 100);
   }
 
   auto document_index = GetDocumentIndex();
   if (document_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
@@ -936,35 +915,29 @@ butil::Status DocumentIndexWrapper::Upsert(const std::vector<pb::common::Documen
       return status;
     }
 
-    write_key_count_ += document_with_ids.size();
-
     return status;
   }
 
-  auto status = document_index->Upsert(document_with_ids, true);
-  if (status.ok()) {
-    write_key_count_ += document_with_ids.size();
-  }
-  return status;
+  return document_index->Upsert(document_with_ids, true);
 }
 
 butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWithId>& document_with_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
   // Waiting switch document index
   int count = 0;
   while (IsSwitchingDocumentIndex()) {
-    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] waiting document index switch, count({})",
-                                   Id(), ++count);
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] waiting document index switch, count({})", Id(),
+                                   ++count);
     bthread_usleep(1000 * 100);
   }
 
   auto document_index = GetDocumentIndex();
   if (document_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
@@ -983,35 +956,29 @@ butil::Status DocumentIndexWrapper::Add(const std::vector<pb::common::DocumentWi
       return status;
     }
 
-    write_key_count_ += document_with_ids.size();
-
     return status;
   }
 
-  auto status = document_index->Add(document_with_ids, true);
-  if (status.ok()) {
-    write_key_count_ += document_with_ids.size();
-  }
-  return status;
+  return document_index->Add(document_with_ids, true);
 }
 
 butil::Status DocumentIndexWrapper::Delete(const std::vector<int64_t>& delete_ids) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
   // Switch document index wait
   int count = 0;
   while (IsSwitchingDocumentIndex()) {
-    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] document index switch waiting, count({})",
-                                   Id(), ++count);
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] document index switch waiting, count({})", Id(),
+                                   ++count);
     bthread_usleep(1000 * 100);
   }
 
   auto document_index = GetDocumentIndex();
   if (document_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
@@ -1023,18 +990,10 @@ butil::Status DocumentIndexWrapper::Delete(const std::vector<int64_t>& delete_id
       return status;
     }
 
-    status = document_index->Delete(FilterDocumentId(delete_ids, document_index->Range(false)));
-    if (status.ok()) {
-      write_key_count_ += delete_ids.size();
-    }
-    return status;
+    return document_index->Delete(FilterDocumentId(delete_ids, document_index->Range(false)));
   }
 
-  auto status = document_index->Delete(delete_ids);
-  if (status.ok()) {
-    write_key_count_ += delete_ids.size();
-  }
-  return status;
+  return document_index->Delete(delete_ids);
 }
 
 static void MergeSearchResult(uint32_t topk, std::vector<pb::common::DocumentWithScore>& input_1,
@@ -1086,12 +1045,12 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
                                            const pb::common::DocumentSearchParameter& parameter,
                                            std::vector<pb::common::DocumentWithScore>& results) {
   if (!IsReady()) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
   auto document_index = GetDocumentIndex();
   if (document_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][index_id({})] document index is not ready.", Id());
+    DINGO_LOG(WARNING) << fmt::format("[document_index.wrapper][id({})] document index is not ready.", Id());
     return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_FOUND, "document index %lu is not ready.", Id());
   }
 
@@ -1113,8 +1072,7 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
   // Exist sibling document index, so need to separate search document.
   auto sibling_document_index = SiblingDocumentIndex();
   if (sibling_document_index != nullptr) {
-    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] search document in sibling document index.",
-                                   Id());
+    DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] search document in sibling document index.", Id());
     std::vector<pb::common::DocumentWithScore> results_1;
     auto status = sibling_document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX,
                                                  use_id_filter, alive_ids, column_names, results_1);
@@ -1139,74 +1097,25 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
     DocumentCodec::DecodeRangeToDocumentId(false, region_range, min_document_id, max_document_id);
 
     DINGO_LOG(INFO) << fmt::format(
-        "[document_index.wrapper][index_id({})] search document in document index with range_filter, range({}) "
-        "query_string({}) "
-        "top_n({}) min_document_id({}) max_document_id({})",
+        "[document_index.wrapper][id({})] search document in document index with range_filter, range({}) "
+        "query_string({}) top_n({}) min_document_id({}) max_document_id({})",
         Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n(),
         min_document_id, max_document_id);
 
     // use range filter
     return document_index->Search(parameter.top_n(), parameter.query_string(), true, min_document_id, max_document_id,
                                   use_id_filter, alive_ids, column_names, results);
-
-    // auto ret =
-    //     DocumentIndexWrapper::SetDocumentIndexRangeFilter(document_index, filters, min_document_id,
-    //     max_document_id);
-    // if (!ret.ok()) {
-    //   DINGO_LOG(ERROR) << fmt::format(
-    //       "[document_index.wrapper][index_id({})] set document index filter failed, error: {}", Id(),
-    //       ret.error_str());
-    //   return ret;
-    // }
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.wrapper][index_id({})] search document in document index, range({}) query_string({}) top_n({})",
-      Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n());
+      "[document_index.wrapper][id({})] search document in document index, range({}) query_string({}) top_n({})", Id(),
+      DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n());
 
   return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
                                 alive_ids, column_names, results);
 }
 
-// butil::Status DocumentIndexWrapper::SetDocumentIndexRangeFilter(
-//     DocumentIndexPtr /*document_index*/, std::vector<std::shared_ptr<DocumentIndex::FilterFunctor>>& filters,
-//     int64_t min_document_id, int64_t max_document_id) {
-//   filters.push_back(std::make_shared<DocumentIndex::RangeFilterFunctor>(min_document_id, max_document_id));
-//   return butil::Status::OK();
-// }
-
-// bool DocumentIndexWrapper::IsTempHoldDocumentIndex() const { return is_hold_document_index_.load(); }
-
-// void DocumentIndexWrapper::SetIsTempHoldDocumentIndex(bool need) {
-//   DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][index_id({})] set document index hold({}->{})", Id(),
-//                                  IsTempHoldDocumentIndex(), need);
-//   is_hold_document_index_.store(need);
-//   SaveMeta();
-// }
-
 // For document index, all node need to hold the index, so this function always return true.
-bool DocumentIndexWrapper::IsPermanentHoldDocumentIndex(int64_t /*region_id*/) {
-  // auto config = ConfigManager::GetInstance().GetRoleConfig();
-  // if (config == nullptr) {
-  //   return true;
-  // }
-
-  // auto region = Server::GetInstance().GetRegion(region_id);
-  // if (region == nullptr) {
-  //   DINGO_LOG(ERROR) << fmt::format("[document_index.wrapper][index_id({})] Not found region.", region_id);
-  //   return false;
-  // }
-  // if (region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
-  //   return true;
-  // }
-
-  // if (!config->GetBool("document.enable_follower_hold_index")) {
-  //   // If follower, delete document index.
-  //   if (!Server::GetInstance().IsLeader(region_id)) {
-  //     return false;
-  //   }
-  // }
-  return true;
-}
+bool DocumentIndexWrapper::IsPermanentHoldDocumentIndex(int64_t /*region_id*/) { return true; }
 
 }  // namespace dingodb

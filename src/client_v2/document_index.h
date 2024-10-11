@@ -72,6 +72,19 @@ struct DocumentAddOptions {
 void SetUpDocumentAdd(CLI::App &app);
 void RunDocumentAdd(DocumentAddOptions const &opt);
 
+struct DocumentBatchAddOptions {
+  std::string coor_url;
+  int64_t region_id;
+  int64_t start_document_id;
+  int64_t total_size;
+  int64_t batch_size;
+  std::string text_prefix;
+  bool is_update;
+  int32_t wait_time_ms;
+};
+void SetUpDocumentBatchAdd(CLI::App &app);
+void RunDocumentBatchAdd(DocumentBatchAddOptions const &opt);
+
 struct DocumentSearchOptions {
   std::string coor_url;
   int64_t region_id;
@@ -135,9 +148,10 @@ struct DocumentGetRegionMetricsOptions {
 void SetUpDocumentGetRegionMetrics(CLI::App &app);
 void RunDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const &opt);
 
-std::string ToRFC3339(const std::chrono::system_clock::time_point& time_point);
+std::string ToRFC3339(const std::chrono::system_clock::time_point &time_point);
 // document
 void SendDocumentAdd(DocumentAddOptions const &opt);
+void SendDocumentBatchAdd(DocumentAddOptions const &opt);
 void SendDocumentDelete(DocumentDeleteOptions const &opt);
 void SendDocumentSearch(DocumentSearchOptions const &opt);
 void SendDocumentBatchQuery(DocumentBatchQueryOptions const &opt);

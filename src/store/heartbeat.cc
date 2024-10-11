@@ -178,7 +178,6 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
           document_index_status->set_is_switching(document_index_wrapper->IsSwitchingDocumentIndex());
           document_index_status->set_is_hold_document_index(document_index_wrapper->IsOwnReady());
           document_index_status->set_apply_log_id(document_index_wrapper->ApplyLogId());
-          document_index_status->set_snapshot_log_id(document_index_wrapper->SnapshotLogId());
           document_index_status->set_last_build_epoch_version(document_index_wrapper->LastBuildEpochVersion());
         }
       }
@@ -395,7 +394,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   // update executor_state by last_seen_timestamp
   pb::common::ExecutorMap executor_map_temp;
   // means all executors
-  std::string cluster_name = "";
+  std::string cluster_name;
 
   int64_t cluster_id = 1;
   pb::coordinator_internal::MetaIncrement meta_increment;
@@ -552,14 +551,6 @@ void VectorIndexScrubTask::ScrubVectorIndex() {
   }
 }
 
-// this is for document
-void DocumentIndexScrubTask::ScrubDocumentIndex() {
-  auto status = DocumentIndexManager::ScrubDocumentIndex();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("Scrub document index failed, error: {}", status.error_str());
-  }
-}
-
 void BalanceLeaderTask::DoBalanceLeader() {
   auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
   if (!coordinator_controller->IsLeader()) {
@@ -687,12 +678,6 @@ void Heartbeat::TriggerCompactionTask(void*) {
 void Heartbeat::TriggerScrubVectorIndex(void*) {
   // Free at ExecuteRoutine()
   auto task = std::make_shared<VectorIndexScrubTask>();
-  Server::GetInstance().GetHeartbeat()->Execute(task);
-}
-
-void Heartbeat::TriggerScrubDocumentIndex(void*) {
-  // Free at ExecuteRoutine()
-  auto task = std::make_shared<DocumentIndexScrubTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

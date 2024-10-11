@@ -48,35 +48,6 @@ class VectorIndexFollowerStopHandler : public BaseHandler {
   int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
 };
 
-// document
-// DocumentIndexLeaderStart
-class DocumentIndexLeaderStartHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kDocumentIndexLeaderStart; }
-  int Handle(store::RegionPtr region, int64_t term_id) override;
-};
-
-// DocumentIndexLeaderStop
-class DocumentIndexLeaderStopHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kDocumentIndexLeaderStop; }
-  int Handle(store::RegionPtr region, butil::Status status) override;
-};
-
-// DocumentIndexFollowerStart
-class DocumentIndexFollowerStartHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kDocumentIndexFollowerStart; }
-  int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
-};
-
-// DocumentIndexFollowerStop
-class DocumentIndexFollowerStopHandler : public BaseHandler {
- public:
-  HandlerType GetType() override { return HandlerType::kDocumentIndexFollowerStop; }
-  int Handle(store::RegionPtr region, const braft::LeaderChangeContext &ctx) override;
-};
-
 // Leader start handler collection
 class LeaderStartHandlerFactory : public HandlerFactory {
  public:

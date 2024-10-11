@@ -33,18 +33,16 @@ class DocumentIndexFactory {
   DocumentIndexFactory(DocumentIndexFactory&& rhs) = delete;
   DocumentIndexFactory& operator=(DocumentIndexFactory&& rhs) = delete;
 
-  static std::shared_ptr<DocumentIndex> LoadIndex(int64_t id, const std::string& index_path,
-                                                  const pb::common::DocumentIndexParameter& document_index_parameter,
-                                                  const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
-                                                  butil::Status& status);
-  static std::shared_ptr<DocumentIndex> CreateIndex(int64_t id, const std::string& index_path,
-                                                    const pb::common::DocumentIndexParameter& document_index_parameter,
-                                                    const pb::common::RegionEpoch& epoch,
-                                                    const pb::common::Range& range, bool force_create,
-                                                    butil::Status& status);
-  static std::shared_ptr<DocumentIndex> LoadOrCreateIndex(
-      int64_t id, const std::string& index_path, const pb::common::DocumentIndexParameter& document_index_parameter,
-      const pb::common::RegionEpoch& epoch, const pb::common::Range& range, butil::Status& status);
+  // load already exist index from disk
+  static DocumentIndexPtr LoadIndex(int64_t id, const std::string& index_path,
+                                    const pb::common::DocumentIndexParameter& parameter,
+                                    const pb::common::RegionEpoch& epoch, const pb::common::Range& range);
+
+  // create new index
+  static DocumentIndexPtr CreateIndex(int64_t id, const std::string& index_path,
+                                      const pb::common::DocumentIndexParameter& parameter,
+                                      const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                      bool force_create);
 };
 
 }  // namespace dingodb
