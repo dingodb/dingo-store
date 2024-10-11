@@ -64,8 +64,8 @@ butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64
 
   if (!IsLeaseToKeyMapInited()) {
     DINGO_LOG(WARNING) << "lease_to_key_map_ not initialized, please wait and try again, term: "
-                       << lease_to_key_map_init_term_.load(butil::memory_order_release)
-                       << ", leader_term: " << leader_term_.load(butil::memory_order_release);
+                       << lease_to_key_map_init_term_.load(butil::memory_order_acquire)
+                       << ", leader_term: " << leader_term_.load(butil::memory_order_acquire);
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER,
                          "lease_to_key_map_ not initialized, please wait and try again");
   }
@@ -113,8 +113,8 @@ butil::Status KvControl::LeaseRenew(int64_t lease_id, int64_t &ttl_seconds,
                                     pb::coordinator_internal::MetaIncrement &meta_increment) {
   if (!IsLeaseToKeyMapInited()) {
     DINGO_LOG(WARNING) << "lease_to_key_map_ not initialized, please wait and try again, term: "
-                       << lease_to_key_map_init_term_.load(butil::memory_order_release)
-                       << ", leader_term: " << leader_term_.load(butil::memory_order_release);
+                       << lease_to_key_map_init_term_.load(butil::memory_order_acquire)
+                       << ", leader_term: " << leader_term_.load(butil::memory_order_acquire);
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER,
                          "lease_to_key_map_ not initialized, please wait and try again");
   }
@@ -226,8 +226,8 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
                                     int64_t &remaining_ttl_seconds, std::set<std::string> &keys) {
   if (!IsLeaseToKeyMapInited()) {
     DINGO_LOG(WARNING) << "lease_to_key_map_ not initialized, please wait and try again, term: "
-                       << lease_to_key_map_init_term_.load(butil::memory_order_release)
-                       << ", leader_term: " << leader_term_.load(butil::memory_order_release);
+                       << lease_to_key_map_init_term_.load(butil::memory_order_acquire)
+                       << ", leader_term: " << leader_term_.load(butil::memory_order_acquire);
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER,
                          "lease_to_key_map_ not initialized, please wait and try again");
   }
@@ -256,8 +256,8 @@ butil::Status KvControl::LeaseQuery(int64_t lease_id, bool get_keys, int64_t &gr
 }
 
 bool KvControl::IsLeaseToKeyMapInited() {
-  return lease_to_key_map_init_term_.load(butil::memory_order_release) ==
-         leader_term_.load(butil::memory_order_release);
+  return lease_to_key_map_init_term_.load(butil::memory_order_acquire) ==
+         leader_term_.load(butil::memory_order_acquire);
 }
 
 void KvControl::LeaseTask() {
@@ -270,7 +270,7 @@ void KvControl::LeaseTask() {
     // check if lease_to_key_map_ is initialized
     if (!IsLeaseToKeyMapInited()) {
       DINGO_LOG(INFO) << "lease_to_key_map_ not initialized, and this is leader, do BuildLeaseToKeyMap, leader_term: "
-                      << leader_term_.load(butil::memory_order_release) << ", lease_to_key_map_init_term_: "
+                      << leader_term_.load(butil::memory_order_acquire) << ", lease_to_key_map_init_term_: "
                       << lease_to_key_map_init_term_.load(butil::memory_order_relaxed);
 
       BuildLeaseToKeyMap();
@@ -286,7 +286,7 @@ void KvControl::LeaseTask() {
   } else {
     // for follower
     // 1. clear lease_to_key_map_
-    if (lease_to_key_map_init_term_.load(butil::memory_order_release) > 0) {
+    if (lease_to_key_map_init_term_.load(butil::memory_order_acquire) > 0) {
       DINGO_LOG(INFO) << "lease_to_key_map_ initialized, and this is not leader, clear lease_to_key_map_";
 
       {
