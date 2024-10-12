@@ -500,8 +500,8 @@ void NodeServiceImpl::CheckVectorIndex(google::protobuf::RpcController* /*contro
   } else {
     if (request->need_hold_if_absent()) {
       // use slow load
-      VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, true, false, request->job_id(),
-                                                          "from peer");
+      VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, false, request->job_id(),
+                                                       "fromPeer");
     }
   }
 }

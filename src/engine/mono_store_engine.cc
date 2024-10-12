@@ -68,13 +68,11 @@ bool MonoStoreEngine::Recover() {
         region->GetStoreEngineType() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
       if (GetRole() == pb::common::INDEX) {
         auto vector_index_wrapper = region->VectorIndexWrapper();
-        VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0,
-                                                            "rocks engine recover");
+        VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, false, 0, "recover");
       }
       if (GetRole() == pb::common::DOCUMENT) {
         auto document_index_wrapper = region->DocumentIndexWrapper();
-        DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, false, 0,
-                                                             "rocks engine recover");
+        DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, false, 0, "recover");
       }
 
       ++count;

@@ -563,7 +563,7 @@ int RaftLoadSnapshotHandler::Handle(store::RegionPtr region, std::shared_ptr<Raw
     }
 
     // use slow load
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, false, 0, "loadRaftSnapshot");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, false, 0, "loadRaftSnapshot");
   } else if (region->Definition().index_parameter().has_document_index_parameter()) {
     DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] load snapshot to document_engine.", region->Id());
 
