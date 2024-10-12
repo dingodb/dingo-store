@@ -168,7 +168,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   } else if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_MONO_STORE) {
     if (GetRole() == pb::common::INDEX) {
       auto vector_index_wrapper = region->VectorIndexWrapper();
-      VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, true, 0, "creating");
+      VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, true, 0, "creating");
     }
   } else {
     // not support
@@ -1483,8 +1483,8 @@ butil::Status HoldVectorIndexTask::HoldVectorIndex(std::shared_ptr<Context> /*ct
     // Load vector index.
     DINGO_LOG(INFO) << fmt::format("[vector_index.hold][index_id({})] launch load or build vector index.", region_id);
     // use slow load
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, true, false, region_cmd->job_id(),
-                                                        "hold vector index");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, true, false, region_cmd->job_id(),
+                                                     "holdVectorIndex");
 
   } else {
     // Delete vector index.

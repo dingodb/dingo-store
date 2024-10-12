@@ -85,37 +85,10 @@ class SaveVectorIndexTask : public TaskRunnable {
   int64_t start_time_;
 };
 
-// Load or build vector index task
 class LoadOrBuildVectorIndexTask : public TaskRunnable {
  public:
-  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index, int64_t job_id,
-                             const std::string& trace)
-      : vector_index_wrapper_(vector_index_wrapper),
-        is_temp_hold_vector_index_(is_temp_hold_vector_index),
-        job_id_(job_id),
-        trace_(trace) {
-    start_time_ = Helper::TimestampMs();
-  }
-  ~LoadOrBuildVectorIndexTask() override = default;
-
-  std::string Type() override { return "LOAD_OR_BUILD_VECTOR_INDEX"; }
-
-  void Run() override;
-
-  std::string Trace() override;
-
- private:
-  VectorIndexWrapperPtr vector_index_wrapper_;
-  bool is_temp_hold_vector_index_;
-  int64_t job_id_;
-  std::string trace_;
-  int64_t start_time_;
-};
-
-class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
- public:
-  LoadAsyncBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
-                                bool is_fast_load, int64_t job_id, const std::string& trace)
+  LoadOrBuildVectorIndexTask(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
+                             bool is_fast_load, int64_t job_id, const std::string& trace)
       : vector_index_wrapper_(vector_index_wrapper),
         is_temp_hold_vector_index_(is_temp_hold_vector_index),
         is_fast_load_(is_fast_load),
@@ -123,9 +96,9 @@ class LoadAsyncBuildVectorIndexTask : public TaskRunnable {
         trace_(trace) {
     start_time_ = Helper::TimestampMs();
   }
-  ~LoadAsyncBuildVectorIndexTask() override = default;
+  ~LoadOrBuildVectorIndexTask() override = default;
 
-  std::string Type() override { return "LOAD_ASYNC_BUILD_VECTOR_INDEX"; }
+  std::string Type() override { return "LOAD_OR_BUILD_VECTOR_INDEX"; }
 
   void Run() override;
 
@@ -179,25 +152,11 @@ class VectorIndexManager {
 
   static std::shared_ptr<VectorIndexManager> New() { return std::make_shared<VectorIndexManager>(); }
 
-  // Load vector index for already exist vector index at bootstrap.
-  // Priority load from snapshot, if snapshot not exist then load from rocksdb.
-  static butil::Status LoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                              const pb::common::RegionEpoch& epoch, const std::string& trace);
-  static butil::Status LoadVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
-                                           const pb::common::RegionEpoch& epoch, const std::string& trace);
-  static butil::Status BuildVectorIndexOnly(VectorIndexWrapperPtr vector_index_wrapper,
-                                            const pb::common::RegionEpoch& epoch, const std::string& trace);
+  static butil::Status RebuildVectorIndexWithSave(VectorIndexWrapperPtr vector_index_wrapper,
+                                                  const pb::common::RegionEpoch& epoch, const std::string& trace);
 
-  // LaunchLoadOrBuildVectorIndex is unused now.
   static void LaunchLoadOrBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
-                                           int64_t job_id, const std::string& trace);
-  static void LaunchLoadAsyncBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper,
-                                              bool is_temp_hold_vector_index, bool is_fast_load, int64_t job_id,
-                                              const std::string& trace);
-
-  // Parallel load or build vector index at server bootstrap.
-  static butil::Status ParallelLoadOrBuildVectorIndex(std::vector<store::RegionPtr> regions, int concurrency,
-                                                      const std::string& trace);
+                                           bool is_fast_load, int64_t job_id, const std::string& trace);
 
   // Save vector index snapshot.
   static butil::Status SaveVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const std::string& trace);
@@ -209,6 +168,7 @@ class VectorIndexManager {
   // Launch rebuild vector index at execute queue.
   static void LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, int64_t job_id, bool is_double_check,
                                        bool is_force, bool is_clear, const std::string& trace);
+
   static void LaunchBuildVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, bool is_temp_hold_vector_index,
                                      bool is_fast_build, int64_t job_id, const std::string& trace);
 
@@ -282,11 +242,12 @@ class VectorIndexManager {
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
   bool ExecuteTaskFast(int64_t region_id, TaskRunnablePtr task);
 
+  static bool ExecuteTask(int64_t region_id, TaskRunnablePtr task, bool is_fast_task);
+
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
   uint64_t GetBackgroundPendingTaskCount();
 
- private:
   static butil::Status LoadVectorIndex(VectorIndexWrapperPtr vector_index_wrapper, const pb::common::RegionEpoch& epoch,
                                        const std::string& trace);
   // Build vector index with original data(rocksdb).
@@ -303,6 +264,7 @@ class VectorIndexManager {
   static butil::Status TrainForBuild(std::shared_ptr<VectorIndex> vector_index, mvcc::ReaderPtr reader,
                                      const pb::common::Range& encode_range);
 
+ private:
   // Execute all vector index load/build/rebuild/save task.
   WorkerSetPtr background_workers_;
   WorkerSetPtr fast_background_workers_;

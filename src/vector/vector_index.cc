@@ -436,7 +436,7 @@ bool VectorIndexWrapper::Recover() {
   if (IsTempHoldVectorIndex()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] need bootstrap build vector index.", Id());
     // use slow load
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(GetSelf(), false, false, 0, "recover");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(GetSelf(), false, false, 0, "recover");
   }
 
   return true;
@@ -1243,7 +1243,8 @@ butil::Status VectorIndexWrapper::Load(const pb::common::VectorLoadParameter& pa
   return vector_index->Load(parameter, vector_state_parameter);
 }
 
-butil::Status VectorIndexWrapper::Status(pb::common::VectorStateParameter& vector_state_parameter, pb::error::Error& internal_error) {
+butil::Status VectorIndexWrapper::Status(pb::common::VectorStateParameter& vector_state_parameter,
+                                         pb::error::Error& internal_error) {
   if (!IsReady()) {
     DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", Id());

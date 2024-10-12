@@ -30,6 +30,7 @@
 #include "common/context.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "common/role.h"
 #include "document/codec.h"
 #include "engine/raw_engine.h"
 #include "fmt/core.h"
@@ -846,61 +847,22 @@ void DebugServiceImpl::TraceWorkQueue(google::protobuf::RpcController* controlle
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard done_guard(svr_done);
 
-  if (request->type() == pb::debug::WORK_QUEUE_STORE_SERVICE_READ) {
-    auto worker_set_traces = Server::GetInstance().GetStoreServiceReadWorkerSetTrace();
+  std::vector<std::vector<std::string>> worker_set_traces;
+  if (GetRole() == pb::common::INDEX) {
+    worker_set_traces = Server::GetInstance().GetVectorIndexBackgroundWorkerSetTrace();
 
-    auto* mut_worker_set_traces = response->add_worker_set_traces();
-    for (auto& worker_trace : worker_set_traces) {
-      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
-      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
-      worker_traces->set_count(worker_trace.size());
-    }
-    mut_worker_set_traces->set_count(worker_set_traces.size());
-
-  } else if (request->type() == pb::debug::WORK_QUEUE_STORE_SERVICE_WRITE) {
-    auto worker_set_traces = Server::GetInstance().GetStoreServiceWriteWorkerSetTrace();
-
-    auto* mut_worker_set_traces = response->add_worker_set_traces();
-    for (auto& worker_trace : worker_set_traces) {
-      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
-      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
-      worker_traces->set_count(worker_trace.size());
-    }
-    mut_worker_set_traces->set_count(worker_set_traces.size());
-
-  } else if (request->type() == pb::debug::WORK_QUEUE_INDEX_SERVICE_READ) {
-    auto worker_set_traces = Server::GetInstance().GetIndexServiceReadWorkerSetTrace();
-
-    auto* mut_worker_set_traces = response->add_worker_set_traces();
-    for (auto& worker_trace : worker_set_traces) {
-      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
-      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
-      worker_traces->set_count(worker_trace.size());
-    }
-    mut_worker_set_traces->set_count(worker_set_traces.size());
-
-  } else if (request->type() == pb::debug::WORK_QUEUE_INDEX_SERVICE_WRITE) {
-    auto worker_set_traces = Server::GetInstance().GetIndexServiceWriteWorkerSetTrace();
-
-    auto* mut_worker_set_traces = response->add_worker_set_traces();
-    for (auto& worker_trace : worker_set_traces) {
-      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
-      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
-      worker_traces->set_count(worker_trace.size());
-    }
-    mut_worker_set_traces->set_count(worker_set_traces.size());
-
-  } else if (request->type() == pb::debug::WORK_QUEUE_VECTOR_INDEX_BACKGROUND) {
-    auto worker_set_traces = Server::GetInstance().GetVectorIndexBackgroundWorkerSetTrace();
-
-    auto* mut_worker_set_traces = response->add_worker_set_traces();
-    for (auto& worker_trace : worker_set_traces) {
-      auto* worker_traces = mut_worker_set_traces->add_worker_traces();
-      Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
-      worker_traces->set_count(worker_trace.size());
-    }
-    mut_worker_set_traces->set_count(worker_set_traces.size());
+  } else if (GetRole() == pb::common::DOCUMENT) {
+    worker_set_traces = Server::GetInstance().GetDocumentIndexBackgroundWorkerSetTrace();
   }
+
+  auto* mut_worker_set_traces = response->add_worker_set_traces();
+  for (auto& worker_trace : worker_set_traces) {
+    auto* worker_traces = mut_worker_set_traces->add_worker_traces();
+    Helper::VectorToPbRepeated(worker_trace, worker_traces->mutable_traces());
+    worker_traces->set_count(worker_trace.size());
+  }
+
+  mut_worker_set_traces->set_count(worker_set_traces.size());
 }
 
 void DebugServiceImpl::AdjustThreadPoolSize(google::protobuf::RpcController* controller,

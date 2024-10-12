@@ -910,19 +910,31 @@ bool DocumentIndexManager::ExecuteTask(int64_t region_id, TaskRunnablePtr task, 
 }
 
 std::vector<std::vector<std::string>> DocumentIndexManager::GetPendingTaskTrace() {
-  if (workers_ == nullptr) {
+  if (workers_ == nullptr || fast_workers_ == nullptr) {
     return {};
   }
 
-  return workers_->GetPendingTaskTrace();
+  std::vector<std::vector<std::string>> result;
+
+  {
+    auto traces = workers_->GetPendingTaskTrace();
+    result.insert(result.end(), traces.begin(), traces.end());
+  }
+
+  {
+    auto traces = fast_workers_->GetPendingTaskTrace();
+    result.insert(result.end(), traces.begin(), traces.end());
+  }
+
+  return result;
 }
 
 uint64_t DocumentIndexManager::GetBackgroundPendingTaskCount() {
-  if (workers_ == nullptr) {
+  if (workers_ == nullptr || fast_workers_ == nullptr) {
     return 0;
   }
 
-  return workers_->PendingTaskCount();
+  return workers_->PendingTaskCount() + fast_workers_->PendingTaskCount();
 }
 
 }  // namespace dingodb

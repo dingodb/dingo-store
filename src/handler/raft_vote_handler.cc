@@ -50,7 +50,7 @@ int VectorIndexLeaderStartHandler::Handle(store::RegionPtr region, int64_t) {
       }
     }
 
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "being leader");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "beingLeader");
   }
 
   return 0;
@@ -110,7 +110,7 @@ int VectorIndexFollowerStartHandler::Handle(store::RegionPtr region, const braft
       }
     }
 
-    VectorIndexManager::LaunchLoadAsyncBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "being follower");
+    VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, is_fast_load, 0, "beingFollower");
   }
 
   return 0;
