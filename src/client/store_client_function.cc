@@ -91,6 +91,9 @@ DEFINE_bool(is_update, false, "is update document");
 
 DEFINE_bool(show_detail, false, "show detail");
 
+DECLARE_string(import_data_set);
+DECLARE_string(import_data_path);
+
 namespace client {
 
 /*
@@ -2276,7 +2279,7 @@ void SendDocumentBatchQuery(int64_t region_id, std::vector<int64_t> document_ids
     request.set_without_scalar_data(true);
   }
 
-  if(FLAGS_without_table) {
+  if (FLAGS_without_table) {
     request.set_without_table_data(true);
   }
 
@@ -2333,7 +2336,7 @@ void SendDocumentScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, 
     request.set_without_scalar_data(true);
   }
 
-  if(FLAGS_without_table) {
+  if (FLAGS_without_table) {
     request.set_without_table_data(true);
   }
 
@@ -2745,41 +2748,136 @@ void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uin
     return;
   }
   if (count == 0) {
-    DINGO_LOG(ERROR) << "count must be greater than 0";
-    return;
+    if (FLAGS_import_data_path == "") {
+      DINGO_LOG(ERROR) << "count must be greater than 0";
+      return;
+    }
   }
   if (start_id < 0) {
     DINGO_LOG(ERROR) << "start_id must be greater than 0";
     return;
   }
 
-  int64_t total = 0;
-
-  if (count % step_count != 0) {
-    DINGO_LOG(ERROR) << fmt::format("count {} must be divisible by step_count {}", count, step_count);
+  if (FLAGS_import_data_set != "sift") {
+    DINGO_LOG(ERROR) << "import_data_set must be sift";
     return;
   }
 
-  uint32_t cnt = count / step_count;
-
+  int64_t total = 0;
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
-
   std::vector<float> random_seeds;
-  random_seeds.resize(count * dimension);
-  for (uint32_t i = 0; i < count; ++i) {
-    for (uint32_t j = 0; j < dimension; ++j) {
-      random_seeds[i * dimension + j] = distrib(rng);
-    }
+  std::ifstream reader(FLAGS_import_data_path.c_str(), std::ios::binary);
+  std::vector<float> data;
+  bool is_eof = false;
 
-    if (i % 10000 == 0) {
-      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, count);
+  bool is_use_file = false;
+
+  if (import_for_add) {
+    if (FLAGS_import_data_path != "") {
+      uint32_t dim = 0;
+
+      if (reader.fail()) {
+        std::string s = fmt::format("open file error : {} {}", FLAGS_import_data_path, strerror(errno));
+        DINGO_LOG(ERROR) << s;
+        return;
+      }
+
+      reader.read(reinterpret_cast<char*>(&dim), sizeof(uint32_t));
+
+      if (dimension != dim) {
+        std::string s = fmt::format("dimension {} not equal to file dimension {}", dimension, dim);
+        DINGO_LOG(ERROR) << s;
+        return;
+      }
+
+      DINGO_LOG(INFO) << fmt::format("sift dimension : {} file : {}", dim, FLAGS_import_data_path);
+
+      reader.seekg(0, std::ios::beg);
+
+      uintmax_t file_size = std::filesystem::file_size(FLAGS_import_data_path);
+
+      if (file_size % (sizeof(uint32_t) + sizeof(float) * dimension) != 0) {
+        std::string s =
+            fmt::format("sift file : {}  is not regular file. sift file format not correct.", FLAGS_import_data_path);
+        DINGO_LOG(ERROR) << s;
+        return;
+      }
+      count = file_size / (sizeof(uint32_t) + sizeof(float) * dimension);
+      DINGO_LOG(INFO) << fmt::format("sift count : {} file : {}", count, FLAGS_import_data_path);
+
+      is_use_file = true;
+    } else {  // random
+
+      random_seeds.resize(count * dimension);
+      for (uint32_t i = 0; i < count; ++i) {
+        for (uint32_t j = 0; j < dimension; ++j) {
+          random_seeds[i * dimension + j] = distrib(rng);
+        }
+
+        if (i % 10000 == 0) {
+          DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, count);
+        }
+      }
+
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", count, count);
+      is_use_file = false;
     }
   }
 
-  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", count, count);
+  auto lambda_read_line_function = [&](std::ifstream& reader, uint32_t dimension, std::vector<float>& data,
+                                       bool& is_eof) {
+    std::vector<uint8_t> buffer;
+    int64_t already_size = 0;
+    size_t buffer_size = dimension * sizeof(float) + sizeof(uint32_t);
+    buffer.resize(buffer_size);
+
+    try {
+      is_eof = false;
+      while (true) {
+        reader.read(reinterpret_cast<char*>(buffer.data()) + already_size, buffer_size - already_size);
+
+        int64_t num = reader.gcount();
+
+        already_size += num;
+
+        if (already_size == buffer_size) {
+          break;
+        }
+
+        if (reader.eof()) {
+          is_eof = true;
+          reader.close();
+          return true;
+        }
+      }
+      uint32_t dim = *(reinterpret_cast<uint32_t*>(buffer.data()));
+
+      if (dim != static_cast<uint32_t>(dimension)) {
+        std::string s = fmt::format("dimension {} not equal to file dimension {}", dimension, dim);
+        LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << s;
+        return false;
+      }
+
+      data.reserve(static_cast<size_t>(dimension));
+      for (size_t i = 0; i < dimension; i++) {
+        float f = *(reinterpret_cast<float*>(buffer.data() + sizeof(uint32_t) + i * sizeof(float)));
+        data.push_back(f);
+      }
+
+    } catch (const std::exception& e) {
+      std::string s = fmt::format("read error : {} {}", FLAGS_import_data_path, e.what());
+      LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << s;
+      return false;
+    }
+    return true;
+  };
+
+  uint32_t cnt = count / step_count;
+  cnt += (count % step_count != 0 ? 1 : 0);
 
   for (uint32_t x = 0; x < cnt; x++) {
+    auto last_step_count = (x == cnt - 1 ? (count % step_count == 0 ? step_count : count % step_count) : step_count);
     auto start = std::chrono::steady_clock::now();
     {
       dingodb::pb::index::VectorImportRequest request;
@@ -2788,14 +2886,32 @@ void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uin
       *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
       int64_t real_start_id = start_id + x * step_count;
-      for (int64_t i = real_start_id; i < real_start_id + step_count; ++i) {
+      for (int64_t i = real_start_id; i < real_start_id + last_step_count; ++i) {
         if (import_for_add) {  // add
           auto* vector_with_id = request.add_vectors();
           vector_with_id->set_id(i);
           vector_with_id->mutable_vector()->set_dimension(dimension);
           vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          if (is_use_file) {
+            data.clear();
+            is_eof = false;
+            bool is_ok = lambda_read_line_function(reader, dimension, data, is_eof);
+            if (!is_ok) {
+              DINGO_LOG(ERROR) << fmt::format("read sift file : {} failed", FLAGS_import_data_path);
+              return;
+            }
+
+            if (is_eof) {
+              DINGO_LOG(ERROR) << fmt::format("read sift file : {} end", FLAGS_import_data_path);
+              return;
+            }
+          }
           for (int j = 0; j < dimension; j++) {
-            vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
+            if (is_use_file) {
+              vector_with_id->mutable_vector()->add_float_values(data[j]);
+            } else {
+              vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - start_id) * dimension + j]);
+            }
           }
 
           if (!FLAGS_without_scalar) {
