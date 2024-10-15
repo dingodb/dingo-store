@@ -219,9 +219,14 @@ DEFINE_uint32(
     "diskann the size of search list during index build. Typical values are between 75 to 200. default is 100.");
 DEFINE_bool(import_for_add, true, "diskann execute import for add or delete, default is add");
 
+DEFINE_string(import_data_set, "sift", "diskann import data set, default is sift");
+// import_data_path is empty by default, which means use the random data.
+DEFINE_string(import_data_path, "", "diskann import data path, default is empty");
+
 DEFINE_bool(
     direct_load_without_build, false,
-    "diskann if true, direct load without build index. default is false. Note: If it is true, do not call the import "
+    "diskann if true, direct load without build index. default is false. Note: If it is true, do not call the "
+    "import "
     "build interface, call load directly. If it is false, first import the data, then build, and then call load");
 DEFINE_uint32(num_nodes_to_cache, 0,
               "While serving the index, the entire graph is stored on SSD.For faster search performance, you can cache "
