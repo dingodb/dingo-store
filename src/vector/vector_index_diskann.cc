@@ -740,12 +740,16 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
   IteratorOptions options;
   options.upper_bound = encode_range.end_key();
 
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_diskann_detail) << fmt::format("Enter DoBuild");
+
   int64_t region_count = 0;
   status = reader->KvCount(Constant::kVectorDataCF, ts, region_range.start_key(), region_range.end_key(), region_count);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_diskann_detail) << fmt::format("After KvCount");
 
   // count too small, set no data to diskann.
   if (region_count < Constant::kDiskannMinCount) {
@@ -780,6 +784,8 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
     return butil::Status(pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_FEW, s);
   }
 
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_diskann_detail) << fmt::format("After seek");
+
   pb::diskann::VectorPushDataRequest vector_push_data_request;
 
   int64_t count = 0;
@@ -791,6 +797,7 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
       Server::GetInstance().GetTsProvider()->GetTs();
 #endif
 
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_diskann_detail) << fmt::format("Enter while iter");
   // scan data from raw engine
   while (iter->Valid()) {
     std::string key(iter->Key());
@@ -806,7 +813,13 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
     vector_push_data_request.add_vector_ids(vector_id);
     count++;
 
-    if (vector_push_data_request.ByteSizeLong() >= FLAGS_diskann_server_import_batch_size) {
+    // A rough estimate of the number of bytes transferred. Never use ByteSizeLong.
+    auto size = vector_push_data_request.vector_ids_size() *
+                (sizeof(int32_t) + vector_push_data_request.vectors(0).dimension() * sizeof(float));
+    if (size >= FLAGS_diskann_server_import_batch_size) {
+      // Deprecate protocol ByteSizeLong api. When the amount of data is large, the calculation is too slow. It will
+      // cause the next import data to time out. The timeout is 30 seconds.
+      // if (vector_push_data_request.ByteSizeLong() >= FLAGS_diskann_server_import_batch_size) {
       vector_push_data_request.set_vector_index_id(Id());
       vector_push_data_request.set_has_more(true);  // true has data
       vector_push_data_request.set_error(::dingodb::pb::error::Errno::OK);
