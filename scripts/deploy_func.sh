@@ -54,7 +54,7 @@ function deploy_server() {
     sed  -i 's|\$COORDINATOR_RAFT_PEERS\$|'"$coor_raft_peers"'|g'  $dstpath/conf/${role}.yaml
 
     sed  -i 's|\$DISKANN_SERVER_LISTEN_HOST\$|'"$SERVER_LISTEN_HOST"'|g'  $dstpath/conf/${role}.yaml
-    sed  -i 's|\$DISKANN_SERVER_HOST\$|'"$SERVER_HOST"'|g'  $dstpath/conf/${role}.yaml
+    sed  -i 's|\$DISKANN_SERVER_HOST\$|'"$DISKANN_SERVER_HOST"'|g'  $dstpath/conf/${role}.yaml
     sed  -i 's|\$DISKANN_SERVER_PORT\$|'" $diskann_port"'|g'  $dstpath/conf/${role}.yaml
 
     if [ -f $srcpath/conf/${role}-gflags.conf ]
