@@ -1496,6 +1496,40 @@ int64_t Helper::GetFileSize(const std::string& path) {
   }
 }
 
+butil::Status Helper::SavePBFile(const std::string& path, const ::google::protobuf::Message* message) {
+  std::string tmp_path(path);
+  tmp_path.append(".tmp");
+
+  std::ofstream file(tmp_path);
+  if (!file.is_open()) {
+    return butil::Status(1, "open file fail");
+  }
+
+  file << message->SerializeAsString();
+
+  file.close();
+
+  return Rename(tmp_path, path);
+}
+
+butil::Status Helper::LoadPBFile(const std::string& path, google::protobuf::Message* message) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return butil::Status(1, "open file fail");
+  }
+
+  std::stringstream buffer;
+  buffer << file.rdbuf();
+
+  file.close();
+
+  if (!message->ParseFromString(buffer.str())) {
+    return butil::Status(1, "parse protobuf fail");
+  }
+
+  return butil::Status::OK();
+}
+
 bool Helper::IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2) {
   if (value1.field_type() != value2.field_type()) {
     return false;

@@ -605,34 +605,10 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     }
 
     auto ret = vector_index->Save(index_filepath);
-    if (ret.error_code() == pb::error::Errno::EVECTOR_NOT_SUPPORT) {
-      log_file << fmt::format(
-                      "[vector_index.child_save_snapshot][index_id({})] Vector index not support save, error: {}",
-                      vector_index_id, ret.error_str())
-               << '\n';
-
-      // Write result to result_file
-      pb::error::Error error;
-      error.set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
-      error.set_errmsg(ret.error_str());
-
-      braft::ProtoBufFile pb_file_result(result_filepath);
-      if (pb_file_result.save(&error, true) != 0) {
-        log_file << fmt::format(
-                        "[vector_index.child_save_snapshot][index_id({})] Save vector index failed, save result to "
-                        "result file failed, error: {}",
-                        vector_index_id, error.ShortDebugString())
-                 << '\n';
-        log_file.close();
-        _exit(-1);
-      }
-
-      log_file.close();
-      _exit(-1);
-    } else if (!ret.ok()) {
-      log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save vector index failed, error: {}",
+    if (!ret.ok()) {
+      log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save vector index failed, error: {}.",
                               vector_index_id, ret.error_str())
-               << '\n';
+               << std::endl;
       // TODO: keep tmp dir for debug, may uncomment later
       // Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
 
@@ -641,15 +617,11 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
       error.set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
       error.set_errmsg(ret.error_str());
 
-      braft::ProtoBufFile pb_file_result(result_filepath);
-      if (pb_file_result.save(&error, true) != 0) {
-        log_file << fmt::format(
-                        "[vector_index.child_save_snapshot][index_id({})] Save vector index failed, save result to "
-                        "result file failed, error: {}",
-                        vector_index_id, error.ShortDebugString())
-                 << '\n';
-        log_file.close();
-        _exit(-1);
+      auto status = Helper::SavePBFile(result_filepath, &error);
+      if (!status.ok()) {
+        log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save result file fail, error: {} {}.",
+                                vector_index_id, status.error_str(), ret.error_str())
+                 << std::endl;
       }
 
       log_file.close();
@@ -661,13 +633,11 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     error.set_errcode(pb::error::Errno::EVECTOR_INDEX_SAVE_SUCCESS);
     error.set_errmsg("EVECTOR_INDEX_SAVE_SUCCESS");
 
-    braft::ProtoBufFile pb_file_result(result_filepath);
-    if (pb_file_result.save(&error, true) != 0) {
-      log_file << fmt::format(
-                      "[vector_index.child_save_snapshot][index_id({})] Save vector index success, save result to "
-                      "result file failed, error: {}",
-                      vector_index_id, error.ShortDebugString())
-               << '\n';
+    auto status = Helper::SavePBFile(result_filepath, &error);
+    if (!status.ok()) {
+      log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save result file fail, error: {}.",
+                              vector_index_id, status.error_str())
+               << std::endl;
       log_file.close();
       _exit(-1);
     }
@@ -679,21 +649,19 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
     *(meta.mutable_range()) = vector_index->Range();
     *(meta.mutable_epoch()) = vector_index->Epoch();
 
-    braft::ProtoBufFile pb_file_meta(meta_filepath);
-    if (pb_file_meta.save(&meta, true) != 0) {
+    status = Helper::SavePBFile(meta_filepath, &meta);
+    if (!status.ok()) {
       log_file << fmt::format(
-                      "[vector_index.child_save_snapshot][index_id({})] Save vector index success, save meta to meta "
-                      "file failed, "
-                      "error: {}",
-                      vector_index_id, meta.ShortDebugString())
-               << '\n';
+                      "[vector_index.child_save_snapshot][index_id({})] Save result file fail, error: {}, meta: {}.",
+                      vector_index_id, status.error_str(), meta.ShortDebugString())
+               << std::endl;
       log_file.close();
       _exit(-1);
     }
 
-    log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save vector index success",
+    log_file << fmt::format("[vector_index.child_save_snapshot][index_id({})] Save vector index success.",
                             vector_index_id)
-             << '\n';
+             << std::endl;
 
     log_file.close();
     _exit(0);
@@ -744,16 +712,16 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
   // read from result_filepath, and deserilize to pb::error::Error
   // check if result is SUCCESS
   pb::error::Error error;
-  braft::ProtoBufFile pb_file_result(result_filepath);
-  if (pb_file_result.load(&error) != 0) {
-    DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index snapshot failed, load result file failed",
-        vector_index_id);
+  auto status = Helper::LoadPBFile(result_filepath, &error);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.save_snapshot][index_id({})] load result file fail, error: {}.",
+                                    vector_index_id, status.error_str());
     // Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
-    return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, load result file failed");
+    return butil::Status(pb::error::Errno::EINTERNAL, "load result file fail");
   }
+
   if (error.errcode() != pb::error::Errno::EVECTOR_INDEX_SAVE_SUCCESS) {
-    DINGO_LOG(ERROR) << fmt::format("[vector_index.save_snapshot][index_id({})] Save vector index snapshot  failed, {}",
+    DINGO_LOG(ERROR) << fmt::format("[vector_index.save_snapshot][index_id({})] Save vector index snapshot failed, {}",
                                     vector_index_id, error.errmsg());
     // Helper::RemoveAllFileOrDirectory(tmp_snapshot_path);
     return butil::Status(error.errcode(), error.errmsg());
@@ -761,44 +729,42 @@ butil::Status VectorIndexSnapshotManager::SaveVectorIndexSnapshot(VectorIndexWra
 
   // check if meta is legal
   pb::store_internal::VectorIndexSnapshotMeta meta;
-  braft::ProtoBufFile pb_file_meta(meta_filepath);
-  if (pb_file_meta.load(&meta) != 0) {
+  status = Helper::LoadPBFile(meta_filepath, &meta);
+  if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index success, save meta to meta file failed, "
-        "error: {}",
-        vector_index_id, meta.ShortDebugString());
+        "[vector_index.save_snapshot][index_id({})] save meta to meta file fail, error: {} meta: {}.", vector_index_id,
+        status.error_str(), meta.ShortDebugString());
     return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, save meta to meta file failed");
   }
   if (meta.vector_index_id() <= 0) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index success, vector_index_id in meta is illegal, "
-        "error: {}",
-        vector_index_id, meta.ShortDebugString());
-    return butil::Status(pb::error::Errno::EINTERNAL, "Save vector index failed, meta is illegal");
+        "[vector_index.save_snapshot][index_id({})] vector_index_id in meta is illegal, meta: {}", vector_index_id,
+        meta.ShortDebugString());
+    return butil::Status(pb::error::Errno::EINTERNAL, "meta is illegal");
   }
   if (meta.snapshot_log_id() <= 0) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] Save vector index success, applied_log_id in meta is illegal, just "
-        "warning, maybe saving the initial build index after process start, error: {}",
+        "[vector_index.save_snapshot][index_id({})] applied_log_id in meta is illegal, just warning, maybe saving the "
+        "initial build index after process start, error: {}",
         vector_index_id, meta.ShortDebugString());
   }
 
   // result is SUCCESS and meta is legal, the vector snapshot is succeed
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.save_snapshot][index_id({})] Save vector index snapshot child process success", vector_index_id);
+      "[vector_index.save_snapshot][index_id({})] Save vector index snapshot child process success.", vector_index_id);
 
   // If already exist snapshot then give up.
   if (snapshot_set->IsExistSnapshot(apply_log_index)) {
     snapshot_log_index = apply_log_index;
     DINGO_LOG(INFO) << fmt::format(
-        "[vector_index.save_snapshot][index_id({})] VectorIndex Snapshot already exist, cannot do save, log_id: {}",
+        "[vector_index.save_snapshot][index_id({})] Vector index snapshot already exist, cannot do save, log_id: {}",
         vector_index_id, apply_log_index);
     return butil::Status();
   }
 
   // Rename
   std::string new_snapshot_path = GetSnapshotNewPath(vector_index_id, apply_log_index);
-  auto status = Helper::Rename(tmp_snapshot_path, new_snapshot_path);
+  status = Helper::Rename(tmp_snapshot_path, new_snapshot_path);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
         "[vector_index.save_snapshot][index_id({})] Rename vector index snapshot failed, {} -> {} error: {}",
@@ -866,11 +832,11 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   }
 
   pb::store_internal::VectorIndexSnapshotMeta meta;
-  braft::ProtoBufFile pb_file_meta(last_snapshot->MetaPath());
-  if (pb_file_meta.load(&meta) != 0) {
+  auto status = Helper::LoadPBFile(last_snapshot->MetaPath(), &meta);
+  if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, meta file invalid.",
-        vector_index_id, last_snapshot->SnapshotLogId());
+        "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot meta failed, error: {}.",
+        vector_index_id, last_snapshot->SnapshotLogId(), status.error_str());
     return nullptr;
   }
 
@@ -893,7 +859,7 @@ std::shared_ptr<VectorIndex> VectorIndexSnapshotManager::LoadVectorIndexSnapshot
   }
 
   // load index from file
-  auto status = vector_index->Load(last_snapshot->IndexDataPath());
+  status = vector_index->Load(last_snapshot->IndexDataPath());
   if (!status.ok()) {
     DINGO_LOG(WARNING) << fmt::format(
         "[vector_index.load_snapshot][index_id({}).snapshot_log_id({})] load snapshot failed, error: {}.",

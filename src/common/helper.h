@@ -310,6 +310,8 @@ class Helper {
   static butil::Status Rename(const std::string& src_path, const std::string& dst_path, bool is_force = true);
   static bool IsExistPath(const std::string& path);
   static int64_t GetFileSize(const std::string& path);
+  static butil::Status SavePBFile(const std::string& path, const ::google::protobuf::Message* message);
+  static butil::Status LoadPBFile(const std::string& path, google::protobuf::Message* message);
 
   // vector scalar index value
   static bool IsEqualVectorScalarValue(const pb::common::ScalarValue& value1, const pb::common::ScalarValue& value2);
