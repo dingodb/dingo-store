@@ -398,14 +398,6 @@ void VectorIndexWrapper::Destroy() {
   if (!status.ok()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] delete meta failed.", Id());
   }
-
-  auto vector_index = GetVectorIndex();
-  if (vector_index == nullptr) {
-    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.", Id());
-    return;
-  }
-
-  vector_index->Drop();
 }
 
 bool VectorIndexWrapper::Recover() {

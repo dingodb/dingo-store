@@ -79,7 +79,7 @@ VectorIndexDiskANN::VectorIndexDiskANN(int64_t id, const pb::common::VectorIndex
   dimension_ = vector_index_parameter.diskann_parameter().dimension();
 }
 
-VectorIndexDiskANN::~VectorIndexDiskANN() = default;
+VectorIndexDiskANN::~VectorIndexDiskANN() { Drop(); }
 
 void VectorIndexDiskANN::Init() {
   if (FLAGS_enable_vector_index_diskann) {
@@ -670,8 +670,11 @@ butil::Status VectorIndexDiskANN::Drop() {
     std::string s = fmt::format("VectorDestroy response error, errcode: {}  errmsg: {}",
                                 pb::error::Errno_Name(status.error_code()), status.error_cstr());
     DINGO_LOG(ERROR) << s;
+    DINGO_LOG(ERROR) << "drop index : " << Id() << " failed";
     return status;
   }
+
+  DINGO_LOG(INFO) << "drop index : " << Id() << " success";
 
   return butil::Status::OK();
 }
