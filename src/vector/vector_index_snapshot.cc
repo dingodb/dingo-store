@@ -64,11 +64,11 @@ bool SnapshotMeta::Init() {
   snapshot_log_id_ = snapshot_index_id;
 
   pb::store_internal::VectorIndexSnapshotMeta meta;
-  braft::ProtoBufFile pb_file_meta(MetaPath());
-  if (pb_file_meta.load(&meta) != 0) {
+  auto status = Helper::LoadPBFile(MetaPath(), &meta);
+  if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format(
-        "[vector_index.snapshot][index_id({})] Parse vector index snapshot meta failed, path: {}", vector_index_id_,
-        path_);
+        "[vector_index.snapshot][index_id({})] Parse vector index snapshot meta failed, error: {} path: {}",
+        vector_index_id_, status.error_str(), path_);
     Destroy();
     return false;
   }
