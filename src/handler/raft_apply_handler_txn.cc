@@ -71,7 +71,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
 
   std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
   std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
-
+  bool ignore_check_log_id = false;
   for (const auto &puts : request.puts_with_cf()) {
     std::vector<pb::common::KeyValue> kv_puts;
     for (const auto &kv : puts.kvs()) {
@@ -119,7 +119,6 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       add_ctx->SetRegionId(region->Id());
       add_ctx->SetCfName(Constant::kVectorDataCF);
       add_ctx->SetRegionEpoch(region->Definition().epoch());
-
       pb::raft::Request raft_request_for_vector_add;
       for (const auto &vector : vector_add.vectors()) {
         auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
@@ -133,6 +132,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         ctx->SetStatus(add_ctx->Status());
         return;
       }
+      ignore_check_log_id = true;
     }
 
     const auto &vector_del = request.vector_del();
@@ -158,8 +158,8 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
       }
       raft_request_for_vector_del.mutable_vector_delete()->set_cf_name(Constant::kVectorDataCF);
-
-      handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id, log_id);
+      handler->Handle(del_ctx, region, engine, raft_request_for_vector_del, region_metrics, term_id,
+                      ignore_check_log_id ? INT64_MAX : log_id);
       if (!del_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(del_ctx->Status());
         return;
@@ -187,7 +187,6 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       add_ctx->SetRegionId(region->Id());
       add_ctx->SetCfName(Constant::kStoreDataCF);
       add_ctx->SetRegionEpoch(region->Definition().epoch());
-
       pb::raft::Request raft_request_for_document_add;
       for (const auto &document : document_add.documents()) {
         auto *new_document = raft_request_for_document_add.mutable_document_add()->add_documents();
@@ -202,6 +201,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         ctx->SetStatus(add_ctx->Status());
         return;
       }
+      ignore_check_log_id = true;
     }
 
     const auto &document_del = request.document_del();
@@ -221,14 +221,13 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       del_ctx->SetRegionId(region->Id());
       del_ctx->SetCfName(Constant::kStoreDataCF);
       del_ctx->SetRegionEpoch(region->Definition().epoch());
-
       pb::raft::Request raft_request_for_document_del;
       for (const auto &id : document_del.ids()) {
         raft_request_for_document_del.mutable_document_delete()->add_ids(id);
       }
       raft_request_for_document_del.mutable_document_delete()->set_cf_name(Constant::kStoreDataCF);
-
-      handler->Handle(del_ctx, region, engine, raft_request_for_document_del, region_metrics, term_id, log_id);
+      handler->Handle(del_ctx, region, engine, raft_request_for_document_del, region_metrics, term_id,
+                      ignore_check_log_id ? INT64_MAX : log_id);
       if (!del_ctx->Status().ok() && ctx != nullptr) {
         ctx->SetStatus(del_ctx->Status());
         return;

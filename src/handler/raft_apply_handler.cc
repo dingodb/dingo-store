@@ -1174,7 +1174,7 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
                                         vector_with_ids.size(), Helper::TimestampNs() - start_time);
         if (status.ok()) {
-          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             vector_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
@@ -1280,7 +1280,7 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
         auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
-          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             vector_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
@@ -1400,22 +1400,22 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
         auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
                                           : document_index_wrapper->Add(document_with_ids);
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
-        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us",
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}us",
                                         document_index_id, document_with_ids.size(),
                                         Helper::TimestampNs() - start_time);
         if (status.ok()) {
-          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             document_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
           if (ctx) {
             ctx->SetStatus(status);
           }
-          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert document failed, count: {} err: {}",
                                             document_index_id, document_with_ids.size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
-        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}",
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert document exception, error: {}",
                                         document_index_id, e.what());
       }
     }
@@ -1446,7 +1446,7 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   }
 
   if (request.ids_size() == 0) {
-    DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector id is empty.", region->Id());
+    DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document id is empty.", region->Id());
     status = butil::Status::OK();
     set_ctx_status(status);
     return 0;
@@ -1485,7 +1485,7 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   }
 
   auto document_index_wrapper = region->DocumentIndexWrapper();
-  int64_t vector_index_id = document_index_wrapper->Id();
+  int64_t document_index_id = document_index_wrapper->Id();
   bool is_ready = document_index_wrapper->IsReady();
   if (is_ready && !request.ids().empty()) {
     if (log_id > document_index_wrapper->ApplyLogId() ||
@@ -1495,19 +1495,19 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
         auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
         if (status.ok()) {
-          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             document_index_wrapper->SetApplyLogId(log_id);
           }
         } else {
           if (ctx) {
             ctx->SetStatus(status);
           }
-          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                            vector_index_id, request.ids().size(), Helper::PrintStatus(status));
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document failed, count: {}, error: {}",
+                                            document_index_id, request.ids().size(), Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
-        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
-                                        e.what());
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete document exception, error: {}",
+                                        document_index_id, e.what());
       }
     }
   }
