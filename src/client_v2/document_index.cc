@@ -131,10 +131,15 @@ void SendDocumentAdd(DocumentAddOptions const& opt) {
   }
   // col6 bool
   {
-    if (opt.document_bool == "true" || opt.document_bool == "false") {
+    if (opt.document_bool == "true") {
       dingodb::pb::common::DocumentValue document_value1;
       document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::BOOL);
-      document_value1.mutable_field_value()->set_string_data(opt.document_bool);
+      document_value1.mutable_field_value()->set_bool_data(true);
+      (*document_data)["col6"] = document_value1;
+    } else if (opt.document_bool == "false") {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::BOOL);
+      document_value1.mutable_field_value()->set_bool_data(false);
       (*document_data)["col6"] = document_value1;
     }
   }
