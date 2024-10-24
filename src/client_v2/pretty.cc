@@ -761,9 +761,8 @@ void Pretty::Show(std::vector<TenantInfo> tenants) {
   rows = {{"ID", "Name", "CreateTime", "UpdateTime", "Comment"}};
 
   for (auto& tenant : tenants) {
-    rows.push_back({std::to_string(tenant.id), tenant.name,
-                    dingodb::Helper::FormatTime(tenant.create_time, "%Y-%m-%d %H:%M:%s"),
-                    dingodb::Helper::FormatTime(tenant.update_time, "%Y-%m-%d %H:%M:%s"), tenant.comment});
+    rows.push_back({std::to_string(tenant.id), tenant.name, dingodb::Helper::FormatMsTime(tenant.create_time),
+                    dingodb::Helper::FormatMsTime(tenant.update_time), tenant.comment});
   }
 
   PrintTable(rows);
@@ -1534,16 +1533,17 @@ void Pretty::Show(dingodb::pb::meta::GetTenantsResponse& response) {
       ftxui::paragraph("Comment"),
   }};
   for (auto const& tenant : response.tenants()) {
+    std::cout << "coor tenant create_time:" << tenant.create_timestamp()
+              << ", format:" << dingodb::Helper::FormatMsTime(tenant.create_timestamp()) << "\n";
     std::vector<ftxui::Element> row = {
         ftxui::paragraph(fmt::format("{}", tenant.id())),
         ftxui::paragraph(fmt::format("{}", tenant.name())),
         ftxui::paragraph(fmt::format("{}", dingodb::Helper::FormatMsTime(tenant.create_timestamp()))),
         ftxui::paragraph(fmt::format("{}", dingodb::Helper::FormatMsTime(tenant.update_timestamp()))),
         ftxui::paragraph(fmt::format("{}", tenant.comment())),
-
     };
     rows.push_back(row);
   }
   PrintTable(rows);
-}
+}  // namespace client_v2
 }  // namespace client_v2
