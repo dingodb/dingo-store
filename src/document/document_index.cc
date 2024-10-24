@@ -269,7 +269,11 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
           break;
         case pb::common::ScalarFieldType::BOOL:
           bool_column_names.push_back(field_name);
-          bool_column_docs.push_back(document_value.field_value().string_data());
+          if (document_value.field_value().bool_data()) {
+            bool_column_docs.push_back("true");
+          } else {
+            bool_column_docs.push_back("false");
+          }
           break;
         default:
           std::string err_msg =
