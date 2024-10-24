@@ -673,12 +673,13 @@ void RunGetTenant(GetTenantOptions const &opt) {
     std::vector<Pretty::TenantInfo> tenants;
     for (const auto &meta : metas) {
       if (meta.type == "tenant") {
-        // {"id":0,"name":"root","comment":null,"createTimestamp":0,"updateTimestamp":0}
+        // {"id":0,"name":"root","comment":null,"createdTime":0,"updatedTime":0}
         auto tenant_json = nlohmann::json::parse(meta.value);
         auto name = tenant_json["name"].is_null() ? "" : tenant_json["name"].get<std::string>();
         auto comment = tenant_json["comment"].is_null() ? "" : tenant_json["comment"].get<std::string>();
-        auto crate_time = tenant_json["createTimestamp"].is_null() ? 0 : tenant_json["createTimestamp"].get<int64_t>();
-        auto update_time = tenant_json["updateTimestamp"].is_null() ? 0 : tenant_json["updateTimestamp"].get<int64_t>();
+        auto crate_time = tenant_json["createdTime"].is_null() ? 0 : tenant_json["createdTime"].get<int64_t>();
+        auto update_time = tenant_json["updatedTime"].is_null() ? 0 : tenant_json["updatedTime"].get<int64_t>();
+
         if (opt.tenant_id == 0) {
           tenants.push_back({tenant_json["id"].get<int64_t>(), name, comment, crate_time, update_time});
         } else if (opt.tenant_id == tenant_json["id"].get<int64_t>()) {
