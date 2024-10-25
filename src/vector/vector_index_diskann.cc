@@ -79,7 +79,7 @@ VectorIndexDiskANN::VectorIndexDiskANN(int64_t id, const pb::common::VectorIndex
   dimension_ = vector_index_parameter.diskann_parameter().dimension();
 }
 
-VectorIndexDiskANN::~VectorIndexDiskANN() { Drop(); }
+VectorIndexDiskANN::~VectorIndexDiskANN() = default;
 
 void VectorIndexDiskANN::Init() {
   if (FLAGS_enable_vector_index_diskann) {

@@ -398,6 +398,20 @@ void VectorIndexWrapper::Destroy() {
   if (!status.ok()) {
     DINGO_LOG(INFO) << fmt::format("[vector_index.wrapper][index_id({})] delete meta failed.", Id());
   }
+
+  auto vector_index = GetVectorIndex();
+  if (vector_index == nullptr) {
+    if (vector_index_type_ == pb::common::VECTOR_INDEX_TYPE_DISKANN) {
+      // create empty diskann index
+      auto vector_index_diskann = std::make_shared<VectorIndexDiskANN>(id_, index_parameter_, pb::common::RegionEpoch{},
+                                                                       pb::common::Range{}, nullptr);
+      // send Destroy to diskann server, if diskann object is not created, it will ignore the message
+      // if diskann object is created, it will destroy the index
+      vector_index_diskann->Drop();
+    }
+  } else {
+    vector_index_->Drop();
+  }
 }
 
 bool VectorIndexWrapper::Recover() {
