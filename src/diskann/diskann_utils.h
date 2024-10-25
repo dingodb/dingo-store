@@ -18,6 +18,7 @@
 #include <sys/types.h>
 
 #include <atomic>
+#include <cstdint>
 #include <string>
 
 #include "butil/status.h"
@@ -71,6 +72,10 @@ class DiskANNUtils {
   static butil::Status CreateDir(const std::string& dir_path);
   static pb::common::DiskANNCoreState DiskANNCoreStateToPb(DiskANNCoreState state);
   static DiskANNCoreState DiskANNCoreStateFromPb(pb::common::DiskANNCoreState state);
+  static int64_t GetAioRelated(const std::string& path);
+  static int64_t GetAioNr();
+  static int64_t GetAioMaxNr();
+  static void OutputAioRelatedInformation(uint32_t num_threads, uint32_t max_event);
 
  protected:
  private:

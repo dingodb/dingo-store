@@ -686,6 +686,9 @@ butil::Status DiskANNCore::DoLoad(const pb::common::LoadDiskAnnParam& load_param
         }
       }
 
+      // diskann/src/linux_aligned_file_reader.cpp #define MAX_EVENTS 1024
+      DiskANNUtils::OutputAioRelatedInformation(num_threads_, 1024);
+
       int res = flash_index->load(num_threads_, index_path_prefix.c_str());
       if (res != 0) {
         std::string s = fmt::format("load diskann failed ret : {} {}", res, FormatParameter());
