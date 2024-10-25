@@ -18,7 +18,9 @@
 #include <xmmintrin.h>
 
 #include <cerrno>
+#include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <string>
 
 #include "common/logging.h"
@@ -591,6 +593,65 @@ DiskANNCoreState DiskANNUtils::DiskANNCoreStateFromPb(pb::common::DiskANNCoreSta
   }
 
   return core_state;
+}
+
+int64_t DiskANNUtils::GetAioRelated(const std::string& path) {
+  int64_t aio_related = 0;
+
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    DINGO_LOG(ERROR) << "Error: Unable to open " << path;
+    return 0;
+  }
+
+  file >> aio_related;
+  if (file.fail()) {
+    DINGO_LOG(ERROR) << "Error: Unable to read value from " << path;
+    return 0;
+  }
+
+  return aio_related;
+}
+
+int64_t DiskANNUtils::GetAioNr() {
+  const std::string aio_nr_path = "/proc/sys/fs/aio-nr";
+  return GetAioRelated(aio_nr_path);
+}
+int64_t DiskANNUtils::GetAioMaxNr() {
+  const std::string aio_max_nr_path = "/proc/sys/fs/aio-max-nr";
+  return GetAioRelated(aio_max_nr_path);
+}
+
+void DiskANNUtils::OutputAioRelatedInformation(uint32_t num_threads, uint32_t max_event) {
+  int64_t aio_nr = GetAioNr();
+  int64_t aio_max_nr = GetAioMaxNr();
+
+  std::string aio_info = fmt::format(
+      "before loading : /proc/sys/fs/aio-max-nr : {} /proc/sys/fs/aio-nr : {} num_threads: {} max_event: {} . ",
+      aio_max_nr, aio_nr, num_threads, max_event);
+
+  if (aio_max_nr <= 0) {
+    aio_info +=
+        "load may EAGAIN. aio_max_nr is not set, please set it to a larger value, such as 1048576. redhat : sudo dnf "
+        "install libaio-devel ; ubuntu : sudo apt install libaio-dev";
+    DINGO_LOG(WARNING) << aio_info;
+    return;
+  }
+
+  if (aio_nr + (num_threads * max_event) > aio_max_nr) {
+    aio_info += fmt::format(
+        "load may EAGAIN. aio-max-nr left : {} is less than num_threads * max_event : {}, please increase aio_max_nr "
+        "or decrease "
+        "num_threads. ",
+        aio_max_nr - aio_nr, num_threads * max_event);
+    DINGO_LOG(WARNING) << aio_info;
+  } else {
+    aio_info += fmt::format(
+        "aio-max-nr left : {} more than num_threads * max_event : {},  this load success. Unless multiple load  may "
+        "EAGAIN. ",
+        aio_max_nr - aio_nr, num_threads * max_event);
+    DINGO_LOG(INFO) << aio_info;
+  }
 }
 
 butil::Status DiskANNUtils::RenameDir(const std::string& old_dir_path, const std::string& new_dir_path) {
