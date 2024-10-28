@@ -568,10 +568,10 @@ butil::Status Storage::VectorBatchSearch(std::shared_ptr<Engine::VectorReader::C
 
   status = vector_reader->VectorBatchSearch(ctx, results);
   if (BAIDU_UNLIKELY(!status.ok())) {
-    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
-      // return OK if not found
-      return butil::Status::OK();
-    }
+    // if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+    //   // return OK if not found
+    //   return butil::Status::OK();
+    // }
 
     return status;
   }
