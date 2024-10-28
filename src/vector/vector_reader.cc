@@ -235,6 +235,12 @@ butil::Status VectorReader::SearchVector(
         auto status = QueryVectorWithId(ts, region_range, partition_id, vector_with_distance.vector_with_id().id(),
                                         true, vector_with_id);
         if (!status.ok()) {
+          if (status.error_code() == pb::error::EKEY_NOT_FOUND) {
+            DINGO_LOG(WARNING) << fmt::format("Vector not found,  partition_id: {}, region_id : {},  vector_id: {}",
+                                              partition_id, vector_index->Id(),
+                                              vector_with_distance.vector_with_id().id());
+            continue;
+          }
           return status;
         }
         vector_with_distance.mutable_vector_with_id()->Swap(&vector_with_id);
