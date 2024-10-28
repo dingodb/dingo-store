@@ -793,7 +793,7 @@ butil::Status VectorIndexManager::ReplayWalToVectorIndex(VectorIndexPtr vector_i
   ids.reserve(Constant::kBuildVectorIndexBatchSize);
 
   int64_t last_log_id = vector_index->ApplyLogId();
-  auto log_entrys = log_stroage->GetEntries(vector_index->Id(), start_log_id, end_log_id);
+  auto log_entrys = log_stroage->GetDataEntries(vector_index->Id(), start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     CHECK(raft_cmd->ParseFromString(log_entry->out_data));

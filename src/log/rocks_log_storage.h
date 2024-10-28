@@ -205,6 +205,7 @@ class RocksLogStorage {
 
   LogEntryPtr GetEntry(int64_t region_id, int64_t index);
   std::vector<LogEntryPtr> GetEntries(int64_t region_id, int64_t start_index, int64_t end_index);
+  std::vector<LogEntryPtr> GetDataEntries(int64_t region_id, int64_t start_index, int64_t end_index);
 
   std::vector<LogEntry> GetConfigurations(int64_t region_id);
 

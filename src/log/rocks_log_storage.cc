@@ -48,7 +48,6 @@ namespace braft {
 DECLARE_bool(raft_sync);
 }
 
-
 namespace dingodb {
 
 namespace wal {
@@ -1118,6 +1117,20 @@ std::vector<LogEntryPtr> RocksLogStorage::GetEntries(int64_t region_id, int64_t 
   delete it;
 
   return log_entries;
+}
+
+std::vector<LogEntryPtr> RocksLogStorage::GetDataEntries(int64_t region_id, int64_t start_index, int64_t end_index) {
+  std::vector<LogEntryPtr> data_log_entries;
+
+  auto log_entries = GetEntries(region_id, start_index, end_index);
+  data_log_entries.reserve(log_entries.size());
+  for (auto& log_entry : log_entries) {
+    if (log_entry->type == LogEntryType::kEntryTypeData) {
+      data_log_entries.push_back(log_entry);
+    }
+  }
+
+  return data_log_entries;
 }
 
 std::vector<LogEntry> RocksLogStorage::GetConfigurations(int64_t region_id) {
