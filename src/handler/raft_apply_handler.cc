@@ -667,7 +667,7 @@ int SplitHandler::Handle(std::shared_ptr<Context>, store::RegionPtr from_region,
 // Get raft log entries.
 static std::vector<pb::raft::LogEntry> GetRaftLogEntries(int64_t region_id, int64_t begin_log_id, int64_t end_log_id) {
   auto log_storage = Server::GetInstance().GetRaftLogStorage();
-  auto log_entries = log_storage->GetEntries(region_id, begin_log_id, end_log_id);
+  auto log_entries = log_storage->GetDataEntries(region_id, begin_log_id, end_log_id);
   std::vector<pb::raft::LogEntry> pb_log_entries;
   pb_log_entries.resize(log_entries.size());
   for (int i = 0; i < log_entries.size(); ++i) {

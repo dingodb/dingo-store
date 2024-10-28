@@ -495,7 +495,7 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   ids.reserve(Constant::kBuildDocumentIndexBatchSize);
 
   int64_t last_log_id = document_index->ApplyLogId();
-  auto log_entrys = log_storage->GetEntries(document_index->Id(), start_log_id, end_log_id);
+  auto log_entrys = log_storage->GetDataEntries(document_index->Id(), start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     CHECK(raft_cmd->ParseFromString(log_entry->out_data));
