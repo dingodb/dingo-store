@@ -735,6 +735,9 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
         std::vector<float> x_i = dingodb::Helper::PbRepeatedToVector(vector->vector().float_values());
         std::vector<float> y_j =
             dingodb::Helper::PbRepeatedToVector(vector_with_distance.vector_with_id().vector().float_values());
+        if (x_i.empty() || y_j.empty()) {
+          continue;
+        }
 
         auto faiss_l2 = dingodb::Helper::DingoFaissL2sqr(x_i.data(), y_j.data(), dimension);
         auto faiss_ip = dingodb::Helper::DingoFaissInnerProduct(x_i.data(), y_j.data(), dimension);
