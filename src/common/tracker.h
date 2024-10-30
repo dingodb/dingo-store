@@ -98,13 +98,22 @@ class Tracker {
   }
   uint64_t RaftApplyTime() const { return metrics_.raft_apply_time_ns; }
 
-  void SetStoreWriteTime(uint64_t elapsed_time) { metrics_.store_write_time_ns = elapsed_time; }
+  void SetStoreWriteTime(uint64_t elapsed_time) {
+    metrics_.store_write_time_ns = elapsed_time;
+    store_write_latency << metrics_.store_write_time_ns / 1000;
+  }
   uint64_t StoreWriteTime() const { return metrics_.store_write_time_ns; }
 
-  void SetVectorIndexWriteTime(uint64_t elapsed_time) { metrics_.vector_index_write_time_ns = elapsed_time; }
+  void SetVectorIndexWriteTime(uint64_t elapsed_time) {
+    metrics_.vector_index_write_time_ns = elapsed_time;
+    vector_index_write_latency << metrics_.vector_index_write_time_ns / 1000;
+  }
   uint64_t VectorIndexwriteTime() const { return metrics_.vector_index_write_time_ns; }
 
-  void SetDocumentIndexWriteTime(uint64_t elapsed_time) { metrics_.document_index_write_time_ns = elapsed_time; }
+  void SetDocumentIndexWriteTime(uint64_t elapsed_time) {
+    metrics_.document_index_write_time_ns = elapsed_time;
+    document_index_write_latency << metrics_.document_index_write_time_ns / 1000;
+  }
   uint64_t DocumentIndexwriteTime() const { return metrics_.document_index_write_time_ns; }
 
   void SetReadStoreTime() {
@@ -123,6 +132,10 @@ class Tracker {
   static bvar::LatencyRecorder raft_queue_wait_latency;
   static bvar::LatencyRecorder raft_apply_latency;
   static bvar::LatencyRecorder read_store_latency;
+
+  static bvar::LatencyRecorder store_write_latency;
+  static bvar::LatencyRecorder vector_index_write_latency;
+  static bvar::LatencyRecorder document_index_write_latency;
 
  private:
   uint64_t start_time_;

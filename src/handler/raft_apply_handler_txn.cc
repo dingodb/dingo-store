@@ -98,6 +98,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
         "[txn][region({})] HandleMultiCfPutAndDelete fail, term: {} apply_log_id: {}, error: {} request: {}.",
         region->Id(), term_id, log_id, status.error_str(), request.ShortDebugString());
   }
+  auto tracker = ctx ? ctx->Tracker() : nullptr;
 
   // check if need to commit to vector index
   {
@@ -119,6 +120,8 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       add_ctx->SetRegionId(region->Id());
       add_ctx->SetCfName(Constant::kVectorDataCF);
       add_ctx->SetRegionEpoch(region->Definition().epoch());
+      if (tracker) add_ctx->SetTracker(tracker);
+
       pb::raft::Request raft_request_for_vector_add;
       for (const auto &vector : vector_add.vectors()) {
         auto *new_vector = raft_request_for_vector_add.mutable_vector_add()->add_vectors();
@@ -152,7 +155,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       del_ctx->SetRegionId(region->Id());
       del_ctx->SetCfName(Constant::kVectorDataCF);
       del_ctx->SetRegionEpoch(region->Definition().epoch());
-
+      if (tracker) del_ctx->SetTracker(tracker);
       pb::raft::Request raft_request_for_vector_del;
       for (const auto &id : vector_del.ids()) {
         raft_request_for_vector_del.mutable_vector_delete()->add_ids(id);
@@ -187,6 +190,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       add_ctx->SetRegionId(region->Id());
       add_ctx->SetCfName(Constant::kStoreDataCF);
       add_ctx->SetRegionEpoch(region->Definition().epoch());
+      if (tracker) add_ctx->SetTracker(tracker);
       pb::raft::Request raft_request_for_document_add;
       for (const auto &document : document_add.documents()) {
         auto *new_document = raft_request_for_document_add.mutable_document_add()->add_documents();
@@ -221,6 +225,7 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
       del_ctx->SetRegionId(region->Id());
       del_ctx->SetCfName(Constant::kStoreDataCF);
       del_ctx->SetRegionEpoch(region->Definition().epoch());
+      if (tracker) del_ctx->SetTracker(tracker);
       pb::raft::Request raft_request_for_document_del;
       for (const auto &id : document_del.ids()) {
         raft_request_for_document_del.mutable_document_delete()->add_ids(id);

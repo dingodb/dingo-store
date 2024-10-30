@@ -217,6 +217,7 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
         << response_info_field->message_type()->full_name();
     return;
   }
+
   pb::common::ResponseInfo* response_info =
       dynamic_cast<pb::common::ResponseInfo*>(reflection->MutableMessage(message, response_info_field));
   auto* time_info = response_info->mutable_time_info();
@@ -226,6 +227,9 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_raft_commit_time_ns(tracker->RaftCommitTime());
   time_info->set_raft_queue_wait_time_ns(tracker->RaftQueueWaitTime());
   time_info->set_raft_apply_time_ns(tracker->RaftApplyTime());
+  time_info->set_store_write_time_ns(tracker->StoreWriteTime());
+  time_info->set_vector_index_write_time_ns(tracker->VectorIndexwriteTime());
+  time_info->set_document_index_write_time_ns(tracker->DocumentIndexwriteTime());
 }
 
 template <typename T, typename U, bool need_region>
