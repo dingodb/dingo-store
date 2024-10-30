@@ -1395,12 +1395,11 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
           document_with_id.set_id(document.id());
           document_with_ids.push_back(document_with_id);
         }
-
         auto start_time = Helper::TimestampNs();
         auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
                                           : document_index_wrapper->Add(document_with_ids);
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
-        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}us",
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}ns",
                                         document_index_id, document_with_ids.size(),
                                         Helper::TimestampNs() - start_time);
         if (status.ok()) {
@@ -1494,6 +1493,9 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
         auto start_time = Helper::TimestampNs();
         auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
+                                        document_index_id, request.ids().size(),
+                                        Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             document_index_wrapper->SetApplyLogId(log_id);

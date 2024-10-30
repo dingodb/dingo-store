@@ -25,4 +25,8 @@ bvar::LatencyRecorder Tracker::raft_queue_wait_latency("dingo_tracker_raft_queue
 bvar::LatencyRecorder Tracker::raft_apply_latency("dingo_tracker_raft_apply");
 bvar::LatencyRecorder Tracker::read_store_latency("dingo_tracker_read_store");
 
+bvar::LatencyRecorder Tracker::store_write_latency("dingo_tracker_store_write");
+bvar::LatencyRecorder Tracker::vector_index_write_latency("dingo_tracker_vector_index_write");
+bvar::LatencyRecorder Tracker::document_index_write_latency("dingo_tracker_document_index_write");
+
 }  // namespace dingodb
