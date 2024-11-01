@@ -397,7 +397,7 @@ TEST_F(DiskANNItemConcurrentTest, Destroy) {
       ctx = std::make_shared<Context>();
       brpc::Controller cntl;
       ctx->SetCntl(&cntl);
-      status = disk_concurrent_item_l2->Destroy(ctx);
+      status = disk_concurrent_items[i]->Destroy(ctx);
       EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
     }));
   }

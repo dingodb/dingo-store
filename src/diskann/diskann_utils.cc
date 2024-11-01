@@ -24,10 +24,12 @@
 #include <string>
 
 #include "common/logging.h"
+#include "common/synchronization.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
 
 namespace dingodb {
+
 butil::Status DiskANNUtils::FileExistsAndRegular(const std::string& file_path) {
   std::filesystem::path file_path_check(file_path);
   if (std::filesystem::exists(file_path_check)) {
@@ -652,6 +654,43 @@ void DiskANNUtils::OutputAioRelatedInformation(uint32_t num_threads, uint32_t ma
         aio_max_nr - aio_nr, num_threads * max_event);
     DINGO_LOG(INFO) << aio_info;
   }
+}
+
+butil::Status DiskANNUtils::CheckAioRelatedInformation(uint32_t num_threads, uint32_t max_event,
+                                                       int64_t aio_wait_count) {
+  static RWLock lock;
+
+  RWLockWriteGuard guard(&lock);
+  int64_t aio_nr = GetAioNr();
+  int64_t aio_max_nr = GetAioMaxNr();
+
+  std::string aio_info = fmt::format(
+      "aio left not enough. loading : /proc/sys/fs/aio-max-nr : {} /proc/sys/fs/aio-nr : {} num_threads: {} max_event: "
+      "{} aio_wait_count : "
+      "{} . ",
+      aio_max_nr, aio_nr, num_threads, max_event, aio_wait_count);
+
+  if (aio_max_nr <= 0) {
+    aio_info +=
+        "load may EAGAIN. aio_max_nr is not set, please set it to a larger value, such as 1048576. redhat : sudo dnf "
+        "install libaio-devel ; ubuntu : sudo apt install libaio-dev";
+    DINGO_LOG(ERROR) << aio_info;
+    return butil::Status(pb::error::Errno::EDISKANN_AIO_NOT_ENOUGH, aio_info);
+  }
+
+  if (aio_nr + (aio_wait_count * num_threads * max_event) > aio_max_nr) {
+    aio_info += fmt::format(
+        "load may EAGAIN. aio-nr left : {} is less than aio_wait_count * num_threads * "
+        "max_event : {}, please "
+        "increase aio_max_nr "
+        "or decrease "
+        "num_threads. ",
+        aio_max_nr - aio_nr, aio_wait_count * num_threads * max_event);
+    DINGO_LOG(ERROR) << aio_info;
+    return butil::Status(pb::error::Errno::EDISKANN_AIO_NOT_ENOUGH, aio_info);
+  }
+
+  return butil::Status::OK();
 }
 
 butil::Status DiskANNUtils::RenameDir(const std::string& old_dir_path, const std::string& new_dir_path) {

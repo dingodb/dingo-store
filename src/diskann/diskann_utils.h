@@ -76,6 +76,7 @@ class DiskANNUtils {
   static int64_t GetAioNr();
   static int64_t GetAioMaxNr();
   static void OutputAioRelatedInformation(uint32_t num_threads, uint32_t max_event);
+  static butil::Status CheckAioRelatedInformation(uint32_t num_threads, uint32_t max_event, int64_t aio_wait_count);
 
  protected:
  private:
