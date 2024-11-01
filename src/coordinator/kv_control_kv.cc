@@ -23,6 +23,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "coordinator/kv_control.h"
+#include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -33,12 +34,22 @@
 namespace dingodb {
 
 DEFINE_int64(max_kv_key_size, 4096, "max kv put count");
+BRPC_VALIDATE_GFLAG(max_kv_key_size, brpc::NonNegativeInteger);
+
 DEFINE_int64(max_kv_value_size, 8192, "max kv put count");
+BRPC_VALIDATE_GFLAG(max_kv_value_size, brpc::NonNegativeInteger);
+
 DEFINE_int64(compaction_retention_rev_count, 1000, "max revision count retention for compaction");
+BRPC_VALIDATE_GFLAG(compaction_retention_rev_count, brpc::NonNegativeInteger);
+
 DEFINE_bool(auto_compaction, false, "auto compaction on/off");
+BRPC_VALIDATE_GFLAG(auto_compaction, brpc::PassValidate);
+
 DEFINE_int64(version_kv_max_count, 100000, "max kv count for version kv");
+BRPC_VALIDATE_GFLAG(version_kv_max_count, brpc::NonNegativeInteger);
 
 DEFINE_bool(dingo_log_switch_coor_kv, false, "log switch for kv control");
+BRPC_VALIDATE_GFLAG(dingo_log_switch_coor_kv, brpc::PassValidate);
 
 std::string KvControl::RevisionToString(const pb::coordinator_internal::RevisionInternal &revision) {
   Buf buf(17);
@@ -700,6 +711,7 @@ butil::Status KvControl::KvPutApply(const std::string &key,
     DINGO_LOG(ERROR) << "KvPutApply PutRawKvIndex failed, key: " << key << "(" << Helper::StringToHex(key)
                      << "), kv_index: " << kv_index.ShortDebugString() << ", error: " << ret.error_str();
   }
+
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_coor_kv)
       << "KvPutApply PutRawKvIndex success, key: " << key << "(" << Helper::StringToHex(key)
       << "), kv_index: " << kv_index.ShortDebugString();

@@ -34,11 +34,19 @@
 namespace dingodb {
 
 DEFINE_int64(version_lease_max_ttl_seconds, 300, "max ttl seconds for version lease");
+BRPC_VALIDATE_GFLAG(version_lease_max_ttl_seconds, brpc::NonNegativeInteger);
+
 DEFINE_int64(version_lease_min_ttl_seconds, 3, "min ttl seconds for version lease");
+BRPC_VALIDATE_GFLAG(version_lease_min_ttl_seconds, brpc::NonNegativeInteger);
+
 DEFINE_int64(version_lease_max_count, 50000, "max lease count");
+BRPC_VALIDATE_GFLAG(version_lease_max_count, brpc::NonNegativeInteger);
+
 DEFINE_int64(version_lease_print_ttl_remaining_seconds, 10, "print ttl remaining seconds if value is less than this");
+BRPC_VALIDATE_GFLAG(version_lease_print_ttl_remaining_seconds, brpc::NonNegativeInteger);
 
 DEFINE_bool(dingo_log_switch_coor_lease, false, "switch for dingo log of kv control lease");
+BRPC_VALIDATE_GFLAG(dingo_log_switch_coor_lease, brpc::PassValidate);
 
 butil::Status KvControl::LeaseGrant(int64_t lease_id, int64_t ttl_seconds, int64_t &granted_id,
                                     int64_t &granted_ttl_seconds,

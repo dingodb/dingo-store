@@ -33,8 +33,10 @@
 namespace dingodb {
 
 DEFINE_int64(version_watch_max_count, 50000, "max count of version watch");
+BRPC_VALIDATE_GFLAG(version_watch_max_count, brpc::NonNegativeInteger);
 
 DEFINE_bool(dingo_log_switch_coor_watch, false, "switch for dingo log of kv control lease");
+BRPC_VALIDATE_GFLAG(dingo_log_switch_coor_watch, brpc::PassValidate);
 
 void WatchCancelCallback(KvControl* kv_control, uint64_t closure_id) {
   kv_control->CancelOneTimeWatchClosure(closure_id);
