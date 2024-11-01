@@ -97,6 +97,7 @@ class DiskANNCore {
   bool warmup_;
   std::atomic<DiskANNCoreState> state_;
   RWLock rw_lock_;
+  static inline std::atomic<int64_t> aio_wait_count = 0;
 };
 
 }  // namespace dingodb

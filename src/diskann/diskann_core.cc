@@ -687,19 +687,29 @@ butil::Status DiskANNCore::DoLoad(const pb::common::LoadDiskAnnParam& load_param
       }
 
       // diskann/src/linux_aligned_file_reader.cpp #define MAX_EVENTS 1024
-      DiskANNUtils::OutputAioRelatedInformation(num_threads_, 1024);
+      std::atomic<int64_t> this_aio_wait_count = ++aio_wait_count;
+      butil::Status status = DiskANNUtils::CheckAioRelatedInformation(num_threads_, 1024, this_aio_wait_count);
+      if (!status.ok()) {
+        aio_wait_count--;
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
 
       int res = flash_index->load(num_threads_, index_path_prefix.c_str());
       if (res != 0) {
+        aio_wait_count--;
         std::string s = fmt::format("load diskann failed ret : {} {}", res, FormatParameter());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
     } catch (const std::exception& e) {
+      aio_wait_count--;
       std::string s = fmt::format("load diskann exception : {} {}", e.what(), FormatParameter());
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EINTERNAL, s);
     }
+
+    aio_wait_count--;
 
     if (count != flash_index->get_num_points()) {
       std::string s = fmt::format("count not match : file :{} load :{}", count, flash_index->get_num_points());
