@@ -50,11 +50,23 @@
 namespace dingodb {
 
 DEFINE_int64(max_partition_num_of_table, 1024, "max partition num of table");
+BRPC_VALIDATE_GFLAG(max_partition_num_of_table, brpc::NonNegativeInteger);
+
 DEFINE_int64(max_table_count, 10000, "max table num of dingo");
+BRPC_VALIDATE_GFLAG(max_table_count, brpc::NonNegativeInteger);
+
 DEFINE_int64(max_index_count, 10000, "max index num of dingo");
+BRPC_VALIDATE_GFLAG(max_index_count, brpc::NonNegativeInteger);
+
 DEFINE_int64(max_tenant_count, 1024, "max tenant num of dingo");
-DEFINE_uint32(default_replica_num, 3, "default replica number");
+BRPC_VALIDATE_GFLAG(max_tenant_count, brpc::NonNegativeInteger);
+
+DEFINE_int32(default_replica_num, 3, "default replica number");
+BRPC_VALIDATE_GFLAG(default_replica_num, brpc::NonNegativeInteger);
+
 DEFINE_bool(enable_lite, false, "enable lite");
+BRPC_VALIDATE_GFLAG(enable_lite, brpc::PassValidate);
+
 butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                             pb::meta::EntityType entity_type,
                                                             pb::coordinator_internal::MetaIncrement& meta_increment,
