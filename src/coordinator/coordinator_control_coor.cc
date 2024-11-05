@@ -2615,6 +2615,11 @@ butil::Status CoordinatorControl::SplitRegionWithTaskList(int64_t split_from_reg
     DINGO_LOG(ERROR) << "SplitRegion from region not exists, id = " << split_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "SplitRegion from region not exists");
   }
+
+  if (!Helper::IsSupportSplitAndMerge(split_from_region.definition())) {
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, "Region not support split");
+  }
+
   if (split_from_region.definition().store_engine() == pb::common::STORE_ENG_MONO_STORE &&
       !FLAGS_enable_region_split_and_merge_for_lite) {
     DINGO_LOG(ERROR) << "SplitRegion region =" << split_from_region_id << " disable split ";
@@ -2797,6 +2802,10 @@ butil::Status CoordinatorControl::MergeRegionWithTaskList(int64_t merge_from_reg
   if (ret < 0) {
     DINGO_LOG(ERROR) << "MergeRegion from region not exists, id = " << merge_from_region_id;
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "MergeRegion from region not exists");
+  }
+
+  if (!Helper::IsSupportSplitAndMerge(merge_from_region.definition())) {
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, "Region not support merge");
   }
 
   // validate merge_to_region_id

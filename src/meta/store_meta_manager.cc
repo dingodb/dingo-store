@@ -266,6 +266,12 @@ void Region::SetNeedBootstrapDoSnapshot(bool need_do_snapshot) {
   inner_region_.set_need_bootstrap_do_snapshot(need_do_snapshot);
 }
 
+bool Region::IsSupportSplitAndMerge() {
+  BAIDU_SCOPED_LOCK(mutex_);
+
+  return Helper::IsSupportSplitAndMerge(inner_region_.definition());
+}
+
 bool Region::DisableChange() {
   BAIDU_SCOPED_LOCK(mutex_);
   return inner_region_.disable_change();
