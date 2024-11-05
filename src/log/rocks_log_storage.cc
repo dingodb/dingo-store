@@ -29,6 +29,7 @@
 #include "brpc/reloadable_flags.h"
 #include "butil/compiler_specific.h"
 #include "butil/iobuf.h"
+#include "butil/time.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -458,10 +459,6 @@ bool RocksLogStorage::InitRocksDB() {
   db_options.use_direct_io_for_flush_and_compaction = true;
   db_options.manual_wal_flush = false;
 
-  // rate_limiter_.reset(rocksdb::NewGenericRateLimiter(1024 * 1024 * FLAGS_rate_bytes_per_sec, 500 * 1000, 10,
-  //                                                    rocksdb::RateLimiter::Mode::kWritesOnly, false));
-  // db_options.rate_limiter = rate_limiter_;
-
   std::vector<rocksdb::ColumnFamilyDescriptor> column_family_descs;
   column_family_descs.push_back(rocksdb::ColumnFamilyDescriptor("default", GenColumnFamilyOptions()));
 
@@ -577,47 +574,44 @@ void RocksLogStorage::ResetFirstAndLastIndex(int64_t region_id, int64_t first_in
 }
 
 bool RocksLogStorage::InitIndexMeta() {
-  {
-    std::string start_key = GenIndexMetaMinKey();
-    std::string end_key = GenIndexMetaMaxKey();
+  std::string start_key = GenIndexMetaMinKey();
+  std::string end_key = GenIndexMetaMaxKey();
 
-    rocksdb::ReadOptions read_option;
-    read_option.auto_prefix_mode = true;
-    read_option.async_io = true;
-    read_option.adaptive_readahead = true;
-    rocksdb::Slice upper_bound(end_key);
-    read_option.iterate_upper_bound = &upper_bound;
+  rocksdb::ReadOptions read_option;
+  read_option.auto_prefix_mode = true;
+  read_option.async_io = true;
+  read_option.adaptive_readahead = true;
+  rocksdb::Slice upper_bound(end_key);
+  read_option.iterate_upper_bound = &upper_bound;
 
-    rocksdb::Iterator* it = db_->NewIterator(read_option);
-    CHECK(it != nullptr) << "[raft.log] new iterator fail.";
+  rocksdb::Iterator* it = db_->NewIterator(read_option);
+  CHECK(it != nullptr) << "[raft.log] new iterator fail.";
 
-    RWLockWriteGuard guard(&rw_lock_);
+  butil::Timer elapsed_time(butil::Timer::STARTED);
 
-    std::string_view end_key_view(end_key);
-    for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
-      // key it->key();
-      int64_t region_id = ParseRegionIdFromIndexMetaKey(it->key().ToString());
+  RWLockWriteGuard guard(&rw_lock_);
 
-      // value
-      pb::store_internal::LogIndexMeta log_index_meta_pb;
-      CHECK(log_index_meta_pb.ParseFromString(it->value().ToString())) << "[raft.log] parse log index meta pb fail.";
+  std::string_view end_key_view(end_key);
+  for (it->Seek(start_key); it->Valid() && it->key().ToStringView() < end_key_view; it->Next()) {
+    int64_t region_id = ParseRegionIdFromIndexMetaKey(it->key().ToString());
 
-      auto log_index_meta = TransformLogIndexMeta(log_index_meta_pb);
-      log_index_metas_.insert(std::make_pair(region_id, log_index_meta));
-    }
+    // value
+    pb::store_internal::LogIndexMeta log_index_meta_pb;
+    CHECK(log_index_meta_pb.ParseFromString(it->value().ToString())) << "[raft.log] parse log index meta pb fail.";
 
-    delete it;
+    auto log_index_meta = TransformLogIndexMeta(log_index_meta_pb);
+    log_index_metas_.insert(std::make_pair(region_id, log_index_meta));
   }
 
-  {
-    RWLockReadGuard guard(&rw_lock_);
-
-    // update first and last log index
-    for (auto& [region_id, log_index_meta] : log_index_metas_) {
-      log_index_meta.first_index.store(GetFirstLogIndex(region_id), std::memory_order_release);
-      log_index_meta.last_index.store(GetLastLogIndex(region_id), std::memory_order_release);
-    }
+  // update first and last log index
+  for (auto& [region_id, log_index_meta] : log_index_metas_) {
+    log_index_meta.first_index.store(GetFirstLogIndex(region_id), std::memory_order_release);
+    log_index_meta.last_index.store(GetLastLogIndex(region_id), std::memory_order_release);
   }
+
+  delete it;
+
+  DINGO_LOG(INFO) << fmt::format("[raft.log] init index meta elapsed_time({}ms)", elapsed_time.m_elapsed());
 
   return true;
 }
@@ -957,7 +951,7 @@ int64_t RocksLogStorage::GetFirstLogIndex(int64_t region_id) {
   CHECK(it != nullptr) << fmt::format("[raft.log][{}] new iterator fail.", region_id);
 
   int64_t temp_region_id = 0;
-  int64_t index = -1;
+  int64_t index = 1;
   it->Seek(start_key);
   if (it->Valid() && it->key().ToStringView() < std::string_view(end_key)) {
     Codec::DecodeKey(it->key().ToStringView(), temp_region_id, index);
@@ -985,7 +979,7 @@ int64_t RocksLogStorage::GetLastLogIndex(int64_t region_id) {
   CHECK(it != nullptr) << fmt::format("[raft.log][{}] new iterator fail.", region_id);
 
   int64_t temp_region_id = 0;
-  int64_t index = -1;
+  int64_t index = 0;
   it->SeekForPrev(end_key);
   if (it->Valid() && it->key().ToStringView() >= std::string_view(start_key)) {
     Codec::DecodeKey(it->key().ToStringView(), temp_region_id, index);
