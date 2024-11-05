@@ -412,6 +412,8 @@ class Helper {
   static std::string ConvertColumnValueToString(const pb::meta::ColumnDefinition& column_definition,
                                                 const std::any& value);
   static pb::common::Schema::Type TransformSchemaType(const std::string& name);
+
+  static bool IsSupportSplitAndMerge(const pb::common::RegionDefinition& definition);
 };
 
 }  // namespace dingodb

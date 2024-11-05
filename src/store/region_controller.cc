@@ -412,6 +412,10 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Parent region not exist.");
   }
 
+  if (!parent_region->IsSupportSplitAndMerge()) {
+    return butil::Status(pb::error::ENOT_SUPPORT, "Region not support split.");
+  }
+
   if (parent_region->DisableChange()) {
     return butil::Status(pb::error::EREGION_DISABLE_CHANGE, "Disable region change.");
   }
@@ -652,10 +656,16 @@ butil::Status MergeRegionTask::ValidateMergeRegion(std::shared_ptr<StoreRegionMe
   if (source_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found source region");
   }
+  if (!source_region->IsSupportSplitAndMerge()) {
+    return butil::Status(pb::error::ENOT_SUPPORT, "Region not support merge.");
+  }
 
   auto target_region = store_region_meta->GetRegion(merge_request.target_region_id());
   if (target_region == nullptr) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found target region");
+  }
+  if (!target_region->IsSupportSplitAndMerge()) {
+    return butil::Status(pb::error::ENOT_SUPPORT, "Region not support merge.");
   }
 
   if (source_region->TemporaryDisableChange()) {

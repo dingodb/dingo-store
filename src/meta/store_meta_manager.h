@@ -118,6 +118,8 @@ class Region {
   bool NeedBootstrapDoSnapshot();
   void SetNeedBootstrapDoSnapshot(bool need_do_snapshot);
 
+  bool IsSupportSplitAndMerge();
+
   bool DisableChange();
   void SetDisableChange(bool disable_change);
 

@@ -436,6 +436,10 @@ void PreSplitCheckTask::PreSplitCheck() {
   auto regions = GET_STORE_REGION_META->GetAllAliveRegion();
   int64_t split_check_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   for (auto& region : regions) {
+    if (!region->IsSupportSplitAndMerge()) {
+      continue;
+    }
+
     auto region_metric = metrics->GetMetrics(region->Id());
     bool need_scan_check = true;
     std::string reason;

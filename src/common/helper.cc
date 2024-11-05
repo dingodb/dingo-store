@@ -2210,4 +2210,11 @@ pb::common::Schema::Type Helper::TransformSchemaType(const std::string& name) {
   return it->second;
 }
 
+bool Helper::IsSupportSplitAndMerge(const pb::common::RegionDefinition& definition) {
+  const auto& index_parameter = definition.index_parameter();
+  return index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR ||
+         index_parameter.vector_index_parameter().vector_index_type() !=
+             pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN;
+}
+
 }  // namespace dingodb
