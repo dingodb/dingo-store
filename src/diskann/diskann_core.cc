@@ -672,11 +672,12 @@ butil::Status DiskANNCore::DoLoad(const pb::common::LoadDiskAnnParam& load_param
       count = count_;
       metric_type = metric_type_;
       dim = dimension_;
+      metric = metric_;
     }
 
     // garbage diskann interface. I modify diskann interface.
     reader = std::make_shared<LinuxAlignedFileReader>();
-    flash_index = std::make_unique<diskann::PQFlashIndex<float>>(reader, metric_);
+    flash_index = std::make_unique<diskann::PQFlashIndex<float>>(reader, metric);
 
     try {
       index_path_prefix = index_path_prefix_;
@@ -813,8 +814,8 @@ butil::Status DiskANNCore::DoLoad(const pb::common::LoadDiskAnnParam& load_param
 }
 
 butil::Status DiskANNCore::DoPrepareTryLoad(const pb::common::CreateDiskAnnParam& diskann_parameter,
-                                            diskann::Metric& metric, pb::common::MetricType& metric_type, size_t& count,
-                                            size_t& dim, bool& build_with_mem_index) {
+                                            diskann::Metric& metric, const pb::common::MetricType& metric_type,
+                                            size_t& count, size_t& dim, bool& build_with_mem_index) {
   auto value_type = diskann_parameter.value_type();
   if (value_type == pb::common::ValueType::INT8_T) {
     std::string s = "diskann value_type not support int8";
