@@ -69,7 +69,7 @@ class DiskANNCore {
   butil::Status DoLoad(const pb::common::LoadDiskAnnParam& load_param, DiskANNCoreState old_state,
                        DiskANNCoreState& state, bool is_try_load);
   butil::Status DoPrepareTryLoad(const pb::common::CreateDiskAnnParam& diskann_parameter, diskann::Metric& metric,
-                                 pb::common::MetricType& metric_type, size_t& count, size_t& dim,
+                                 const pb::common::MetricType& metric_type, size_t& count, size_t& dim,
                                  bool& build_with_mem_index);
   butil::Status FillSearchResult(uint32_t topk, const std::vector<std::vector<float>>& distances,
                                  const std::vector<std::vector<uint64_t>>& labels,
