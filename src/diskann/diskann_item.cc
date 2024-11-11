@@ -89,6 +89,8 @@ DiskANNItem::~DiskANNItem() {
 #endif
 }
 
+std::shared_ptr<DiskANNItem> DiskANNItem::GetSelf() { return shared_from_this(); }
+
 butil::Status DiskANNItem::Import(std::shared_ptr<Context> ctx, const std::vector<pb::common::Vector>& vectors,
                                   const std::vector<int64_t>& vector_ids, bool has_more,
                                   bool /*force_to_load_data_if_exist*/, int64_t already_send_vector_count, int64_t ts,
@@ -876,8 +878,9 @@ butil::Status DiskANNItem::DoSyncBuild(std::shared_ptr<Context> ctx, bool force_
 }
 
 butil::Status DiskANNItem::DoAsyncBuild(std::shared_ptr<Context> ctx, bool force_to_build, DiskANNCoreState old_state) {
-  auto lambda_call = [this, force_to_build, old_state, ctx]() {
-    this->DoBuildInternal(ctx, force_to_build, old_state);
+  std::shared_ptr<DiskANNItem> self = GetSelf();
+  auto lambda_call = [self, force_to_build, old_state, ctx]() {
+    self->DoBuildInternal(ctx, force_to_build, old_state);
   };
 
 #if defined(ENABLE_DISKANN_ITEM_PTHREAD)
@@ -966,7 +969,8 @@ butil::Status DiskANNItem::DoSyncLoad(std::shared_ptr<Context> ctx, const pb::co
 
 butil::Status DiskANNItem::DoAsyncLoad(std::shared_ptr<Context> ctx, const pb::common::LoadDiskAnnParam& load_param,
                                        DiskANNCoreState old_state) {
-  auto lambda_call = [this, &load_param, old_state, ctx]() { this->DoLoadInternal(ctx, load_param, old_state); };
+  std::shared_ptr<DiskANNItem> self = GetSelf();
+  auto lambda_call = [self, &load_param, old_state, ctx]() { self->DoLoadInternal(ctx, load_param, old_state); };
 
 #if defined(ENABLE_DISKANN_ITEM_PTHREAD)
   std::thread th(lambda_call);
@@ -1032,7 +1036,8 @@ butil::Status DiskANNItem::DoSyncTryLoad(std::shared_ptr<Context> ctx, const pb:
 
 butil::Status DiskANNItem::DoAsyncTryLoad(std::shared_ptr<Context> ctx, const pb::common::LoadDiskAnnParam& load_param,
                                           DiskANNCoreState old_state) {
-  auto lambda_call = [this, &load_param, old_state, ctx]() { this->DoTryLoadInternal(ctx, load_param, old_state); };
+  std::shared_ptr<DiskANNItem> self = GetSelf();
+  auto lambda_call = [self, &load_param, old_state, ctx]() { self->DoTryLoadInternal(ctx, load_param, old_state); };
 
 #if defined(ENABLE_DISKANN_ITEM_PTHREAD)
   std::thread th(lambda_call);

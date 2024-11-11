@@ -36,7 +36,7 @@ namespace dingodb {
 
 #undef TEST_VECTOR_INDEX_DISKANN_MOCK
 
-class VectorIndexDiskANN : public VectorIndex {
+class VectorIndexDiskANN : public VectorIndex, public std::enable_shared_from_this<VectorIndexDiskANN> {
  public:
   explicit VectorIndexDiskANN(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
                               const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
@@ -50,6 +50,8 @@ class VectorIndexDiskANN : public VectorIndex {
   VectorIndexDiskANN& operator=(VectorIndexDiskANN&& rhs) = delete;
 
   static void Init();
+
+  std::shared_ptr<VectorIndexDiskANN> GetSelf();
 
   butil::Status Save(const std::string& path) override;
   butil::Status Load(const std::string& path) override;
