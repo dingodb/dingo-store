@@ -1158,9 +1158,8 @@ butil::Status DiskANNItem::DoClose(std::shared_ptr<Context> ctx, bool is_destroy
   bool is_force = false;
   DiskANNCoreState state;
   if (diskann_core_) {
-    // if error occurred and errno == EDISKANN_AIO_NOT_ENOUGH,   is_force = true
-    // this is for avoiding diskann core reset fail
-    if (pb::error::Errno::EDISKANN_AIO_NOT_ENOUGH == last_error_.error_code()) {
+    // If an error has occurred, the object can be destroyed even during building or loading.
+    if (pb::error::Errno::OK != last_error_.error_code()) {
       is_force = true;
     }
     auto status = diskann_core_->Reset(is_delete_files, state, is_force);
