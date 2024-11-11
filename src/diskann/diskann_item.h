@@ -40,7 +40,7 @@ namespace dingodb {
 
 // #undef ENABLE_DISKANN_ID_MAPPING
 
-class DiskANNItem {
+class DiskANNItem : public std::enable_shared_from_this<DiskANNItem> {
  public:
   explicit DiskANNItem(std::shared_ptr<Context> ctx, int64_t vector_index_id,
                        const pb::common::VectorIndexParameter& vector_index_parameter, u_int32_t num_threads,
@@ -52,6 +52,8 @@ class DiskANNItem {
   DiskANNItem& operator=(const DiskANNItem& rhs) = delete;
   DiskANNItem(DiskANNItem&& rhs) = delete;
   DiskANNItem& operator=(DiskANNItem&& rhs) = delete;
+
+  std::shared_ptr<DiskANNItem> GetSelf();
 
   butil::Status Import(std::shared_ptr<Context> ctx, const std::vector<pb::common::Vector>& vectors,
                        const std::vector<int64_t>& vector_ids, bool has_more, bool force_to_load_data_if_exist,

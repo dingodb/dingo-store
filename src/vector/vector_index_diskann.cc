@@ -360,9 +360,10 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
 
   if (!FLAGS_diskann_build_sync_internal) {
     internal_state = pb::common::DiskANNCoreState::BUILDING;
-    auto task = std::make_shared<ServiceTask>([this, region_range, reader, parameter, ts]() {
+    std::shared_ptr<VectorIndexDiskANN> self = GetSelf();
+    auto task = std::make_shared<ServiceTask>([self, region_range, reader, parameter, ts]() {
       pb::common::DiskANNCoreState state;
-      auto status = DoBuild(region_range, reader, parameter, ts, state);
+      auto status = self->DoBuild(region_range, reader, parameter, ts, state);
       (void)status;
     });
 
@@ -502,14 +503,15 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
 
   if (!FLAGS_diskann_load_sync_internal) {
     internal_state = pb::common::DiskANNCoreState::LOADING;
-    auto task = std::make_shared<ServiceTask>([this, internal_parameter]() {
+    std::shared_ptr<VectorIndexDiskANN> self = GetSelf();
+    auto task = std::make_shared<ServiceTask>([self, internal_parameter]() {
       pb::common::DiskANNCoreState state;
       butil::Status status;
       // load index rpc
       if (internal_parameter.diskann().direct_load_without_build()) {
-        status = SendVectorTryLoadRequestWrapper(internal_parameter, state);
+        status = self->SendVectorTryLoadRequestWrapper(internal_parameter, state);
       } else {
-        status = SendVectorLoadRequestWrapper(internal_parameter, state);
+        status = self->SendVectorLoadRequestWrapper(internal_parameter, state);
       }
       if (!status.ok()) {
         LOG(ERROR) << "[" << __PRETTY_FUNCTION__ << "] " << status.error_cstr();
@@ -687,6 +689,8 @@ butil::Status VectorIndexDiskANN::Dump(bool dump_all, std::vector<std::string>& 
     return DoDump(dump_datas);
   }
 }
+
+std::shared_ptr<VectorIndexDiskANN> VectorIndexDiskANN::GetSelf() { return shared_from_this(); }
 
 butil::Status VectorIndexDiskANN::Save(const std::string& /*path*/) {
   return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, "not support in DiskANN!!!");
