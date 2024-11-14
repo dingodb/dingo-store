@@ -243,7 +243,7 @@ class Constant {
   // do not change this parameter or it will crash.
   inline static const int64_t kDiskannMinCount = 2;
   // max count of vectors for diskann
-  inline static const int64_t kDiskannMaxCount = std::numeric_limits<uint32_t>::max();
+  inline static const int64_t kDiskannMaxCount = std::numeric_limits<int32_t>::max();
   inline static const std::string kDiskannStore = "store";
   inline static const std::string kDiskannPathConfigName = "path";
   inline static const std::string kDiskannNumThreadsConfigName = "num_threads";

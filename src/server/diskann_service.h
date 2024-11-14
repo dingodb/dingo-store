@@ -74,6 +74,11 @@ class DiskAnnServiceImpl : public pb::diskann::DiskAnnService {
                        ::dingodb::pb::diskann::VectorSetNoDataResponse* response,
                        ::google::protobuf::Closure* done) override;
 
+  void VectorSetImportTooMany(google::protobuf::RpcController* controller,
+                              const ::dingodb::pb::diskann::VectorSetImportTooManyRequest* request,
+                              ::dingodb::pb::diskann::VectorSetImportTooManyResponse* response,
+                              ::google::protobuf::Closure* done) override;
+
   void VectorDump(google::protobuf::RpcController* controller, const ::dingodb::pb::diskann::VectorDumpRequest* request,
                   ::dingodb::pb::diskann::VectorDumpResponse* response, ::google::protobuf::Closure* done) override;
 

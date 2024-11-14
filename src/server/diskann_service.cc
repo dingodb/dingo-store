@@ -692,6 +692,60 @@ void DiskAnnServiceImpl::VectorSetNoData(google::protobuf::RpcController* contro
   }
 }
 
+static butil::Status ValidateVectorSetImportTooMany(
+    const ::dingodb::pb::diskann::VectorSetImportTooManyRequest* request) {
+  if (request->vector_index_id() <= 0) {
+    std::string s = fmt::format("Invalid vector index id : {}", request->vector_index_id());
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+  }
+
+  return butil::Status::OK();
+}
+
+static void DoVectorSetImportTooMany(std::shared_ptr<DiskAnnServiceHandle> handle,
+                                     google::protobuf::RpcController* controller,
+                                     const ::dingodb::pb::diskann::VectorSetImportTooManyRequest* request,
+                                     ::dingodb::pb::diskann::VectorSetImportTooManyResponse* response,
+                                     TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  butil::Status status = ValidateVectorSetImportTooMany(request);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>(cntl, true ? nullptr : done_guard.release(), request, response);
+  ctx->SetTracker(tracker);
+
+  status = handle->VectorSetImportTooMany(ctx, request->vector_index_id());
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+  }
+}
+
+void DiskAnnServiceImpl::VectorSetImportTooMany(google::protobuf::RpcController* controller,
+                                                const ::dingodb::pb::diskann::VectorSetImportTooManyRequest* request,
+                                                ::dingodb::pb::diskann::VectorSetImportTooManyResponse* response,
+                                                ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorSetImportTooMany(handle_, controller, request, response, svr_done);
+  });
+
+  bool ret = DiskANNItemRuntime::GetMiscWorkerSet()->Execute(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
 static butil::Status ValidateVectorDump(const ::dingodb::pb::diskann::VectorDumpRequest* request) {
   if (request->vector_index_id() <= 0) {
     std::string s = fmt::format("Invalid vector index id : {}", request->vector_index_id());

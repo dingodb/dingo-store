@@ -71,6 +71,8 @@ class DiskANNItem : public std::enable_shared_from_this<DiskANNItem> {
   std::string Dump(std::shared_ptr<Context> ctx);
   butil::Status Count(std::shared_ptr<Context> ctx, int64_t& count);  // NOLINT
   butil::Status SetNoData(std::shared_ptr<Context> ctx);
+  butil::Status SetImportTooMany(std::shared_ptr<Context> ctx);
+
 
   static void SetImportTimeout(int64_t timeout_s) { DiskANNItem::import_timeout_s = timeout_s; }
   static void SetBaseDir(const std::string& base) { DiskANNItem::base_dir = base; }
