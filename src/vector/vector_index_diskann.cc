@@ -772,6 +772,20 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
     return butil::Status::OK();
   }
 
+  // count too many, set error to diskann.
+  if (region_count > Constant::kDiskannMaxCount) {
+    std::string s = fmt::format("region : {} vector current count {} is more than max count {}. set error to diskann",
+                                Id(), region_count, Constant::kDiskannMaxCount);
+    DINGO_LOG(WARNING) << s;
+    status = SendVectorSetImportTooManyRequestWrapper();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+    state = pb::common::DiskANNCoreState::IMPORTING;
+    return butil::Status(pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_MANY, s);
+  }
+
   auto iter = reader->NewIterator(Constant::kVectorDataCF, ts, options);
 
   if (!iter) {
@@ -1219,6 +1233,55 @@ butil::Status VectorIndexDiskANN::SendVectorSetNoDataRequestWrapper() {
                                 pb::common::DiskANNCoreState_Name(vector_set_no_data_response.state()));  // state
     DINGO_LOG(ERROR) << s;
     return butil::Status(vector_set_no_data_response.error().errcode(), s);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexDiskANN::SendVectorSetImportTooManyRequest(const google::protobuf::Message& request,
+                                                                    google::protobuf::Message& response) {
+  butil::Status status;
+  if (!InitChannel(diskann_server_addr)) {
+    std::string s = fmt::format("Init channel failed, addr : {}", diskann_server_addr);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  // count rpc
+  status = SendRequest("DiskAnnService", "VectorSetImportTooMany", request, response);
+  if (!status.ok()) {
+    std::string s = fmt::format("VectorSetImportTooMany request failed, errcode: {}  errmsg: {}",
+                                pb::error::Errno_Name(status.error_code()), status.error_cstr());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(status.error_code(), s);
+  }
+
+  return butil::Status::OK();
+}
+butil::Status VectorIndexDiskANN::SendVectorSetImportTooManyRequestWrapper() {
+  butil::Status status;
+
+  // count rpc
+  pb::diskann::VectorSetImportTooManyRequest vector_set_import_too_many_request;
+  pb::diskann::VectorSetImportTooManyResponse vector_set_import_too_many_response;
+
+  vector_set_import_too_many_request.set_vector_index_id(Id());
+  status = SendVectorSetImportTooManyRequest(vector_set_import_too_many_request, vector_set_import_too_many_response);
+  if (!status.ok()) {
+    std::string s = fmt::format("VectorSetImportTooMany request failed, errcode: {}  errmsg: {}",
+                                pb::error::Errno_Name(status.error_code()), status.error_cstr());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(status.error_code(), s);
+  }
+
+  if (vector_set_import_too_many_response.error().errcode() != pb::error::Errno::OK) {
+    std::string s =
+        fmt::format("VectorSetImportTooMany response error, errcode: {}  errmsg: {} state: {}",
+                    pb::error::Errno_Name(vector_set_import_too_many_response.error().errcode()),
+                    vector_set_import_too_many_response.error().errmsg(),
+                    pb::common::DiskANNCoreState_Name(vector_set_import_too_many_response.state()));  // state
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(vector_set_import_too_many_response.error().errcode(), s);
   }
 
   return butil::Status::OK();

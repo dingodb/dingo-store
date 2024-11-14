@@ -133,6 +133,9 @@ class VectorIndexDiskANN : public VectorIndex, public std::enable_shared_from_th
   butil::Status SendVectorSetNoDataRequest(const google::protobuf::Message& request,
                                            google::protobuf::Message& response);
   butil::Status SendVectorSetNoDataRequestWrapper();
+  butil::Status SendVectorSetImportTooManyRequest(const google::protobuf::Message& request,
+                                           google::protobuf::Message& response);
+  butil::Status SendVectorSetImportTooManyRequestWrapper();
   butil::Status SendVectorBuildRequest(const google::protobuf::Message& request, google::protobuf::Message& response);
   butil::Status SendVectorBuildRequestWrapper(const pb::common::VectorBuildParameter& parameter,
                                               pb::common::DiskANNCoreState& state);

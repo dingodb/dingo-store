@@ -694,6 +694,56 @@ butil::Status DiskANNItem::SetNoData(std::shared_ptr<Context> ctx) {
   return butil::Status::OK();
 }
 
+butil::Status DiskANNItem::SetImportTooMany(std::shared_ptr<Context> ctx) {
+  DiskANNCoreState old_state;
+  butil::Status status;
+  BvarLatencyGuard bvar_guard(&g_diskann_server_nodata_latency);
+  RWLockWriteGuard guard(&rw_lock_);
+
+  SetSide(ctx);
+  bool is_error_occurred = false;
+  old_state = state_.load();
+
+  auto lambda_set_state_function = [this, &is_error_occurred, &status, ctx]() {
+    if (is_error_occurred) {
+      last_error_ = status;
+      error_local_side_ = local_side_;
+      error_remote_side_ = remote_side_;
+    }
+
+    ctx->SetStatus(last_error_);
+    ctx->SetDiskANNCoreStateX(state_);
+  };
+
+  ON_SCOPE_EXIT(lambda_set_state_function);
+  if (state_.load() == DiskANNCoreState::kImporting &&
+      last_error_.error_code() == pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_MANY) {
+    std::string s = fmt::format("diskann is set import too many.(kImporting). ignore.");
+    DINGO_LOG(INFO) << s;
+    status = butil::Status(pb::error::Errno::OK, s);
+    return status;
+  }
+
+  if (!last_error_.ok()) {
+    is_error_occurred = true;
+    DINGO_LOG(ERROR) << "already error occurred, ignore set import too many.  return." << last_error_.error_cstr();
+    status = last_error_;
+    return status;
+  }
+
+  if (state_.load() != DiskANNCoreState::kUnknown) {
+    std::string s = fmt::format("diskann item state wrong. {}", FormatParameter());
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::Errno::EDISKANN_IMPORT_STATE_WRONG, s);
+    return status;
+  }
+
+  state_ = DiskANNCoreState::kImporting;
+  std::string s = fmt::format("diskann set import too many. > {}", Constant::kDiskannMaxCount);
+  last_error_ = butil::Status(pb::error::Errno::EDISKANN_IMPORT_COUNT_TOO_MANY, s);
+  return butil::Status::OK();
+}
+
 bool DiskANNItem::IsBuildedFilesExist(int64_t vector_index_id, pb::common::MetricType metric_type) {
   std::string data_bin_path = fmt::format("{}/{}/{}/{}", base_dir, normal_name, vector_index_id, input_name);
 #if defined(ENABLE_DISKANN_ID_MAPPING)

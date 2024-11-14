@@ -331,6 +331,30 @@ butil::Status DiskAnnServiceHandle::VectorSetNoData(std::shared_ptr<Context> ctx
   return status;
 }
 
+butil::Status DiskAnnServiceHandle::VectorSetImportTooMany(std::shared_ptr<Context> ctx, int64_t vector_index_id) {
+  butil::Status status;
+  auto item = item_manager.Find(vector_index_id);
+  if (item == nullptr) {
+    std::string s = fmt::format("vector_index_id : {} not  exists", vector_index_id);
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(pb::error::EINDEX_NOT_FOUND, s);
+    return status;
+  }
+
+  status = item->SetImportTooMany(ctx);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+  }
+
+  pb::diskann::VectorSetImportTooManyResponse& response =
+      (dynamic_cast<pb::diskann::VectorSetImportTooManyResponse&>(*ctx->Response()));
+
+  ServiceHelper::SetError(response.mutable_last_error(), ctx->Status().error_code(), ctx->Status().error_str());
+  response.set_state(DiskANNUtils::DiskANNCoreStateToPb(ctx->DiskANNCoreStateX()));
+
+  return status;
+}
+
 butil::Status DiskAnnServiceHandle::VectorDump(std::shared_ptr<Context> ctx, int64_t vector_index_id) {
   butil::Status status;
   auto item = item_manager.Find(vector_index_id);

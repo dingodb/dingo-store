@@ -59,6 +59,8 @@ class DiskAnnServiceHandle {
 
   static butil::Status VectorSetNoData(std::shared_ptr<Context> ctx, int64_t vector_index_id);
 
+  static butil::Status VectorSetImportTooMany(std::shared_ptr<Context> ctx, int64_t vector_index_id);
+
   static butil::Status VectorDump(std::shared_ptr<Context> ctx, int64_t vector_index_id);
 
   static butil::Status VectorDumpAll(std::shared_ptr<Context> ctx);
