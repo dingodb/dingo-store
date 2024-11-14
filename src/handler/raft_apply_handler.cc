@@ -298,6 +298,10 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
   store_region_meta->UpdateState(from_region, pb::common::StoreRegionState::SPLITTING);
 
+  // set last split time
+  to_region->UpdateLastSplitTimestamp();
+  from_region->UpdateLastSplitTimestamp();
+
   // set child region version/range/state
   store_region_meta->UpdateEpochVersionAndRange(to_region, to_region->Epoch().version() + 1, to_range, "split child");
 
@@ -540,6 +544,10 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
                                                 "split parent");
   // store_region_meta->UpdateEpochVersionAndRange(child_region, child_region->Epoch().version() + 1, child_range,
   //                                               "child parent");
+
+  // set last split time
+  parent_region->UpdateLastSplitTimestamp();
+  child_region->UpdateLastSplitTimestamp();
 
   DINGO_LOG(INFO) << fmt::format(
       "[split.spliting][job_id({}).region({}->{})] splited, child region({}/{}) parent region({}/{})", request.job_id(),
@@ -1494,8 +1502,7 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
         auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
-                                        document_index_id, request.ids().size(),
-                                        Helper::TimestampNs() - start_time);
+                                        document_index_id, request.ids().size(), Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             document_index_wrapper->SetApplyLogId(log_id);

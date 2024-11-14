@@ -515,6 +515,7 @@ file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
 file(GLOB CLIENT_V2_SRCS ${PROJECT_SOURCE_DIR}/src/client_v2/*.cc)
+file(GLOB MERGE_SRCS ${PROJECT_SOURCE_DIR}/src/merge/*.cc)
 if(WITH_DISKANN)
   file(GLOB DISKANN_SRCS ${PROJECT_SOURCE_DIR}/src/diskann/*.cc)
 endif()
@@ -605,7 +606,8 @@ add_library(
   ${SERIAL_SRCS}
   ${COPROCESSOR_SRCS}
   ${LIBEXPR_SRCS}
-  ${DISKANN_SRCS})
+  ${DISKANN_SRCS}
+  ${MERGE_SRCS})
 
 if(NOT WITH_DISKANN)
   list(REMOVE_ITEM DINGODB_OBJS ${DISKANN_SRCS})

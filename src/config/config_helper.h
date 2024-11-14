@@ -49,6 +49,11 @@ class ConfigHelper {
   static double GetWorkerThreadRatio();
   static int32_t GetRaftWorkerThreadNum();
   static double GetRaftWorkerThreadRatio();
+  static int64_t GetMergeCheckSize();
+  static int64_t GetMergeCheckKeysCount();
+  static int64_t GetSplitMergeInterval();
+  static float GetMergeSizeRatio();
+  static float GetMergeKeysRatio();
 };
 
 }  // namespace dingodb

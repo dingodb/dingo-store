@@ -966,6 +966,11 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
+    if (!dingo_server.InitPreMergeChecker()) {
+      DINGO_LOG(ERROR) << "InitPreMergeChecker failed!";
+      return -1;
+    }
+
     store_service.SetStorage(dingo_server.GetStorage());
     if (brpc_server.AddService(&store_service, brpc::SERVER_DOESNT_OWN_SERVICE) != 0) {
       DINGO_LOG(ERROR) << "Fail to add store service!";
@@ -1111,6 +1116,11 @@ int main(int argc, char *argv[]) {
 
     if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitPreMergeChecker()) {
+      DINGO_LOG(ERROR) << "InitPreMergeChecker failed!";
       return -1;
     }
 
@@ -1265,6 +1275,11 @@ int main(int argc, char *argv[]) {
 
     if (!dingo_server.InitPreSplitChecker()) {
       DINGO_LOG(ERROR) << "InitPreSplitChecker failed!";
+      return -1;
+    }
+
+    if (!dingo_server.InitPreMergeChecker()) {
+      DINGO_LOG(ERROR) << "InitPreMergeChecker failed!";
       return -1;
     }
 

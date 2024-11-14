@@ -104,6 +104,11 @@ class RegionMetrics {
     return inner_region_metrics_.last_update_metrics_version();
   }
 
+  int64_t LastUpdateMetricsTimestamp() {
+    BAIDU_SCOPED_LOCK(mutex_);
+    return inner_region_metrics_.last_update_metrics_timestamp();
+  }
+
   void SetLastUpdateMetricsVersion(int64_t last_update_metrics_version) {
     BAIDU_SCOPED_LOCK(mutex_);
     inner_region_metrics_.set_last_update_metrics_version(last_update_metrics_version);

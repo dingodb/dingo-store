@@ -46,6 +46,7 @@
 #include "store/region_controller.h"
 #include "store/store_controller.h"
 #include "vector/vector_index_manager.h"
+#include "merge/merge_checker.h"
 
 namespace dingodb {
 
@@ -111,6 +112,9 @@ class Server {
 
   // Init PreSplitChecker
   bool InitPreSplitChecker();
+
+  // Init PreMergeChecker
+  bool InitPreMergeChecker();
 
   // Init TsProvider
   bool InitTsProvider();
@@ -209,6 +213,7 @@ class Server {
 
   bool IsLeader(int64_t region_id);
   std::shared_ptr<PreSplitChecker> GetPreSplitChecker();
+  std::shared_ptr<PreMergeChecker> GetPreMergeChecker();
 
   void SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set);
   void SetStoreServiceWriteWorkerSet(WorkerSetPtr worker_set);
@@ -345,6 +350,9 @@ class Server {
 
   // Pre split checker
   std::shared_ptr<PreSplitChecker> pre_split_checker_;
+
+  // Pre merge checker
+  std::shared_ptr<PreMergeChecker> pre_merge_checker_;
 
   // Crontab config
   std::vector<CrontabConfig> crontab_configs_;
