@@ -83,8 +83,8 @@ DEFINE_int32(server_approximate_size_metrics_collect_interval_s, 300,
              "approximate size metrics collect interval seconds");
 DEFINE_int32(scan_scan_interval_s, 30, "scan interval seconds");
 DEFINE_int32(scanv2_scan_interval_s, 30, "scan interval seconds");
-DEFINE_bool(region_enable_auto_split, true, "enable auto split");
 DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds");
+DEFINE_int32(region_merge_check_interval_s, 300, "merge check interval seconds");
 DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
 DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
 DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
@@ -109,6 +109,12 @@ DEFINE_bool(enable_timing_get_tso, false, "enable get tso");
 DEFINE_int32(get_tso_interval_ms, 1000, "get tso interval");
 
 DEFINE_int32(recycle_stream_interval_s, 10, "recycle stream interval seconds");
+
+DEFINE_bool(region_enable_auto_split, true, "enable auto split");
+BRPC_VALIDATE_GFLAG(region_enable_auto_split, brpc::PassValidate);
+
+DEFINE_bool(region_enable_auto_merge, true, "enable auto merge");
+BRPC_VALIDATE_GFLAG(region_enable_auto_merge, brpc::PassValidate);
 
 extern "C" {
 extern void omp_set_num_threads(int) noexcept;  // NOLINT
@@ -574,6 +580,23 @@ bool Server::InitCrontabManager() {
     }
   }
 
+  // Add merge checker crontab
+  // CAUTION: Do not merge region for DOCUMENT
+  if (GetRole() == pb::common::STORE || GetRole() == pb::common::INDEX) {
+    FLAGS_region_enable_auto_merge = config->GetBool("region.enable_auto_merge");
+    if (FLAGS_region_enable_auto_merge) {
+      FLAGS_region_merge_check_interval_s =
+          GetInterval(config, "region.merge_check_interval_s", FLAGS_region_merge_check_interval_s);
+      crontab_configs_.push_back({
+          "MERGE_CHECKER",
+          {pb::common::STORE, pb::common::INDEX},
+          FLAGS_region_merge_check_interval_s * 1000,
+          true,
+          [](void*) { PreMergeChecker::TriggerPreMergeCheck(nullptr); },
+      });
+    }
+  }
+
   // Add push crontab
   FLAGS_coordinator_push_interval_s =
       GetInterval(config, "coordinator.push_interval_s", FLAGS_coordinator_push_interval_s);
@@ -849,6 +872,15 @@ bool Server::InitPreSplitChecker() {
   split_check_concurrency =
       split_check_concurrency > 0 ? split_check_concurrency : Constant::kDefaultSplitCheckConcurrency;
   return pre_split_checker_->Init(split_check_concurrency);
+}
+
+bool Server::InitPreMergeChecker() {
+  pre_merge_checker_ = std::make_shared<PreMergeChecker>();
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  int merge_check_concurrency = config->GetInt("region.merge_check_concurrency");
+  merge_check_concurrency =
+      merge_check_concurrency > 0 ? merge_check_concurrency : Constant::kDefaultMergeCheckConcurrency;
+  return pre_merge_checker_->Init(merge_check_concurrency);
 }
 
 bool Server::InitTsProvider() {
@@ -1182,6 +1214,8 @@ void Server::SetClusterForceReadOnly(bool is_read_only, const std::string& read_
 bool Server::IsLeader(int64_t region_id) { return GetStorage()->IsLeader(region_id); }
 
 std::shared_ptr<PreSplitChecker> Server::GetPreSplitChecker() { return pre_split_checker_; }
+
+std::shared_ptr<PreMergeChecker> Server::GetPreMergeChecker() { return pre_merge_checker_; }
 
 void Server::SetStoreServiceReadWorkerSet(WorkerSetPtr worker_set) { store_service_read_worker_set_ = worker_set; }
 

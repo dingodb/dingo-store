@@ -466,7 +466,7 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
     return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
   }
 
-  auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+  auto status = Helper::ValidateRaftStatusForSplitMerge(node->GetStatus());
   if (!status.ok()) {
     return status;
   }

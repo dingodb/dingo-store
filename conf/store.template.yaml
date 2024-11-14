@@ -16,6 +16,14 @@ region:
   region_max_size: 268435456 # 256MB
   enable_auto_split: true
   split_check_interval_s: 120
+  enable_auto_merge: true
+  merge_check_interval_s: 120
+  max_merge_region_size: 1048576 # 1MB
+  max_merge_region_keys: 10000
+  split_merge_interval: 3600  #1h
+  merge_size_ratio: 0.2
+  merge_keys_ratio: 0.2
+  merge_check_concurrency: 3
 raft:
   listen_host: $RAFT_LISTEN_HOST$
   host: $RAFT_HOST$

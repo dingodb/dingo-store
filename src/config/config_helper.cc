@@ -55,6 +55,76 @@ int64_t ConfigHelper::GetSplitCheckApproximateSize() {
   return static_cast<int64_t>(static_cast<double>(Constant::kDefaultSplitCheckApproximateSizeRatio) * region_max_size);
 }
 
+int64_t ConfigHelper::GetMergeCheckSize() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kAutoMergeRegionMaxSizeDefaultValue;
+  }
+  int64_t region_max_size = config->GetInt64("region.max_merge_region_size");
+  if (region_max_size < Constant::kAutoMergeRegionMaxSizeDefaultValue) {
+    region_max_size = Constant::kAutoMergeRegionMaxSizeDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] max_merge_region_size is too small, set default value({})",
+                                      Constant::kAutoMergeRegionMaxSizeDefaultValue);
+  }
+  return region_max_size;
+}
+
+int64_t ConfigHelper::GetSplitMergeInterval() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kSplitMergeIntervalDefaultValue;
+  }
+  int64_t split_merge_interval = config->GetInt64("region.split_merge_interval");
+  if (split_merge_interval < Constant::kSplitMergeIntervalDefaultValue) {
+    split_merge_interval = Constant::kSplitMergeIntervalDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_merge_interval is too small, set default value({})",
+                                      Constant::kSplitMergeIntervalDefaultValue);
+  }
+  return split_merge_interval;
+}
+
+int64_t ConfigHelper::GetMergeCheckKeysCount() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kAutoMergeRegionMaxKeysCountDefaultValue;
+  }
+  int64_t region_max_keys_count = config->GetInt64("region.max_merge_region_keys");
+  if (region_max_keys_count < Constant::kAutoMergeRegionMaxKeysCountDefaultValue) {
+    region_max_keys_count = Constant::kAutoMergeRegionMaxKeysCountDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] max_merge_region_keys is too small, set default value({})",
+                                      Constant::kAutoMergeRegionMaxKeysCountDefaultValue);
+  }
+  return region_max_keys_count;
+}
+
+float ConfigHelper::GetMergeSizeRatio() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kMergeRatioDefaultValue;
+  }
+  float merge_ratio = static_cast<float>(config->GetDouble("region.merge_size_ratio"));
+  if (merge_ratio < 0.1 || merge_ratio > 0.9) {
+    merge_ratio = Constant::kMergeRatioDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] merge_size_ratio out of range, set default value({})",
+                                      Constant::kMergeRatioDefaultValue);
+  }
+  return merge_ratio;
+}
+
+float ConfigHelper::GetMergeKeysRatio() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kMergeKeysRatioDefaultValue;
+  }
+  float merge_ratio = static_cast<float>(config->GetDouble("region.merge_keys_ratio"));
+  if (merge_ratio < 0.1 || merge_ratio > 0.9) {
+    merge_ratio = Constant::kMergeKeysRatioDefaultValue;
+    DINGO_LOG(WARNING) << fmt::format("[config] split_size_ratio out of range, set default value({})",
+                                      Constant::kMergeKeysRatioDefaultValue);
+  }
+  return merge_ratio;
+}
+
 std::string ConfigHelper::GetSplitPolicy() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {

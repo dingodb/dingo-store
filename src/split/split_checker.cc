@@ -39,6 +39,7 @@
 
 namespace dingodb {
 DECLARE_bool(enable_region_split_and_merge_for_lite);
+DECLARE_bool(region_enable_auto_split);
 
 MergedIterator::MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
                                const std::string& end_key)
@@ -228,7 +229,7 @@ static bool CheckLeaderAndFollowerStatus(int64_t region_id) {
     return false;
   }
 
-  auto status = Helper::ValidateRaftStatusForSplit(node->GetStatus());
+  auto status = Helper::ValidateRaftStatusForSplitMerge(node->GetStatus());
   if (!status.ok()) {
     DINGO_LOG(INFO) << fmt::format("[split.check][region({})] {}", region_id, status.error_str());
     return false;
@@ -540,6 +541,10 @@ void PreSplitChecker::Destroy() {
 bool PreSplitChecker::Execute(TaskRunnablePtr task) { return worker_->Execute(task); }
 
 void PreSplitChecker::TriggerPreSplitCheck(void*) {
+  if (!FLAGS_region_enable_auto_split) {
+    DINGO_LOG(INFO) << "disable auto split";
+    return;
+  }
   // Free at ExecuteRoutine()
   auto task = std::make_shared<PreSplitCheckTask>(Server::GetInstance().GetPreSplitChecker()->GetSplitCheckWorkers());
   Server::GetInstance().GetPreSplitChecker()->Execute(task);

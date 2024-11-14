@@ -1658,7 +1658,7 @@ bool Helper::ParallelRunTask(TaskFunctor task, void* arg, int concurrency) {
   return true;
 }
 
-butil::Status Helper::ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRaftStatus> raft_status) {  // NOLINT
+butil::Status Helper::ValidateRaftStatusForSplitMerge(std::shared_ptr<pb::common::BRaftStatus> raft_status) {  // NOLINT
   if (raft_status == nullptr) {
     return butil::Status(pb::error::EINTERNAL, "Get raft status failed.");
   }

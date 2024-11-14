@@ -193,6 +193,15 @@ class Constant {
   static constexpr uint32_t kSplitKeysNumberDefaultValue = 100000;
   static constexpr float kSplitKeysRatioDefaultValue = 0.5;
 
+  // merge region
+  static constexpr uint32_t kAutoMergeRegionMaxSizeDefaultValue = 1048576;  // 1M
+  static constexpr uint32_t kAutoMergeRegionMaxKeysCountDefaultValue = 10000;
+  static constexpr uint32_t kSplitMergeIntervalDefaultValue = 3600;  // 1h
+  static constexpr uint32_t kDefaultMergeCheckConcurrency = 3;
+  static constexpr int64_t kRegionMetricsUpdateSecondDefaultValue = 60;  // 60s
+  static constexpr float kMergeRatioDefaultValue = 0.2;
+  static constexpr float kMergeKeysRatioDefaultValue = 0.2;
+
   static const int32_t kRaftLogFallBehindThreshold = 1000;
   static const int32_t kTransferLeaderRaftLogFallBehindThreshold = 16;
 

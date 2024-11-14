@@ -341,8 +341,8 @@ class Helper {
   using TaskFunctor = void* (*)(void*);
   static bool ParallelRunTask(TaskFunctor task, void* arg, int concurrency);
 
-  // Validate raft status whether suitable or not region split.
-  static butil::Status ValidateRaftStatusForSplit(std::shared_ptr<pb::common::BRaftStatus> raft_status);
+  // Validate raft status whether suitable or not region split/merge.
+  static butil::Status ValidateRaftStatusForSplitMerge(std::shared_ptr<pb::common::BRaftStatus> raft_status);
 
   static butil::Status ParseRaftSnapshotRegionMeta(const std::string& snapshot_path,
                                                    pb::store_internal::RaftSnapshotRegionMeta& meta);
