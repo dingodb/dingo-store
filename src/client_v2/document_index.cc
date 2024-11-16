@@ -125,7 +125,7 @@ void SendDocumentAdd(DocumentAddOptions const& opt) {
     document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::DATETIME);
     auto now = std::chrono::system_clock::now();
     std::string time_str = ToRFC3339(now);
-    document_value1.mutable_field_value()->set_string_data(time_str);
+    document_value1.mutable_field_value()->set_datetime_data(time_str);
     std::cout << "doc_id: " << opt.document_id << " ,time_str:" << time_str << std::endl;
     (*document_data)["col5"] = document_value1;
   }
