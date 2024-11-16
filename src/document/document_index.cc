@@ -265,7 +265,7 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
           break;
         case pb::common::ScalarFieldType::DATETIME:
           date_column_names.push_back(field_name);
-          date_column_docs.push_back(document_value.field_value().string_data());
+          date_column_docs.push_back(document_value.field_value().datetime_data());
           break;
         case pb::common::ScalarFieldType::BOOL:
           bool_column_names.push_back(field_name);
