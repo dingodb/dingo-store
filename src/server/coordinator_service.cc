@@ -56,6 +56,8 @@ BRPC_VALIDATE_GFLAG(async_hello, brpc::PassValidate);
 DEFINE_int32(hello_latency_ms, 0, "hello latency seconds");
 BRPC_VALIDATE_GFLAG(hello_latency_ms, brpc::NonNegativeInteger);
 
+DECLARE_int32(default_replica_num);
+
 void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
                         pb::coordinator::HelloResponse *response, TrackClosure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -1212,6 +1214,9 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   const std::string &region_name = request->region_name();
   const std::string &resource_tag = request->resource_tag();
   int64_t replica_num = request->replica_num();
+  if (replica_num < 1) {
+    replica_num = FLAGS_default_replica_num;
+  }
   const pb::common::Range &range = request->range();
   pb::common::RawEngine raw_engine = request->raw_engine();
   pb::common::StorageEngine store_engine = request->store_engine();
