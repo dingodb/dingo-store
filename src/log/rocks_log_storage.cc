@@ -1326,7 +1326,7 @@ bool RocksLogStorage::HasSpecificLog(int64_t region_id, int64_t begin_index, int
 
   delete it;
 
-  return true;
+  return false;
 }
 
 LogEntry RocksLogStorageWrapper::ToLogEntry(int64_t region_id, const braft::LogEntry* entry) {
