@@ -945,7 +945,7 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
 std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
   if (GetRole() == pb::common::ClusterRole::COORDINATOR) {
     return {Constant::kStoreDataCF};
-  } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
+  } else if (GetRole() == pb::common::ClusterRole::STORE) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
     }
@@ -958,6 +958,11 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
     }
     return {Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
             Constant::kVectorTableCF};
+  } else if (GetRole() == pb::common::ClusterRole::DOCUMENT) {
+    if (IsExecutorTxn(key) || IsClientTxn(key)) {
+      return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF, Constant::kStoreDataCF};
+    }
+    return {Constant::kStoreDataCF};
   }
 
   return {};
