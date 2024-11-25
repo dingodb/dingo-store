@@ -1166,6 +1166,10 @@ butil::Status VectorIndexManager::CatchUpLogToVectorIndex(VectorIndexWrapperPtr 
   }
 
   auto raft_meta = Server::GetInstance().GetRaftMeta(vector_index_wrapper->Id());
+  if (raft_meta == nullptr) {
+    return butil::Status(pb::error::ERAFT_META_NOT_FOUND, "not found raft meta.");
+  }
+
   for (int i = 0;; ++i) {
     int64_t start_log_id = vector_index->ApplyLogId() + 1;
     int64_t end_log_id = raft_meta->AppliedId();
