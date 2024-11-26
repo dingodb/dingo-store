@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "common/serial_helper.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "glog/logging.h"
 #include "mvcc/codec.h"
 #include "nlohmann/json_fwd.hpp"
@@ -361,7 +362,8 @@ bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parame
     } else if (tokenizer_type == "bool") {
       column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBool;
     } else {
-      error_message = "unknown column";
+      // error_message = fmt::format("Key({}) is invalid.", 123);
+      error_message = fmt::format("unknown column {}", tokenizer_type.dump());
       return false;
     }
     // check ngram tokenizer parameter
