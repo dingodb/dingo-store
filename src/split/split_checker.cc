@@ -98,11 +98,10 @@ void MergedIterator::Next(IteratorPtr iter, int iter_pos) {
 
 // base physics key, contain key of multi version.
 std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
-                                       const std::vector<std::string>& cf_names, uint32_t& count) {
+                                       const std::vector<std::string>& cf_names, uint32_t& count, int64_t& size) {
   MergedIterator iter(raw_engine_, cf_names, range.end_key());
   iter.Seek(range.start_key());
 
-  int64_t size = 0;
   int64_t chunk_size = 0;
   std::string prev_key;
   std::vector<std::string> keys;
@@ -136,11 +135,10 @@ std::string HalfSplitChecker::SplitKey(store::RegionPtr region, const pb::common
 
 // base physics key, contain key of multi version.
 std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
-                                       const std::vector<std::string>& cf_names, uint32_t& count) {
+                                       const std::vector<std::string>& cf_names, uint32_t& count, int64_t& size) {
   MergedIterator iter(raw_engine_, cf_names, range.end_key());
   iter.Seek(range.start_key());
 
-  int64_t size = 0;
   std::string prev_key;
   std::string split_key;
   bool is_split = false;
@@ -168,11 +166,10 @@ std::string SizeSplitChecker::SplitKey(store::RegionPtr region, const pb::common
 
 // base logic key, ignore key of multi version.
 std::string KeysSplitChecker::SplitKey(store::RegionPtr region, const pb::common::Range& range,
-                                       const std::vector<std::string>& cf_names, uint32_t& count) {
+                                       const std::vector<std::string>& cf_names, uint32_t& count, int64_t& size) {
   MergedIterator iter(raw_engine_, cf_names, range.end_key());
   iter.Seek(range.start_key());
 
-  int64_t size = 0;
   int64_t split_key_count = 0;
   std::string prev_key;
   std::string split_key;
@@ -264,7 +261,8 @@ void SplitCheckTask::SplitCheck() {
   DINGO_LOG(INFO) << fmt::format("[split.check][region({})] Will check SplitKey for raw_range{} cf_names({})",
                                  region_->Id(), Helper::RangeToString(plain_range), Helper::VectorToString(cf_names));
   uint32_t key_count = 0;
-  std::string encode_split_key = split_checker_->SplitKey(region_, encode_range, cf_names, key_count);
+  int64_t size = 0;
+  std::string encode_split_key = split_checker_->SplitKey(region_, encode_range, cf_names, key_count, size);
 
   int64_t ts = 0;
   std::string plain_split_key;
@@ -273,9 +271,14 @@ void SplitCheckTask::SplitCheck() {
   }
 
   // Update region key count metrics.
-  if (region_metrics_ != nullptr && key_count > 0) {
-    region_metrics_->SetKeyCount(key_count);
-    region_metrics_->SetNeedUpdateKeyCount(false);
+  if (region_metrics_ != nullptr) {
+    if (key_count > 0) {
+      region_metrics_->SetKeyCount(key_count);
+      region_metrics_->SetNeedUpdateKeyCount(false);
+    }
+    if (size > 0) {
+      region_metrics_->SetRegionSize(size);
+    }
   }
 
   bool need_split = true;
