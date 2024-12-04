@@ -405,7 +405,8 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
       if (vector.vector().float_values().size() != dimension) {
         return butil::Status(
             pb::error::EILLEGAL_PARAMTETERS,
@@ -2611,7 +2612,8 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
-          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ) {
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
+          vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
         if (BAIDU_UNLIKELY(vector.vector().float_values().size() != dimension)) {
           return butil::Status(
               pb::error::EILLEGAL_PARAMTETERS,
