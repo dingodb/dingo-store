@@ -191,12 +191,13 @@ TEST_F(SplitCheckerTest, HalfSplitKeys) {  // NOLINT
       std::make_shared<HalfSplitChecker>(SplitCheckerTest::engine, split_threshold_size, split_chunk_size);
 
   uint32_t count = 0;
+  int64_t size = 0;
   std::vector<std::string> raft_addrs;
   dingodb::pb::common::Range range;
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count, size);
 
   auto reader = SplitCheckerTest::engine->Reader();
 
@@ -231,12 +232,13 @@ TEST_F(SplitCheckerTest, SizeSplitKeys) {  // NOLINT
   }
 
   uint32_t count = 0;
+  int64_t size = 0;
   std::vector<std::string> raft_addrs;
   dingodb::pb::common::Range range;
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count, size);
 
   EXPECT_EQ(false, split_key.empty());
 
@@ -271,12 +273,13 @@ TEST_F(SplitCheckerTest, KeysSplitKeys) {  // NOLINT
   }
 
   uint32_t count = 0;
+  int64_t size = 0;
   std::vector<std::string> raft_addrs;
   dingodb::pb::common::Range range;
   range.set_start_key("aa");
   range.set_end_key("zz");
   auto region = BuildRegion(1000, "unit_test", raft_addrs, range.start_key(), range.end_key());
-  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count);
+  auto split_key = split_checker->SplitKey(region, region->Range(false), kAllCFs, count, size);
   EXPECT_EQ(true, !split_key.empty());
 
   auto reader = SplitCheckerTest::engine->Reader();
