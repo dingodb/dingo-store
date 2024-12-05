@@ -57,7 +57,6 @@ int main(int argc, char* argv[]) {
 
   if (testing::FLAGS_gtest_filter == "*") {
     std::string default_run_case;
-
     // common
     default_run_case += "ConfigTest.*";
     default_run_case += ":HelperTest.*";
@@ -81,6 +80,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":SplitCheckerTest.*";
 
     default_run_case += ":CandidateStoresTest.*";
+    
+    default_run_case += ":CandidateStoresTestByBlanceRegion.*";
 
     default_run_case += ":RocksLogStorageTest.*";
 

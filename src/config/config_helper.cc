@@ -261,6 +261,25 @@ std::string ConfigHelper::GetBalanceLeaderInspectionTimePeriod() {
   return config->GetString("coordinator.balance_leader_inspection_time_period");
 }
 
+std::string ConfigHelper::GetBalanceRegionInspectionTimePeriod() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return "";
+  }
+
+  return config->GetString("coordinator.balance_region_inspection_time_period");
+}
+
+float ConfigHelper::GetBalanceRegionCountRatio() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kBalanceRegionDefaultRegionCountRatio;
+  }
+  float count = config->GetDouble("coordinator.balance_region_default_region_count_ratio");
+
+  return (count < 0 || count > 1) ? Constant::kBalanceRegionDefaultRegionCountRatio : count;
+}
+
 int32_t ConfigHelper::GetWorkerThreadNum() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {

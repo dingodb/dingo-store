@@ -239,6 +239,18 @@ class BalanceLeaderTask : public TaskRunnable {
   static void DoBalanceLeader();
 };
 
+class BalanceRegionTask : public TaskRunnable {
+ public:
+  BalanceRegionTask() = default;
+  ~BalanceRegionTask() override = default;
+
+  std::string Type() override { return "BALANCE_REGION"; }
+
+  void Run() override { DoBalanceRegion(); }
+
+  static void DoBalanceRegion();
+};
+
 class Heartbeat {
  public:
   Heartbeat() = default;
@@ -262,6 +274,7 @@ class Heartbeat {
   static void TriggerLeaseTask(void*);
   static void TriggerCompactionTask(void*);
   static void TriggerBalanceLeader(void*);
+  static void TriggerBalanceRegion(void*);
 
  private:
   bool Execute(TaskRunnablePtr task);

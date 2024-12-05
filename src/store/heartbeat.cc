@@ -30,6 +30,7 @@
 #include "common/logging.h"
 #include "common/role.h"
 #include "coordinator/balance_leader.h"
+#include "coordinator/balance_region.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -48,7 +49,7 @@ DEFINE_int32(region_delete_after_deleted_time, 86400, "delete region after delet
 
 DECLARE_string(raft_snapshot_policy);
 
-DEFINE_int64(store_heartbeat_report_region_multiple, 10,
+DEFINE_int64(store_heartbeat_report_region_multiple, 3,
              "store heartbeat report region multiple, this defines how many times of heartbeat will report "
              "region_metrics once to coordinator");
 
@@ -590,6 +591,37 @@ void BalanceLeaderTask::DoBalanceLeader() {
   }
 }
 
+void BalanceRegionTask::DoBalanceRegion(){
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return;
+  }
+
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    return;
+  }
+
+  {
+    // store
+    auto tracker = balanceregion::Tracker::New();
+    auto status = balanceregion::BalanceRegionScheduler::LaunchBalanceRegion(
+        coordinator_controller, raft_engine, pb::common::NODE_TYPE_STORE, false, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.region] store process error: {}", status.error_str());
+    tracker->Print();
+  }
+
+  {
+    // index
+    auto tracker = balanceregion::Tracker::New();
+    auto status = balanceregion::BalanceRegionScheduler::LaunchBalanceRegion(
+        coordinator_controller, raft_engine, pb::common::NODE_TYPE_INDEX, false, false, tracker);
+    DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.region] index process error: {}", status.error_str());
+    tracker->Print();
+  }
+
+}
+
 bool Heartbeat::Init() {
   auto worker = Worker::New();
   if (!worker->Init()) {
@@ -686,5 +718,11 @@ void Heartbeat::TriggerBalanceLeader(void*) {
   auto task = std::make_shared<BalanceLeaderTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
+
+void Heartbeat::TriggerBalanceRegion(void*){
+  auto task = std::make_shared<BalanceRegionTask>();
+  Server::GetInstance().GetHeartbeat()->Execute(task);
+}
+
 
 }  // namespace dingodb
