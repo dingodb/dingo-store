@@ -1013,6 +1013,12 @@ int CoordinatorSender() {
   else if (FLAGS_method == "BalanceLeader") {
     SendBalanceLeader(coordinator_interaction);
   }
+
+  // balance region
+  else if (FLAGS_method == "BalanceRegion") {
+    SendBalanceRegion(coordinator_interaction);
+  }
+  
   // force_read_only
   else if (FLAGS_method == "UpdateForceReadOnly") {
     SendUpdateForceReadOnly(coordinator_interaction);

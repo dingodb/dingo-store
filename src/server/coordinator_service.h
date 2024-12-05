@@ -302,6 +302,10 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void BalanceLeader(google::protobuf::RpcController* controller, const pb::coordinator::BalanceLeaderRequest* request,
                      pb::coordinator::BalanceLeaderResponse* response, google::protobuf::Closure* done) override;
 
+  // Balance region
+  void BalanceRegion(google::protobuf::RpcController* controller, const pb::coordinator::BalanceRegionRequest* request,
+                     pb::coordinator::BalanceRegionResponse* response, google::protobuf::Closure* done) override;
+
   // CreateIds
   void CreateIds(google::protobuf::RpcController* controller, const pb::coordinator::CreateIdsRequest* request,
                  pb::coordinator::CreateIdsResponse* response, google::protobuf::Closure* done) override;

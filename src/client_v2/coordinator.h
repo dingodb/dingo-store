@@ -541,6 +541,14 @@ struct BalanceLeaderOptions {
 void SetUpBalanceLeader(CLI::App &app);
 void RunBalanceLeader(BalanceLeaderOptions const &opt);
 
+struct BalanceRegionOptions {
+  std::string coor_url;
+  bool dryrun;
+  int32_t store_type;
+};
+void SetUpBalanceRegion(CLI::App &app);
+void RunBalanceRegion(BalanceRegionOptions const &opt);
+
 // force_read_only
 struct UpdateForceReadOnlyOptions {
   std::string coor_url;

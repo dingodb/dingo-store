@@ -286,6 +286,68 @@ void CoordinatorControl::GetStoreRegionMetrics(int64_t store_id, int64_t region_
   }
 }
 
+void CoordinatorControl::GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics>& store_metrics) {
+  std::vector<int64_t> store_ids_to_get_full;
+  std::set<int64_t> store_ids_to_get_own;
+  std::vector<int64_t> all_store_ids;
+  if (store_id == 0) {
+    store_map_.GetAllKeys(all_store_ids);
+  } else {
+    all_store_ids.push_back(store_id);
+  }
+
+  {
+    BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+    for (const auto& id : all_store_ids) {
+      if (store_region_metrics_map_.find(id) != store_region_metrics_map_.end()) {
+        const auto& store_metric = store_region_metrics_map_.at(id);
+        if (store_metric.has_store_own_metrics() && store_metric.store_own_metrics().id() != 0) {
+          store_metrics.push_back(store_metric);
+        } else {
+          store_ids_to_get_own.insert(id);
+        }
+      } else {
+        store_ids_to_get_full.push_back(id);
+      }
+    }
+  }
+
+  // for store that has no own metrics, so we get store_own_metric from store_metrics_map
+  if (!store_ids_to_get_full.empty()) {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (const auto& id : store_ids_to_get_full) {
+      if (store_metrics_map_.find(id) != store_metrics_map_.end()) {
+        pb::common::StoreMetrics store_metric;
+        store_metric.set_id(id);
+        (*store_metric.mutable_store_own_metrics()) = store_metrics_map_.at(id).store_own_metrics;
+        store_metrics.push_back(store_metric);
+
+        DINGO_LOG(INFO) << "GetStoreMetrics... store_ids_to_get_full OK store_id=" << id
+                        << " store_own_metrics=" << store_metric.store_own_metrics().ShortDebugString();
+      }
+    }
+  }
+
+  // for store that only has partial heartbeat, so we get store_own_metric from store_map_
+  if (!store_ids_to_get_own.empty()) {
+    BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+    for (auto& metrics_to_update : store_metrics) {
+      if (store_ids_to_get_own.count(metrics_to_update.id()) > 0) {  // NOLINT
+        if (store_metrics_map_.find(metrics_to_update.id()) != store_metrics_map_.end()) {
+          (*metrics_to_update.mutable_store_own_metrics()) =
+              store_metrics_map_.at(metrics_to_update.id()).store_own_metrics;
+
+          DINGO_LOG(INFO) << "GetStoreMetrics... store_ids_to_get_own OK store_id=" << metrics_to_update.id()
+                          << " store_own_metrics=" << metrics_to_update.store_own_metrics().ShortDebugString();
+        } else {
+          DINGO_LOG(WARNING) << "GetStoreMetrics... store_ids_to_get_own store_id=" << metrics_to_update.id()
+                             << " not exist in store_metrics_map_";
+        }
+      }
+    }
+  }
+}
+
 void CoordinatorControl::DeleteStoreRegionMetrics(int64_t store_id) {
   {
     BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
@@ -3328,6 +3390,244 @@ butil::Status CoordinatorControl::ChangePeerRegionWithTaskList(
   return butil::Status::OK();
 }
 
+// ChangePairPeerRegionWithTaskList
+butil::Status CoordinatorControl::ChangePairPeerRegionWithTaskList(
+    int64_t region_id, std::vector<int64_t>& new_store_ids, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  auto validate_ret = ValidateTaskListConflict(region_id, region_id);
+  if (!validate_ret.ok()) {
+    DINGO_LOG(ERROR) << "ChangePeerRegionWithTaskList validate task list "
+                        "conflict failed, change_peer_region_id="
+                     << region_id;
+    return validate_ret;
+  }
+
+  // validate region_id
+  pb::coordinator_internal::RegionInternal region;
+  int ret = region_map_.Get(region_id, region);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion region not exists, id = " << region_id;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region not exists");
+  }
+  if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id" << region_id << "store engine not match";
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STORE_ENGINE_NOT_MATCH,
+                         "ChangePeerRegion region store engine not match");
+  }
+  // validate region has NORMAL status
+  auto region_status = GetRegionStatus(region_id);
+  if (region.state() != ::dingodb::pb::common::RegionState::REGION_NORMAL ||
+      region_status.raft_status() != ::dingodb::pb::common::RegionRaftStatus::REGION_RAFT_HEALTHY ||
+      region_status.heartbeat_status() != ::dingodb::pb::common::RegionHeartbeatState::REGION_ONLINE) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", region is not ready for "
+                        "change_peer, region_id = "
+                     << region_id;
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                         "ChangePeerRegion region is not ready for change_peer");
+  }
+
+  // check if region leader is healthy
+  auto leader_store_status = CheckRegionLeaderOnline(region_id);
+  if (!leader_store_status.ok()) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", region leader is not ready for "
+                        "change_peer, region_id = "
+                     << region_id << ", error: " << leader_store_status.error_str();
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                         "ChangePeerRegion region leader is not ready for change_peer, error: %s",
+                         leader_store_status.error_cstr());
+  }
+
+  // validate new_store_ids only has one new store or only less one store
+  std::vector<int64_t> old_store_ids;
+  old_store_ids.reserve(region.definition().peers_size());
+  for (int i = 0; i < region.definition().peers_size(); i++) {
+    old_store_ids.push_back(region.definition().peers(i).store_id());
+  }
+
+  if (old_store_ids.empty()) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", old_store_ids is empty, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "ChangePeerRegion old_store_ids is empty");
+  }
+
+  std::vector<int64_t> new_store_ids_diff_more;
+  std::vector<int64_t> new_store_ids_diff_less;
+
+  std::sort(new_store_ids.begin(), new_store_ids.end());
+  std::sort(old_store_ids.begin(), old_store_ids.end());
+
+  std::set_difference(new_store_ids.begin(), new_store_ids.end(), old_store_ids.begin(), old_store_ids.end(),
+                      std::inserter(new_store_ids_diff_more, new_store_ids_diff_more.begin()));
+  std::set_difference(old_store_ids.begin(), old_store_ids.end(), new_store_ids.begin(), new_store_ids.end(),
+                      std::inserter(new_store_ids_diff_less, new_store_ids_diff_less.begin()));
+
+  if (new_store_ids_diff_more.size() != 1 || new_store_ids_diff_less.size() != 1) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", new_store_ids can only add one and delete one "
+                        "diff store, region_id = "
+                     << region_id << " new_store_ids_diff_more.size() = " << new_store_ids_diff_more.size()
+                     << " new_store_ids_diff_less.size() = " << new_store_ids_diff_less.size();
+    for (auto it : new_store_ids_diff_more) DINGO_LOG(ERROR) << "new_store_ids_diff_more = " << it;
+    for (auto it : new_store_ids_diff_less) DINGO_LOG(ERROR) << "new_store_ids_diff_less = " << it;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                         "ChangePeerRegion  can only add one region and delete one region");
+  }
+
+  if (new_store_ids_diff_more.size() == 1) {
+    auto store_status = CheckStoreNormal(new_store_ids_diff_more.at(0));
+    if (!store_status.ok()) {
+      DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                       << ", new_store_ids_diff_more store is not normal, region_id = " << region_id
+                       << " store_id = " << new_store_ids_diff_more.at(0);
+      return butil::Status(pb::error::Errno::ECHANGE_PEER_STATUS_ILLEGAL,
+                           "ChangePeerRegion new_store_ids_diff_more store is not normal, %s",
+                           store_status.error_cstr());
+    }
+  }
+
+  // for region with epoch > 1, check if all peer has eligible snapshot (snapshot's epoch version is equal to region
+  if (region.definition().epoch().version() > 1) {
+    for (const auto& store_id : old_store_ids) {
+      BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
+      if (store_region_metrics_map_.find(store_id) == store_region_metrics_map_.end()) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                         << ", store_metrics_map find failed, store_id = " << store_id;
+        return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion store_metrics_map find failed");
+      }
+
+      auto it = store_region_metrics_map_[store_id].region_metrics_map().find(region_id);
+      if (it == store_region_metrics_map_[store_id].region_metrics_map().end()) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
+        return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
+      }
+
+      const auto& region_metrics = it->second;
+      DINGO_LOG(INFO) << "ChangePeerRegion, region_id=" << region_id
+                      << ", region_metrics.epoch_version() = " << region_metrics.region_definition().epoch().version()
+                      << ", region.epoch_version() = " << region.definition().epoch().version()
+                      << " snapshot.epoch_version() = " << region_metrics.snapshot_epoch_version();
+
+      if (region_metrics.snapshot_epoch_version() < region.definition().epoch().version()) {
+        DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                         << ", region_metrics.snapshot_epoch_version() < "
+                            "region.definition().epoch().version(), region_id = "
+                         << region_id << " snapshot_epoch_version = " << region_metrics.snapshot_epoch_version()
+                         << " region.epoch_version() = " << region.definition().epoch().version();
+        return butil::Status(pb::error::Errno::EREGION_SNAPSHOT_EPOCH_NOT_MATCH,
+                             "ChangePeerRegion region_metrics.snapshot_epoch_version() < "
+                             "region.definition().epoch().version()");
+      }
+    }
+  }
+
+  // generate store operation for stores
+  auto leader_store_id = GetRegionLeaderId(region_id);
+
+  if (leader_store_id == new_store_ids_diff_less.at(0) && new_store_ids.size() < 3) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion, region_id=" << region_id
+                     << ", region.leader_store_id() == "
+                        "new_store_ids_diff_less.at(0), region_id = "
+                     << region_id << " new_store_ids.size() = " << new_store_ids.size();
+    return butil::Status(pb::error::Errno::ECHANGE_PEER_UNABLE_TO_REMOVE_LEADER,
+                         "ChangePeerRegion region.leader_store_id() == "
+                         "new_store_ids_diff_less.at(0) and new_store_ids.size() < 3");
+  }
+
+  pb::common::Store store_to_add_peer;
+  ret = store_map_.Get(new_store_ids_diff_more.at(0), store_to_add_peer);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion new_store_ids_diff_more not "
+                        "exists, region_id = "
+                     << region_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion new_store_ids_diff_more not exists");
+  }
+
+  pb::common::Store old_store_to_check;
+  ret = store_map_.Get(old_store_ids.at(0), old_store_to_check);
+  if (ret < 0) {
+    DINGO_LOG(ERROR) << "ChangePeerRegion old_store_ids not exists, region_id = " << region_id;
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND, "ChangePeerRegion old_store_ids not exists");
+  }
+
+  // check if new store and old store has same type
+  if (old_store_to_check.store_type() != store_to_add_peer.store_type()) {
+    DINGO_LOG(ERROR)
+        << "ChangePeerRegion old_store_ids and new_store_ids_diff_more has different store_type, region_id = "
+        << region_id << ", old_store_to_check.store_type() = " << old_store_to_check.store_type()
+        << ", new_store_to_add_peer.store_type() = " << store_to_add_peer.store_type();
+    return butil::Status(pb::error::Errno::ESTORE_NOT_FOUND,
+                         "ChangePeerRegion old_store_ids and new_store_ids_diff_more has different store_type");
+  }
+
+  // build new task_list
+  auto* increment_task_list = CreateTaskList(meta_increment, "ChangePeer");
+
+  // create region task
+  {
+    // this is the new definition of region
+    pb::common::RegionDefinition new_region_definition;
+    new_region_definition = region.definition();
+    new_region_definition.clear_peers();
+
+    // generate new peer from store
+    auto* peer = new_region_definition.add_peers();
+    peer->set_store_id(store_to_add_peer.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    *(peer->mutable_server_location()) = store_to_add_peer.server_location();
+    *(peer->mutable_raft_location()) = store_to_add_peer.raft_location();
+
+    // add old peer to new_region_definition
+    for (int i = 0; i < region.definition().peers_size(); i++) {
+      auto* peer = new_region_definition.add_peers();
+      *peer = region.definition().peers(i);
+    }
+
+    // this create region task
+    AddCreateTask(increment_task_list, new_store_ids_diff_more.at(0), region_id, new_region_definition, meta_increment);
+
+    AddCheckStoreRegionTask(increment_task_list, new_store_ids_diff_more.at(0), region_id);
+
+    AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition, meta_increment);
+
+    AddCheckChangePeerResultTask(increment_task_list, region_id, new_region_definition);
+  }
+
+  // delete region task
+  {
+    // this is the new definition of region
+    pb::common::RegionDefinition new_region_definition;
+    new_region_definition = region.definition();
+    new_region_definition.clear_peers();
+
+    // generate new peer from store
+    auto* peer = new_region_definition.add_peers();
+    peer->set_store_id(store_to_add_peer.id());
+    peer->set_role(::dingodb::pb::common::PeerRole::VOTER);
+    *(peer->mutable_server_location()) = store_to_add_peer.server_location();
+    *(peer->mutable_raft_location()) = store_to_add_peer.raft_location();
+
+    // calculate new peers
+    for (int i = 0; i < region.definition().peers_size(); i++) {
+      if (region.definition().peers(i).store_id() != new_store_ids_diff_less.at(0)) {
+        auto* peer = new_region_definition.add_peers();
+        *peer = region.definition().peers(i);
+      }
+    }
+
+    // this is change_peer task
+    AddChangePeerTask(increment_task_list, leader_store_id, region_id, new_region_definition, meta_increment);
+
+    // this is delete_region task
+    AddDeleteTaskWithCheck(increment_task_list, new_store_ids_diff_less.at(0), region_id, new_region_definition.peers(),
+                           meta_increment);
+
+    AddCheckChangePeerResultTask(increment_task_list, region_id, new_region_definition);
+  }
+
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::TransferLeaderRegionWithTaskList(
     int64_t region_id, int64_t new_leader_store_id, bool is_force,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
@@ -4405,9 +4705,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
         region_to_update.definition().range().end_key() != region_metrics.region_definition().range().end_key()) {
       DINGO_LOG(INFO) << "region range change region_id = " << region_metrics.id() << " old range = ["
                       << Helper::StringToHex(region_to_update.definition().range().start_key()) << ", "
-                      << Helper::StringToHex(region_to_update.definition().range().end_key()) << ")"
-                      << " new range = [" << Helper::StringToHex(region_metrics.region_definition().range().start_key())
-                      << ", " << Helper::StringToHex(region_metrics.region_definition().range().end_key()) << ")";
+                      << Helper::StringToHex(region_to_update.definition().range().end_key()) << ")" << " new range = ["
+                      << Helper::StringToHex(region_metrics.region_definition().range().start_key()) << ", "
+                      << Helper::StringToHex(region_metrics.region_definition().range().end_key()) << ")";
       if (!leader_has_old_epoch) {
         need_update_region_metrics = true;
       }
@@ -5261,15 +5561,24 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
     const auto& region_check = task_pre_check.region_check();
 
     if (region_check.state() != 0 && region_check.state() != region.state()) {
+      DINGO_LOG(INFO) << "region_check.state or not same , region_check: "
+                      << pb::common::RegionState_Name(region_check.state())
+                      << " region :" << pb::common::RegionState_Name(region.state());
       check_passed = false;
     }
 
     auto region_status = GetRegionStatus(region.id());
     if (region_check.raft_status() != 0 && region_check.raft_status() != region_status.raft_status()) {
+      DINGO_LOG(INFO) << "region_check.raft_status = 0 or not same , region_check: "
+                      << pb::common::RegionRaftStatus_Name(region_check.raft_status())
+                      << " region_status :" << pb::common::RegionRaftStatus_Name(region_status.raft_status());
       check_passed = false;
     }
 
     if (region_check.replica_status() != 0 && region_check.replica_status() != region_status.replica_status()) {
+      DINGO_LOG(INFO) << "region_check.replica_status , region_check: "
+                      << pb::common::ReplicaStatus_Name(region_check.replica_status())
+                      << " region_status :" << pb::common::ReplicaStatus_Name(region_status.replica_status());
       check_passed = false;
     }
 
@@ -5295,6 +5604,16 @@ bool CoordinatorControl::DoTaskPreCheck(const pb::coordinator::TaskPreCheck& tas
       std::sort(peers_of_region.begin(), peers_of_region.end());
 
       if (!std::equal(peers_to_check.begin(), peers_to_check.end(), peers_of_region.begin(), peers_of_region.end())) {
+        std::string check_str;
+        for (auto i : peers_to_check) {
+          check_str += std::to_string(i) + " ";
+        }
+        std::string region_str;
+        for (auto i : peers_of_region) {
+          region_str += std::to_string(i) + " ";
+        }
+        DINGO_LOG(INFO) << "peers of region and peers to check not equal" << " check ids : " << check_str
+                        << " region ids : " << region_str;
         check_passed = false;
       }
     }

@@ -99,11 +99,13 @@ DEFINE_int32(raft_snapshot_interval_s, 120, "raft snapshot interval seconds");
 DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval seconds");
 DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
 DEFINE_int32(balance_leader_interval_s, 60, "balance leader interval seconds");
+DEFINE_int32(balance_region_interval_s, 120, "balance region interval seconds");
 DEFINE_int32(recycle_task_list_interval_s, 60, "recycle task list interval seconds");
 
 DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
 
 DEFINE_bool(enable_balance_leader, true, "enable balance leader");
+DEFINE_bool(enable_balance_region, true, "enable balance region");
 
 DEFINE_bool(enable_timing_get_tso, false, "enable get tso");
 DEFINE_int32(get_tso_interval_ms, 1000, "get tso interval");
@@ -775,6 +777,19 @@ bool Server::InitCrontabManager() {
         FLAGS_balance_leader_interval_s * 1000,
         true,
         [](void*) { Heartbeat::TriggerBalanceLeader(nullptr); },
+    });
+  }
+
+  if (FLAGS_enable_balance_region) {
+    // Add balance region crontab
+    FLAGS_balance_region_interval_s =
+        GetInterval(config, "raft.balance_region_interval_s", FLAGS_balance_region_interval_s);
+    crontab_configs_.push_back({
+        "BALANCE_REGION",
+        {pb::common::COORDINATOR},
+        FLAGS_balance_region_interval_s * 1000,
+        true,
+        [](void*) { Heartbeat::TriggerBalanceRegion(nullptr); },
     });
   }
 

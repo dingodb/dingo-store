@@ -234,6 +234,9 @@ class Constant {
   inline static const std::string kGcStopValueTrue = "GC_STOP_TRUE";
   inline static const std::string kGcStopValueFalse = "GC_STOP_FALSE";
 
+  // balance region
+  inline static const float kBalanceRegionDefaultRegionCountRatio = 0.8f;
+
   // force_read_only
   inline static const std::string kForceReadOnlyKey = "FORCE_READ_ONLY";
   inline static const std::string kForceReadOnlyReason = "FORCE_READ_REASON";

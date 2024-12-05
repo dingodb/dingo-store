@@ -305,8 +305,7 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
   std::cout << "response:" << response.DebugString();
@@ -449,8 +448,7 @@ void RunRaftSnapshot(RaftSnapshotOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -514,8 +512,7 @@ void RunRaftResetPeer(RaftResetPeerOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -551,8 +548,7 @@ void RunGetNodeInfo(GetNodeInfoOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
 
-  DINGO_LOG(INFO) << "Received response"
-                  << " cluster_id=" << request.cluster_id()
+  DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
                   << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
@@ -2607,6 +2603,35 @@ void RunBalanceLeader(BalanceLeaderOptions const &opt) {
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("BalanceLeader", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+void SetUpBalanceRegion(CLI::App &app) {
+  auto opt = std::make_shared<BalanceRegionOptions>();
+  auto *cmd = app.add_subcommand("BalanceRegion", "Balance region ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--dryrun", opt->dryrun, "Request parameter safe dryrun")->default_val(true);
+  cmd->add_option("--type", opt->store_type, "Request parameter store_type")->required();
+  cmd->callback([opt]() { RunBalanceRegion(*opt); });
+}
+
+void RunBalanceRegion(BalanceRegionOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    DINGO_LOG(ERROR) << "Set Up failed coor_url=" << opt.coor_url;
+    exit(-1);
+  }
+  dingodb::pb::coordinator::BalanceRegionRequest request;
+  dingodb::pb::coordinator::BalanceRegionResponse response;
+
+  request.set_dryrun(opt.dryrun);
+  request.set_store_type(dingodb::pb::common::StoreType(opt.store_type));
+
+  auto status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("BalanceRegion", request, response);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "SendRequest status=" << status;
   } else {

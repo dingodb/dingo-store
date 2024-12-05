@@ -182,6 +182,9 @@ void SendUpdateGCSafePoint(std::shared_ptr<dingodb::CoordinatorInteraction> coor
 // balance leader
 void SendBalanceLeader(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
+// balance region
+void SendBalanceRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+
 // set force_read_only
 void SendUpdateForceReadOnly(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 

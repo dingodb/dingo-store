@@ -34,6 +34,7 @@
 #include "common/version.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/balance_leader.h"
+#include "coordinator/balance_region.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
@@ -3708,6 +3709,41 @@ void CoordinatorServiceImpl::BalanceLeader(google::protobuf::RpcController *,
     task->set_region_id(transfer_leader_task->region_id);
     task->set_source_store_id(transfer_leader_task->source_store_id);
     task->set_target_store_id(transfer_leader_task->target_store_id);
+  }
+}
+
+void CoordinatorServiceImpl::BalanceRegion(google::protobuf::RpcController *,
+                                           const pb::coordinator::BalanceRegionRequest *request,
+                                           pb::coordinator::BalanceRegionResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  DINGO_LOG(DEBUG) << "Receive BalanceRegion Request:" << request->ShortDebugString();
+
+  auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
+  if (!coordinator_controller->IsLeader()) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  auto raft_engine = Server::GetInstance().GetRaftStoreEngine();
+  if (raft_engine == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::ERAFT_NOT_FOUND, "Not found raft engine.");
+    return;
+  }
+
+  auto tracker = balanceregion::Tracker::New();
+  auto status = balanceregion::BalanceRegionScheduler::LaunchBalanceRegion(
+      coordinator_controller, raft_engine, request->store_type(), request->dryrun(), true, tracker);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  response->set_score(tracker->region_score);
+
+  if (tracker->task != nullptr) {
+    auto *task = response->mutable_task();
+    task->set_region_id(tracker->task->region_id);
+    task->set_source_store_id(tracker->task->source_store_id);
+    task->set_target_store_id(tracker->task->target_store_id);
   }
 }
 

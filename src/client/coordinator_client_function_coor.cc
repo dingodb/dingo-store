@@ -277,8 +277,7 @@ void SendRaftTransferLeader() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -320,8 +319,7 @@ void SendRaftSnapshot() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -385,8 +383,7 @@ void SendRaftResetPeer() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -422,8 +419,7 @@ void SendGetNodeInfo() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " cluster_id=" << request.cluster_id()
+    DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
@@ -2070,6 +2066,22 @@ void SendBalanceLeader(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   request.set_store_type(dingodb::pb::common::StoreType(FLAGS_store_type));
 
   auto status = coordinator_interaction->SendRequest("BalanceLeader", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+  }
+}
+
+
+void SendBalanceRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::BalanceRegionRequest request;
+  dingodb::pb::coordinator::BalanceRegionResponse response;
+
+  request.set_dryrun(FLAGS_dryrun);
+  request.set_store_type(dingodb::pb::common::StoreType(FLAGS_store_type));
+
+  auto status = coordinator_interaction->SendRequest("BalanceRegion", request, response);
   if (!status.ok()) {
     DINGO_LOG(INFO) << "SendRequest status=" << status;
   } else {

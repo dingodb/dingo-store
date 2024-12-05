@@ -311,6 +311,8 @@ class CoordinatorControl : public MetaControl {
   // change peer region
   butil::Status ChangePeerRegionWithTaskList(int64_t region_id, std::vector<int64_t> &new_store_ids,
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status ChangePairPeerRegionWithTaskList(int64_t region_id, std::vector<int64_t> &new_store_ids,
+                                                         pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // transfer leader region
   butil::Status TransferLeaderRegionWithTaskList(int64_t region_id, int64_t new_leader_store_id, bool is_force,
@@ -515,6 +517,7 @@ class CoordinatorControl : public MetaControl {
   // get store metrics
   void GetStoreRegionMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
   void GetStoreRegionMetrics(int64_t store_id, int64_t region_id, std::vector<pb::common::StoreMetrics> &store_metrics);
+  void GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
   // delete store metrics
   void DeleteStoreRegionMetrics(int64_t store_id);

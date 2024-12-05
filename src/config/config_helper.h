@@ -45,6 +45,9 @@ class ConfigHelper {
 
   static std::string GetBalanceLeaderInspectionTimePeriod();
 
+  static std::string GetBalanceRegionInspectionTimePeriod();
+  static float GetBalanceRegionCountRatio();
+
   static int32_t GetWorkerThreadNum();
   static double GetWorkerThreadRatio();
   static int32_t GetRaftWorkerThreadNum();
