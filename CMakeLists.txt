@@ -275,7 +275,6 @@ add_custom_target(
   COMMENT "generate message target"
   VERBATIM)
 
-
 # include PROTO_HEADER
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/serial/src/)
@@ -519,6 +518,7 @@ file(GLOB MERGE_SRCS ${PROJECT_SOURCE_DIR}/src/merge/*.cc)
 if(WITH_DISKANN)
   file(GLOB DISKANN_SRCS ${PROJECT_SOURCE_DIR}/src/diskann/*.cc)
 endif()
+file(GLOB BR_SRCS ${PROJECT_SOURCE_DIR}/src/br/*.cc)
 
 if(NOT ENABLE_XDPROCKS)
   list(REMOVE_ITEM ENGINE_SRCS "${PROJECT_SOURCE_DIR}/src/engine/xdprocks_raw_engine.cc")
@@ -608,6 +608,11 @@ add_library(
   ${LIBEXPR_SRCS}
   ${DISKANN_SRCS}
   ${MERGE_SRCS})
+
+set(BR_TEST_SRCS ${BR_SRCS})
+list(REMOVE_ITEM BR_TEST_SRCS "${PROJECT_SOURCE_DIR}/src/br/main.cc")
+
+add_library(BR_TEST_OBJS OBJECT ${BR_TEST_SRCS})
 
 if(NOT WITH_DISKANN)
   list(REMOVE_ITEM DINGODB_OBJS ${DISKANN_SRCS})
@@ -703,11 +708,27 @@ add_executable(
   ${SERIAL_SRCS}
   ${VERSION_SRCS}
   $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(
+  dingodb_br
+  ${BR_SRCS}
+  src/coordinator/coordinator_interaction.cc
+  src/common/role.cc
+  src/common/helper.cc
+  src/common/serial_helper.cc
+  src/common/service_access.cc
+  src/coprocessor/utils.cc
+  src/mvcc/codec.cc
+  src/vector/codec.cc
+  src/document/codec.cc
+  ${SERIAL_SRCS}
+  ${VERSION_SRCS}
+  $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
 add_dependencies(dingodb_server ${DEPEND_LIBS})
 add_dependencies(dingodb_client ${DEPEND_LIBS})
 add_dependencies(dingodb_cli ${DEPEND_LIBS})
+add_dependencies(dingodb_br ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
   message(STATUS "Build DingoDB with static libraries linking")
@@ -732,6 +753,8 @@ target_link_libraries(dingodb_server ${DYNAMIC_LIB} ${VECTOR_LIB} "-Xlinker \"-(
 target_link_libraries(dingodb_client ${DYNAMIC_LIB})
 
 target_link_libraries(dingodb_cli ${DYNAMIC_LIB} CLI11::CLI11)
+
+target_link_libraries(dingodb_br ${DYNAMIC_LIB})
 
 if(BUILD_UNIT_TESTS)
   message(STATUS "Build unit test")
