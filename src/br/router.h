@@ -21,7 +21,7 @@
 #include <string>
 #include <vector>
 
-#include "bthread/mutex.h"
+#include "common/synchronization.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
@@ -89,7 +89,7 @@ class RegionRouter {
   // key: the start_key of region range
   // value: RegionEntry
   std::map<std::string, RegionEntryPtr> route_map_;
-  bthread_mutex_t mutex_;
+  dingodb::RWLock rw_lock_;
 };
 
 }  // namespace br

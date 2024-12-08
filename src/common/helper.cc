@@ -14,6 +14,8 @@
 
 #include "common/helper.h"
 
+#include <openssl/evp.h>
+#include <openssl/ossl_typ.h>
 #include <sys/resource.h>
 #include <sys/statvfs.h>
 #include <sys/sysinfo.h>
@@ -57,6 +59,7 @@
 #include "fmt/core.h"
 #include "glog/logging.h"
 #include "google/protobuf/util/json_util.h"
+#include "openssl/sha.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
@@ -2231,6 +2234,166 @@ bool Helper::IsSupportSplitAndMerge(const pb::common::RegionDefinition& definiti
   return index_parameter.index_type() != pb::common::IndexType::INDEX_TYPE_VECTOR ||
          index_parameter.vector_index_parameter().vector_index_type() !=
              pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN;
+}
+
+void Helper::CalSha1CodeWithString(const std::string& source, std::string& hash_code) {
+  unsigned char hash[SHA_DIGEST_LENGTH];
+  SHA1(reinterpret_cast<const unsigned char*>(source.c_str()), source.size(), hash);
+
+  hash_code.clear();
+  for (unsigned char& i : hash) {
+    hash_code += fmt::format("{:02x}", i);
+  }
+}
+
+butil::Status Helper::CalSha1CodeWithFile(const std::string& path, std::string& hash_code) {
+  std::filesystem::path file_path_check(path);
+  if (std::filesystem::exists(path)) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) {
+      std::string s = fmt::format("file_path : {} is not regular file : {} {}", path, ec.value(), ec.message());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EFILE_NOT_REGULAR, s);
+    }
+  } else {  // data_path not exist
+    std::string s = fmt::format("file_path : {} not exist", path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EFILE_NOT_EXIST, s);
+  }
+
+  SHA_CTX s;
+  unsigned char hash[SHA_DIGEST_LENGTH];
+
+  SHA1_Init(&s);
+
+  try {
+    std::ifstream reader(path.c_str(), std::ios::binary);
+    std::vector<int8_t> buffer;
+    int64_t remain = 0;
+    size_t buffer_size = 1024 * 1024;
+    buffer.resize(buffer_size);
+    uint32_t real_count = 0;
+
+    while (true) {
+      reader.read(reinterpret_cast<char*>(buffer.data()), buffer_size);
+      int64_t num = reader.gcount();
+      if (0 == num) {
+        break;
+      }
+      SHA1_Update(&s, reinterpret_cast<char*>(buffer.data()), num);
+    }
+  } catch (const std::exception& e) {
+    std::string s = fmt::format("read error : {} {}", path, e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EFILE_READ, s);
+  }
+
+  SHA1_Final(hash, &s);
+
+  hash_code.clear();
+  for (unsigned char& i : hash) {
+    hash_code += fmt::format("{:02x}", i);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Helper::CalSha1CodeWithFileEx(const std::string& path, std::string& hash_code) {
+  std::filesystem::path file_path_check(path);
+  if (std::filesystem::exists(path)) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(path, ec)) {
+      std::string s = fmt::format("file_path : {} is not regular file : {} {}", path, ec.value(), ec.message());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EFILE_NOT_REGULAR, s);
+    }
+  } else {  // data_path not exist
+    std::string s = fmt::format("file_path : {} not exist", path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EFILE_NOT_EXIST, s);
+  }
+
+  EVP_MD_CTX* ctx = nullptr;
+  unsigned char hash[SHA_DIGEST_LENGTH];
+
+  ctx = EVP_MD_CTX_new();
+  EVP_DigestInit_ex(ctx, EVP_sha1(), nullptr);
+
+  try {
+    std::ifstream reader(path.c_str(), std::ios::binary);
+    std::vector<int8_t> buffer;
+    int64_t remain = 0;
+    size_t buffer_size = 1024 * 1024;
+    buffer.resize(buffer_size);
+    uint32_t real_count = 0;
+
+    while (true) {
+      reader.read(reinterpret_cast<char*>(buffer.data()), buffer_size);
+      int64_t num = reader.gcount();
+      if (0 == num) {
+        break;
+      }
+
+      EVP_DigestUpdate(ctx, reinterpret_cast<char*>(buffer.data()), num);
+    }
+  } catch (const std::exception& e) {
+    EVP_DigestFinal_ex(ctx, hash, nullptr);
+    EVP_MD_CTX_free(ctx);
+    std::string s = fmt::format("read error : {} {}", path, e.what());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EFILE_READ, s);
+  }
+
+  EVP_DigestFinal_ex(ctx, hash, nullptr);
+  EVP_MD_CTX_free(ctx);
+
+  hash_code.clear();
+  for (unsigned char& i : hash) {
+    hash_code += fmt::format("{:02x}", i);
+  }
+
+  return butil::Status::OK();
+}
+
+bool Helper::StringConvertTrue(const std::string& str) {
+  return std::string("true") == str || std::string("TRUE") == str || std::string("True") == str ||
+         std::string("1") == str;
+}
+
+bool Helper::StringConvertFalse(const std::string& str) {
+  return std::string("false") == str || std::string("FALSE") == str || std::string("False") == str ||
+         std::string("0") == str;
+}
+
+void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                             pb::common::ControlConfigVariable& config, bool& gflags_var) {
+  bool is_true = Helper::StringConvertTrue(variable.value());
+  bool is_false = Helper::StringConvertFalse(variable.value());
+
+  if (!is_true && !is_false) {
+    config.set_is_already_set(false);
+    config.set_is_error_occurred(true);
+    DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
+                     << " is not bool type, skip.";
+    return;
+  }
+
+  if (is_true) {
+    if (gflags_var) {
+      config.set_is_already_set(true);
+    } else {
+      config.set_is_already_set(false);
+      gflags_var = true;
+    }
+  } else if (is_false) {
+    if (gflags_var) {
+      config.set_is_already_set(false);
+      gflags_var = false;
+    } else {
+      config.set_is_already_set(true);
+    }
+  }
+  config.set_is_error_occurred(false);
 }
 
 }  // namespace dingodb

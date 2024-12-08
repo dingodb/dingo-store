@@ -415,6 +415,15 @@ class Helper {
   static pb::common::Schema::Type TransformSchemaType(const std::string& name);
 
   static bool IsSupportSplitAndMerge(const pb::common::RegionDefinition& definition);
+
+  static void CalSha1CodeWithString(const std::string& source, std::string& hash_code);
+  static butil::Status CalSha1CodeWithFile(const std::string& path, std::string& hash_code);
+  static butil::Status CalSha1CodeWithFileEx(const std::string& path, std::string& hash_code);
+
+  static bool StringConvertTrue(const std::string& str);
+  static bool StringConvertFalse(const std::string& str);
+  static void HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
+                                              pb::common::ControlConfigVariable& config, bool& gflags_var);
 };
 
 }  // namespace dingodb

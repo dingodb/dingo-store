@@ -162,6 +162,9 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void CreateAutoIncrement(google::protobuf::RpcController* controller,
                            const pb::meta::CreateAutoIncrementRequest* request,
                            pb::meta::CreateAutoIncrementResponse* response, google::protobuf::Closure* done) override;
+  void CreateAutoIncrements(google::protobuf::RpcController* controller,
+                            const pb::meta::CreateAutoIncrementsRequest* request,
+                            pb::meta::CreateAutoIncrementsResponse* response, google::protobuf::Closure* done) override;
   void UpdateAutoIncrement(google::protobuf::RpcController* controller,
                            const ::dingodb::pb::meta::UpdateAutoIncrementRequest* request,
                            pb::meta::UpdateAutoIncrementResponse* response, google::protobuf::Closure* done) override;
@@ -213,6 +216,12 @@ class MetaServiceImpl : public pb::meta::MetaService {
 
   void ListWatch(google::protobuf::RpcController* controller, const pb::meta::ListWatchRequest* request,
                  pb::meta::ListWatchResponse* response, google::protobuf::Closure* done) override;
+
+  void ExportMeta(google::protobuf::RpcController* controller, const pb::meta::ExportMetaRequest* request,
+                  pb::meta::ExportMetaResponse* response, google::protobuf::Closure* done) override;
+
+  void SaveIdEpochType(google::protobuf::RpcController* controller, const pb::meta::SaveIdEpochTypeRequest* request,
+                       pb::meta::SaveIdEpochTypeResponse* response, google::protobuf::Closure* done) override;
 
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 

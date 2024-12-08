@@ -118,6 +118,13 @@ class IndexServiceImpl : public pb::index::IndexService {
   void TxnDeleteRange(google::protobuf::RpcController* controller, const pb::store::TxnDeleteRangeRequest* request,
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
+  // backup & restore
+  void BackupData(google::protobuf::RpcController* controller, const dingodb::pb::store::BackupDataRequest* request,
+                  dingodb::pb::store::BackupDataResponse* response, google::protobuf::Closure* done) override;
+
+  void ControlConfig(google::protobuf::RpcController* controller, const pb::store::ControlConfigRequest* request,
+                     pb::store::ControlConfigResponse* response, google::protobuf::Closure* done) override;
+
   void SetStorage(StoragePtr storage) { storage_ = storage; }
   void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
   void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }

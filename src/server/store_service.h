@@ -131,6 +131,16 @@ class StoreServiceImpl : public pb::store::StoreService {
   void TxnDeleteRange(google::protobuf::RpcController* controller, const pb::store::TxnDeleteRangeRequest* request,
                       pb::store::TxnDeleteRangeResponse* response, google::protobuf::Closure* done) override;
 
+  // backup & restore
+  void BackupData(google::protobuf::RpcController* controller, const dingodb::pb::store::BackupDataRequest* request,
+                  dingodb::pb::store::BackupDataResponse* response, google::protobuf::Closure* done) override;
+
+  void BackupMeta(google::protobuf::RpcController* controller, const dingodb::pb::store::BackupMetaRequest* request,
+                  dingodb::pb::store::BackupMetaResponse* response, google::protobuf::Closure* done) override;
+
+  void ControlConfig(google::protobuf::RpcController* controller, const pb::store::ControlConfigRequest* request,
+                     pb::store::ControlConfigResponse* response, google::protobuf::Closure* done) override;
+
   void SetStorage(StoragePtr storage) { storage_ = storage; }
 
   void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }

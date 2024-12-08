@@ -19,6 +19,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -34,6 +35,7 @@
 #include "config/config_helper.h"
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
+#include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "metrics/coordinator_bvar_metrics.h"
 #include "proto/common.pb.h"
@@ -982,7 +984,7 @@ void CoordinatorControl::GetRegionMap(pb::common::RegionMap& region_map, int64_t
     region_map_.GetRawMapCopy(region_internal_map_copy);
 
     for (auto& element : region_internal_map_copy) {
-      if (tenant_id == element.second.definition().tenant_id()) {
+      if (tenant_id == element.second.definition().tenant_id() || tenant_id == -1) {
         auto* tmp_region = region_map.add_regions();
         GenRegionSlim(element.second, *tmp_region);
       }
@@ -5979,14 +5981,16 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
-                                                    pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
-                                                    int64_t& new_safe_point, bool& gc_stop,
-                                                    std::map<int64_t, int64_t>& tenant_safe_points,
-                                                    pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::UpdateGCSafePoint(
+    int64_t safe_point, pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag, int64_t& new_safe_point,
+    bool& gc_stop, std::map<int64_t, int64_t>& tenant_safe_points, int64_t resolve_lock_safe_point,
+    std::map<int64_t, int64_t>& tenant_resolve_lock_safe_points, int64_t& new_resolve_lock_safe_point,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "UpdateGCSafePoint safe_point=" << safe_point
                   << ", gc_flag=" << pb::coordinator::UpdateGCSafePointRequest::GcFlagType_Name(gc_flag)
-                  << ", tenant_safe_points.count: " << tenant_safe_points.size();
+                  << ", tenant_safe_points.count: " << tenant_safe_points.size()
+                  << ", resolve_lock_safe_point=" << resolve_lock_safe_point
+                  << ", tenant_resolve_lock_safe_points.count: " << tenant_resolve_lock_safe_points.size();
 
   // update gc_stop
   pb::coordinator_internal::CommonInternal gc_stop_element;
@@ -6041,8 +6045,22 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
     UpdatePresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT, new_safe_point, meta_increment);
   }
 
+  // update resolve_lock_safe_point
+  int64_t now_resolve_lock_safe_point = GetPresentId(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT);
+
+  if (now_resolve_lock_safe_point >= resolve_lock_safe_point) {
+    DINGO_LOG(WARNING) << "UpdateGCSafePoint now_resolve_lock_safe_point=" << now_resolve_lock_safe_point
+                       << " >= resolve_lock_safe_point=" << resolve_lock_safe_point << ", skip update default";
+    new_resolve_lock_safe_point = now_resolve_lock_safe_point;
+  } else {
+    new_resolve_lock_safe_point = resolve_lock_safe_point;
+    UpdatePresentId(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT, new_resolve_lock_safe_point,
+                    meta_increment);
+  }
+
   // check and update tenant safe_points
   std::map<int64_t, int64_t> new_tenant_safe_points;
+  std::map<int64_t, int64_t> new_tenant_resolve_lock_safe_points;
 
   for (const auto [tenant_id, safe_point_in_map] : tenant_safe_points) {
     if (tenant_id == 0) {
@@ -6068,13 +6086,53 @@ butil::Status CoordinatorControl::UpdateGCSafePoint(int64_t safe_point,
     }
   }
 
+  for (const auto [tenant_id, resolve_lock_safe_point_in_map] : tenant_resolve_lock_safe_points) {
+    if (tenant_id == 0) {
+      continue;
+    }
+
+    pb::coordinator_internal::TenantInternal tenant;
+    auto ret = tenant_map_.Get(tenant_id, tenant);
+    if (ret < 0) {
+      std::string s = "tenant_map_.Get failed, tenant_id=" + std::to_string(tenant_id);
+      return butil::Status(pb::error::EINTERNAL, s);
+    }
+
+    if (tenant.resolve_lock_safe_point() < resolve_lock_safe_point_in_map) {
+      new_tenant_resolve_lock_safe_points[tenant_id] = tenant.resolve_lock_safe_point();
+      auto lambda_find_tenant_function =
+          [temp_tenant_id = tenant_id](pb::coordinator_internal::MetaIncrementTenant& meta_increment_tenant) {
+            return meta_increment_tenant.id() == temp_tenant_id;
+          };
+      auto iter = std::find_if(meta_increment.mutable_tenants()->begin(), meta_increment.mutable_tenants()->end(),
+                               lambda_find_tenant_function);
+
+      if (iter != meta_increment.tenants().end()) {
+        iter->mutable_tenant()->set_update_timestamp(butil::gettimeofday_ms());
+        iter->mutable_tenant()->set_resolve_lock_safe_point(resolve_lock_safe_point_in_map);
+      } else {
+        auto* tenant_increment = meta_increment.add_tenants();
+        tenant_increment->set_id(tenant_id);
+        tenant_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+        auto* increment_tenant = tenant_increment->mutable_tenant();
+        *increment_tenant = tenant;
+        increment_tenant->set_update_timestamp(butil::gettimeofday_ms());
+        increment_tenant->set_resolve_lock_safe_point(resolve_lock_safe_point_in_map);
+      }
+    }
+  }
+
   return butil::Status::OK();
 }
 
 butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_stop,
                                                  const std::vector<int64_t>& tenant_ids, bool get_all_tenant,
-                                                 std::map<int64_t, int64_t>& tenant_safe_points) {
+                                                 std::map<int64_t, int64_t>& tenant_safe_points,
+                                                 int64_t& resolve_lock_safe_point,
+                                                 const std::vector<int64_t>& tenant_resolve_lock_ids,
+                                                 std::map<int64_t, int64_t>& resolve_lock_tenant_safe_points) {
   safe_point = GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT);
+  resolve_lock_safe_point = GetPresentId(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT);
   pb::coordinator_internal::CommonInternal common;
   common_disk_meta_->Get(Constant::kGcStopKey, common);
   gc_stop = (common.value() == Constant::kGcStopValueTrue);
@@ -6091,6 +6149,7 @@ butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_s
     for (const auto& tenant : tenants) {
       if (tenant.id() != 0) {
         tenant_safe_points[tenant.id()] = tenant.safe_point_ts();
+        resolve_lock_tenant_safe_points[tenant.id()] = tenant.resolve_lock_safe_point_ts();
       }
     }
 
@@ -6111,6 +6170,23 @@ butil::Status CoordinatorControl::GetGCSafePoint(int64_t& safe_point, bool& gc_s
       }
 
       tenant_safe_points[tenant_id] = tenant.safe_point_ts();
+    }
+
+    // get resolve_lock_safe_points for tenant_resolve_lock_ids
+    for (const auto tenant_id : tenant_resolve_lock_ids) {
+      if (tenant_id == 0) {
+        resolve_lock_tenant_safe_points[tenant_id] = resolve_lock_safe_point;
+        continue;
+      }
+
+      pb::coordinator_internal::TenantInternal tenant;
+      auto ret = tenant_map_.Get(tenant_id, tenant);
+      if (ret < 0) {
+        std::string s = "tenant_map_.Get failed, tenant_id=" + std::to_string(tenant_id);
+        return butil::Status(pb::error::EINTERNAL, s);
+      }
+
+      resolve_lock_tenant_safe_points[tenant_id] = tenant.resolve_lock_safe_point();
     }
   }
 
@@ -6885,6 +6961,82 @@ butil::Status CoordinatorControl::CreateIds(pb::coordinator::IdEpochType id_epoc
                   << ", from: " << ids.front() << " to: " << ids.back();
 
   return butil::Status::OK();
+}
+
+// backup & restore
+
+BrWatchDogManager::BrWatchDogManager() { bthread_mutex_init(&mutex_, nullptr); }
+BrWatchDogManager::~BrWatchDogManager() { bthread_mutex_destroy(&mutex_); }
+
+BrWatchDogManager* BrWatchDogManager::Instance() {
+  static BrWatchDogManager instance;
+  return &instance;
+}
+
+butil::Status BrWatchDogManager::RegisterBackup(const std::string& backup_name, const std::string& backup_path,
+                                                int64_t backup_start_timestamp, int64_t backup_current_timestamp,
+                                                int64_t backup_timeout_s) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  // check exist
+  if (!br_backup_watch_dog_info_) {
+    br_backup_watch_dog_info_ = std::make_shared<BrBackupWatchDogInfo>(backup_name, backup_path, backup_start_timestamp,
+                                                                       backup_current_timestamp, backup_timeout_s);
+  } else {
+    // get current timestamp
+    int64_t current_timestamp = Helper::Timestamp();
+    // update
+    if (br_backup_watch_dog_info_->backup_name == backup_name) {
+      br_backup_watch_dog_info_->backup_current_timestamp = backup_current_timestamp;
+    } else {  // backup name not match
+      if (current_timestamp >
+          (br_backup_watch_dog_info_->backup_current_timestamp + br_backup_watch_dog_info_->backup_timeout_s)) {
+        // timeout, reset
+        br_backup_watch_dog_info_ = std::make_shared<BrBackupWatchDogInfo>(
+            backup_name, backup_path, backup_start_timestamp, backup_current_timestamp, backup_timeout_s);
+      } else {
+        // not timeout, update backup_current_timestamp
+        std::string s = fmt::format(
+            "register backup  failed, backup exist. backup name not match, input backup_name={} not match current "
+            "already exist backup_name={}",
+            backup_name, br_backup_watch_dog_info_->backup_name);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EBACKUP_TASK_EXIST, s);
+      }
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status BrWatchDogManager::UnRegisterBackup(const std::string& backup_name) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  // check exist
+  if (!br_backup_watch_dog_info_) {
+    return butil::Status::OK();
+  } else {
+    // backup name equal
+    if (br_backup_watch_dog_info_->backup_name == backup_name) {
+      br_backup_watch_dog_info_.reset();
+    } else {  // backup name not match
+      std::string s = fmt::format(
+          "unregister backup failed. backup name not match, input backup_name={} not match current already exist "
+          "backup_name={}",
+          backup_name, br_backup_watch_dog_info_->backup_name);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::EBACKUP_TASK_NAME_NOT_MATCH, s);
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::RegisterBackup(const std::string& backup_name, const std::string& backup_path,
+                                                 int64_t backup_start_timestamp, int64_t backup_current_timestamp,
+                                                 int64_t backup_timeout_s) {
+  return BrWatchDogManager::Instance()->RegisterBackup(backup_name, backup_path, backup_start_timestamp,
+                                                       backup_current_timestamp, backup_timeout_s);
+}
+
+butil::Status CoordinatorControl::UnRegisterBackup(const std::string& backup_name) {
+  return BrWatchDogManager::Instance()->UnRegisterBackup(backup_name);
 }
 
 }  // namespace dingodb

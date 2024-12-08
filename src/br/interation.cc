@@ -19,6 +19,7 @@
 
 #include "br/helper.h"
 #include "bthread/bthread.h"
+#include "butil/strings/string_split.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
@@ -48,6 +49,8 @@ bool ServerInteraction::Init(std::vector<std::string> addrs) {
     channels_.push_back(std::move(channel));
   }
 
+  addrs_ = addrs;
+
   return true;
 }
 
@@ -62,6 +65,7 @@ bool ServerInteraction::AddAddr(const std::string& addr) {
 
   channels_.push_back(std::move(channel));
   endpoints_.push_back(endpoint);
+  addrs_.push_back(addr);
 
   return true;
 }
@@ -96,6 +100,36 @@ void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location
   if (AddAddr(fmt::format("{}:{}", location.host(), location.port()))) {
     leader_index_.store(endpoints_.size() - 1);
   }
+}
+
+std::vector<std::string> ServerInteraction::GetAddrs() { return addrs_; }
+
+std::string ServerInteraction::GetAddrsAsString() {
+  std::string internal_addrs;
+  for (size_t i = 0; i < addrs_.size(); i++) {
+    if (0 != i) {
+      internal_addrs += ",";
+    }
+    internal_addrs += addrs_[i];
+  }
+  return internal_addrs;
+}
+
+butil::Status ServerInteraction::CreateInteraction(const std::vector<std::string>& addrs,
+                                                   ServerInteractionPtr& interaction) {
+  butil::Status status;
+  interaction = std::make_shared<br::ServerInteraction>();
+  if (!interaction->Init(addrs)) {
+    std::string s = fmt::format("Fail to init interaction, addrs");
+    for (const auto& addr : addrs) {
+      s += fmt::format(" {}", addr);
+    }
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(dingodb::pb::error::EINTERNAL, s);
+    return status;
+  }
+
+  return butil::Status::OK();
 }
 
 }  // namespace br

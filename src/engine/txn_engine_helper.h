@@ -331,6 +331,100 @@ class TxnEngineHelper {
                                   int64_t start_ts, int64_t mutation_size,
                                   std::vector<pb::common::KeyValue> &kv_puts_data,
                                   std::vector<pb::common::KeyValue> &kv_puts_lock);
+
+  // backup & restore
+  static butil::Status BackupData(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
+                                  const pb::common::RegionType &region_type, std::string backup_ts, int64_t backup_tso,
+                                  const std::string &storage_path, const pb::common::StorageBackend &storage_backend,
+                                  const pb::common::CompressionType &compression_type, int32_t compression_level,
+                                  dingodb::pb::store::BackupDataResponse *response);
+
+  static butil::Status DoBackupDataCoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                           store::RegionPtr region, const pb::common::RegionType &region_type,
+                                           int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                           std::map<std::string, std::string> &kv_write);
+
+  static butil::Status DoBackupDataCoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                              store::RegionPtr region, const pb::common::RegionType &region_type,
+                                              int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+                                              std::map<std::string, std::string> &kv_scalar,
+                                              std::map<std::string, std::string> &kv_table,
+                                              std::map<std::string, std::string> &kv_scalar_speedup);
+
+  static butil::Status DoBackupDataForStoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                               store::RegionPtr region, const pb::common::RegionType &region_type,
+                                               int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                               std::map<std::string, std::string> &kv_write);
+
+  static butil::Status DoBackupDataForStoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                  store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                  int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+                                                  std::map<std::string, std::string> &kv_scalar,
+                                                  std::map<std::string, std::string> &kv_table,
+                                                  std::map<std::string, std::string> &kv_scalar_speedup);
+
+  static butil::Status DoBackupDataForIndexTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                               store::RegionPtr region, const pb::common::RegionType &region_type,
+                                               int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                               std::map<std::string, std::string> &kv_write);
+
+  static butil::Status DoBackupDataForIndexNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                  store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                  int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+                                                  std::map<std::string, std::string> &kv_scalar,
+                                                  std::map<std::string, std::string> &kv_table,
+                                                  std::map<std::string, std::string> &kv_scalar_speedup);
+
+  static butil::Status DoBackupDataForDocumentTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                  store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                  int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                                  std::map<std::string, std::string> &kv_write);
+
+  static butil::Status DoBackupDataForDocumentNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                     store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                     int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+                                                     std::map<std::string, std::string> &kv_scalar,
+                                                     std::map<std::string, std::string> &kv_table,
+                                                     std::map<std::string, std::string> &kv_scalar_speedup);
+
+  static butil::Status DoWriteDataAndCheckForTxn(RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot,
+                                                 int64_t region_id, const pb::common::RegionType &region_type,
+                                                 const pb::store::WriteInfo &write_info,
+                                                 std::string_view write_iter_key, std::string_view write_iter_value,
+                                                 const std::string &write_key, int64_t start_ts, int64_t write_ts,
+                                                 std::map<std::string, std::string> &kv_data,
+                                                 std::map<std::string, std::string> &kv_write);
+
+  static butil::Status WriteSstFileForTxn(store::RegionPtr region, int64_t instance_id,
+                                          const pb::common::RegionType &region_type,
+                                          const pb::common::StorageBackend &storage_backend,
+                                          const std::string &backup_file_prefix, const std::string &region_type_name,
+                                          const std::map<std::string, std::string> &kv_data,
+                                          const std::map<std::string, std::string> &kv_write,
+                                          pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group);
+
+  static butil::Status WriteSstFileForNonTxn(store::RegionPtr region, int64_t instance_id,
+                                             const pb::common::RegionType &region_type,
+                                             const pb::common::StorageBackend &storage_backend,
+                                             const std::string &backup_file_prefix, const std::string &region_type_name,
+                                             const std::map<std::string, std::string> &kv_default,
+                                             const std::map<std::string, std::string> &kv_scalar,
+                                             const std::map<std::string, std::string> &kv_table,
+                                             const std::map<std::string, std::string> &kv_scalar_speedup,
+                                             pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group);
+
+  static butil::Status DoWriteSstFile(store::RegionPtr region, int64_t instance_id,
+                                      const pb::common::RegionType &region_type,
+                                      const pb::common::StorageBackend &storage_backend,
+                                      const std::string &backup_file_prefix, const std::string &region_type_name,
+                                      const std::string &cf, const std::map<std::string, std::string> &kvs,
+                                      pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group);
+
+  static butil::Status BackupMeta(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
+                                  const pb::common::RegionType &region_type, std::string backup_ts, int64_t backup_tso,
+                                  const std::string &storage_path, const pb::common::StorageBackend &storage_backend,
+                                  const pb::common::CompressionType &compression_type, int32_t compression_level,
+                                  dingodb::pb::store::BackupMetaResponse *response);
 };
 
 }  // namespace dingodb

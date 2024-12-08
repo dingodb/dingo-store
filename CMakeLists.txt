@@ -719,6 +719,9 @@ add_executable(
   src/mvcc/codec.cc
   src/vector/codec.cc
   src/document/codec.cc
+  src/common/synchronization.cc
+  src/common/uuid.cc
+  src/common/version.cc
   ${SERIAL_SRCS}
   ${VERSION_SRCS}
   $<TARGET_OBJECTS:PROTO_OBJS>)
