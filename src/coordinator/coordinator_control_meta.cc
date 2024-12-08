@@ -3461,6 +3461,8 @@ void CoordinatorControl::GetDefaultTenant(pb::coordinator_internal::TenantIntern
   tenant_internal.set_update_timestamp(kBaseTimestampMs);
 
   tenant_internal.set_safe_point_ts(GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT));
+  tenant_internal.set_resolve_lock_safe_point(
+      GetPresentId(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT));
 }
 
 butil::Status CoordinatorControl::CreateTenant(pb::meta::Tenant& tenant,
@@ -3576,6 +3578,7 @@ butil::Status CoordinatorControl::UpdateTenant(pb::meta::Tenant& tenant,
 }
 
 butil::Status CoordinatorControl::UpdateTenantSafepoint(int64_t tenant_id, int64_t safe_point_ts,
+                                                        int64_t resolve_lock_safe_point_ts,
                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
   pb::coordinator_internal::TenantInternal tenant_internal;
 
@@ -3599,6 +3602,7 @@ butil::Status CoordinatorControl::UpdateTenantSafepoint(int64_t tenant_id, int64
     *increment_tenant = tenant_internal;
     increment_tenant->set_update_timestamp(butil::gettimeofday_ms());
     increment_tenant->set_safe_point_ts(safe_point_ts);
+    increment_tenant->set_resolve_lock_safe_point(resolve_lock_safe_point_ts);
   } else {
     GetDefaultTenant(tenant_internal);
   }
@@ -3661,6 +3665,7 @@ butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& t
   tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
   tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
   tenant.set_revision(tenant_internal.revision());
+  tenant.set_resolve_lock_safe_point_ts(tenant_internal.resolve_lock_safe_point());
 
   tenants.push_back(std::move(tenant));
 
@@ -3674,6 +3679,7 @@ butil::Status CoordinatorControl::GetAllTenants(std::vector<pb::meta::Tenant>& t
     tenant.set_delete_timestamp(tenant_internal.delete_timestamp());
     tenant.set_safe_point_ts(tenant_internal.safe_point_ts());
     tenant.set_revision(tenant_internal.revision());
+    tenant.set_resolve_lock_safe_point_ts(tenant_internal.resolve_lock_safe_point());
 
     tenants.push_back(std::move(tenant));
   }

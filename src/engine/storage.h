@@ -232,6 +232,22 @@ class Storage {
                             const pb::common::RegionDefinition& region_definition, int64_t prepare_merge_log_id,
                             const std::vector<pb::raft::LogEntry>& entries);
 
+  butil::Status BackupData(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                           const pb::common::RegionType& region_type, std::string backup_ts, int64_t backup_tso,
+                           const std::string& storage_path, const pb::common::StorageBackend& storage_backend,
+                           const pb::common::CompressionType& compression_type, int32_t compression_level,
+                           dingodb::pb::store::BackupDataResponse* response);
+
+  butil::Status BackupMeta(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                           const pb::common::RegionType& region_type, std::string backup_ts, int64_t backup_tso,
+                           const std::string& storage_path, const pb::common::StorageBackend& storage_backend,
+                           const pb::common::CompressionType& compression_type, int32_t compression_level,
+                           dingodb::pb::store::BackupMetaResponse* response);
+
+  static butil::Status ControlConfig(std::shared_ptr<Context> ctx,
+                              const std::vector<pb::common::ControlConfigVariable>& variables,
+                              dingodb::pb::store::ControlConfigResponse* response);
+
  private:
   std::shared_ptr<Engine> raft_engine_;
   std::shared_ptr<Engine> mono_engine_;

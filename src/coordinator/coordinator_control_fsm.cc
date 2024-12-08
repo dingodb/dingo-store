@@ -1037,8 +1037,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   if (index <= applied_index && term <= applied_term) {
     DINGO_LOG(WARNING)
         << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
-        << "][applied_index=" << applied_index << "]"
-        << "[term=" << term << "][applied_term=" << applied_term << "]";
+        << "][applied_index=" << applied_index << "]" << "[term=" << term << "][applied_term=" << applied_term << "]";
     return;
   } else if (meta_increment.ByteSizeLong() > 0) {
     DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
@@ -1270,10 +1269,30 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
             DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but safe_point_ts <= old, [id="
                             << tenant_increment->id() << "], old_safe_point_ts=" << tenant_internal.safe_point_ts()
                             << ", new_safe_point_ts=" << tenant_increment->tenant().safe_point_ts();
-            continue;
+            goto RESOLVE_LOCK_;
           }
 
           tenant_internal.set_safe_point_ts(tenant_increment->tenant().safe_point_ts());
+          tenant_internal.set_update_timestamp(tenant_increment->tenant().update_timestamp());
+        } else {
+          tenant_internal.set_name(tenant_increment->tenant().name());
+          tenant_internal.set_comment(tenant_increment->tenant().comment());
+          tenant_internal.set_update_timestamp(tenant_increment->tenant().update_timestamp());
+        }
+
+      RESOLVE_LOCK_:
+        // if resolve_lock > 0, update resolve_lock only
+        // else do not update resolve_lock
+        if (tenant_increment->tenant().resolve_lock_safe_point() > 0) {
+          if (tenant_increment->tenant().resolve_lock_safe_point() <= tenant_internal.resolve_lock_safe_point()) {
+            DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but resolve_lock_safe_point <= old, [id="
+                            << tenant_increment->id()
+                            << "], old_resolve_lock_safe_point=" << tenant_internal.resolve_lock_safe_point()
+                            << ", new_resolve_lock_safe_point=" << tenant_increment->tenant().resolve_lock_safe_point();
+            continue;
+          }
+
+          tenant_internal.set_resolve_lock_safe_point(tenant_increment->tenant().resolve_lock_safe_point());
           tenant_internal.set_update_timestamp(tenant_increment->tenant().update_timestamp());
         } else {
           tenant_internal.set_name(tenant_increment->tenant().name());

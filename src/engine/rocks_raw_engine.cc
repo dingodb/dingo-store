@@ -117,6 +117,27 @@ butil::Status Iterator::Status() const {
   return butil::Status(pb::error::EINTERNAL, "Internal iterator error");
 }
 
+butil::Status SstFileWriter::SaveFile(const std::map<std::string, std::string>& kvs, const std::string& filename) {
+  auto status = sst_writer_->Open(filename);
+  if (!status.ok()) {
+    return butil::Status(status.code(), status.ToString());
+  }
+
+  for (const auto& [key, value] : kvs) {
+    status = sst_writer_->Put(key, value);
+    if (!status.ok()) {
+      return butil::Status(status.code(), status.ToString());
+    }
+  }
+
+  status = sst_writer_->Finish();
+  if (!status.ok()) {
+    return butil::Status(status.code(), status.ToString());
+  }
+
+  return butil::Status();
+}
+
 butil::Status SstFileWriter::SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename) {
   auto status = sst_writer_->Open(filename);
   if (!status.ok()) {

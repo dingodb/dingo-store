@@ -2441,6 +2441,107 @@ void DocumentServiceImpl::TxnDeleteRange(google::protobuf::RpcController* contro
                             "WorkerSet queue is full, please wait and retry");
   }
 }
+static butil::Status ValidateBackupDataRangeRequest(const dingodb::pb::store::BackupDataRequest* request,
+                                                    store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::Range req_range;
+  req_range.set_start_key(request->start_key());
+  req_range.set_end_key(request->end_key());
+
+  status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+static void DoBackupData(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const dingodb::pb::store::BackupDataRequest* request,
+                         dingodb::pb::store::BackupDataResponse* response, TrackClosure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+
+  auto status = ValidateBackupDataRangeRequest(request, region);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  // check leader if need
+  if (request->need_leader()) {
+    status = storage->ValidateLeader(region);
+    if (!status.ok()) {
+      ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+      return;
+    }
+  }
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+
+  status = storage->BackupData(ctx, region, request->region_type(), request->backup_ts(), request->backup_tso(),
+                               request->storage_path(), request->storage_backend(), request->compression_type(),
+                               request->compression_level(), response);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (!is_sync) done->Run();
+  }
+}
+
+void DocumentServiceImpl::BackupData(google::protobuf::RpcController* controller,
+                                     const dingodb::pb::store::BackupDataRequest* request,
+                                     dingodb::pb::store::BackupDataResponse* response,
+                                     google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoBackupData(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
 
 static butil::Status ValidateTxnDumpRequest(const pb::store::TxnDumpRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
@@ -2552,7 +2653,8 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::doc
 void DocumentServiceImpl::Hello(google::protobuf::RpcController* controller, const pb::document::HelloRequest* request,
                                 pb::document::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto* svr_done =
+      new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(__func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
 
@@ -2568,7 +2670,7 @@ void DocumentServiceImpl::GetMemoryInfo(google::protobuf::RpcController* control
                                         const pb::document::HelloRequest* request,
                                         pb::document::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+  auto* svr_done = new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(__func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
 

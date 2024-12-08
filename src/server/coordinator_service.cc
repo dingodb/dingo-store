@@ -59,6 +59,9 @@ BRPC_VALIDATE_GFLAG(hello_latency_ms, brpc::NonNegativeInteger);
 
 DECLARE_int32(default_replica_num);
 
+DECLARE_bool(enable_balance_leader);
+DECLARE_bool(enable_balance_region);
+
 void DoCoordinatorHello(google::protobuf::RpcController * /*controller*/, const pb::coordinator::HelloRequest *request,
                         pb::coordinator::HelloResponse *response, TrackClosure *done,
                         std::shared_ptr<CoordinatorControl> coordinator_control,
@@ -2280,8 +2283,16 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
     tenant_safe_points.insert({tenant_id, safe_point});
   }
 
-  auto ret = coordinator_control->UpdateGCSafePoint(request->safe_point(), request->gc_flag(), new_gc_safe_point,
-                                                    gc_stop, tenant_safe_points, meta_increment);
+  std::map<int64_t, int64_t> tenant_resolve_lock_safe_points;
+  for (const auto &[tenant_id, resolve_lock_safe_point] : request->tenant_resolve_lock_safe_points()) {
+    tenant_resolve_lock_safe_points.insert({tenant_id, resolve_lock_safe_point});
+  }
+
+  int64_t new_resolve_lock_safe_point = 0;
+
+  auto ret = coordinator_control->UpdateGCSafePoint(
+      request->safe_point(), request->gc_flag(), new_gc_safe_point, gc_stop, tenant_safe_points,
+      request->resolve_lock_safe_point(), tenant_resolve_lock_safe_points, new_resolve_lock_safe_point, meta_increment);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "UpdateGCSafePoint failed, gc_safe_point:" << request->safe_point()
                      << ", errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
@@ -2292,6 +2303,7 @@ void DoUpdateGCSafePoint(google::protobuf::RpcController * /*controller*/,
 
   response->set_new_safe_point(new_gc_safe_point);
   response->set_gc_stop(gc_stop);
+  response->set_new_safe_point(new_resolve_lock_safe_point);
 
   if (meta_increment.ByteSizeLong() == 0) {
     return;
@@ -2325,6 +2337,7 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
   }
 
   int64_t gc_safe_point = 0;
+  int64_t gc_resolve_lock_safe_point = 0;
   bool gc_stop = false;
 
   std::vector<int64_t> tenant_ids;
@@ -2335,10 +2348,20 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
     }
   }
 
+  std::vector<int64_t> tenant_resolve_lock_ids;
+  if (!request->tenant_resolve_lock_ids().empty()) {
+    tenant_resolve_lock_ids.reserve(request->tenant_resolve_lock_ids().size());
+    for (const auto &tenant_id : request->tenant_resolve_lock_ids()) {
+      tenant_resolve_lock_ids.push_back(tenant_id);
+    }
+  }
+
   std::map<int64_t, int64_t> tenant_safe_points;
+  std::map<int64_t, int64_t> resolve_lock_tenant_safe_points;
 
   auto ret = coordinator_control->GetGCSafePoint(gc_safe_point, gc_stop, tenant_ids, request->get_all_tenant(),
-                                                 tenant_safe_points);
+                                                 tenant_safe_points, gc_resolve_lock_safe_point,
+                                                 tenant_resolve_lock_ids, resolve_lock_tenant_safe_points);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << "GetGCSafePoint failed, errcode:" << ret.error_code() << ", errmsg:" << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -2346,12 +2369,20 @@ void DoGetGCSafePoint(google::protobuf::RpcController * /*controller*/,
   }
 
   response->set_safe_point(gc_safe_point);
+  response->set_resolve_lock_safe_point(gc_resolve_lock_safe_point);
   response->set_gc_stop(gc_stop);
 
   if (!tenant_safe_points.empty()) {
     auto *new_tenant_safe_points = response->mutable_tenant_safe_points();
     for (const auto [tenant_id, safe_point] : tenant_safe_points) {
       new_tenant_safe_points->insert({tenant_id, safe_point});
+    }
+  }
+
+  if (!resolve_lock_tenant_safe_points.empty()) {
+    auto *new_tenant_resolve_lock_safe_points = response->mutable_tenant_resolve_lock_safe_points();
+    for (const auto [tenant_id, resolve_lock_safe_point] : resolve_lock_tenant_safe_points) {
+      new_tenant_resolve_lock_safe_points->insert({tenant_id, resolve_lock_safe_point});
     }
   }
 
@@ -3831,6 +3862,146 @@ void CoordinatorServiceImpl::CreateIds(google::protobuf::RpcController *controll
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoCreateIds(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+// backup & restore
+void DoRegisterBackup(google::protobuf::RpcController * /*controller*/,
+                      const pb::coordinator::RegisterBackupRequest *request,
+                      pb::coordinator::RegisterBackupResponse *response, TrackClosure *done,
+                      std::shared_ptr<CoordinatorControl> coordinator_control,
+                      std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  auto ret = coordinator_control->RegisterBackup(request->backup_name(), request->backup_path(),
+                                                 request->backup_start_timestamp(), request->backup_current_timestamp(),
+                                                 request->backup_timeout_s());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RegisterBackup failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "RegisterBackup Success. backup_name = " << request->backup_name();
+}
+void CoordinatorServiceImpl::RegisterBackup(google::protobuf::RpcController *controller,
+                                            const pb::coordinator::RegisterBackupRequest *request,
+                                            pb::coordinator::RegisterBackupResponse *response,
+                                            google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRegisterBackup(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoUnRegisterBackup(google::protobuf::RpcController * /*controller*/,
+                        const pb::coordinator::UnRegisterBackupRequest *request,
+                        pb::coordinator::UnRegisterBackupResponse *response, TrackClosure *done,
+                        std::shared_ptr<CoordinatorControl> coordinator_control,
+                        std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  auto ret = coordinator_control->UnRegisterBackup(request->backup_name());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UnRegisterBackup failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "UnRegisterBackup Success. backup_name = " << request->backup_name();
+}
+
+void CoordinatorServiceImpl::UnRegisterBackup(google::protobuf::RpcController *controller,
+                                              const pb::coordinator::UnRegisterBackupRequest *request,
+                                              pb::coordinator::UnRegisterBackupResponse *response,
+                                              google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoUnRegisterBackup(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoControlConfig(google::protobuf::RpcController * /*controller*/,
+                     const pb::coordinator::ControlConfigRequest *request,
+                     pb::coordinator::ControlConfigResponse *response, TrackClosure *done,
+                     std::shared_ptr<CoordinatorControl> /*coordinator_control*/,
+                     std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  for (const auto &variable : request->control_config_variable()) {
+    pb::common::ControlConfigVariable config;
+    config.set_name(variable.name());
+    config.set_value(variable.value());
+
+    if ("FLAGS_enable_balance_leader" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_leader);
+    } else if ("FLAGS_enable_balance_region" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_region);
+    } else {
+      config.set_is_already_set(false);
+      config.set_is_error_occurred(true);
+      DINGO_LOG(ERROR) << "ControlConfig not support variable: " << variable.name() << " skip.";
+    }
+
+    response->mutable_control_config_variable()->Add(std::move(config));
+  }
+
+  butil::Status ret;
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "ControlConfig failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "ControlConfig Success.  " << response->DebugString();
+}
+
+void CoordinatorServiceImpl::ControlConfig(google::protobuf::RpcController *controller,
+                                           const pb::coordinator::ControlConfigRequest *request,
+                                           pb::coordinator::ControlConfigResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoControlConfig(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

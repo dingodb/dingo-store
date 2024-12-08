@@ -274,6 +274,50 @@ class Constant {
 
   // tenant
   inline static const int64_t kDefaultTenantId = 0;
+
+  // backup & restore
+  inline static const std::string kStoreRegionName = "store";
+  inline static const std::string kIndexRegionName = "index";
+  inline static const std::string kDocumentRegionName = "document";
+  inline static const std::string kCoordinatorRegionName = "coordinator";
+  inline static const std::string kBackupRegionName = "backup";
+
+  inline static const std::string kSdkData = "sdk";
+  inline static const std::string kSqlData = "sql";
+
+  inline static const std::string kCoordinatorSdkMetaKeyName = "SDK_META";
+  inline static const std::string kCoordinatorSdkMetaSstName = "coordinator_sdk_meta.sst";
+
+  inline static const std::string kStoreRegionSqlMetaSstName = "store_region_sql_meta.sst";
+  inline static const std::string kStoreCfSstMetaSqlMetaSstName = "store_cf_sst_meta_sql_meta.sst";
+
+  // sdk data
+  inline static const std::string kStoreRegionSdkDataSstName = "store_region_sdk_data.sst";
+  inline static const std::string kStoreCfSstMetaSdkDataSstName = "store_cf_sst_meta_sdk_data.sst";
+  inline static const std::string kIndexRegionSdkDataSstName = "index_region_sdk_data.sst";
+  inline static const std::string kIndexCfSstMetaSdkDataSstName = "index_cf_sst_meta_sdk_data.sst";
+  inline static const std::string kDocumentRegionSdkDataSstName = "document_region_sdk_data.sst";
+  inline static const std::string kDocumentCfSstMetaSdkDataSstName = "document_cf_sst_meta_sdk_data.sst";
+
+  // sql data
+  inline static const std::string kStoreRegionSqlDataSstName = "store_region_sql_data.sst";
+  inline static const std::string kStoreCfSstMetaSqlDataSstName = "store_cf_sst_meta_sql_data.sst";
+  inline static const std::string kIndexRegionSqlDataSstName = "index_region_sql_data.sst";
+  inline static const std::string kIndexCfSstMetaSqlDataSstName = "index_cf_sst_meta_sql_data.sst";
+  inline static const std::string kDocumentRegionSqlDataSstName = "document_region_sql_data.sst";
+  inline static const std::string kDocumentCfSstMetaSqlDataSstName = "document_cf_sst_meta_sql_data.sst";
+
+  inline static const std::string kBackupMetaDataFileName = "backupmeta.datafile";
+  inline static const std::string kBackupMetaSchemaName = "backupmeta.schema";
+  inline static const std::string kBackupMetaName = "backupmeta";
+  inline static const std::string kBackupMetaEncryptionName = "backupmeta.encryption";
+  inline static const std::string kBackupMetaDebugName = "backupmeta.debug";
+
+  inline static const std::string kIdEpochTypeAndValueKey = "dingodb::pb::meta::IdEpochTypeAndValue";
+  inline static const std::string kTableIncrementKey = "dingodb::pb::meta::TableIncrementGroup";
+
+  inline static const std::string kBackupVersionKey = "pb::common::VersionInfo";
+  inline static const std::string kBackupBackupParamKey = "pb::common::BackupParam";
 };
 
 }  // namespace dingodb

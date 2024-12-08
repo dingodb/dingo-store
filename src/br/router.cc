@@ -28,7 +28,7 @@ static dingodb::pb::common::Region SendQueryRegion(int64_t region_id) {
 
   request.set_region_id(region_id);
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "QueryRegion", request, response);
+  //InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "QueryRegion", request, response);
 
   return response.region();
 }
@@ -83,8 +83,8 @@ dingodb::pb::store::Context RegionEntry::GenConext() {
   return ctx;
 }
 
-RegionRouter::RegionRouter() { bthread_mutex_init(&mutex_, nullptr); }
-RegionRouter::~RegionRouter() { bthread_mutex_destroy(&mutex_); }
+RegionRouter::RegionRouter() = default;
+RegionRouter::~RegionRouter() = default;
 
 RegionRouter& RegionRouter::GetInstance() {
   static RegionRouter instance;
@@ -92,13 +92,13 @@ RegionRouter& RegionRouter::GetInstance() {
 }
 
 void RegionRouter::AddRegionEntry(const dingodb::pb::common::Region& region) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  dingodb::RWLockWriteGuard guard(&rw_lock_);
 
   route_map_.insert_or_assign(region.definition().range().start_key(), RegionEntry::New(region));
 }
 
 void RegionRouter::AddRegionEntry(RegionEntryPtr region) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  dingodb::RWLockWriteGuard guard(&rw_lock_);
 
   route_map_.insert_or_assign(region->Range().start_key(), region);
 }
@@ -124,7 +124,7 @@ void RegionRouter::UpdateRegionEntry(const dingodb::pb::error::StoreRegionInfo& 
 }
 
 RegionEntryPtr RegionRouter::QueryRegionEntry(const std::string& key) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  dingodb::RWLockReadGuard guard(&rw_lock_);
 
   auto it = route_map_.lower_bound(key);
   if (it == route_map_.end()) {
@@ -146,7 +146,7 @@ RegionEntryPtr RegionRouter::QueryRegionEntry(int64_t region_id) {
   RegionEntryPtr region_entry;
 
   {
-    BAIDU_SCOPED_LOCK(mutex_);
+    dingodb::RWLockReadGuard guard(&rw_lock_);
 
     for (auto& [_, temp_region_entry] : route_map_) {
       if (temp_region_entry->RegionId() == region_id) {
@@ -168,7 +168,7 @@ RegionEntryPtr RegionRouter::QueryRegionEntry(int64_t region_id) {
 }
 
 std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByTable(int64_t table_id) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  dingodb::RWLockReadGuard guard(&rw_lock_);
 
   std::vector<RegionEntryPtr> region_entries;
   for (auto& [_, region_entry] : route_map_) {
@@ -184,7 +184,7 @@ std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByTable(int64_t table_
 }
 
 std::vector<RegionEntryPtr> RegionRouter::QueryRegionEntryByPartition(int64_t partition_id) {
-  BAIDU_SCOPED_LOCK(mutex_);
+  dingodb::RWLockReadGuard guard(&rw_lock_);
 
   std::vector<RegionEntryPtr> region_entries;
   for (auto& [_, region_entry] : route_map_) {

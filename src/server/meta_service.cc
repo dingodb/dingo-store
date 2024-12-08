@@ -27,6 +27,7 @@
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
 #include "coordinator/tso_control.h"
+#include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -801,6 +802,52 @@ void DoCreateAutoIncrement(google::protobuf::RpcController *controller,
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
     DINGO_LOG(ERROR) << "failed, " << table_id << " | " << request->start_id() << " | " << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      auto_increment_control->RedirectResponse(response);
+    }
+    return;
+  }
+}
+
+void DoCreateAutoIncrements(google::protobuf::RpcController *controller,
+                            const pb::meta::CreateAutoIncrementsRequest *request,
+                            pb::meta::CreateAutoIncrementsResponse *response, TrackClosure *done,
+                            std::shared_ptr<AutoIncrementControl> auto_increment_control,
+                            std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (const auto &table_increment : request->table_increment_group().table_increments()) {
+    if (!auto_increment_control->IsLeader()) {
+      return auto_increment_control->RedirectResponse(response);
+    }
+
+    auto table_id = table_increment.table_id();
+    auto start_id = table_increment.start_id();
+
+    auto ret = auto_increment_control->CreateAutoIncrement(table_id, start_id, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "failed, " << table_id << " | " << start_id;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  }
+
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), nullptr, response);
+  ctx->SetRegionId(Constant::kAutoIncrementRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "failed, " << " | " << ret2.error_str();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
 
     if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
@@ -2619,6 +2666,29 @@ void MetaServiceImpl::CreateAutoIncrement(google::protobuf::RpcController *contr
   }
 }
 
+void MetaServiceImpl::CreateAutoIncrements(google::protobuf::RpcController *controller,
+                                           const pb::meta::CreateAutoIncrementsRequest *request,
+                                           pb::meta::CreateAutoIncrementsResponse *response,
+                                           google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!auto_increment_control_->IsLeader()) {
+    return RedirectAutoIncrementResponse(response);
+  }
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateAutoIncrements(controller, request, response, svr_done, auto_increment_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
 void MetaServiceImpl::UpdateAutoIncrement(google::protobuf::RpcController *controller,
                                           const ::dingodb::pb::meta::UpdateAutoIncrementRequest *request,
                                           pb::meta::UpdateAutoIncrementResponse *response,
@@ -3488,6 +3558,177 @@ void MetaServiceImpl::ListWatch(google::protobuf::RpcController *controller, con
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoListWatch(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoExportMeta(google::protobuf::RpcController * /*controller*/, const pb::meta::ExportMetaRequest *request,
+                  pb::meta::ExportMetaResponse *response, TrackClosure *done,
+                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // 1. get all tenants
+  std::vector<pb::meta::Tenant> tenants;
+  auto ret = coordinator_control->GetAllTenants(tenants);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetTenants failed in meta_service, error code=" << ret;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  // 2. get all schema
+  for (auto &tenant : tenants) {
+    std::vector<pb::meta::Schema> schemas;
+    ret = coordinator_control->GetSchemas(tenant.id(), schemas);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "GetSchemas failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+
+    pb::meta::Schemas pb_schemas;
+    for (const auto &schema : schemas) {
+      // Schema DingoCommonId
+      std::string schema_dingo_common_id = fmt::format("{}|{}|{}", static_cast<int32_t>(schema.id().entity_type()),
+                                                       schema.id().parent_entity_id(), schema.id().entity_id());
+      pb::meta::TablesAndIndexes tables_and_indexes;
+
+      // 3.1 get all table
+      std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
+      ret = coordinator_control->GetTables(schema.id().entity_id(), table_definition_with_ids);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "GetTables failed in meta_service, error code=" << ret;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg(ret.error_str());
+        return;
+      }
+
+      for (const auto &table_definition_with_id : table_definition_with_ids) {
+        tables_and_indexes.add_tables()->CopyFrom(table_definition_with_id);
+      }
+
+      table_definition_with_ids.clear();
+
+      // 3.2 get all index
+      auto ret = coordinator_control->GetIndexes(schema.id().entity_id(), table_definition_with_ids);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "GetIndexes failed in meta_service, error code=" << ret;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg(ret.error_str());
+        return;
+      }
+
+      // 3.2.1 add index_definition_with_id
+      std::vector<pb::meta::IndexDefinitionWithId> index_definition_with_ids;
+      for (const auto &table_definition_with_id : table_definition_with_ids) {
+        pb::meta::IndexDefinitionWithId index_definition_with_id;
+        *(index_definition_with_id.mutable_index_id()) = table_definition_with_id.table_id();
+
+        MetaServiceImpl::TableDefinitionToIndexDefinition(table_definition_with_id.table_definition(),
+                                                          *(index_definition_with_id.mutable_index_definition()));
+        index_definition_with_id.set_tenant_id(tenant.id());
+        index_definition_with_ids.emplace_back(index_definition_with_id);
+      }
+
+      for (const auto &index_definition_with_id : index_definition_with_ids) {
+        tables_and_indexes.add_indexes()->CopyFrom(index_definition_with_id);
+      }
+
+      (*response->mutable_meta_all()->mutable_tables_and_indexes())[schema_dingo_common_id] = tables_and_indexes;
+
+      // copy schema
+      pb_schemas.add_schemas()->CopyFrom(schema);
+    }
+
+    (*response->mutable_meta_all()->mutable_schemas())[tenant.id()] = pb_schemas;
+
+    response->mutable_meta_all()->add_tenants()->CopyFrom(tenant);
+  }
+
+  DINGO_LOG(INFO) << "ExportMeta Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::ExportMeta(google::protobuf::RpcController *controller,
+                                 const pb::meta::ExportMetaRequest *request, pb::meta::ExportMetaResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoExportMeta(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoSaveIdEpochType(google::protobuf::RpcController * /*controller*/,
+                       const pb::meta::SaveIdEpochTypeRequest *request, pb::meta::SaveIdEpochTypeResponse *response,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> id_epoch_type_values;
+  butil::Status ret = coordinator_control->GetAllPresentId(id_epoch_type_values);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "GetAllGetPresentId failed.";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  for (const auto &[type, value] : id_epoch_type_values) {
+    pb::meta::IdEpochTypeAndValueItem type_value;
+    type_value.set_type(type);
+    type_value.set_value(value);
+    response->mutable_id_epoch_type_and_value()->mutable_items()->Add()->CopyFrom(type_value);
+  }
+
+  DINGO_LOG(INFO) << "SaveIdEpochType Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::SaveIdEpochType(google::protobuf::RpcController *controller,
+                                      const pb::meta::SaveIdEpochTypeRequest *request,
+                                      pb::meta::SaveIdEpochTypeResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoSaveIdEpochType(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

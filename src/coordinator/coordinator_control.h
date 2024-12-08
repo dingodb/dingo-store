@@ -312,7 +312,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status ChangePeerRegionWithTaskList(int64_t region_id, std::vector<int64_t> &new_store_ids,
                                              pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status ChangePairPeerRegionWithTaskList(int64_t region_id, std::vector<int64_t> &new_store_ids,
-                                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+                                                 pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // transfer leader region
   butil::Status TransferLeaderRegionWithTaskList(int64_t region_id, int64_t new_leader_store_id, bool is_force,
@@ -897,10 +897,14 @@ class CoordinatorControl : public MetaControl {
   // GC
   butil::Status UpdateGCSafePoint(int64_t safe_point, pb::coordinator::UpdateGCSafePointRequest::GcFlagType gc_flag,
                                   int64_t &new_safe_point, bool &gc_stop,
-                                  std::map<int64_t, int64_t> &tenant_safe_points,
+                                  std::map<int64_t, int64_t> &tenant_safe_points, int64_t resolve_lock_safe_point,
+                                  std::map<int64_t, int64_t> &tenant_resolve_lock_safe_points,
+                                  int64_t &new_resolve_lock_safe_point,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetGCSafePoint(int64_t &safe_point, bool &gc_stop, const std::vector<int64_t> &tenant_ids,
-                               bool get_all_tenant, std::map<int64_t, int64_t> &tenant_safe_points);
+                               bool get_all_tenant, std::map<int64_t, int64_t> &tenant_safe_points,
+                               int64_t &resolve_lock_safe_point, const std::vector<int64_t> &tenant_resolve_lock_ids,
+                               std::map<int64_t, int64_t> &resolve_lock_tenant_safe_points);
 
   // meta watch
   static butil::Status MetaWatchSendEvents(int64_t watch_id, std::bitset<WATCH_BITSET_SIZE> watch_bitset,
@@ -934,10 +938,18 @@ class CoordinatorControl : public MetaControl {
   butil::Status CreateTenant(pb::meta::Tenant &tenant, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status DropTenant(int64_t tenant_id, pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status UpdateTenant(pb::meta::Tenant &tenant, pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status UpdateTenantSafepoint(int64_t tenant_id, int64_t safe_point_ts,
+  butil::Status UpdateTenantSafepoint(int64_t tenant_id, int64_t safe_point_ts, int64_t resolve_lock_safe_point_ts,
                                       pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetTenants(std::vector<int64_t> tenant_ids, std::vector<pb::meta::Tenant> &tenants);
   butil::Status GetAllTenants(std::vector<pb::meta::Tenant> &tenants);
+
+  // backup & restore
+  static butil::Status RegisterBackup(const std::string &backup_name, const std::string &backup_path,
+                                      int64_t backup_start_timestamp, int64_t backup_current_timestamp,
+                                      int64_t backup_timeout_s);
+  static butil::Status UnRegisterBackup(const std::string &backup_name);
+
+  butil::Status GetAllPresentId(std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> &id_epoch_type_values);
 
  private:
   butil::Status ValidateTaskListConflict(int64_t region_id, int64_t second_region_id);
@@ -1138,6 +1150,42 @@ class MetaWatchCleanTask : public TaskRunnable {
  private:
   CoordinatorControl *coordinator_control_;
   int64_t max_outdate_time_ms_;
+};
+
+// backup & restore
+
+struct BrBackupWatchDogInfo {
+  std::string backup_name;
+  std::string backup_path;
+  int64_t backup_start_timestamp;
+  int64_t backup_current_timestamp;
+  int64_t backup_timeout_s;
+
+  BrBackupWatchDogInfo(const std::string &backup_name, const std::string &backup_path, int64_t backup_start_timestamp,
+                       int64_t backup_current_timestamp, int64_t backup_timeout_s)
+      : backup_name(backup_name),
+        backup_path(backup_path),
+        backup_start_timestamp(backup_start_timestamp),
+        backup_current_timestamp(backup_current_timestamp),
+        backup_timeout_s(backup_timeout_s) {}
+
+  ~BrBackupWatchDogInfo() = default;
+};
+class BrWatchDogManager {
+ public:
+  static BrWatchDogManager *Instance();
+
+  butil::Status RegisterBackup(const std::string &backup_name, const std::string &backup_path,
+                               int64_t backup_start_timestamp, int64_t backup_current_timestamp,
+                               int64_t backup_timeout_s);
+
+  butil::Status UnRegisterBackup(const std::string &backup_name);
+
+ private:
+  BrWatchDogManager();
+  ~BrWatchDogManager();
+  std::shared_ptr<BrBackupWatchDogInfo> br_backup_watch_dog_info_;
+  bthread_mutex_t mutex_;
 };
 
 }  // namespace dingodb

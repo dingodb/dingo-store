@@ -46,6 +46,9 @@
 
 namespace dingodb {
 
+DECLARE_bool(region_enable_auto_split);
+DECLARE_bool(region_enable_auto_merge);
+
 Storage::Storage(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Engine> mono_engine,
                  mvcc::TsProviderPtr ts_provider)
     : raft_engine_(raft_engine), mono_engine_(mono_engine), ts_provider_(ts_provider) {}
@@ -1648,6 +1651,51 @@ butil::Status Storage::CommitMerge(std::shared_ptr<Context> ctx, int64_t job_id,
   } else {
     return butil::Status(pb::error::EENGINE_NOT_FOUND, "engine not found");
   }
+}
+
+butil::Status Storage::BackupData(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  const pb::common::RegionType& region_type, std::string backup_ts, int64_t backup_tso,
+                                  const std::string& storage_path, const pb::common::StorageBackend& storage_backend,
+                                  const pb::common::CompressionType& compression_type, int32_t compression_level,
+                                  dingodb::pb::store::BackupDataResponse* response) {
+  RawEnginePtr raw_engine = GetRawEngine(ctx->StoreEngineType(), ctx->RawEngineType());
+
+  return TxnEngineHelper::BackupData(ctx, raw_engine, region, region_type, backup_ts, backup_tso, storage_path,
+                                     storage_backend, compression_type, compression_level, response);
+}
+
+butil::Status Storage::BackupMeta(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  const pb::common::RegionType& region_type, std::string backup_ts, int64_t backup_tso,
+                                  const std::string& storage_path, const pb::common::StorageBackend& storage_backend,
+                                  const pb::common::CompressionType& compression_type, int32_t compression_level,
+                                  dingodb::pb::store::BackupMetaResponse* response) {
+  RawEnginePtr raw_engine = GetRawEngine(ctx->StoreEngineType(), ctx->RawEngineType());
+
+  return TxnEngineHelper::BackupMeta(ctx, raw_engine, region, region_type, backup_ts, backup_tso, storage_path,
+                                     storage_backend, compression_type, compression_level, response);
+}
+
+butil::Status Storage::ControlConfig(std::shared_ptr<Context> /*ctx*/,
+                                     const std::vector<pb::common::ControlConfigVariable>& variables,
+                                     dingodb::pb::store::ControlConfigResponse* response) {
+  for (const auto& variable : variables) {
+    pb::common::ControlConfigVariable config;
+    config.set_name(variable.name());
+    config.set_value(variable.value());
+
+    if ("FLAGS_region_enable_auto_split" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_region_enable_auto_split);
+    } else if ("FLAGS_region_enable_auto_merge" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_region_enable_auto_merge);
+    } else {
+      config.set_is_already_set(false);
+      config.set_is_error_occurred(true);
+      DINGO_LOG(ERROR) << "ControlConfig not support variable: " << variable.name() << " skip.";
+    }
+
+    response->mutable_control_config_variable()->Add(std::move(config));
+  }
+  return butil::Status();
 }
 
 }  // namespace dingodb

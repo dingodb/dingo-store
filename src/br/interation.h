@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "br/parameter.h"
 #include "brpc/channel.h"
 #include "brpc/controller.h"
 #include "common/logging.h"
@@ -37,10 +38,6 @@
 
 namespace br {
 
-const int kMaxRetry = 5;
-const int64_t kTimeoutMs = 60000;
-const bool kLogEachRequest = true;
-
 class ServerInteraction {
  public:
   ServerInteraction() : leader_index_(0){};
@@ -50,6 +47,9 @@ class ServerInteraction {
   const ServerInteraction& operator=(const ServerInteraction&) = delete;
   ServerInteraction(ServerInteraction&&) = delete;
   ServerInteraction& operator=(ServerInteraction&&) = delete;
+
+  static butil::Status CreateInteraction(const std::vector<std::string>& addrs,
+                                         std::shared_ptr<ServerInteraction>& interaction);
 
   bool Init(const std::string& addrs);
   bool Init(std::vector<std::string> addrs);
@@ -70,11 +70,15 @@ class ServerInteraction {
 
   int64_t GetLatency() const { return latency_; }
 
+  std::vector<std::string> GetAddrs();
+  std::string GetAddrsAsString();
+
  private:
   std::atomic<int> leader_index_;
   std::vector<butil::EndPoint> endpoints_;
   std::vector<std::unique_ptr<brpc::Channel> > channels_;
   int64_t latency_;
+  std::vector<std::string> addrs_;
 };
 
 using ServerInteractionPtr = std::shared_ptr<ServerInteraction>;
@@ -106,14 +110,15 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
     DINGO_LOG(FATAL) << "Unknown api name: " << api_name;
   }
 
+  butil::Status status;
   int retry_count = 0;
   do {
     brpc::Controller cntl;
-    cntl.set_timeout_ms(kTimeoutMs);
+    cntl.set_timeout_ms(FLAGS_br_server_interaction_timeout_ms);
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
-    if (kLogEachRequest) {
+    if (FLAGS_br_server_interaction_print_each_rpc_request) {
       DINGO_LOG(INFO) << fmt::format("send request api [{}] {} response: {} request: {}", leader_index, api_name,
                                      response.ShortDebugString().substr(0, 256),
                                      request.ShortDebugString().substr(0, 256));
@@ -123,7 +128,8 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
                                       cntl.ErrorText());
       if (cntl.ErrorCode() == 112) {
         ++retry_count;
-        NextLeader(leader_index);
+        // NextLeader(leader_index);
+        status.set_error(cntl.ErrorCode(), cntl.ErrorText());
         continue;
       }
       latency_ = cntl.latency_us();
@@ -149,13 +155,12 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
       return butil::Status();
     }
 
-  } while (retry_count < kMaxRetry);
+  } while (retry_count < FLAGS_br_server_interaction_max_retry);
 
   DINGO_LOG(ERROR) << fmt::format("{} response failed, error: {} {}", api_name,
-                                  dingodb::pb::error::Errno_Name(response.error().errcode()),
-                                  response.error().errmsg());
+                                  dingodb::pb::error::Errno_Name(status.error_code()), status.error_cstr());
 
-  return butil::Status(response.error().errcode(), response.error().errmsg());
+  return status;
 }
 
 template <typename Request, typename Response>

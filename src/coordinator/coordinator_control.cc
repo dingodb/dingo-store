@@ -612,4 +612,92 @@ int64_t CoordinatorControl::UpdatePresentId(const pb::coordinator::IdEpochType& 
   return new_id;
 }
 
+butil::Status CoordinatorControl::GetAllPresentId(
+    std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>>& id_epoch_type_values) {
+  int64_t value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_COORINATOR);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_COORINATOR, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_STORE);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_STORE, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_EXECUTOR, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_SCHEMA);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_SCHEMA, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_REGION, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_TABLE);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_TABLE, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_INDEX);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_INDEX,
+                                    value);  // deprecated for index id auto_increment
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_MDS);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_MDS, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_TENANT);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_TENANT, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_COORINATOR);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_COORINATOR, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_STORE);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_STORE, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_EXECUTOR);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_EXECUTOR, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_SCHEMA);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_SCHEMA, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_REGION);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_REGION, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_TABLE);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_TABLE, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::EPOCH_INDEX);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::EPOCH_INDEX, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_TERM);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::RAFT_APPLY_TERM, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::RAFT_APPLY_INDEX, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_TASK_LIST);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_TASK_LIST, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_LEASE, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REVISION);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_REVISION, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_META_WATCH);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_META_WATCH, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_GC_SAFE_POINT, value);
+
+  // // for online ddl
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_SCHEMA_VERSION);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_SCHEMA_VERSION, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_DDL_JOB);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_DDL_JOB, value);
+
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT, value);
+
+  return butil::Status::OK();
+}
+
 }  // namespace dingodb

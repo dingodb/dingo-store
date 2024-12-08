@@ -145,6 +145,7 @@ class SstFileWriter {
   SstFileWriter(SstFileWriter&& rhs) = delete;
   SstFileWriter& operator=(SstFileWriter&& rhs) = delete;
 
+  butil::Status SaveFile(const std::map<std::string, std::string>& kvs, const std::string& filename);
   butil::Status SaveFile(const std::vector<pb::common::KeyValue>& kvs, const std::string& filename);
   butil::Status SaveFile(std::shared_ptr<dingodb::Iterator> iter, const std::string& filename);
 

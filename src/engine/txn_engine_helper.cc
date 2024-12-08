@@ -14,10 +14,13 @@
 
 #include "engine/txn_engine_helper.h"
 
+#include <openssl/sha.h>
+
 #include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <memory>
 #include <string>
@@ -32,9 +35,11 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/stream.h"
+#include "common/uuid.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "document/codec.h"
 #include "engine/gc_safe_point.h"
+#include "engine/rocks_raw_engine.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "glog/logging.h"
@@ -61,6 +66,7 @@ DEFINE_int64(gc_delete_batch_count, 32768, "gc delete batch count");
 
 DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
+DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
@@ -3217,9 +3223,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       if (force_sync_commit) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-            << "fallback is set, check_txn_status treats it as a non-async-commit txn"
-            << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
-            << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+            << "fallback is set, check_txn_status treats it as a non-async-commit txn" << "primary_key: " << primary_key
+            << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
+            << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
       } else {
         *txn_result->mutable_locked() = lock_info;
         // async-commit locks can't be resolved until they expire.
@@ -3889,7 +3895,7 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
         }
       }
     }  // end while iter
-  }    // end scan lock
+  }  // end scan lock
 
   if (!lock_infos_to_commit.empty()) {
     auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
@@ -5340,6 +5346,739 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
   }
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format("[txn_gc] gc task end.");
+}
+
+// backup & restore
+butil::Status TxnEngineHelper::BackupData(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                          store::RegionPtr region, const pb::common::RegionType &region_type,
+                                          std::string backup_ts, int64_t backup_tso, const std::string &storage_path,
+                                          const pb::common::StorageBackend &storage_backend,
+                                          const pb::common::CompressionType &compression_type,
+                                          int32_t compression_level, dingodb::pb::store::BackupDataResponse *response) {
+  butil::Status status;
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})] backup data. backup_ts : {}  backup_tso : {} storage_path : {} "
+      "storage_backend : {} compression_type : {} compression_level : {}",
+      ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
+      storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
+
+  if (region == nullptr) {
+    std::string s = fmt::format("[backupdata][region({})]  region not found.", ctx->RegionId());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
+  }
+
+  bool is_txn = region->IsTxn();
+
+  // txn
+  std::map<std::string, std::string> kv_data;
+  std::map<std::string, std::string> kv_write;
+
+  // non txn
+  std::map<std::string, std::string> kv_default;
+  std::map<std::string, std::string> kv_scalar;
+  std::map<std::string, std::string> kv_table;
+  std::map<std::string, std::string> kv_scalar_speedup;
+
+  std::string region_type_name;
+
+  if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::STORE_REGION && !is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                        kv_table, kv_scalar_speedup);
+  } else if (region_type == pb::common::RegionType::INDEX_REGION && is_txn) {
+    region_type_name = Constant::kIndexRegionName;
+    status = DoBackupDataForIndexTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::INDEX_REGION && !is_txn) {
+    region_type_name = Constant::kIndexRegionName;
+    status = DoBackupDataForIndexNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                        kv_table, kv_scalar_speedup);
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && is_txn) {
+    region_type_name = Constant::kDocumentRegionName;
+    status = DoBackupDataForDocumentTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else if (region_type == pb::common::RegionType::DOCUMENT_REGION && !is_txn) {
+    region_type_name = Constant::kDocumentRegionName;
+    status = DoBackupDataForDocumentNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar,
+                                           kv_table, kv_scalar_speedup);
+  } else {
+    std::string s = fmt::format("[backupdata][region({})][region_type({})] BackupData invalid region type and txn",
+                                region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  std::string hash_code;
+
+  Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
+
+  // second timestamp
+  int64_t second_timestamp = Helper::Timestamp();
+
+  std::string backup_file_prefix =
+      fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
+
+  pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
+
+  int64_t instance_id = Server::GetInstance().Id();
+
+  if (is_txn) {
+    status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                                kv_data, kv_write, sst_meta_group);
+
+  } else {
+    status =
+        WriteSstFileForNonTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                              kv_default, kv_scalar, kv_table, kv_scalar_speedup, sst_meta_group);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataCoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                   store::RegionPtr region, const pb::common::RegionType &region_type,
+                                                   int64_t backup_tso, std::map<std::string, std::string> &kv_data,
+                                                   std::map<std::string, std::string> &kv_write) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+  std::string region_start_key = region->Range().start_key();
+  std::string region_end_key = region->Range().end_key();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+      << fmt::format("[backupdata][region({})][type({})][txn] start region start_key: {} end_key: {} backup_tso : {}",
+                     region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+                     Helper::StringToHex(region_end_key), backup_tso);
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions write_iter_options;
+  write_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  write_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  auto write_iter = reader->NewIterator(Constant::kTxnWriteCF, snapshot, write_iter_options);
+  if (nullptr == write_iter) {
+    std::string s =
+        fmt::format("[backupdata][write][region({})][type({})][txn] NewIterator failed.  start_key: {} end_key: {} ",
+                    region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+                    Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  write_iter->Seek(write_iter_options.lower_bound);
+
+  // this var is too long. this is important var. do not cut down it.
+  bool is_continue_scan_in_this_write_key = false;
+
+  std::string write_key;
+  std::string last_write_key;
+
+  while (write_iter->Valid()) {
+    total_iter_count++;
+    std::string_view write_iter_key = write_iter->Key();
+    std::string_view write_iter_value = write_iter->Value();
+
+    int64_t write_ts = 0;
+
+    auto ret = mvcc::Codec::DecodeKey(write_iter_key, write_key, write_ts);
+    if (!ret) {
+      std::string s =
+          fmt::format("[backupdata][write][region({})][type({})][txn] decode txn key failed, write_iter->key : {} ",
+                      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    // reset for first put
+    if (last_write_key != write_key) {
+      is_continue_scan_in_this_write_key = true;
+      last_write_key = write_key;
+    }
+
+    // write_ts > backup_tso key value
+    if (write_ts > backup_tso) {
+      write_iter->Next();
+      continue;
+    }
+
+    if (!is_continue_scan_in_this_write_key) {
+      write_iter->Next();
+      continue;
+    }
+
+    pb::store::WriteInfo write_info;
+    bool parse_success = write_info.ParseFromArray(write_iter_value.data(), write_iter_value.size());
+    if (!parse_success) {
+      std::string s = fmt::format(
+          "[backupdata][write][region({})][type({})][txn] ParseFromArray failed, write_iter->key : {}  "
+          "write_key : {}  write_ts : {}, write_iter->value : {} ",
+          region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_iter_key),
+          Helper::StringToHex(write_key), write_ts, Helper::StringToHex(write_iter_value));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    int64_t start_ts = write_info.start_ts();
+    pb::store::Op op = write_info.op();
+
+    // handle write_ts <= backup_tso key value
+    switch (op) {
+      case pb::store::Put:
+        [[fallthrough]];
+      case pb::store::Delete: {
+        butil::Status status =
+            DoWriteDataAndCheckForTxn(reader, snapshot, region_id, region_type, write_info, write_iter_key,
+                                      write_iter_value, write_key, start_ts, write_ts, kv_data, kv_write);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
+        }
+        is_continue_scan_in_this_write_key = false;
+        break;
+      }
+      case pb::store::Rollback: {
+        // continue scan
+        break;
+      }
+      case pb::store::Lock:
+        [[fallthrough]];
+      case pb::store::PutIfAbsent:
+        [[fallthrough]];
+      case pb::store::None:
+        [[fallthrough]];
+      case pb::store::Op_INT_MIN_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      case pb::store::Op_INT_MAX_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      default: {
+        std::string s = fmt::format(
+            "[backupdata][write][region({})][type({})][txn] invalid pb::store::Op type : {} type string : "
+            "{} , write_iter->key : {}  write_key : {}  write_ts : {} write_iter->value : {} ignore. ",
+            region_id, pb::common::RegionType_Name(region_type), static_cast<int>(op), pb::store::Op_Name(op),
+            Helper::StringToHex(write_iter_key), Helper::StringToHex(write_key), write_ts,
+            write_info.ShortDebugString());
+        DINGO_LOG(ERROR) << s;
+        break;
+      }
+    }
+
+    write_iter->Next();
+  }
+
+  end_time_ms = Helper::TimestampMs();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][txn] end region start_key: {} end_key: {} backup_tso "
+      ": {} time consuming : {} ms total_data_count : {} total_write_count : {}  total_iter_count : {} ",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_data.size(), kv_write.size(),
+      total_iter_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataCoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                      store::RegionPtr region,
+                                                      const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                      std::map<std::string, std::string> &kv_default,
+                                                      std::map<std::string, std::string> &kv_scalar,
+                                                      std::map<std::string, std::string> &kv_table,
+                                                      std::map<std::string, std::string> &kv_scalar_speedup) {
+  int64_t start_time_ms = Helper::TimestampMs();
+  int64_t end_time_ms = 0;
+  int64_t total_delete_count = 0;
+  int64_t total_iter_count = 0;
+  int64_t region_id = ctx->RegionId();
+  std::string region_start_key = region->Range().start_key();
+  std::string region_end_key = region->Range().end_key();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][nontxn] start region start_key: {} end_key: {} "
+      "backup_tso : {}",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso);
+
+  RawEngine::ReaderPtr reader = raw_engine->Reader();
+  std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
+
+  IteratorOptions default_iter_options;
+  default_iter_options.lower_bound = mvcc::Codec::EncodeKey(region_start_key, Constant::kMaxVer);
+  default_iter_options.upper_bound = mvcc::Codec::EncodeKey(region_end_key, Constant::kMaxVer);
+
+  const std::string &cf_name =
+      (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF);
+
+  auto default_iter = reader->NewIterator(cf_name, snapshot, default_iter_options);
+  if (nullptr == default_iter) {
+    std::string s = fmt::format(
+        "[backupdata][default][region({})][type({})][nontxn] NewIterator failed.  start_key: {} end_key: {} ",
+        region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+        Helper::StringToHex(region_end_key));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EINTERNAL, s);
+  }
+
+  default_iter->Seek(default_iter_options.lower_bound);
+
+  // this var is too long. this is important var. do not cut down it.
+  bool is_continue_scan_in_this_default_key = false;
+
+  std::string default_key;
+  std::string last_default_key;
+
+  char prefix = '\0';
+  int64_t region_part_id = 0;
+  if (region_type == pb::common::RegionType::INDEX_REGION) {
+    prefix = region->GetKeyPrefix();
+    region_part_id = region->PartitionId();
+  }
+
+  auto lambda_emplace_back_function = [&region, &prefix, &region_part_id, &kv_default, &kv_scalar, &kv_table,
+                                       &kv_scalar_speedup, &snapshot, &reader](
+                                          pb::common::RegionType type, std::string_view default_iter_key,
+                                          std::string_view default_iter_value, int64_t vector_id, int64_t default_ts) {
+    // push back to kv_default
+    { kv_default.insert({std::string(default_iter_key), std::string(default_iter_value)}); }
+
+    if (type == pb::common::RegionType::INDEX_REGION) {
+      std::string scalar_key = std::string(default_iter_key);
+      std::string scalar_value;
+      auto status = reader->KvGet(Constant::kVectorScalarCF, snapshot, scalar_key, scalar_value);
+      if (status.ok()) {
+        kv_scalar.insert({scalar_key, scalar_value});
+      }
+
+      std::string table_key = std::string(default_iter_key);
+      std::string table_value;
+      status = reader->KvGet(Constant::kVectorTableCF, snapshot, table_key, table_value);
+      if (status.ok()) {
+        kv_table.insert({table_key, table_value});
+      }
+
+      pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+      for (const auto &fields : scalar_schema.fields()) {
+        if (fields.enable_speed_up()) {
+          std::string scalar_speedup_key =
+              VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
+          std::string scalar_speedup_value;
+          status =
+              reader->KvGet(Constant::kVectorScalarKeySpeedUpCF, snapshot, scalar_speedup_key, scalar_speedup_value);
+          if (status.ok()) {
+            kv_scalar_speedup.insert({scalar_speedup_key, scalar_speedup_value});
+          }
+        }
+      }
+    }
+  };
+
+  while (default_iter->Valid()) {
+    total_iter_count++;
+    std::string_view default_iter_key = default_iter->Key();
+    std::string_view default_iter_value = default_iter->Value();
+    int64_t default_ts = 0;
+
+    auto ret = mvcc::Codec::DecodeKey(default_iter_key, default_key, default_ts);
+    if (!ret) {
+      std::string s =
+          fmt::format("[backupdata][decode][region({})][type({})][nontxn] decode key failed, key : {} ", region_id,
+                      pb::common::RegionType_Name(region_type), Helper::StringToHex(default_iter_key));
+      DINGO_LOG(FATAL) << s;
+    }
+
+    int64_t vector_id = 0;
+    int64_t partition_id = 0;
+
+    if (region_type == pb::common::RegionType::INDEX_REGION) {
+      VectorCodec::DecodeFromEncodeKeyWithTs(std::string(default_iter_key), partition_id, vector_id);
+      if (region_part_id != partition_id) {
+        std::string s = fmt::format(
+            "[backupdata][decode][region({})][type({})][nontxn] decode  region_part_id({}) != "
+            "partition_id({}), "
+            "key : {} ",
+            region_id, pb::common::RegionType_Name(region_type), region_part_id, partition_id,
+            Helper::StringToHex(default_iter_key));
+        DINGO_LOG(FATAL) << s;
+      }
+    }
+
+    if (last_default_key != default_key) {
+      is_continue_scan_in_this_default_key = true;
+      last_default_key = default_key;
+    }
+
+    // write_ts > backup_tso key value
+    if (default_ts > backup_tso) {
+      default_iter->Next();
+      continue;
+    }
+
+    if (!is_continue_scan_in_this_default_key) {
+      default_iter->Next();
+      continue;
+    }
+
+    mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(default_iter_value);
+
+    switch (value_flag) {
+      case mvcc::ValueFlag::kPut:
+        [[fallthrough]];
+      case mvcc::ValueFlag::kPutTTL:
+        [[fallthrough]];
+      case mvcc::ValueFlag::kDelete: {
+        lambda_emplace_back_function(region_type, default_iter_key, default_iter_value, vector_id, default_ts);
+        is_continue_scan_in_this_default_key = false;
+        break;
+      }
+
+      default: {
+        std::string s =
+            fmt::format("[backupdata][region({})][type({})][nontxn] invalid mvcc value flag : {}, value : {} ",
+                        region_id, pb::common::RegionType_Name(region_type), static_cast<int>(value_flag),
+                        Helper::StringToHex(default_iter_value));
+        DINGO_LOG(FATAL) << s;
+      }
+    }
+
+    default_iter->Next();
+  }
+
+  end_time_ms = Helper::TimestampMs();
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupdata][region({})][type({})][nontxn] end region start_key: {} end_key: {} "
+      "backup_tso "
+      ": {} time  consuming : {} ms total_default_count : {} total_scalar_count : {}  total_table_count : {} "
+      "total_scalar_speedup_count : {} total_iter_count : {}",
+      region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(region_start_key),
+      Helper::StringToHex(region_end_key), backup_tso, (end_time_ms - start_time_ms), kv_default.size(),
+      kv_scalar.size(), kv_table.size(), kv_scalar_speedup.size(), total_iter_count);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForStoreTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                       store::RegionPtr region,
+                                                       const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                       std::map<std::string, std::string> &kv_data,
+                                                       std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForStoreNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_default,
+                                                          std::map<std::string, std::string> &kv_scalar,
+                                                          std::map<std::string, std::string> &kv_table,
+                                                          std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForIndexTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                       store::RegionPtr region,
+                                                       const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                       std::map<std::string, std::string> &kv_data,
+                                                       std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForIndexNonTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_default,
+                                                          std::map<std::string, std::string> &kv_scalar,
+                                                          std::map<std::string, std::string> &kv_table,
+                                                          std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForDocumentTxn(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                                          store::RegionPtr region,
+                                                          const pb::common::RegionType &region_type, int64_t backup_tso,
+                                                          std::map<std::string, std::string> &kv_data,
+                                                          std::map<std::string, std::string> &kv_write) {
+  return DoBackupDataCoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+}
+
+butil::Status TxnEngineHelper::DoBackupDataForDocumentNonTxn(
+    std::shared_ptr<Context> ctx, RawEnginePtr raw_engine, store::RegionPtr region,
+    const pb::common::RegionType &region_type, int64_t backup_tso, std::map<std::string, std::string> &kv_default,
+    std::map<std::string, std::string> &kv_scalar, std::map<std::string, std::string> &kv_table,
+    std::map<std::string, std::string> &kv_scalar_speedup) {
+  return DoBackupDataCoreNonTxn(ctx, raw_engine, region, region_type, backup_tso, kv_default, kv_scalar, kv_table,
+                                kv_scalar_speedup);
+}
+
+butil::Status TxnEngineHelper::DoWriteDataAndCheckForTxn(
+    RawEngine::ReaderPtr reader, std::shared_ptr<Snapshot> snapshot, int64_t region_id,
+    const pb::common::RegionType &region_type, const pb::store::WriteInfo &write_info, std::string_view write_iter_key,
+    std::string_view write_iter_value, const std::string &write_key, int64_t start_ts, int64_t write_ts,
+    std::map<std::string, std::string> &kv_data, std::map<std::string, std::string> &kv_write) {
+  std::string lock_key = mvcc::Codec::EncodeKey(write_key, Constant::kLockVer);
+  std::string lock_value;
+  butil::Status status = reader->KvGet(Constant::kTxnLockCF, snapshot, lock_key, lock_value);
+  if (status.ok()) {
+    pb::store::LockInfo lock_info;
+
+    if (!lock_value.empty()) {
+      auto ret = lock_info.ParseFromString(lock_value);
+      if (!ret) {
+        DINGO_LOG(FATAL) << "[backupdata] GetLockInfo parse lock info failed, lock_key: "
+                         << Helper::StringToHex(lock_key) << ", lock_value: " << Helper::StringToHex(lock_value);
+      }
+
+      if (lock_info.lock_ts() == start_ts) {
+        // exist lock conflict
+        std::string s = fmt::format(
+            "[backupdata][write][region({})][type({})][txn] lock conflict, write_key : {}  "
+            "write_ts : {} lock_key : {} lock_ts : {} lock_info : {}",
+            region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(write_key), write_ts,
+            Helper::StringToHex(lock_key), lock_info.lock_ts(), lock_info.ShortDebugString());
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return butil::Status(pb::error::Errno::EBACKUP_TXN_FOUND_LOCK, s);
+      }
+    }
+
+  } else if (status.error_code() != pb::error::Errno::EKEY_NOT_FOUND) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  { kv_write.insert({std::string(write_iter_key), std::string(write_iter_value)}); }
+
+  // try get key from data column family. if not exist , ignore.
+  std::string data_key = mvcc::Codec::EncodeKey(write_key, write_info.start_ts());
+  std::string data_value;
+  status = reader->KvGet(Constant::kTxnDataCF, snapshot, data_key, data_value);
+  if (status.ok()) {
+    kv_data.insert({data_key, data_value});
+  } else {
+    if (pb::error::Errno::EKEY_NOT_FOUND != status.error_code()) {
+      // other error
+      std::string s = fmt::format(
+          "[backupdata][data][region({})][type({})][txn] get key failed. key: {} raw_key : {}  "
+          "start_ts : {} status : {} write_info: {}",
+          region_id, pb::common::RegionType_Name(region_type), Helper::StringToHex(data_key),
+          Helper::StringToHex(write_key), write_info.start_ts(), status.error_cstr(), write_info.ShortDebugString());
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
+  }
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::WriteSstFileForTxn(
+    store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
+    const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
+    const std::string &region_type_name, const std::map<std::string, std::string> &kv_data,
+    const std::map<std::string, std::string> &kv_write, pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kTxnWriteCF, kv_write, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kTxnDataCF, kv_data, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::WriteSstFileForNonTxn(
+    store::RegionPtr region, int64_t instance_id, const pb::common::RegionType &region_type,
+    const pb::common::StorageBackend &storage_backend, const std::string &backup_file_prefix,
+    const std::string &region_type_name, const std::map<std::string, std::string> &kv_default,
+    const std::map<std::string, std::string> &kv_scalar, const std::map<std::string, std::string> &kv_table,
+    const std::map<std::string, std::string> &kv_scalar_speedup,
+    pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
+
+  status = DoWriteSstFile(
+      region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+      (region_type == pb::common::RegionType::INDEX_REGION ? Constant::kVectorDataCF : Constant::kStoreDataCF),
+      kv_default, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorScalarCF, kv_scalar, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorTableCF, kv_table, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DoWriteSstFile(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                          Constant::kVectorScalarKeySpeedUpCF, kv_scalar_speedup, sst_meta_group);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::DoWriteSstFile(store::RegionPtr region, int64_t instance_id,
+                                              const pb::common::RegionType &region_type,
+                                              const pb::common::StorageBackend &storage_backend,
+                                              const std::string &backup_file_prefix,
+                                              const std::string &region_type_name, const std::string &cf,
+                                              const std::map<std::string, std::string> &kvs,
+                                              pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group) {
+  butil::Status status;
+
+  if (kvs.empty()) {
+    std::string s = fmt::format("[backupdata][region({})][region_type({})] empty. ignore.", region->Id(),
+                                pb::common::RegionType_Name(region_type));
+    DINGO_LOG(INFO) << s;
+    return butil::Status();
+  }
+
+  rocksdb::Options options;
+  rocks::SstFileWriter sst(options);
+  std::string base_path = storage_backend.local().path();
+  std::string dir_name = fmt::format("{}-{}", region_type_name, instance_id);
+  std::string dir_path = base_path + "/" + dir_name;
+
+  if (std::filesystem::exists(dir_path)) {
+    std::error_code ec;
+    if (!std::filesystem::is_directory(dir_path, ec)) {
+      std::string s = fmt::format("dir_path : {} is not directory, {}, {}", dir_path, ec.value(), ec.message());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EFILE_NOT_DIRECTORY, s);
+    }
+  } else {
+    bool is_success = Helper::CreateDirectory(dir_path);
+    if (!is_success) {
+      std::string s = fmt::format("[backupdata][region({})][region_type({})] CreateDirectory failed. dir_path : {}",
+                                  region->Id(), pb::common::RegionType_Name(region_type), dir_path);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EBACKUP_CREATE_REMOTE_DIR, s);
+    }
+  }
+
+  std::string data_file_name = fmt::format("{}_{}.sst", backup_file_prefix, cf);
+  std::string data_file_path = dir_path + "/" + data_file_name;
+  status = sst.SaveFile(kvs, data_file_path);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  int64_t data_file_size = sst.GetSize();
+  std::string data_file_hash_code;
+  status = Helper::CalSha1CodeWithFileEx(data_file_path, data_file_hash_code);
+
+  pb::common::BackupDataFileValueSstMeta *sst_meta = sst_meta_group->add_backup_data_file_value_sst_metas();
+  sst_meta->set_cf(cf);
+  sst_meta->set_region_id(region->Id());
+  sst_meta->set_dir_name(dir_name);
+  sst_meta->set_file_size(data_file_size);
+  sst_meta->set_encryption(data_file_hash_code);
+  sst_meta->set_file_name(data_file_name);
+
+  return butil::Status();
+}
+
+butil::Status TxnEngineHelper::BackupMeta(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                          store::RegionPtr region, const pb::common::RegionType &region_type,
+                                          std::string backup_ts, int64_t backup_tso, const std::string &storage_path,
+                                          const pb::common::StorageBackend &storage_backend,
+                                          const pb::common::CompressionType &compression_type,
+                                          int32_t compression_level, dingodb::pb::store::BackupMetaResponse *response) {
+  butil::Status status;
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail) << fmt::format(
+      "[backupmeta][region({})][type({})] backup meta. backup_ts : {}  backup_tso : {} storage_path : {} "
+      "storage_backend : {} compression_type : {} compression_level : {}",
+      ctx->RegionId(), pb::common::RegionType_Name(region_type), backup_ts, backup_tso, storage_path,
+      storage_backend.DebugString(), pb::common::CompressionType_Name(compression_type), compression_level);
+
+  if (region == nullptr) {
+    std::string s = fmt::format("[backupmeta][region({})]  region not found.", ctx->RegionId());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, s);
+  }
+
+  bool is_txn = region->IsTxn();
+
+  // txn
+  std::map<std::string, std::string> kv_data;
+  std::map<std::string, std::string> kv_write;
+
+  std::string region_type_name;
+
+  if (region_type == pb::common::RegionType::STORE_REGION && is_txn) {
+    region_type_name = Constant::kStoreRegionName;
+    status = DoBackupDataForStoreTxn(ctx, raw_engine, region, region_type, backup_tso, kv_data, kv_write);
+  } else {
+    std::string s = fmt::format("[backupmeta][region({})][region_type({})] backupmeta invalid region type and txn",
+                                region->Id(), pb::common::RegionType_Name(region_type), (is_txn ? "true" : "false"));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::ENOT_SUPPORT, s);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  std::string hash_code;
+
+  Helper::CalSha1CodeWithString(region->Range().start_key(), hash_code);
+
+  // second timestamp
+  int64_t second_timestamp = Helper::Timestamp();
+
+  std::string backup_file_prefix =
+      fmt::format("{}_{}_{}_{}", region->Id(), region->EpochToString(), hash_code, second_timestamp);
+
+  pb::common::BackupDataFileValueSstMetaGroup *sst_meta_group = response->mutable_sst_metas();
+
+  int64_t instance_id = Server::GetInstance().Id();
+
+  if (is_txn) {
+    status = WriteSstFileForTxn(region, instance_id, region_type, storage_backend, backup_file_prefix, region_type_name,
+                                kv_data, kv_write, sst_meta_group);
+  }
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  return butil::Status();
 }
 
 }  // namespace dingodb
