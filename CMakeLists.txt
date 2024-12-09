@@ -529,6 +529,8 @@ if(NOT WITH_DISKANN)
   list(REMOVE_ITEM SERVER_SRCS "${PROJECT_SOURCE_DIR}/src/server/diskann_service.cc")
 endif()
 
+list(REMOVE_ITEM BR_SRCS "${PROJECT_SOURCE_DIR}/src/br/main.cc")
+
 include(CheckSymbolExists)
 
 macro(detect_target_arch)
@@ -607,12 +609,8 @@ add_library(
   ${COPROCESSOR_SRCS}
   ${LIBEXPR_SRCS}
   ${DISKANN_SRCS}
-  ${MERGE_SRCS})
-
-set(BR_TEST_SRCS ${BR_SRCS})
-list(REMOVE_ITEM BR_TEST_SRCS "${PROJECT_SOURCE_DIR}/src/br/main.cc")
-
-add_library(BR_TEST_OBJS OBJECT ${BR_TEST_SRCS})
+  ${MERGE_SRCS}
+  ${BR_SRCS})
 
 if(NOT WITH_DISKANN)
   list(REMOVE_ITEM DINGODB_OBJS ${DISKANN_SRCS})
@@ -710,6 +708,7 @@ add_executable(
   $<TARGET_OBJECTS:PROTO_OBJS>)
 add_executable(
   dingodb_br
+  src/br/main.cc
   ${BR_SRCS}
   src/coordinator/coordinator_interaction.cc
   src/common/role.cc
