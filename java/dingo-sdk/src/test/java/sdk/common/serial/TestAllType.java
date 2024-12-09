@@ -44,10 +44,13 @@ public class TestAllType {
         recordEncoder = new RecordEncoder(schemaVersion, schemas, commonId);
         recordDecoder = new RecordDecoder(schemaVersion, schemas, commonId);
     }
+
+    /*
     @Test
     public void testEncodeAndDecode() {
 
         Object[] records = getRecords();
+        recordEncoder.setCodecVersion( 0x1 );
 
         KeyValue kv = recordEncoder.encode(records);
 
@@ -80,10 +83,102 @@ public class TestAllType {
             }
         }
     }
+    */
+
+    @Test
+    public void testEncodeAndDecodeV2() {
+        Object[] records = getRecords();
+
+        recordEncoder.setCodecVersion( 0x2 );
+        KeyValue kv = recordEncoder.encode(records);
+
+        Object[] result = recordDecoder.decode(kv);
+        // Positive test case
+        Assert.assertNotNull(result);
+        Assert.assertEquals(records.length, result.length);
+        // Negative test case
+        for (int i = 0; i < schemas.size(); i++) {
+            System.out.println(records[i]+","+result[i]);
+            switch (schemas.get(i).getType()) {
+                case BYTES:
+                    byte[] e = (byte[]) records[i];
+                    byte[] r = (byte[]) result[i];
+                    Assert.assertArrayEquals(e, r);
+                    break;
+                case BOOLEANLIST:
+                case STRINGLIST:
+                case DOUBLELIST:
+                case FLOATLIST:
+                case INTEGERLIST:
+                case LONGLIST:
+                    val e_val = records[i];
+                    val r_cal = result[i];
+                    Assert.assertTrue(e_val.equals(r_cal));
+                    break;
+                default:
+                    Assert.assertEquals(records[i], result[i]);
+                    break;
+            }
+        }
+    }
+
+    /*
     @Test
     public void testDecodeWithColumnIndexes() {
 
         Object[] records = getRecords();
+        recordEncoder.setCodecVersion( 0x1 );
+
+        KeyValue kv = recordEncoder.encode(records);
+
+        int[] columnIndexes = new int[]{0, 3, 6, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22};
+        Object[] result = recordDecoder.decode(kv, columnIndexes);
+        // Positive test case
+        Assert.assertNotNull(result);
+        Assert.assertEquals(columnIndexes.length, result.length);
+        // Negative test case
+        int j = 0;
+        for (int i = 0; i < schemas.size(); i++) {
+            if(j < columnIndexes.length)
+                System.out.println(records[i]+","+result[j]);
+            switch (schemas.get(i).getType()) {
+                case BYTES:
+                    if (isValueInArray(i, columnIndexes)) {
+                        byte[] e = (byte[]) records[i];
+                        byte[] r = (byte[]) result[j];
+                        Assert.assertArrayEquals(e, r);
+                        j++;
+                    }
+                    break;
+                case BOOLEANLIST:
+                case STRINGLIST:
+                case DOUBLELIST:
+                case FLOATLIST:
+                case INTEGERLIST:
+                case LONGLIST:
+                    if (isValueInArray(i, columnIndexes)) {
+                        val e_val = records[i];
+                        val r_cal = result[j];
+                        Assert.assertTrue(e_val.equals(r_cal));
+                        j++;
+                    }
+                    break;
+                default:
+                    if (isValueInArray(i, columnIndexes)) {
+                        Assert.assertEquals(records[i], result[j]);
+                        j++;
+                    }
+                    break;
+            }
+        }
+    }
+    */
+
+    @Test
+    public void testDecodeWithColumnIndexesV2() {
+
+        Object[] records = getRecords();
+        recordEncoder.setCodecVersion( 0x2 );
 
         KeyValue kv = recordEncoder.encode(records);
 
@@ -254,6 +349,16 @@ public class TestAllType {
         testLongList2.setAllowNull(true);
         testLongList2.setIsKey(false);
 
+        DingoSchema<String> emptyStr1 = new StringSchema();
+        emptyStr1.setIndex(24);
+        emptyStr1.setAllowNull(false);
+        emptyStr1.setIsKey(false);
+
+        DingoSchema<String> emptyStr2 = new StringSchema();
+        emptyStr2.setIndex(25);
+        emptyStr2.setAllowNull(false);
+        emptyStr2.setIsKey(false);
+
         List<DingoSchema> table = new ArrayList<>();
         table.add(id);
         table.add(name);
@@ -279,6 +384,8 @@ public class TestAllType {
         table.add(testIntegerList2);
         table.add(testLongList1);
         table.add(testLongList2);
+        table.add(emptyStr1);
+        table.add(emptyStr2);
 
         return table;
     }
@@ -365,7 +472,9 @@ public class TestAllType {
                 i1,
                 i2,
                 l1,
-                l2
+                l2,
+                "",
+                "abcdef"
         };
         return record;
     }

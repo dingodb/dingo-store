@@ -93,12 +93,21 @@ class RelExprHelper {
                                         const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr, size_t index,
                                         std::vector<std::any>& columns);  // NOLINT
 
+  static butil::Status TransToOperandV2(BaseSchema::Type type, const std::any& column,
+                                      std::unique_ptr<std::vector<expr::Operand>>& operand_ptr);  // NOLINT
+
+  static butil::Status TransFromOperandV2(BaseSchema::Type type,
+                                        const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr, size_t index,
+                                        std::vector<std::any>& columns);  // NOLINT
+
   static butil::Status TransToOperandWrapper(
+      const int codec_version,
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& original_serial_schemas,
       const std::vector<int>& selection_column_indexes, const std::vector<std::any>& original_record,
       std::unique_ptr<std::vector<expr::Operand>>& operand_ptr);  // NOLINT
 
   static butil::Status TransFromOperandWrapper(
+      const int codec_version,
       const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
       const std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>>& result_serial_schemas,
       const std::vector<int>& result_column_indexes, std::vector<std::any>& result_record);
