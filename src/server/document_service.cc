@@ -1578,11 +1578,19 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   for (const auto& pessimistic_check : request->pessimistic_checks()) {
     pessimistic_checks.push_back(pessimistic_check);
   }
+  std::vector<std::string> secondaries;
+  secondaries.reserve(request->secondaries_size());
+  if (request->use_async_commit()) {
+    for (const auto& secondary : request->secondaries()) {
+      secondaries.push_back(secondary);
+    }
+  }
+
   std::vector<pb::common::KeyValue> kvs;
   status =
       storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
                            request->txn_size(), request->try_one_pc(), request->min_commit_ts(),
-                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
