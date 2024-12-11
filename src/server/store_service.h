@@ -118,6 +118,8 @@ class StoreServiceImpl : public pb::store::StoreService {
   void TxnCheckTxnStatus(google::protobuf::RpcController* controller,
                          const pb::store::TxnCheckTxnStatusRequest* request,
                          pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done) override;
+  void TxnCheckSecondaryLocks(google::protobuf::RpcController* controller, const pb::store::TxnCheckSecondaryLocksRequest* request,
+                      pb::store::TxnCheckSecondaryLocksResponse* response, google::protobuf::Closure* done) override;
   void TxnResolveLock(google::protobuf::RpcController* controller, const pb::store::TxnResolveLockRequest* request,
                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) override;
   void TxnBatchRollback(google::protobuf::RpcController* controller, const pb::store::TxnBatchRollbackRequest* request,
