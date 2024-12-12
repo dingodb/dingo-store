@@ -606,10 +606,11 @@ butil::Status RaftStoreEngine::TxnWriter::TxnPrewrite(
     std::shared_ptr<Context> ctx, store::RegionPtr region, const std::vector<pb::store::Mutation>& mutations,
     const std::string& primary_lock, int64_t start_ts, int64_t lock_ttl, int64_t txn_size, bool try_one_pc,
     int64_t min_commit_ts, int64_t max_commit_ts, const std::vector<int64_t>& pessimistic_checks,
-    const std::map<int64_t, int64_t>& for_update_ts_checks, const std::map<int64_t, std::string>& lock_extra_datas) {
+    const std::map<int64_t, int64_t>& for_update_ts_checks, const std::map<int64_t, std::string>& lock_extra_datas,
+    const std::vector<std::string>& secondaries) {
   return TxnEngineHelper::Prewrite(txn_writer_raw_engine_, raft_engine_, ctx, region, mutations, primary_lock, start_ts,
                                    lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts, pessimistic_checks,
-                                   for_update_ts_checks, lock_extra_datas);
+                                   for_update_ts_checks, lock_extra_datas, secondaries);
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr region,
@@ -620,9 +621,16 @@ butil::Status RaftStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx
 
 butil::Status RaftStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,
                                                             const std::string& primary_key, int64_t lock_ts,
-                                                            int64_t caller_start_ts, int64_t current_ts) {
+                                                            int64_t caller_start_ts, int64_t current_ts,
+                                                            bool force_sync_commit) {
   return TxnEngineHelper::CheckTxnStatus(txn_writer_raw_engine_, raft_engine_, ctx, primary_key, lock_ts,
-                                         caller_start_ts, current_ts);
+                                         caller_start_ts, current_ts, force_sync_commit);
+}
+
+butil::Status RaftStoreEngine::TxnWriter::TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                                 int64_t start_ts,
+                                                                 const std::vector<std::string>& keys) {
+  return TxnEngineHelper::TxnCheckSecondaryLocks(txn_writer_raw_engine_, ctx, region, start_ts, keys);
 }
 
 butil::Status RaftStoreEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts,

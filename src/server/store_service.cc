@@ -2238,11 +2238,18 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   for (const auto& pessimistic_check : request->pessimistic_checks()) {
     pessimistic_checks.push_back(pessimistic_check);
   }
+  std::vector<std::string> secondaries;
+  secondaries.reserve(request->secondaries_size());
+  if (request->use_async_commit()) {
+    for (const auto& secondary : request->secondaries()) {
+      secondaries.push_back(secondary);
+    }
+  }
   std::vector<pb::common::KeyValue> kvs;
-  status =
-      storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                           request->txn_size(), request->try_one_pc(), request->min_commit_ts(),
-                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+  status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
+                                request->lock_ttl(), request->txn_size(), request->try_one_pc(),
+                                request->min_commit_ts(), request->max_commit_ts(), pessimistic_checks,
+                                for_update_ts_checks, lock_extra_datas, secondaries);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -2435,7 +2442,14 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  region->SetTxnAppliedMaxTs(request->caller_start_ts());
+  int64_t new_max_ts = request->lock_ts();
+  if (request->current_ts() > new_max_ts) {
+    new_max_ts = request->current_ts();
+  }
+  if (request->caller_start_ts() > new_max_ts) {
+    new_max_ts = request->caller_start_ts();
+  }
+  region->SetTxnAppliedMaxTs(new_max_ts);
   auto status = ValidateTxnCheckTxnStatusRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
@@ -2461,7 +2475,7 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   status = storage->TxnCheckTxnStatus(ctx, request->primary_key(), request->lock_ts(), request->caller_start_ts(),
-                                      request->current_ts());
+                                      request->current_ts(), request->force_sync_commit());
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 
@@ -2483,6 +2497,117 @@ void StoreServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* contro
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnCheckTxnStatus(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateTxnCheckSecondaryLocks(const dingodb::pb::store::TxnCheckSecondaryLocksRequest* request,
+                                                    store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->start_ts() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0, it's illegal");
+  }
+  if (request->keys_size() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "keys is empty, it's illegal");
+  }
+  for (const auto& key : request->keys()) {
+    if (key.empty()) {
+      return butil::Status(pb::error::EKEY_EMPTY, "key is empty");
+    }
+    std::vector<std::string_view> keys;
+    keys.push_back(key);
+    auto status = ServiceHelper::ValidateRegion(region, keys);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoTxnCheckSecondaryLocks(StoragePtr storage, google::protobuf::RpcController* controller,
+                              const dingodb::pb::store::TxnCheckSecondaryLocksRequest* request,
+                              dingodb::pb::store::TxnCheckSecondaryLocksResponse* response, TrackClosure* done,
+                              bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+  region->SetTxnAppliedMaxTs(request->start_ts());
+  auto status = ValidateTxnCheckSecondaryLocks(request, region);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& key : request->keys()) {
+    keys_for_lock.push_back(key);
+  }
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, true);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(region_id);
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+
+  std::vector<std::string> keys;
+  for (const auto& key : request->keys()) {
+    keys.emplace_back(key);
+  }
+
+  std::vector<pb::common::KeyValue> kvs;
+
+  status = storage->TxnCheckSecondaryLocks(ctx, region, request->start_ts(), keys);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+
+    if (!is_sync) done->Run();
+    return;
+  }
+}
+
+void StoreServiceImpl::TxnCheckSecondaryLocks(google::protobuf::RpcController* controller,
+                                              const pb::store::TxnCheckSecondaryLocksRequest* request,
+                                              pb::store::TxnCheckSecondaryLocksResponse* response,
+                                              google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoTxnCheckSecondaryLocks(storage_, controller, request, response, svr_done, true);
   });
   bool ret = write_worker_set_->ExecuteRR(task);
   if (BAIDU_UNLIKELY(!ret)) {

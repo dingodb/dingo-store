@@ -1883,8 +1883,9 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
     store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
     const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
     int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t min_commit_ts,
-    int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc,
-    std::vector<pb::common::KeyValue> &kv_puts_data, std::vector<pb::common::KeyValue> &kv_puts_lock,
+    int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc, bool &use_async_commit,
+    const std::vector<std::string> &secondaries, std::vector<pb::common::KeyValue> &kv_puts_data,
+    std::vector<pb::common::KeyValue> &kv_puts_lock,
     std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
     int64_t &final_min_commit_ts) {
   int64_t region_id = region->Id();
@@ -1923,13 +1924,21 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       if (!lock_extra_data.empty()) {
         lock_info.set_extra_data(lock_extra_data);
       }
-
-      if (try_one_pc) {
+      if (use_async_commit) {
+        lock_info.set_use_async_commit(true);
+        if (mutation.key() == primary_lock) {
+          *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+        }
+      }
+      if (try_one_pc || use_async_commit) {
         GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
                             lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
+          use_async_commit = false;
+          lock_info.set_use_async_commit(false);
+          lock_info.clear_secondaries();
         }
       }
 
@@ -1963,13 +1972,22 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         if (!lock_extra_data.empty()) {
           lock_info.set_extra_data(lock_extra_data);
         }
+        if (use_async_commit) {
+          lock_info.set_use_async_commit(true);
+          if (mutation.key() == primary_lock) {
+            *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+          }
+        }
 
-        if (try_one_pc) {
+        if (try_one_pc || use_async_commit) {
           GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
                               lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
+            use_async_commit = false;
+            lock_info.set_use_async_commit(false);
+            lock_info.clear_secondaries();
           }
         }
 
@@ -2015,12 +2033,22 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         if (!lock_extra_data.empty()) {
           lock_info.set_extra_data(lock_extra_data);
         }
-        if (try_one_pc) {
+        if (use_async_commit) {
+          lock_info.set_use_async_commit(true);
+          if (mutation.key() == primary_lock) {
+            *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+          }
+        }
+
+        if (try_one_pc || use_async_commit) {
           GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
                               lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
+            use_async_commit = false;
+            lock_info.set_use_async_commit(false);
+            lock_info.clear_secondaries();
           }
         }
         if (try_one_pc) {
@@ -2061,12 +2089,22 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       if (!lock_extra_data.empty()) {
         lock_info.set_extra_data(lock_extra_data);
       }
-      if (try_one_pc) {
+      if (use_async_commit) {
+        lock_info.set_use_async_commit(true);
+        if (mutation.key() == primary_lock) {
+          *lock_info.mutable_secondaries() = {secondaries.begin(), secondaries.end()};
+        }
+      }
+
+      if (try_one_pc || use_async_commit) {
         GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
                             lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
+          use_async_commit = false;
+          lock_info.set_use_async_commit(false);
+          lock_info.clear_secondaries();
         }
       }
 
@@ -2313,14 +2351,12 @@ butil::Status TxnEngineHelper::DoPreWrite(std::shared_ptr<Engine> raft_engine, s
   return ret;
 }
 
-butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
-                                        std::shared_ptr<Context> ctx, store::RegionPtr region,
-                                        const std::vector<pb::store::Mutation> &mutations,
-                                        const std::string &primary_lock, int64_t start_ts, int64_t lock_ttl,
-                                        int64_t txn_size, bool try_one_pc, int64_t min_commit_ts, int64_t max_commit_ts,
-                                        const std::vector<int64_t> &pessimistic_checks,
-                                        const std::map<int64_t, int64_t> &for_update_ts_checks,
-                                        const std::map<int64_t, std::string> &lock_extra_datas) {
+butil::Status TxnEngineHelper::Prewrite(
+    RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region,
+    const std::vector<pb::store::Mutation> &mutations, const std::string &primary_lock, int64_t start_ts,
+    int64_t lock_ttl, int64_t txn_size, bool try_one_pc, int64_t min_commit_ts, int64_t max_commit_ts,
+    const std::vector<int64_t> &pessimistic_checks, const std::map<int64_t, int64_t> &for_update_ts_checks,
+    const std::map<int64_t, std::string> &lock_extra_datas, const std::vector<std::string> &secondaries) {
   BvarLatencyGuard bvar_guard(&g_txn_prewrite_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -2330,7 +2366,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       << ", txn_size: " << txn_size << ", try_one_pc: " << try_one_pc << ", min_commit_ts: " << min_commit_ts
       << ", max_commit_ts: " << max_commit_ts << ", pessimistic_checks_size: " << pessimistic_checks.size()
       << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
-      << ", lock_extra_datas_size: " << lock_extra_datas.size();
+      << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size: " << secondaries.size();
 
   if (BAIDU_UNLIKELY(mutations.size() > FLAGS_max_prewrite_count)) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", ctx->RegionId(), start_ts)
@@ -2341,8 +2377,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
                      << ", max_commit_ts: " << max_commit_ts
                      << ", pessimistic_checks_size: " << pessimistic_checks.size()
                      << ", for_update_ts_checks_size: " << for_update_ts_checks.size()
-                     << ", lock_extra_datas_size: " << lock_extra_datas.size()
-                     << ", mutations.size() > FLAGS_max_prewrite_count";
+                     << ", lock_extra_datas_size: " << lock_extra_datas.size() << ", secondaries_size"
+                     << secondaries.size() << ", mutations.size() > FLAGS_max_prewrite_count";
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                          "prewrite mutations.size() > FLAGS_max_prewrite_count");
   }
@@ -2367,6 +2403,10 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
   // ((key, value, lock_info, is_pessimistic_lock))
   std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> locks_for_1pc;
 
+  bool use_async_commit = false;
+  if (!secondaries.empty()) {
+    use_async_commit = true;
+  }
   auto *response = dynamic_cast<pb::store::TxnPrewriteResponse *>(ctx->Response());
   if (response == nullptr) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
@@ -2643,6 +2683,7 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
           << prev_lock_info.ShortDebugString() << ", mutation: " << mutation.ShortDebugString();
       // if enable 1pc need to fallback to 2pc
       try_one_pc = false;
+      use_async_commit = false;
       continue;
     }
 
@@ -2652,8 +2693,8 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
     // 3.1 write data and lock
     auto ret3 = GenPrewriteDataAndLock(region, mutation, prev_lock_info, write_info, primary_lock, start_ts,
                                        for_update_ts, lock_ttl, txn_size, lock_extra_data, min_commit_ts, max_commit_ts,
-                                       need_check_pessimistic_lock, try_one_pc, kv_puts_data, kv_puts_lock,
-                                       locks_for_1pc, temp_min_commit_ts);
+                                       need_check_pessimistic_lock, try_one_pc, use_async_commit, secondaries,
+                                       kv_puts_data, kv_puts_lock, locks_for_1pc, temp_min_commit_ts);
     if (!ret3.ok()) {
       if (ret3.error_code() == pb::error::Errno::EVALUE_EMPTY) {
         error->set_errcode(pb::error::Errno::EVALUE_EMPTY);
@@ -2662,13 +2703,17 @@ butil::Status TxnEngineHelper::Prewrite(RawEnginePtr raw_engine, std::shared_ptr
       }
       return ret3;
     }
-    if (try_one_pc) {
+    if (try_one_pc || use_async_commit) {
       if (final_min_commit_ts < temp_min_commit_ts) {
         final_min_commit_ts = temp_min_commit_ts;
       }
     } else {
       final_min_commit_ts = 0;
     }
+  }
+
+  if (use_async_commit) {
+    response->set_min_commit_ts(final_min_commit_ts);
   }
   if (response->txn_result_size() > 0) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -2819,7 +2864,7 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
         // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
         // get a new tso from coordinator, then commit again.
-        if (lock_info.min_commit_ts() > 0 && commit_ts <= lock_info.min_commit_ts()) {
+        if (lock_info.min_commit_ts() > 0 && commit_ts < lock_info.min_commit_ts()) {
           // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
           auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
           commit_ts_expired->set_start_ts(start_ts);
@@ -3097,14 +3142,16 @@ bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status
 
 butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                               std::shared_ptr<Context> ctx, const std::string &primary_key,
-                                              int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts) {
+                                              int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts,
+                                              bool force_sync_commit) {
   BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << fmt::format("[txn][region({})] CheckTxnStatus, primary_key: {}", ctx->RegionId(),
                      Helper::StringToHex(primary_key))
       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
-      << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+      << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts
+      << ", force_sync_commit: " << force_sync_commit;
 
   // we need to do if primay_key is in this region'range in service before apply to raft state machine
   // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
@@ -3163,6 +3210,22 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       auto *primary_mismatch = txn_result->mutable_primary_mismatch();
       *(primary_mismatch->mutable_lock_info()) = lock_info;
       return butil::Status::OK();
+    }
+
+    // for async commit
+    if (lock_info.use_async_commit()) {
+      if (force_sync_commit) {
+        DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+            << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
+            << "fallback is set, check_txn_status treats it as a non-async-commit txn"
+            << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
+            << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+      } else {
+        *txn_result->mutable_locked() = lock_info;
+        // async-commit locks can't be resolved until they expire.
+        response->set_lock_ttl(0);
+        return butil::Status::OK();
+      }
     }
 
     // for pessimistic lock, we just return lock_info, let executor decide to backoff or unlock
@@ -3542,6 +3605,117 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   }
 
   return ret;
+}
+
+bvar::LatencyRecorder g_txn_check_secondary_locks_latency("dingo_txn_check_secondary_locks");
+
+/// Check secondary locks of an async commit transaction.
+///
+/// If all prewritten locks exist, the lock information is returned.
+/// Otherwise, it returns the commit timestamp of the transaction.
+butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Context> ctx,
+                                                      store::RegionPtr region, int64_t start_ts,
+                                                      const std::vector<std::string> &keys) {
+  BvarLatencyGuard bvar_guard(&g_txn_check_secondary_locks_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
+      << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size();
+
+  if (BAIDU_UNLIKELY(keys.size() > FLAGS_max_resolve_count)) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", ctx->RegionId(), start_ts)
+                     << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", keys_size: " << keys.size()
+                     << ", keys.size() > FLAGS_max_resolve_count";
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "resolve keys.size() > FLAGS_max_resolve_count");
+  }
+
+  TxnReader txn_reader(raw_engine);
+  auto ret_init = txn_reader.Init();
+  if (!ret_init.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
+                     << ", init txn_reader failed, status: " << ret_init.error_str();
+    return butil::Status(pb::error::Errno::EINTERNAL, "init txn_reader failed");
+  }
+
+  std::vector<pb::common::KeyValue> kv_puts_write;
+  std::vector<std::string> kv_deletes_lock;
+
+  auto *response = dynamic_cast<pb::store::TxnCheckSecondaryLocksResponse *>(ctx->Response());
+  if (response == nullptr) {
+    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_ts: {}", region->Id(), start_ts)
+                     << ", response is nullptr";
+    return butil::Status(pb::error::Errno::EINTERNAL, "response is nullptr");
+  }
+  auto *error = response->mutable_error();
+  auto *txn_result = response->mutable_txn_result();
+
+  for (const auto &key : keys) {
+    pb::store::LockInfo lock_info;
+    auto ret = txn_reader.GetLockInfo(key, lock_info);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks", region->Id())
+                       << ", get lock info failed, key: " << Helper::StringToHex(key) << ", start_ts: " << start_ts
+                       << ", status: " << ret.error_str();
+    }
+
+    if (lock_info.lock_ts() == start_ts) {
+      if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+          lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckSecondaryLocks, start_Ts: {}", region->Id(), start_ts)
+                         << ", meet a invalid lock_type, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+      response->add_locks()->Swap(&lock_info);
+      continue;
+    } else {
+      // the lock is not exists, check if it is rollbacked or committed
+      // try to get if there is a rollback to lock_ts
+      pb::store::WriteInfo write_info;
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks, ", region->Id())
+                         << ", get rollback info failed, primary_key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        // rollback, return rollback
+        response->set_commit_ts(0);
+        return butil::Status::OK();
+      }
+
+      // if there is not a rollback to lock_ts, try to get the commit_ts
+      int64_t commit_ts = 0;
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info, commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
+                         << ", get write info failed, secondary_key: " << Helper::StringToHex(key)
+                         << ", lock_ts: " << start_ts << ", status: " << ret2.error_str();
+      }
+
+      if (commit_ts == 0) {
+        // it seems there is a lock previously exists, but it is not committed, and there is no rollback, there must
+        // be some error, return TxnNotFound
+        auto *txn_not_found = txn_result->mutable_txn_not_found();
+        txn_not_found->set_primary_key(key);
+        txn_not_found->set_start_ts(start_ts);
+        DINGO_LOG(ERROR)
+            << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
+            << ", cannot found the transaction, maybe some error ocurred, return txn_not_found, secondary_key: "
+            << Helper::StringToHex(key) << ", start_ts: " << start_ts
+            << ", lock_info: " << lock_info.ShortDebugString();
+        return butil::Status::OK();
+      }
+      // commit, return committed
+      response->set_commit_ts(commit_ts);
+      return butil::Status::OK();
+    }
+  }
+  DINGO_LOG(INFO) << "yjddebug checksecondary commit_ts:" << response->commit_ts();
+  return butil::Status::OK();
 }
 
 bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");

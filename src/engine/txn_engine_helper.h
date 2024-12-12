@@ -177,7 +177,8 @@ class TxnEngineHelper {
                                 int64_t min_commit_ts, int64_t max_commit_ts,
                                 const std::vector<int64_t> &pessimistic_checks,
                                 const std::map<int64_t, int64_t> &for_update_ts_checks,
-                                const std::map<int64_t, std::string> &lock_extra_datas);
+                                const std::map<int64_t, std::string> &lock_extra_datas,
+                                const std::vector<std::string> &secondaries);
 
   static butil::Status Commit(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine, std::shared_ptr<Context> ctx,
                               store::RegionPtr region, int64_t start_ts, int64_t commit_ts,
@@ -189,7 +190,11 @@ class TxnEngineHelper {
 
   static butil::Status CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine,
                                       std::shared_ptr<Context> ctx, const std::string &primary_key, int64_t lock_ts,
-                                      int64_t caller_start_ts, int64_t current_ts);
+                                      int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit);
+
+  static butil::Status TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Context> ctx,
+                                              store::RegionPtr region, int64_t start_ts,
+                                              const std::vector<std::string> &keys);
 
   static butil::Status ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
@@ -307,8 +312,9 @@ class TxnEngineHelper {
       store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
       const pb::store::WriteInfo &write_info, const std::string &primary_lock, int64_t start_ts, int64_t for_update_ts,
       int64_t lock_ttl, int64_t txn_size, const std::string &lock_extra_data, int64_t min_commit_ts,
-      int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc,
-      std::vector<pb::common::KeyValue> &kv_puts_data, std::vector<pb::common::KeyValue> &kv_puts_lock,
+      int64_t max_commit_ts, bool need_check_pessimistic_lock, bool &try_one_pc, bool &use_async_commit,
+      const std::vector<std::string> &secondaries, std::vector<pb::common::KeyValue> &kv_puts_data,
+      std::vector<pb::common::KeyValue> &kv_puts_lock,
       std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
       int64_t &final_min_commit_ts);
 

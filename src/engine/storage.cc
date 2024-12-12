@@ -1245,7 +1245,8 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
                                    int64_t min_commit_ts, int64_t max_commit_ts,
                                    const std::vector<int64_t>& pessimistic_checks,
                                    const std::map<int64_t, int64_t>& for_update_ts_checks,
-                                   const std::map<int64_t, std::string>& lock_extra_datas) {
+                                   const std::map<int64_t, std::string>& lock_extra_datas,
+                                   const std::vector<std::string>& secondaries) {
   auto status = ValidateLeader(region);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
@@ -1260,7 +1261,7 @@ butil::Status Storage::TxnPrewrite(std::shared_ptr<Context> ctx, store::RegionPt
 
   status =
       writer->TxnPrewrite(ctx, region, mutations, primary_lock, start_ts, lock_ttl, txn_size, try_one_pc, min_commit_ts,
-                          max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                          max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
@@ -1289,7 +1290,7 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr 
 }
 
 butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
-                                         int64_t caller_start_ts, int64_t current_ts) {
+                                         int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit) {
   auto status = ValidateLeader(ctx->RegionId());
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
@@ -1300,7 +1301,26 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts);
+  status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts, force_sync_commit);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+butil::Status Storage::TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
+                                              const std::vector<std::string>& keys) {
+  auto status = ValidateLeader(ctx->RegionId());
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    return status;
+  }
+
+  DINGO_LOG(DEBUG) << "TxnCheckSecondaryLocks start_ts : " << start_ts << " keys size : " << keys.size();
+
+  auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
+
+  status = writer->TxnCheckSecondaryLocks(ctx, region, start_ts, keys);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
