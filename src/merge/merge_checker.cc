@@ -183,6 +183,10 @@ void MergeCheckTask::MergeCheck() {
     if (!need_merge) {
       break;
     }
+    need_merge = ValidRegion(merge_to_region_, reason);
+    if (!need_merge) {
+      break;
+    }
     if (CheckLeaderAndFollowerStatus(merge_from_region_->Id())) {
       need_merge = false;
       reason = "not leader or follower abnormal";
@@ -407,6 +411,10 @@ void PreMergeCheckTask::PreMergeCheck() {
         break;
       }
       need_scan_check = ValidRegion(merge_from, reason);
+      if (!need_scan_check) {
+        break;
+      }
+      need_scan_check = ValidRegion(merge_to, reason);
       if (!need_scan_check) {
         break;
       }
