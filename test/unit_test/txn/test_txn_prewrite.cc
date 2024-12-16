@@ -502,9 +502,10 @@ TEST_F(TxnPreWriteTest, PreWrite) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -553,12 +554,12 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
     for_update_ts_checks.insert_or_assign(0, target_start_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
-
+    std::vector<std::string> secondaries;
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_start_ts);
 
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -594,7 +595,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
     mutations.emplace_back(mutation);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
-
+    std::vector<std::string> secondaries;
     auto lambda_test_normal = [&](int64_t start_ts, int64_t lock_for_update_ts, int64_t expected_for_update_ts,
                                   bool success, int64_t commit_ts) {
       pb::store::TxnPrewriteResponse response;
@@ -603,17 +604,17 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
       MustPessimisticLocked(key, start_ts, lock_for_update_ts);
       for_update_ts_checks.insert_or_assign(0, expected_for_update_ts);
       if (success) {
-        auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, start_ts,
-                                                target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                                pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+        auto status = TxnEngineHelper::Prewrite(
+            engine, mono_engine, ctx, region, mutations, primary_lock, start_ts, target_lock_ttl, txn_size, try_one_pc,
+            min_commit_ts, max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
         EXPECT_EQ(status.ok(), true);
         EXPECT_EQ(response.one_pc_commit_ts(), 0);
         EXPECT_EQ(response.txn_result_size(), 0);
         MustLocked(key, start_ts);
         // test idempotency
-        auto status1 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, start_ts,
-                                                 target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                                 pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+        auto status1 = TxnEngineHelper::Prewrite(
+            engine, mono_engine, ctx, region, mutations, primary_lock, start_ts, target_lock_ttl, txn_size, try_one_pc,
+            min_commit_ts, max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
         EXPECT_EQ(status1.ok(), true);
         EXPECT_EQ(response.one_pc_commit_ts(), 0);
         EXPECT_EQ(response.txn_result_size(), 0);
@@ -623,9 +624,9 @@ TEST_F(TxnPreWriteTest, PessimisticPreWrite) {
         MustCommit(region, start_ts, commit_ts, commit_keys);
         MustUnlock(key);
       } else {
-        auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, start_ts,
-                                                target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                                pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+        auto status = TxnEngineHelper::Prewrite(
+            engine, mono_engine, ctx, region, mutations, primary_lock, start_ts, target_lock_ttl, txn_size, try_one_pc,
+            min_commit_ts, max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
         EXPECT_EQ(status.ok(), true);
         EXPECT_EQ(response.one_pc_commit_ts(), 0);
         EXPECT_GT(response.txn_result_size(), 0);
@@ -691,12 +692,12 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     for_update_ts_checks.insert_or_assign(0, target_start_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
-
+    std::vector<std::string> secondaries;
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_start_ts);
     // normal prewrite
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -706,7 +707,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     // repeat prewrite
     auto status1 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                              target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status1.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
     MustLocked(key, target_start_ts);
@@ -743,11 +744,11 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
-
+    std::vector<std::string> secondaries;
     // normal prewrite
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -758,7 +759,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWrite) {
     try_one_pc = true;
     auto status1 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                              target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status1.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
     MustLocked(key, target_start_ts);
@@ -805,9 +806,10 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), target_start_ts + 1);
@@ -846,10 +848,12 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     for (int i = 0; i < 2; i++) {
-      auto status = TxnEngineHelper::Prewrite(
-          engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts, target_lock_ttl, txn_size,
-          try_one_pc, min_commit_ts, max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
       EXPECT_EQ(status.ok(), true);
       EXPECT_EQ(response.one_pc_commit_ts(), 0);
       MustLocked(key, target_start_ts);
@@ -889,10 +893,11 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     // Lock key.
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.txn_result_size(), 0);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -911,7 +916,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     // Try 1PC on the two keys and it will fail on the second one.
     auto status2 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                              target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_TRUE(status2.ok());
     for (auto const &txn_result : response.txn_result()) {
       EXPECT_EQ(txn_result.locked().key(), key);
@@ -955,9 +960,10 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), region_max_ts + 1);
@@ -998,9 +1004,10 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts);
     MustUnlock(key);
@@ -1049,12 +1056,13 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, target_start_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
+    std::vector<std::string> secondaries;
 
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_start_ts);
 
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), target_start_ts + 1);
@@ -1095,12 +1103,13 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, target_for_update_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
+    std::vector<std::string> secondaries;
 
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_for_update_ts);
 
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), target_for_update_ts + 1);
     MustUnlock(key);
@@ -1140,12 +1149,12 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, target_for_update_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
-
+    std::vector<std::string> secondaries;
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_for_update_ts);
 
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.txn_result_size(), 0);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -1181,7 +1190,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
     std::vector<int64_t> pessimistic_checks;
     std::map<int64_t, int64_t> for_update_ts_checks;
     std::map<int64_t, std::string> lock_extra_datas;
-
+    std::vector<std::string> secondaries;
     {
       // optismistic prewrite
       pb::store::Mutation mutation;
@@ -1192,9 +1201,10 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
       for_update_ts_checks.insert_or_assign(0, 0);
       lock_extra_datas.insert_or_assign(0, "");
       pessimistic_checks.push_back(0);
-      auto status = TxnEngineHelper::Prewrite(
-          engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts, target_lock_ttl, txn_size,
-          try_one_pc, min_commit_ts, max_commit_ts, pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
       EXPECT_EQ(status.ok(), true);
       EXPECT_EQ(response.txn_result_size(), 0);
       EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -1221,7 +1231,7 @@ TEST_F(TxnPreWriteTest, PessimisticPreWriteWithOnePC) {
 
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
     EXPECT_GT(response.txn_result_size(), 0);
@@ -1276,12 +1286,13 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, target_start_ts);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(1);
+    std::vector<std::string> secondaries;
 
     MustAcquirePessimisticlock(engine, mono_engine, region, primary_lock, key, target_start_ts, target_start_ts);
     // normal prewrite
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -1292,7 +1303,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     try_one_pc = true;
     auto status1 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                              target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status1.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
     MustLocked(key, target_start_ts);
@@ -1329,11 +1340,11 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     for_update_ts_checks.insert_or_assign(0, 0);
     lock_extra_datas.insert_or_assign(0, "");
     pessimistic_checks.push_back(0);
-
+    std::vector<std::string> secondaries;
     // normal prewrite
     auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                             target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
 
     EXPECT_EQ(status.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
@@ -1344,7 +1355,7 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
     try_one_pc = true;
     auto status1 = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
                                              target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
-                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas);
+                                             pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
     EXPECT_EQ(status1.ok(), true);
     EXPECT_EQ(response.one_pc_commit_ts(), 0);
     MustLocked(key, target_start_ts);
