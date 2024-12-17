@@ -1049,6 +1049,42 @@ butil::Status Storage::DocumentSearch(std::shared_ptr<Engine::DocumentReader::Co
   return butil::Status();
 }
 
+butil::Status Storage::DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                         const pb::stream::StreamRequestMeta& req_stream_meta, bool& has_more,
+                                         std::vector<pb::common::DocumentWithScore>& results) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    return status;
+  }
+  // after validate leader
+  auto stream_meta = req_stream_meta;
+  auto stream = Server::GetInstance().GetStreamManager()->GetOrNew(stream_meta);
+  if (stream == nullptr) {
+    return butil::Status(pb::error::ESTREAM_EXPIRED, fmt::format("stream({}) is expired.", stream_meta.stream_id()));
+  }
+  ctx->SetStream(stream);
+
+  DINGO_LOG(DEBUG) << "DocumentSearchAll region_id: " << ctx->region_id << ", stream limit: " << stream_meta.limit()
+                   << ", has_more: " << has_more;
+
+  auto document_reader = GetEngineDocumentReader(ctx->store_engine_type, ctx->raw_engine_type);
+
+  status = document_reader->DocumentSearchAll(ctx, has_more, results);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    if (pb::error::EKEY_NOT_FOUND == status.error_code()) {
+      // return OK if not found
+      return butil::Status::OK();
+    }
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+    return status;
+  }
+  if (!has_more || stream_meta.close()) {
+    Server::GetInstance().GetStreamManager()->RemoveStream(stream);
+  }
+
+  return butil::Status();
+}
+
 butil::Status Storage::DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id) {
   auto status = ValidateLeader(region);
   if (BAIDU_UNLIKELY(!status.ok())) {

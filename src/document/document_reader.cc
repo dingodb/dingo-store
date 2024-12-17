@@ -32,6 +32,8 @@
 
 namespace dingodb {
 
+DECLARE_int64(stream_message_max_limit_size);
+
 butil::Status DocumentReader::QueryDocumentWithId(int64_t ts, const pb::common::Range& region_range,
                                                   int64_t partition_id, int64_t document_id, bool with_scalar_data,
                                                   bool with_table_data, std::vector<std::string>& selected_scalar_keys,
@@ -127,6 +129,28 @@ butil::Status DocumentReader::DocumentSearch(std::shared_ptr<Engine::DocumentRea
   }
 
   return butil::Status();
+}
+
+butil::Status DocumentReader::DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx, bool& has_more,
+                                                std::vector<pb::common::DocumentWithScore>& results) {
+  auto status = butil::Status();
+  auto stream = ctx->stream;
+  auto stream_state =
+      std::dynamic_pointer_cast<DocumentSearchAllStreamState>(stream->GetOrNewStreamState([&]() -> StreamStatePtr {
+        std::vector<pb::common::DocumentWithScore> all_results;
+        status = SearchDocument(ctx->ts, ctx->partition_id, ctx->document_index, ctx->region_range, ctx->parameter,
+                                all_results);
+        if (!status.ok()) {
+          return nullptr;
+        }
+        return DocumentSearchAllStreamState::New(std::move(all_results));
+      }));
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "Document search all failed: " << Helper::PrintStatus(status);
+    return status;
+  }
+  has_more = stream_state->Batch(stream->Limit(), results);
+  return status;
 }
 
 butil::Status DocumentReader::DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
@@ -353,6 +377,21 @@ butil::Status DocumentReader::ScanDocumentId(std::shared_ptr<Engine::DocumentRea
   }
 
   return butil::Status::OK();
+}
+
+bool DocumentSearchAllStreamState::Batch(int32_t limit, std::vector<pb::common::DocumentWithScore>& results) {
+  results.reserve(limit);
+  size_t count = 0;
+  size_t total_bytes = 0;
+  bool has_more;
+  while (current_ != end_ && count < limit && total_bytes < FLAGS_stream_message_max_limit_size) {
+    results.push_back(*current_);
+    total_bytes += current_->ByteSizeLong();
+    ++current_;
+    ++count;
+  }
+  has_more = (current_ != end_);
+  return has_more;
 }
 
 }  // namespace dingodb

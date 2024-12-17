@@ -276,7 +276,6 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   // temporary disable split/merge/change_peer, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(from_region, true);
   store_region_meta->UpdateTemporaryDisableChange(to_region, true);
-
   pb::common::Range to_range;
   // child range
   to_range.set_start_key(old_from_range.start_key());
@@ -510,7 +509,6 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
 
   // temporary disable split, avoid overlap change.
   store_region_meta->UpdateTemporaryDisableChange(parent_region, true);
-
   // Set child region definition
   pb::common::RegionDefinition definition = parent_region->Definition();
   definition.set_id(child_region_id);
@@ -854,7 +852,6 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   store_region_meta->UpdateLastChangeJobId(target_region, request.job_id());
   // Disable temporary change
   store_region_meta->UpdateTemporaryDisableChange(target_region, true);
-
   auto source_region = store_region_meta->GetRegion(request.source_region_id());
   if (source_region == nullptr) {
     DINGO_LOG(FATAL) << fmt::format(

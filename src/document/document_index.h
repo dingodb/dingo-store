@@ -67,7 +67,8 @@ class DocumentIndex {
   butil::Status Load(const std::string& path);
 
   butil::Status Search(uint32_t topk, const std::string& query_string, bool use_range_filter, int64_t start_id,
-                       int64_t end_id, bool use_id_filter, const std::vector<uint64_t>& alive_ids,
+                       int64_t end_id, bool use_id_filter, bool query_unlimited,
+                       const std::vector<uint64_t>& alive_ids,
                        const std::vector<std::string>& column_names,
                        std::vector<pb::common::DocumentWithScore>& results);
 

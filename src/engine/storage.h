@@ -188,6 +188,8 @@ class Storage {
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<pb::common::DocumentWithScore>& results);
+  butil::Status DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta, bool& has_more,
+                                  std::vector<pb::common::DocumentWithScore>& results);
   butil::Status DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id);
   butil::Status DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                   std::vector<pb::common::DocumentWithId>& document_with_ids);

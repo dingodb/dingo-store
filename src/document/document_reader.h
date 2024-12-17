@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/stream.h"
 #include "engine/engine.h"
 #include "engine/raw_engine.h"
 #include "mvcc/reader.h"
@@ -41,6 +42,8 @@ class DocumentReader {
 
   butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<pb::common::DocumentWithScore>& results);
+  butil::Status DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx, bool& has_more,
+                                  std::vector<pb::common::DocumentWithScore>& results);
 
   butil::Status DocumentBatchQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
@@ -70,6 +73,28 @@ class DocumentReader {
   butil::Status ScanDocumentId(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<int64_t>& document_ids);
   mvcc::ReaderPtr reader_;
+};
+
+class DocumentSearchAllStreamState;
+using DocumentSearchAllStreamStatePtr = std::shared_ptr<DocumentSearchAllStreamState>;
+
+class DocumentSearchAllStreamState : public StreamState {
+ public:
+  DocumentSearchAllStreamState(std::vector<pb::common::DocumentWithScore>& vec) {
+    results_ = vec;
+    current_ = results_.begin();
+    end_ = results_.end();
+  }
+  ~DocumentSearchAllStreamState() override = default;
+  bool Batch(int32_t limit, std::vector<pb::common::DocumentWithScore>& results);
+  static DocumentSearchAllStreamStatePtr New(std::vector<pb::common::DocumentWithScore> vec) {
+    return std::make_shared<DocumentSearchAllStreamState>(vec);
+  }
+
+ private:
+  std::vector<pb::common::DocumentWithScore>::iterator current_;
+  std::vector<pb::common::DocumentWithScore>::iterator end_;
+  std::vector<pb::common::DocumentWithScore> results_;
 };
 
 }  // namespace dingodb

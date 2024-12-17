@@ -364,7 +364,7 @@ butil::Status DocumentIndex::Delete(const std::vector<int64_t>& delete_ids) {
 }
 
 butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_string, bool use_range_filter,
-                                    int64_t start_id, int64_t end_id, bool use_id_filter,
+                                    int64_t start_id, int64_t end_id, bool use_id_filter, bool query_unlimited,
                                     const std::vector<uint64_t>& alive_ids,
                                     const std::vector<std::string>& column_names,
                                     std::vector<pb::common::DocumentWithScore>& results) {
@@ -376,7 +376,7 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, err_msg);
   }
 
-  if (topk == 0) {
+  if (!query_unlimited && topk == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "topk must be greater than 0");
   }
 
@@ -393,8 +393,9 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
   //   }
   // }
 
-  auto search_result = ffi_bm25_search_with_column_names(index_path_, query_string, topk, alive_ids, use_id_filter,
-                                                         use_range_filter, start_id, end_id, column_names);
+  auto search_result =
+      ffi_bm25_search_with_column_names(index_path_, query_string, topk, alive_ids, use_id_filter, use_range_filter,
+                                        start_id, end_id, column_names, query_unlimited);
 
   if (search_result.error_code == 0) {
     for (const auto& row_id_with_score : search_result.result) {
@@ -1096,15 +1097,16 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
   if (sibling_document_index != nullptr) {
     DINGO_LOG(INFO) << fmt::format("[document_index.wrapper][id({})] search document in sibling document index.", Id());
     std::vector<pb::common::DocumentWithScore> results_1;
-    auto status = sibling_document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX,
-                                                 use_id_filter, alive_ids, column_names, results_1);
+    auto status =
+        sibling_document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
+                                       parameter.query_unlimited(), alive_ids, column_names, results_1);
     if (!status.ok()) {
       return status;
     }
 
     std::vector<pb::common::DocumentWithScore> results_2;
     status = document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
-                                    alive_ids, column_names, results_2);
+                                    parameter.query_unlimited(), alive_ids, column_names, results_2);
     if (!status.ok()) {
       return status;
     }
@@ -1120,21 +1122,23 @@ butil::Status DocumentIndexWrapper::Search(const pb::common::Range& region_range
 
     DINGO_LOG(INFO) << fmt::format(
         "[document_index.wrapper][id({})] search document in document index with range_filter, range({}) "
-        "query_string({}) top_n({}) min_document_id({}) max_document_id({})",
+        "query_string({}) top_n({}, query_unlimited({})) min_document_id({}) max_document_id({})",
         Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n(),
-        min_document_id, max_document_id);
+        parameter.query_unlimited(), min_document_id, max_document_id);
 
     // use range filter
     return document_index->Search(parameter.top_n(), parameter.query_string(), true, min_document_id, max_document_id,
-                                  use_id_filter, alive_ids, column_names, results);
+                                  use_id_filter, parameter.query_unlimited(), alive_ids, column_names, results);
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.wrapper][id({})] search document in document index, range({}) query_string({}) top_n({})", Id(),
-      DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n());
+      "[document_index.wrapper][id({})] search document in document index, range({}) query_string({}) top_n({}), "
+      "query_unlimited({})",
+      Id(), DocumentCodec::DebugRange(false, region_range), parameter.query_string(), parameter.top_n(),
+      parameter.query_unlimited());
 
   return document_index->Search(parameter.top_n(), parameter.query_string(), false, 0, INT64_MAX, use_id_filter,
-                                alive_ids, column_names, results);
+                                parameter.query_unlimited(), alive_ids, column_names, results);
 }
 
 // For document index, all node need to hold the index, so this function always return true.
