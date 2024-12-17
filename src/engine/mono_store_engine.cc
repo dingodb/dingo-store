@@ -304,6 +304,13 @@ butil::Status MonoStoreEngine::DocumentReader::DocumentSearch(std::shared_ptr<Do
   return vector_reader->DocumentSearch(ctx, results);
 }
 
+butil::Status MonoStoreEngine::DocumentReader::DocumentSearchAll(std::shared_ptr<DocumentReader::Context> ctx,
+                                                                 bool& has_more,
+                                                                 std::vector<pb::common::DocumentWithScore>& results) {
+  auto vector_reader = dingodb::DocumentReader::New(reader_);
+  return vector_reader->DocumentSearchAll(ctx, has_more, results);
+}
+
 butil::Status MonoStoreEngine::DocumentReader::DocumentBatchQuery(
     std::shared_ptr<DocumentReader::Context> ctx, std::vector<pb::common::DocumentWithId>& document_with_ids) {
   auto vector_reader = dingodb::DocumentReader::New(reader_);

@@ -36,6 +36,11 @@ class DocumentServiceImpl : public pb::document::DocumentService {
                           pb::document::DocumentBatchQueryResponse* response, google::protobuf::Closure* done) override;
   void DocumentSearch(google::protobuf::RpcController* controller, const pb::document::DocumentSearchRequest* request,
                       pb::document::DocumentSearchResponse* response, google::protobuf::Closure* done) override;
+
+  void DocumentSearchAll(google::protobuf::RpcController* controller,
+                         const pb::document::DocumentSearchAllRequest* request,
+                         pb::document::DocumentSearchAllResponse* response, google::protobuf::Closure* done) override;
+
   void DocumentGetBorderId(google::protobuf::RpcController* controller,
                            const pb::document::DocumentGetBorderIdRequest* request,
                            pb::document::DocumentGetBorderIdResponse* response,

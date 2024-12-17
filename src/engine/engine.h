@@ -23,6 +23,7 @@
 
 #include "butil/status.h"
 #include "common/context.h"
+#include "common/stream.h"
 #include "config/config.h"
 #include "document/document_index.h"
 #include "engine/raw_engine.h"
@@ -225,10 +226,16 @@ class Engine : public std::enable_shared_from_this<Engine> {
 
       DocumentIndexWrapperPtr document_index;
       pb::common::ScalarSchema scalar_schema;
+
+      StreamPtr Stream() { return stream; }
+      void SetStream(StreamPtr streamptr) { stream = streamptr; }
+      StreamPtr stream;
     };
 
     virtual butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
                                          std::vector<pb::common::DocumentWithScore>& results) = 0;
+    virtual butil::Status DocumentSearchAll(std::shared_ptr<DocumentReader::Context> ctx, bool& has_more,
+                                            std::vector<pb::common::DocumentWithScore>& results) = 0;
 
     virtual butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
                                              std::vector<pb::common::DocumentWithId>& doc_with_ids) = 0;

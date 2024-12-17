@@ -155,6 +155,8 @@ class MonoStoreEngine : public Engine {
 
     butil::Status DocumentSearch(std::shared_ptr<DocumentReader::Context> ctx,
                                  std::vector<pb::common::DocumentWithScore>& results) override;
+    butil::Status DocumentSearchAll(std::shared_ptr<DocumentReader::Context> ctx, bool& has_more,
+                                    std::vector<pb::common::DocumentWithScore>& results) override;
     butil::Status DocumentBatchQuery(std::shared_ptr<DocumentReader::Context> ctx,
                                      std::vector<pb::common::DocumentWithId>& document_with_ids) override;
     butil::Status DocumentGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,

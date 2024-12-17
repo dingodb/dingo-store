@@ -3714,7 +3714,6 @@ butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, s
       return butil::Status::OK();
     }
   }
-  DINGO_LOG(INFO) << "yjddebug checksecondary commit_ts:" << response->commit_ts();
   return butil::Status::OK();
 }
 

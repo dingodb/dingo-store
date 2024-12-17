@@ -292,6 +292,121 @@ void DocumentServiceImpl::DocumentSearch(google::protobuf::RpcController* contro
   }
 }
 
+static butil::Status ValidateDocumentSearchAllRequest(StoragePtr storage,
+                                                      const pb::document::DocumentSearchAllRequest* request,
+                                                      store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+  if (request->stream_meta().limit() <= 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit is invalid");
+  }
+  if (request->stream_meta().limit() > FLAGS_stream_message_max_limit_size) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "param limit beyond max limit");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (!region->DocumentIndexWrapper()->IsReady()) {
+    if (region->DocumentIndexWrapper()->IsBuildError()) {
+      return butil::Status(pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+                           fmt::format("Document index {} build error, please wait for recover.", region->Id()));
+    }
+    return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                         fmt::format("Document index {} not ready, please retry.", region->Id()));
+  }
+
+  return ServiceHelper::ValidateRegionState(region);
+}
+
+void DoDocumentSearchAll(StoragePtr storage, google::protobuf::RpcController* controller,
+                         const pb::document::DocumentSearchAllRequest* request,
+                         pb::document::DocumentSearchAllResponse* response, TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateDocumentSearchAllRequest(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::document::DocumentSearchAllRequest*>(request);
+  auto ctx = std::make_shared<Engine::DocumentReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->document_index = region->DocumentIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->parameter.Swap(mut_request->mutable_parameter());
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+
+  std::vector<pb::common::DocumentWithScore> document_results;
+  bool has_more = false;
+  status = storage->DocumentSearchAll(ctx, mut_request->stream_meta(), has_more, document_results);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+
+  for (auto& document_with_score : document_results) {
+    *(response->add_document_with_scores()) = document_with_score;
+  }
+  auto stream = ctx->Stream();
+  CHECK(stream != nullptr) << fmt::format("[region({})] stream is nullptr.", region_id);
+
+  auto* mut_stream_meta = response->mutable_stream_meta();
+  mut_stream_meta->set_stream_id(stream->StreamId());
+  mut_stream_meta->set_has_more(has_more);
+}
+
+void DocumentServiceImpl::DocumentSearchAll(google::protobuf::RpcController* controller,
+                                            const pb::document::DocumentSearchAllRequest* request,
+                                            pb::document::DocumentSearchAllResponse* response,
+                                            google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_document_search) {
+    return DoDocumentSearchAll(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoDocumentSearchAll(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteLeastQueue(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
 static butil::Status ValidateDocumentAddRequest(StoragePtr storage, const pb::document::DocumentAddRequest* request,
                                                 store::RegionPtr region) {
   auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
@@ -1587,10 +1702,10 @@ void DoTxnPrewriteDocument(StoragePtr storage, google::protobuf::RpcController* 
   }
 
   std::vector<pb::common::KeyValue> kvs;
-  status =
-      storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(), request->lock_ttl(),
-                           request->txn_size(), request->try_one_pc(), request->min_commit_ts(),
-                           request->max_commit_ts(), pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+  status = storage->TxnPrewrite(ctx, region, mutations, request->primary_lock(), request->start_ts(),
+                                request->lock_ttl(), request->txn_size(), request->try_one_pc(),
+                                request->min_commit_ts(), request->max_commit_ts(), pessimistic_checks,
+                                for_update_ts_checks, lock_extra_datas, secondaries);
 
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());

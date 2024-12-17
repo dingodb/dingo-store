@@ -142,7 +142,7 @@ TEST(DingoDocumentIndexTest, test_default_create) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -150,7 +150,7 @@ TEST(DingoDocumentIndexTest, test_default_create) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 5);
@@ -248,7 +248,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -256,7 +256,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 5);
@@ -264,7 +264,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, false, {}, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 3);
@@ -276,7 +276,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 2);
@@ -288,7 +288,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of")", false, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", false, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 3);
@@ -300,7 +300,7 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6])", true, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6])", true, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -312,8 +312,8 @@ TEST(DingoDocumentIndexTest, test_load_or_create) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6 7] AND i64: >= 1006)", true, 5, 8, true, alive_ids,
-                                 {}, results);
+    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6 7] AND i64: >= 1006)", true, 5, 8, true, false,
+                                 alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -444,7 +444,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(5, "discover", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -452,7 +452,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, {}, {}, results);
+    ret = document_index->Search(10, "of", false, 0, INT64_MAX, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 4);
@@ -460,7 +460,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
 
   {
     std::vector<dingodb::pb::common::DocumentWithScore> results;
-    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, false, {}, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, false, false, {}, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 2);
@@ -472,7 +472,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", true, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
 
@@ -489,7 +489,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of")", false, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of")", false, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 2);
@@ -501,7 +501,7 @@ TEST(DingoDocumentIndexTest, test_upsert) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6])", true, 5, 8, true, alive_ids, {}, results);
+    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6])", true, 5, 8, true, false, alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 1);
@@ -513,8 +513,8 @@ TEST(DingoDocumentIndexTest, test_upsert) {
     alive_ids.push_back(6);
     alive_ids.push_back(7);
     alive_ids.push_back(8);
-    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6 7] AND i64: >= 1006)", true, 5, 8, true, alive_ids,
-                                 {}, results);
+    ret = document_index->Search(10, R"(text:"of" AND row_id:IN [6 7] AND i64: >= 1006)", true, 5, 8, true, false,
+                                 alive_ids, {}, results);
     std::cout << "status: " << ret.error_code() << ", " << ret.error_str() << '\n';
     EXPECT_EQ(ret.ok(), true);
     EXPECT_EQ(results.size(), 0);
