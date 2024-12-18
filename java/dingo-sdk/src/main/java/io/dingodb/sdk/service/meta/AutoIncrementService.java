@@ -102,7 +102,7 @@ public class AutoIncrementService {
         }
     }
 
-    private void updateIncrement(DingoCommonId tableId, long increment) {
+    public void updateIncrement(DingoCommonId tableId, long increment) {
         Meta.UpdateAutoIncrementRequest request = Meta.UpdateAutoIncrementRequest.newBuilder()
                 .setTableId(mapping(tableId))
                 .setStartId(increment)
@@ -117,15 +117,39 @@ public class AutoIncrementService {
         try {
             AutoIncrement autoIncrement = innerCache.computeIfAbsent(tableId,
                     id -> new AutoIncrement(id, increment, offset, this::fetcher));
+            if (autoIncrement.getLimit() == 0) {
+                autoIncrement.inc();
+            }
             if (incrementId < autoIncrement.getLimit() && incrementId >= autoIncrement.current()) {
                 autoIncrement.inc(incrementId);
             } else {
                 // update server startid
                 autoIncrement.inc(incrementId);
                 if (autoIncrement.getLimit() > 0 && incrementId > autoIncrement.getLimit()) {
-                    updateIncrement(tableId, incrementId);
+                    long maxId = current(tableId);
+                    if (incrementId > maxId) {
+                        updateIncrement(tableId, incrementId);
+                    }
                 }
             }
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    public void reset(DingoCommonId tableId) {
+        rwLock.writeLock().lock();
+        try {
+            innerCache.remove(tableId);
+        } finally {
+            rwLock.writeLock().unlock();
+        }
+    }
+
+    public void reset() {
+        rwLock.writeLock().lock();
+        try {
+            innerCache.clear();
         } finally {
             rwLock.writeLock().unlock();
         }
