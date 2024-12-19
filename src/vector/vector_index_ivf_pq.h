@@ -22,6 +22,8 @@
 
 #include "butil/status.h"
 #include "common/synchronization.h"
+#include "faiss/Index.h"
+#include "faiss/IndexIDMap.h"
 #include "faiss/MetricType.h"
 #include "proto/common.pb.h"
 #include "vector/vector_index.h"
@@ -108,7 +110,7 @@ class VectorIndexIvfPq : public VectorIndex {
 
   int32_t nbits_per_idx_;
 
-  std::unique_ptr<VectorIndexFlat> index_flat_;
+  std::unique_ptr<VectorIndexFlat<faiss::Index,faiss::IndexIDMap2>> index_flat_;
 
   std::unique_ptr<VectorIndexRawIvfPq> index_raw_ivf_pq_;
 

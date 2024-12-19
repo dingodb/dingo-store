@@ -15,10 +15,12 @@
 #include "vector/vector_index_utils.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstdint>
 #include <memory>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -426,9 +428,22 @@ void VectorIndexUtils::NormalizeVectorForHnsw(const float* data, uint32_t dimens
 butil::Status VectorIndexUtils::CheckVectorDimension(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                      int dimension) {
   for (const auto& vector_with_id : vector_with_ids) {
-    if (vector_with_id.vector().float_values().size() != dimension) {
+    if (vector_with_id.vector().value_type() == pb::common::ValueType::FLOAT) {
+      if (vector_with_id.vector().float_values().size() != dimension) {
+        std::string s =
+            fmt::format("vector dimension not match, {} {}", vector_with_id.vector().float_values_size(), dimension);
+        return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+      }
+    } else if (vector_with_id.vector().value_type() == pb::common::ValueType::UINT8) {
+      if (vector_with_id.vector().binary_values().size() != dimension / CHAR_BIT) {
+        std::string s = fmt::format("binary vector dimension not match, {} {}/bit",
+                                    vector_with_id.vector().binary_values_size(), dimension);
+        return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+      }
+    } else {
       std::string s =
-          fmt::format("vector dimension not match, {} {}", vector_with_id.vector().float_values_size(), dimension);
+          fmt::format("invalid value type : {}", pb::common::ValueType_Name(vector_with_id.vector().value_type()));
+      DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
     }
   }
@@ -467,23 +482,55 @@ butil::Status VectorIndexUtils::CheckVectorIdDuplicated(const std::unique_ptr<fa
   return butil::Status::OK();
 }
 
-std::unique_ptr<float[]> VectorIndexUtils::ExtractVectorValue(
-    const std::vector<pb::common::VectorWithId>& vector_with_ids, faiss::idx_t dimension, bool normalize) {
-  std::unique_ptr<float[]> vectors = std::make_unique<float[]>(vector_with_ids.size() * dimension);
+template <typename T>
+std::unique_ptr<T[]> VectorIndexUtils::ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                          faiss::idx_t dimension, bool normalize) {
+  std::unique_ptr<T[]> vectors = nullptr;
+  if (std::is_same<T, float>::value) {
+    vectors = std::make_unique<T[]>(vector_with_ids.size() * dimension);
+  } else if (std::is_same<T, uint8_t>::value) {
+    vectors = std::make_unique<T[]>(vector_with_ids.size() * dimension / CHAR_BIT);
+  } else {
+    std::string s = fmt::format("invalid value typename type");
+    DINGO_LOG(ERROR) << s;
+    return nullptr;
+  }
 
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    const auto& vector_value = vector_with_ids[i].vector().float_values();
-    memcpy(vectors.get() + i * dimension, vector_value.data(), dimension * sizeof(float));
-
-    if (normalize) {
-      VectorIndexUtils::NormalizeVectorForFaiss(vectors.get() + i * dimension, dimension);
+    if (vector_with_ids[i].vector().value_type() == pb::common::ValueType::FLOAT) {
+      if (!std::is_same<T, float>::value) {
+        std::string s = fmt::format("template not match vectors value_type : {}",
+                                    pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
+        DINGO_LOG(ERROR) << s;
+        return nullptr;
+      }
+      const auto& vector_value = vector_with_ids[i].vector().float_values();
+      memcpy(vectors.get() + i * dimension, vector_value.data(), dimension * sizeof(float));
+      if (normalize) {
+        VectorIndexUtils::NormalizeVectorForFaiss(reinterpret_cast<float*>(vectors.get()) + i * dimension, dimension);
+      }
+    } else if (vector_with_ids[i].vector().value_type() == pb::common::ValueType::UINT8) {
+      if (!std::is_same<T, uint8_t>::value) {
+        std::string s = fmt::format("template not match vectors value_type : {}",
+                                    pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
+        DINGO_LOG(ERROR) << s;
+        return nullptr;
+      }
+      const auto& vector_value = vector_with_ids[i].vector().binary_values();
+      memcpy(vectors.get() + i * dimension / CHAR_BIT, vector_value.data(), dimension / CHAR_BIT);
+    } else {
+      std::string s =
+          fmt::format("invalid value type : {}", pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
+      DINGO_LOG(ERROR) << s;
+      return nullptr;
     }
   }
   return std::move(vectors);
 }
 
+template <typename T>
 butil::Status VectorIndexUtils::FillSearchResult(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                                 uint32_t topk, const std::vector<faiss::Index::distance_t>& distances,
+                                                 uint32_t topk, const std::vector<T>& distances,
                                                  const std::vector<faiss::idx_t>& labels,
                                                  pb::common::MetricType metric_type, faiss::idx_t dimension,
                                                  std::vector<pb::index::VectorWithDistanceResult>& results) {
@@ -496,19 +543,32 @@ butil::Status VectorIndexUtils::FillSearchResult(const std::vector<pb::common::V
         continue;
       }
       auto* vector_with_distance = result.add_vector_with_distances();
+      if (metric_type == pb::common::METRIC_TYPE_L2 || metric_type == pb::common::METRIC_TYPE_COSINE ||
+          metric_type == pb::common::METRIC_TYPE_INNER_PRODUCT) {
+        auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+        vector_with_id->set_id(labels[pos]);
+        vector_with_id->mutable_vector()->set_dimension(dimension);
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+        if (metric_type == pb::common::MetricType::METRIC_TYPE_COSINE ||
+            metric_type == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
+          vector_with_distance->set_distance(1.0F - distances[pos]);
+        } else {
+          vector_with_distance->set_distance(distances[pos]);
+        }
 
-      auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
-      vector_with_id->set_id(labels[pos]);
-      vector_with_id->mutable_vector()->set_dimension(dimension);
-      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-      if (metric_type == pb::common::MetricType::METRIC_TYPE_COSINE ||
-          metric_type == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        vector_with_distance->set_distance(1.0F - distances[pos]);
+        vector_with_distance->set_metric_type(metric_type);
+      } else if (metric_type == pb::common::METRIC_TYPE_HAMMING) {
+        auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
+        vector_with_id->set_id(labels[pos]);
+        vector_with_id->mutable_vector()->set_dimension(dimension);
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
+        vector_with_distance->set_distance(static_cast<float>(distances[pos]));
+        vector_with_distance->set_metric_type(metric_type);
       } else {
-        vector_with_distance->set_distance(distances[pos]);
+        std::string s = fmt::format("invalid metric_type type : {}", pb::common::MetricType_Name(metric_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
-
-      vector_with_distance->set_metric_type(metric_type);
     }
   }
   return butil::Status::OK();
@@ -529,12 +589,20 @@ butil::Status VectorIndexUtils::FillRangeSearchResult(
       auto* vector_with_id = vector_with_distance->mutable_vector_with_id();
       vector_with_id->set_id(range_search_result->labels[off + i]);
       vector_with_id->mutable_vector()->set_dimension(dimension);
-      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-      if (metric_type == pb::common::MetricType::METRIC_TYPE_COSINE ||
-          metric_type == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
-        vector_with_distance->set_distance(1.0F - range_search_result->distances[off + i]);
-      } else {
+      if (metric_type == pb::common::MetricType::METRIC_TYPE_HAMMING) {
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
         vector_with_distance->set_distance(range_search_result->distances[off + i]);
+      } else if (metric_type == pb::common::MetricType::METRIC_TYPE_COSINE ||
+                 metric_type == pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT) {
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+        vector_with_distance->set_distance(1.0F - range_search_result->distances[off + i]);
+      } else if (metric_type == pb::common::METRIC_TYPE_L2) {
+        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+        vector_with_distance->set_distance(range_search_result->distances[off + i]);
+      } else {
+        std::string s = fmt::format("invalid metric_type type : {}", pb::common::MetricType_Name(metric_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
 
       vector_with_distance->set_metric_type(metric_type);
@@ -620,6 +688,44 @@ butil::Status VectorIndexUtils::CheckVectorIndexParameterCompatibility(const pb:
                            "source_ivf_pq_parameter.ncentroids() != target_ivf_pq_parameter.ncentroids()");
     }
     return butil::Status::OK();
+  } else if (source.vector_index_type() == pb::common::VECTOR_INDEX_TYPE_BINARY_FLAT) {
+    const auto& source_binary_flat_parameter = source.binary_flat_parameter();
+    const auto& target_binary_flat_parameter = target.binary_flat_parameter();
+    if (source_binary_flat_parameter.dimension() != target_binary_flat_parameter.dimension()) {
+      DINGO_LOG(INFO) << "source_binary_flat_parameter.dimension() != target_binary_flat_parameter.dimension()";
+      return butil::Status(pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH,
+                           "source_binary_flat_parameter.dimension() != target_binary_flat_parameter.dimension()");
+    }
+    if (source_binary_flat_parameter.metric_type() != target_binary_flat_parameter.metric_type()) {
+      DINGO_LOG(INFO) << "source_binary_flat_parameter.metric_type() != target_binary_flat_parameter.metric_type()";
+      return butil::Status(pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH,
+                           "source_binary_flat_parameter.metric_type() != target_binary_flat_parameter.metric_type()");
+    }
+    return butil::Status::OK();
+  } else if (source.vector_index_type() == pb::common::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+    const auto& source_binary_ivf_flat_parameter = source.binary_ivf_flat_parameter();
+    const auto& target_binary_ivf_flat_parameter = target.binary_ivf_flat_parameter();
+    if (source_binary_ivf_flat_parameter.dimension() != target_binary_ivf_flat_parameter.dimension()) {
+      DINGO_LOG(INFO) << "source_binary_ivf_flat_parameter.dimension() != target_binary_ivf_flat_parameter.dimension()";
+      return butil::Status(
+          pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH,
+          "source_binary_ivf_flat_parameter.dimension() != target_binary_ivf_flat_parameter.dimension()");
+    }
+    if (source_binary_ivf_flat_parameter.metric_type() != target_binary_ivf_flat_parameter.metric_type()) {
+      DINGO_LOG(INFO)
+          << "source_binary_ivf_flat_parameter.metric_type() != target_binary_ivf_flat_parameter.metric_type()";
+      return butil::Status(
+          pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH,
+          "source_binary_ivf_flat_parameter.metric_type() != target_binary_ivf_flat_parameter.metric_type()");
+    }
+    if (source_binary_ivf_flat_parameter.ncentroids() != target_binary_ivf_flat_parameter.ncentroids()) {
+      DINGO_LOG(INFO)
+          << "source_binary_ivf_flat_parameter.ncentroids() != target_binary_ivf_flat_parameter.ncentroids()";
+      return butil::Status(
+          pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH,
+          "source_binary_ivf_flat_parameter.ncentroids() != target_binary_ivf_flat_parameter.ncentroids()");
+    }
+    return butil::Status::OK();
   } else {
     DINGO_LOG(ERROR) << "source.vector_index_type() is not supported";
     return butil::Status(pb::error::EMERGE_VECTOR_INDEX_TYPE_NOT_MATCH, "source.vector_index_type() is not supported");
@@ -656,9 +762,11 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
 
     // check hnsw_parameter.metric_type
-    // The distance metric used to calculate the similarity between vectors. This parameter is required and must not
-    // be METRIC_TYPE_NONE.
-    if (hnsw_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+    // The distance metric used to calculate the similarity between vectors.
+    // This parameter must be METRIC_TYPE_COSINE or METRIC_TYPE_INNER_PRODUCT or METRIC_TYPE_L2.
+    if (!(hnsw_parameter.metric_type() == pb::common::METRIC_TYPE_COSINE) &&
+        !(hnsw_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
+        !(hnsw_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "hnsw_parameter.metric_type is illegal " << hnsw_parameter.metric_type();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "hnsw_parameter.metric_type is illegal " + std::to_string(hnsw_parameter.metric_type()));
@@ -715,7 +823,9 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
 
     // check flat_parameter.metric_type
-    if (flat_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+    if (!(flat_parameter.metric_type() == pb::common::METRIC_TYPE_COSINE) &&
+        !(flat_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
+        !(flat_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "flat_parameter.metric_type is illegal " << flat_parameter.metric_type();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "flat_parameter.metric_type is illegal " + std::to_string(flat_parameter.metric_type()));
@@ -741,13 +851,12 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
 
     // check ivf_flat_parameter.metric_type
-    // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
-    // search. This parameter must not be METRIC_TYPE_NONE.
-    if (ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+    if (!(ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_COSINE) &&
+        !(ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
+        !(ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "ivf_flat_parameter.metric_type is illegal " << ivf_flat_parameter.metric_type();
-      return butil::Status(
-          pb::error::Errno::EILLEGAL_PARAMTETERS,
-          "ivf_flat_parameter.metric_type is illegal " + std::to_string(ivf_flat_parameter.metric_type()));
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "ivf_flat_parameter.metric_type is illegal " + std::to_string(ivf_flat_parameter.metric_type()));
     }
 
     // check ivf_flat_parameter.ncentroids
@@ -781,8 +890,10 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
 
     // check ivf_pq_parameter.metric_type
     // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
-    // search. This parameter must not be METRIC_TYPE_NONE.
-    if (ivf_pq_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+    // search. This parameter must be METRIC_TYPE_COSINE or METRIC_TYPE_INNER_PRODUCT or METRIC_TYPE_L2.
+    if (!(ivf_pq_parameter.metric_type() == pb::common::METRIC_TYPE_COSINE) &&
+        !(ivf_pq_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
+        !(ivf_pq_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "ivf_pq_parameter.metric_type is illegal " << ivf_pq_parameter.metric_type();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "ivf_pq_parameter.metric_type is illegal " + std::to_string(ivf_pq_parameter.metric_type()));
@@ -854,6 +965,75 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     return status;
   }
 #endif
+  if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT) {
+    if (!vector_index_parameter.has_binary_flat_parameter()) {
+      DINGO_LOG(ERROR) << "vector_index_type is Binary FLAT, but has_binary_flat_parameter is not set";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "vector_index_type is Binary FLAT, but has_binary_flat_parameter is not set");
+    }
+
+    const auto& binary_flat_parameter = vector_index_parameter.binary_flat_parameter();
+
+    // check binary_flat_parameter.dimension
+    if (binary_flat_parameter.dimension() <= 0 || binary_flat_parameter.dimension() > Constant::kVectorMaxDimension ||
+        binary_flat_parameter.dimension() % 8 != 0) {
+      DINGO_LOG(ERROR) << "binary_flat_parameter.dimension is illegal " << binary_flat_parameter.dimension();
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          "binary_flat_parameter.dimension is illegal " + std::to_string(binary_flat_parameter.dimension()));
+    }
+
+    // check binary_flat_parameter.metric_type
+    if (binary_flat_parameter.metric_type() != pb::common::METRIC_TYPE_HAMMING) {
+      DINGO_LOG(ERROR) << "binary_flat_parameter.metric_type is illegal " << binary_flat_parameter.metric_type();
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          "binary_flat_parameter.metric_type is illegal " + std::to_string(binary_flat_parameter.metric_type()));
+    }
+  }
+
+  if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+    if (!vector_index_parameter.has_binary_ivf_flat_parameter()) {
+      DINGO_LOG(ERROR) << "vector_binary_index_type is BINARY_IVF_FLAT, but binary_ivf_flat_parameter is not set";
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "vector_index_type is BINARY_IVF_FLAT, but binary_ivf_flat_parameter is not set");
+    }
+
+    const auto& binary_ivf_flat_parameter = vector_index_parameter.binary_ivf_flat_parameter();
+
+    // check binary_ivf_flat_parameter.dimension
+    // The dimension of the vectors to be indexed. This parameter must be greater than 0.
+    if (binary_ivf_flat_parameter.dimension() <= 0 ||
+        binary_ivf_flat_parameter.dimension() > Constant::kVectorMaxDimension ||
+        binary_ivf_flat_parameter.dimension() % 8 != 0) {
+      DINGO_LOG(ERROR) << "binary_ivf_flat_parameter.dimension is illegal " << binary_ivf_flat_parameter.dimension();
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          "binary_ivf_flat_parameter.dimension is illegal " + std::to_string(binary_ivf_flat_parameter.dimension()));
+    }
+
+    // check binary_ivf_flat_parameter.metric_type
+    // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
+    // search. This parameter must be METRIC_TYPE_HAMMING.
+    if (binary_ivf_flat_parameter.metric_type() != pb::common::METRIC_TYPE_HAMMING) {
+      DINGO_LOG(ERROR) << "ivf_flat_parameter.metric_type is illegal " << binary_ivf_flat_parameter.metric_type();
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           "binary_ivf_flat_parameter.metric_type is illegal " +
+                               std::to_string(binary_ivf_flat_parameter.metric_type()));
+    }
+
+    // check binary_ivf_flat_parameter.ncentroids
+    // The number of centroids (clusters) used in the product quantization. This parameter affects the memory usage
+    // of the index and the accuracy of the search. This parameter must be greater than 0.
+    if (binary_ivf_flat_parameter.ncentroids() <= 0) {
+      std::string s =
+          fmt::format("binary_ivf_flat_parameter.ncentroids is illegal : {}  default : {}",
+                      binary_ivf_flat_parameter.ncentroids(), Constant::kCreateBinaryIvfFlatParamNcentroids);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+  }
+
   return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
 }
 
@@ -879,8 +1059,10 @@ butil::Status VectorIndexUtils::ValidateDiskannParameter(
 
     // check diskann_parameter.metric_type
     // The distance metric used to compute the distance between vectors. This parameter affects the accuracy of the
-    // search. This parameter must not be METRIC_TYPE_NONE.
-    if (diskann_parameter.metric_type() == pb::common::METRIC_TYPE_NONE) {
+    // search. This parameter must be METRIC_TYPE_COSINE or METRIC_TYPE_INNER_PRODUCT or METRIC_TYPE_L2.
+    if (!(diskann_parameter.metric_type() == pb::common::METRIC_TYPE_COSINE) &&
+        !(diskann_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
+        !(diskann_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "diskann_parameter.metric_type is illegal " << diskann_parameter.metric_type();
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "diskann_parameter.metric_type is illegal " +
                                                                        std::to_string(diskann_parameter.metric_type()));
@@ -1139,5 +1321,21 @@ butil::Status VectorIndexUtils::IsNeedToScanKeySpeedUpCF(const pb::common::Scala
 
   return butil::Status::OK();
 }
+
+template std::unique_ptr<float[]> VectorIndexUtils::ExtractVectorValue<float>(
+    const std::vector<pb::common::VectorWithId>&, long, bool);
+
+template std::unique_ptr<uint8_t[]> VectorIndexUtils::ExtractVectorValue<uint8_t>(
+    const std::vector<pb::common::VectorWithId>&, long, bool);
+
+template butil::Status VectorIndexUtils::FillSearchResult<float>(const std::vector<pb::common::VectorWithId>&,
+                                                                 unsigned int, const std::vector<float>&,
+                                                                 const std::vector<long>&, pb::common::MetricType, long,
+                                                                 std::vector<pb::index::VectorWithDistanceResult>&);
+
+template butil::Status VectorIndexUtils::FillSearchResult<int>(const std::vector<pb::common::VectorWithId>&,
+                                                               unsigned int, const std::vector<int>&,
+                                                               const std::vector<long>&, pb::common::MetricType, long,
+                                                               std::vector<pb::index::VectorWithDistanceResult>&);
 
 }  // namespace dingodb

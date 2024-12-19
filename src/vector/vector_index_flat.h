@@ -54,6 +54,7 @@ class FlatIDSelector : public faiss::IDSelector {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
+template <typename T,typename U>
 class VectorIndexFlat : public VectorIndex {
  public:
   explicit VectorIndexFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -112,18 +113,18 @@ class VectorIndexFlat : public VectorIndex {
   bool NeedToSave(int64_t last_save_log_behind) override;
 
  private:
-  template <typename T>
-  std::vector<faiss::idx_t> GetExistVectorIds(const T& ids, size_t size);
+  template <typename V>
+  std::vector<faiss::idx_t> GetExistVectorIds(const V& ids, size_t size);
 
   // Dimension of the elements
   faiss::idx_t dimension_;
 
-  // only support L2 and IP
+  // only support L2 and IP Hamming
   pb::common::MetricType metric_type_;
 
-  std::unique_ptr<faiss::Index> raw_index_;
+  std::unique_ptr<T> raw_index_;
 
-  std::unique_ptr<faiss::IndexIDMap2> index_id_map2_;
+  std::unique_ptr<U> index_id_map2_;
 
   RWLock rw_lock_;
 

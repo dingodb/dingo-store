@@ -85,7 +85,7 @@ butil::Status VectorIndexRawIvfPq::AddOrUpsert(const std::vector<pb::common::Vec
   }
 
   const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
-  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
 
   RWLockWriteGuard guard(&rw_lock_);
 
@@ -174,7 +174,7 @@ butil::Status VectorIndexRawIvfPq::Search(const std::vector<pb::common::VectorWi
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
 
-  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
+  const auto& vector_values = VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
 
   {
     RWLockReadGuard guard(&rw_lock_);
@@ -224,7 +224,7 @@ butil::Status VectorIndexRawIvfPq::RangeSearch(const std::vector<pb::common::Vec
 
   int32_t nprobe = parameter.ivf_pq().nprobe() > 0 ? parameter.ivf_pq().nprobe() : Constant::kSearchIvfPqParamNprobe;
 
-  const auto& vectors_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
+  const auto& vectors_values = VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());

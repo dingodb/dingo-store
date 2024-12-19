@@ -65,6 +65,7 @@ struct VectorSearchOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int32_t topn;
   std::string vector_data;
   std::string key;
@@ -91,6 +92,7 @@ struct VectorSearchDebugOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int32_t topn;
   int64_t start_vector_id;
   int32_t batch_count;
@@ -112,6 +114,7 @@ struct VectorRangeSearchOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   double radius;
   std::string key;
   bool without_vector;
@@ -129,6 +132,7 @@ struct VectorRangeSearchDebugOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   double radius;
   int64_t start_vector_id;
   int32_t batch_count;
@@ -150,6 +154,7 @@ struct VectorBatchSearchOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int32_t topn;
   int32_t batch_count;
   std::string key;
@@ -214,11 +219,22 @@ struct VectorGetRegionMetricsOptions {
 void SetUpVectorGetRegionMetrics(CLI::App &app);
 void RunVectorGetRegionMetricsd(VectorGetRegionMetricsOptions const &opt);
 
+enum ValueType : uint8_t {
+  kFloat,
+  kBinary,
+};
+struct VectorData {
+  ValueType value_type;
+  std::vector<std::vector<float>> vector_float_datas;
+  std::vector<std::vector<uint8_t>> vector_binary_datas;
+};
+
 struct VectorAddOptions {
   std::string coor_url;
   int64_t table_id;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int64_t start_id;
   int32_t count;
   int32_t step_count;
@@ -262,6 +278,7 @@ struct VectorAddBatchOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int64_t start_id;
   int32_t count;
   int32_t step_count;
@@ -275,6 +292,7 @@ struct VectorAddBatchDebugOptions {
   std::string coor_url;
   int64_t region_id;
   int32_t dimension;
+  std::string value_type;
   int64_t start_id;
   int32_t count;
   int32_t step_count;

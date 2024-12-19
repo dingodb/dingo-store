@@ -82,7 +82,8 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
   BvarLatencyGuard bvar_guard(&g_ivf_pq_upsert_latency);
   {
     RWLockWriteGuard guard(&rw_lock_);
-    status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
+    status = InvokeConcreteFunction("AddOrUpsertWrapper",
+                                    &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
     if (status.ok()) {
       return status;
@@ -100,7 +101,8 @@ butil::Status VectorIndexIvfPq::AddOrUpsertWrapper(const std::vector<pb::common:
   // add again
   {
     RWLockWriteGuard guard(&rw_lock_);
-    status = InvokeConcreteFunction("AddOrUpsertWrapper", &VectorIndexFlat::AddOrUpsertWrapper,
+    status = InvokeConcreteFunction("AddOrUpsertWrapper",
+                                    &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::AddOrUpsertWrapper,
                                     &VectorIndexRawIvfPq::AddOrUpsertWrapper, true, vector_with_ids, is_upsert);
   }
 
@@ -123,8 +125,8 @@ butil::Status VectorIndexIvfPq::Delete(const std::vector<int64_t>& delete_ids) {
   BvarLatencyGuard bvar_guard(&g_ivf_pq_delete_latency);
   RWLockWriteGuard guard(&rw_lock_);
 
-  butil::Status status =
-      InvokeConcreteFunction("Delete", &VectorIndexFlat::Delete, &VectorIndexRawIvfPq::Delete, false, delete_ids);
+  butil::Status status = InvokeConcreteFunction("Delete", &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::Delete,
+                                                &VectorIndexRawIvfPq::Delete, false, delete_ids);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     return status;
   }
@@ -147,8 +149,9 @@ butil::Status VectorIndexIvfPq::Search(const std::vector<pb::common::VectorWithI
 
   BvarLatencyGuard bvar_guard(&g_ivf_pq_search_latency);
   RWLockReadGuard guard(&rw_lock_);
-  status = InvokeConcreteFunction("Search", &VectorIndexFlat::Search, &VectorIndexRawIvfPq::Search, false,
-                                  vector_with_ids, topk, filters, reconstruct, parameter, results);
+  status = InvokeConcreteFunction("Search", &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::Search,
+                                  &VectorIndexRawIvfPq::Search, false, vector_with_ids, topk, filters, reconstruct,
+                                  parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     return status;
   }
@@ -177,8 +180,9 @@ butil::Status VectorIndexIvfPq::RangeSearch(const std::vector<pb::common::Vector
   BvarLatencyGuard bvar_guard(&g_ivf_pq_range_search_latency);
   RWLockReadGuard guard(&rw_lock_);
 
-  status = InvokeConcreteFunction("RangeSearch", &VectorIndexFlat::RangeSearch, &VectorIndexRawIvfPq::RangeSearch,
-                                  false, vector_with_ids, radius, filters, reconstruct, parameter, results);
+  status = InvokeConcreteFunction("RangeSearch", &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::RangeSearch,
+                                  &VectorIndexRawIvfPq::RangeSearch, false, vector_with_ids, radius, filters,
+                                  reconstruct, parameter, results);
   if (!status.ok() && (pb::error::Errno::EVECTOR_NOT_TRAIN != status.error_code())) {
     return status;
   }
@@ -205,8 +209,8 @@ butil::Status VectorIndexIvfPq::Save(const std::string& path) {
   // Remove glog temporarily.
   // The outside has been locked. Remove the locking operation here.
   // BAIDU_SCOPED_LOCK(mutex_);
-  butil::Status status =
-      InvokeConcreteFunction("Save", &VectorIndexFlat::Save, &VectorIndexRawIvfPq::Save, false, path);
+  butil::Status status = InvokeConcreteFunction("Save", &VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>::Save,
+                                                &VectorIndexRawIvfPq::Save, false, path);
   if (!status.ok()) {
     // DINGO_LOG(ERROR) << "VectorIndexIvfPq::Save failed " << status.error_cstr();
     return status;
@@ -245,7 +249,8 @@ butil::Status VectorIndexIvfPq::Load(const std::string& path) {
   ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
   flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
   flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-  auto internal_index_flat = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range, thread_pool);
+  auto internal_index_flat = std::make_unique<VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>>(
+      id, index_parameter_flat, epoch, range, thread_pool);
 
   status = internal_index_flat->Load(path);
   if (status.ok()) {
@@ -495,7 +500,8 @@ void VectorIndexIvfPq::Init() {
     ::dingodb::pb::common::CreateFlatParam* flat_parameter = index_parameter_flat.mutable_flat_parameter();
     flat_parameter->set_metric_type(vector_index_parameter.ivf_pq_parameter().metric_type());
     flat_parameter->set_dimension(vector_index_parameter.ivf_pq_parameter().dimension());
-    index_flat_ = std::make_unique<VectorIndexFlat>(id, index_parameter_flat, epoch, range, thread_pool);
+    index_flat_ = std::make_unique<VectorIndexFlat<faiss::Index, faiss::IndexIDMap2>>(id, index_parameter_flat, epoch,
+                                                                                      range, thread_pool);
 
   } else if (IndexTypeInIvfPq::kIvfPq == inner_index_type_) {
     index_raw_ivf_pq_ = std::make_unique<VectorIndexRawIvfPq>(id, vector_index_parameter, epoch, range, thread_pool);

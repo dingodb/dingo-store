@@ -1229,9 +1229,9 @@ void SetUpCreateRegion(CLI::App &app) {
   cmd->add_flag("--use_json_parameter", opt->use_json_parameter, "Request parameter use_json_parameter swtich");
   cmd->add_flag("--key_is_hex", opt->key_is_hex, "Request parameter key_is_hex");
   cmd->add_option("--vector_index_type", opt->vector_index_type,
-                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq");
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq|binary_Flat|binary_ivf_flat");
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
-  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")->ignore_case();
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE|HAMMING")->ignore_case();
   cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
   cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction");
   cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks");
@@ -1404,6 +1404,12 @@ void RunCreateRegion(CreateRegionOption const &opt) {
       vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
     } else if (opt.vector_index_type == "ivf_pq") {
       vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+    } else if (opt.vector_index_type == "binary_flat") {
+      vector_index_parameter->set_vector_index_type(
+          ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT);
+    } else if (opt.vector_index_type == "binary_ivf_flat") {
+      vector_index_parameter->set_vector_index_type(
+          ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT);
     } else {
       DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
       return;
@@ -1425,8 +1431,10 @@ void RunCreateRegion(CreateRegionOption const &opt) {
       metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
     } else if (opt.metrics_type == "COSINE" || opt.metrics_type == "cosine") {
       metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+    } else if (opt.metrics_type == "HAMMING" || opt.metrics_type == "hamming") {
+      metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_HAMMING;
     } else {
-      DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP and COSINE";
+      DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP, COSINE and HAMMING";
       return;
     }
 
@@ -1469,6 +1477,15 @@ void RunCreateRegion(CreateRegionOption const &opt) {
       ivf_pq_index_parameter->set_ncentroids(opt.ncentroids);
       ivf_pq_index_parameter->set_nsubvector(opt.nsubvector);
       ivf_pq_index_parameter->set_nbits_per_idx(opt.nbits_per_idx);
+    } else if (opt.vector_index_type == "binary_flat") {
+      auto *binary_flat_parameter = vector_index_parameter->mutable_binary_flat_parameter();
+      binary_flat_parameter->set_metric_type(metric_type);
+      binary_flat_parameter->set_dimension(opt.dimension);
+    }else if(opt.vector_index_type=="binary_ivf_flat") {
+      auto *binary_ivf_flat_parameter = vector_index_parameter->mutable_binary_ivf_flat_parameter();
+      binary_ivf_flat_parameter->set_metric_type(metric_type);
+      binary_ivf_flat_parameter->set_dimension(opt.dimension);
+      binary_ivf_flat_parameter->set_ncentroids(opt.ncentroids);
     }
   }
 

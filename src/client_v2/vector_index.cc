@@ -14,6 +14,11 @@
 
 #include "client_v2/vector_index.h"
 
+#include <climits>
+#include <cstdint>
+#include <iostream>
+#include <string>
+
 #include "client_v2/helper.h"
 #include "client_v2/meta.h"
 #include "client_v2/pretty.h"
@@ -85,35 +90,64 @@ bool QueryRegionIdByVectorId(dingodb::pb::meta::IndexRange& index_range, int64_t
   return false;
 }
 
-int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_t> vector_ids,
-                       std::vector<std::vector<float>> vector_datas, uint32_t vector_datas_offset, bool with_scalar,
-                       bool with_table, std::string scalar_filter_key, std::string scalar_filter_value,
-                       std::string scalar_filter_key2, std::string scalar_filter_value2) {
+int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_t> vector_ids, VectorData vector_datas,
+                       uint32_t vector_datas_offset, bool with_scalar, bool with_table, std::string scalar_filter_key,
+                       std::string scalar_filter_value, std::string scalar_filter_key2,
+                       std::string scalar_filter_value2) {
   dingodb::pb::index::VectorAddRequest request;
   dingodb::pb::index::VectorAddResponse response;
 
   uint32_t max_size = 0;
-  if (vector_datas.empty()) {
-    max_size = vector_ids.size();
-  } else {
-    if (vector_datas.size() > vector_datas_offset + vector_ids.size()) {
+  if (vector_datas.value_type == ValueType::kBinary) {
+    if (vector_datas.vector_binary_datas.empty()) {
       max_size = vector_ids.size();
     } else {
-      max_size = vector_datas.size() > vector_datas_offset ? vector_datas.size() - vector_datas_offset : 0;
+      if (vector_datas.vector_binary_datas.size() > vector_datas_offset + vector_ids.size()) {
+        max_size = vector_ids.size();
+      } else {
+        max_size = vector_datas.vector_binary_datas.size() > vector_datas_offset
+                       ? vector_datas.vector_binary_datas.size() - vector_datas_offset
+                       : 0;
+      }
     }
-  }
 
-  if (max_size == 0) {
-    std::cout << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
-              << ", vector_datas.size: " << vector_datas.size() << ", vector_datas_offset: " << vector_datas_offset
-              << ", vector_ids.size: " << vector_ids.size() << std::endl;
-    return 0;
+    if (max_size == 0) {
+      std::cout << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
+                << ", vector_datas.size: " << vector_datas.vector_binary_datas.size()
+                << ", vector_datas_offset: " << vector_datas_offset << ", vector_ids.size: " << vector_ids.size()
+                << std::endl;
+      return 0;
+    }
+  } else if (vector_datas.value_type == ValueType::kFloat) {
+    if (vector_datas.vector_float_datas.empty()) {
+      max_size = vector_ids.size();
+    } else {
+      if (vector_datas.vector_float_datas.size() > vector_datas_offset + vector_ids.size()) {
+        max_size = vector_ids.size();
+      } else {
+        max_size = vector_datas.vector_float_datas.size() > vector_datas_offset
+                       ? vector_datas.vector_float_datas.size() - vector_datas_offset
+                       : 0;
+      }
+    }
+
+    if (max_size == 0) {
+      std::cout << "vector_datas.size() - vector_datas_offset <= vector_ids.size(), max_size: " << max_size
+                << ", vector_datas.size: " << vector_datas.vector_float_datas.size()
+                << ", vector_datas_offset: " << vector_datas_offset << ", vector_ids.size: " << vector_ids.size()
+                << std::endl;
+      return -1;
+    }
+  } else {
+    std::cout << "value_type" << " is not supported" << std::endl;
+    return -1;
   }
 
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
+  std::uniform_real_distribution<> distrib_binary(0, 255);
 
   for (int i = 0; i < max_size; ++i) {
     const auto& vector_id = vector_ids[i];
@@ -121,20 +155,41 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
     auto* vector_with_id = request.add_vectors();
     vector_with_id->set_id(vector_id);
     vector_with_id->mutable_vector()->set_dimension(dimension);
-    vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    if (vector_datas.value_type == ValueType::kBinary) {
+      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
-    if (vector_datas.empty()) {
-      for (int j = 0; j < dimension; j++) {
-        vector_with_id->mutable_vector()->add_float_values(distrib(rng));
+      if (vector_datas.vector_binary_datas.empty()) {
+        for (int j = 0; j < dimension / CHAR_BIT; j++) {
+          std::string bytedata(1, static_cast<char>(distrib_binary(rng)));
+          vector_with_id->mutable_vector()->add_binary_values(bytedata);
+        }
+      } else {
+        const auto& vector_data = vector_datas.vector_binary_datas[i + vector_datas_offset];
+        CHECK(vector_data.size() == dimension / CHAR_BIT);
+
+        for (int j = 0; j < dimension / CHAR_BIT; j++) {
+          std::string bytedata(1, vector_data[j]);
+          vector_with_id->mutable_vector()->add_binary_values(bytedata);
+        }
       }
+    } else if (vector_datas.value_type == ValueType::kFloat) {
+      vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 
+      if (vector_datas.vector_float_datas.empty()) {
+        for (int j = 0; j < dimension; j++) {
+          vector_with_id->mutable_vector()->add_float_values(distrib(rng));
+        }
+      } else {
+        const auto& vector_data = vector_datas.vector_float_datas[i + vector_datas_offset];
+        CHECK(vector_data.size() == dimension);
+
+        for (int j = 0; j < dimension; j++) {
+          vector_with_id->mutable_vector()->add_float_values(vector_data[j]);
+        }
+      }
     } else {
-      const auto& vector_data = vector_datas[i + vector_datas_offset];
-      CHECK(vector_data.size() == dimension);
-
-      for (int j = 0; j < dimension; j++) {
-        vector_with_id->mutable_vector()->add_float_values(vector_data[j]);
-      }
+      std::cout << "value_type is not supported" << std::endl;
+      return -1;
     }
 
     if (with_scalar) {
@@ -356,7 +411,6 @@ int SendBatchVectorAdd(int64_t region_id, uint32_t dimension, std::vector<int64_
       table_data->set_table_value(fmt::format("table_value{}", vector_id));
     }
   }
-
   butil::Status status =
       InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorAdd", request, response);
   int success_count = 0;
@@ -389,7 +443,7 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
   }
   Helper::PrintIndexRange(index_range);
 
-  std::vector<std::vector<float>> vector_datas;
+  VectorData vector_data;
 
   if (!opt.csv_data.empty()) {
     if (!dingodb::Helper::IsExistPath(opt.csv_data)) {
@@ -401,15 +455,33 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
 
     if (file.is_open()) {
       std::string line;
-      while (std::getline(file, line)) {
-        std::vector<float> row;
-        std::stringstream ss(line);
-        std::string value;
-        while (std::getline(ss, value, ',')) {
-          row.push_back(std::stof(value));
+      if (opt.value_type == "binary") {
+        vector_data.value_type = ValueType::kBinary;
+        while (std::getline(file, line)) {
+          std::vector<uint8_t> row;
+          std::stringstream ss(line);
+          std::string value;
+          while (std::getline(ss, value, ',')) {
+            row.push_back(static_cast<uint8_t>(std::stoi(value, nullptr, 2)));
+          }
+          vector_data.vector_binary_datas.push_back(row);
         }
-        vector_datas.push_back(row);
+      } else if (opt.value_type == "float") {
+        vector_data.value_type = ValueType::kFloat;
+        while (std::getline(file, line)) {
+          std::vector<float> row;
+          std::stringstream ss(line);
+          std::string value;
+          while (std::getline(ss, value, ',')) {
+            row.push_back(std::stof(value));
+          }
+          vector_data.vector_float_datas.push_back(row);
+        }
+      } else {
+        std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+        exit(-1);
       }
+
       file.close();
     }
   }
@@ -417,10 +489,10 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
   uint32_t total_count = 0;
 
   int64_t end_id = 0;
-  if (vector_datas.empty()) {
+  if (vector_data.vector_binary_datas.empty() && vector_data.vector_float_datas.empty()) {
     end_id = opt.start_id + opt.count;
   } else {
-    end_id = opt.start_id + vector_datas.size();
+    end_id = opt.start_id + vector_data.vector_binary_datas.size() + vector_data.vector_float_datas.size();
   }
 
   std::vector<int64_t> vector_ids;
@@ -436,7 +508,7 @@ void SendVectorAddRetry(VectorAddOptions const& opt) {  // NOLINT
       return;
     }
 
-    int ret = SendBatchVectorAdd(region_id, opt.dimension, vector_ids, vector_datas, total_count, !opt.without_scalar,
+    int ret = SendBatchVectorAdd(region_id, opt.dimension, vector_ids, vector_data, total_count, !opt.without_scalar,
                                  !opt.without_table, opt.scalar_filter_key, opt.scalar_filter_value,
                                  opt.scalar_filter_key2, opt.scalar_filter_value2);
     if (ret == dingodb::pb::error::EKEY_OUT_OF_RANGE || ret == dingodb::pb::error::EREGION_REDIRECT) {
@@ -460,7 +532,15 @@ void SendVectorAdd(VectorAddOptions const& opt) {
   std::vector<int64_t> vector_ids;
   vector_ids.reserve(opt.step_count);
 
-  std::vector<std::vector<float>> vector_datas;
+  VectorData vector_data;
+  if (opt.value_type == "binary") {
+    vector_data.value_type = ValueType::kBinary;
+  } else if (opt.value_type == "float") {
+    vector_data.value_type = ValueType::kFloat;
+  } else {
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    exit(-1);
+  }
 
   if (!opt.csv_data.empty()) {
     if (!dingodb::Helper::IsExistPath(opt.csv_data)) {
@@ -472,15 +552,28 @@ void SendVectorAdd(VectorAddOptions const& opt) {
 
     if (file.is_open()) {
       std::string line;
-      while (std::getline(file, line)) {
-        std::vector<float> row;
-        std::stringstream ss(line);
-        std::string value;
-        while (std::getline(ss, value, ',')) {
-          row.push_back(std::stof(value));
+      if (opt.value_type == "binary") {
+        while (std::getline(file, line)) {
+          std::vector<uint8_t> row;
+          std::stringstream ss(line);
+          std::string value;
+          while (std::getline(ss, value, ',')) {
+            row.push_back(static_cast<uint8_t>(std::stoi(value, nullptr, 2)));
+          }
+          vector_data.vector_binary_datas.push_back(row);
         }
-        vector_datas.push_back(row);
+      } else if (opt.value_type == "float") {
+        while (std::getline(file, line)) {
+          std::vector<float> row;
+          std::stringstream ss(line);
+          std::string value;
+          while (std::getline(ss, value, ',')) {
+            row.push_back(std::stof(value));
+          }
+          vector_data.vector_float_datas.push_back(row);
+        }
       }
+
       file.close();
     }
   }
@@ -488,10 +581,10 @@ void SendVectorAdd(VectorAddOptions const& opt) {
   uint32_t total_count = 0;
 
   int64_t end_id = 0;
-  if (vector_datas.empty()) {
+  if (vector_data.vector_binary_datas.empty() && vector_data.vector_float_datas.empty()) {
     end_id = opt.start_id + opt.count;
   } else {
-    end_id = opt.start_id + vector_datas.size();
+    end_id = opt.start_id + vector_data.vector_binary_datas.size() + vector_data.vector_float_datas.size();
   }
 
   for (int i = opt.start_id; i < end_id; i += opt.step_count) {
@@ -499,7 +592,7 @@ void SendVectorAdd(VectorAddOptions const& opt) {
       vector_ids.push_back(j);
     }
 
-    SendBatchVectorAdd(opt.region_id, opt.dimension, vector_ids, vector_datas, total_count, !opt.without_scalar,
+    SendBatchVectorAdd(opt.region_id, opt.dimension, vector_ids, vector_data, total_count, !opt.without_scalar,
                        !opt.without_table, opt.scalar_filter_key, opt.scalar_filter_value, opt.scalar_filter_key2,
                        opt.scalar_filter_value2);
 
@@ -608,17 +701,33 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
+  std::uniform_real_distribution<> distrib_binary(0, 255);
 
-  std::vector<float> random_seeds;
-  random_seeds.resize(opt.count * opt.dimension);
-  for (uint32_t i = 0; i < opt.count; ++i) {
-    for (uint32_t j = 0; j < opt.dimension; ++j) {
-      random_seeds[i * opt.dimension + j] = distrib(rng);
+  std::vector<float> float_random_seeds;
+  std::vector<uint8_t> binary_random_seeds;
+  if (opt.value_type == "binary") {
+    binary_random_seeds.resize(opt.count * opt.dimension / CHAR_BIT);
+    for (uint32_t i = 0; i < opt.count; ++i) {
+      for (uint32_t j = 0; j < opt.dimension / CHAR_BIT; ++j) {
+        binary_random_seeds[i * opt.dimension / CHAR_BIT + j] = distrib_binary(rng);
+      }
+      if (i % 10000 == 0) {
+        std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+      }
     }
-
-    if (i % 10000 == 0) {
-      std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+  } else if (opt.value_type == "float") {
+    float_random_seeds.resize(opt.count * opt.dimension);
+    for (uint32_t i = 0; i < opt.count; ++i) {
+      for (uint32_t j = 0; j < opt.dimension; ++j) {
+        float_random_seeds[i * opt.dimension + j] = distrib(rng);
+      }
+      if (i % 10000 == 0) {
+        std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+      }
     }
+  } else {
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    return;
   }
 
   // Add data to index
@@ -651,9 +760,23 @@ void SendVectorAddBatch(VectorAddBatchOptions const& opt) {
         auto* vector_with_id = request.add_vectors();
         vector_with_id->set_id(i);
         vector_with_id->mutable_vector()->set_dimension(opt.dimension);
-        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-        for (int j = 0; j < opt.dimension; j++) {
-          vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - opt.start_id) * opt.dimension + j]);
+        if (!float_random_seeds.empty()) {
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          for (int j = 0; j < opt.dimension; j++) {
+            vector_with_id->mutable_vector()->add_float_values(
+                float_random_seeds[(i - opt.start_id) * opt.dimension + j]);
+          }
+
+        } else if (!binary_random_seeds.empty()) {
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
+          for (int j = 0; j < opt.dimension / CHAR_BIT; j++) {
+            std::string byte_data(
+                1, static_cast<char>(binary_random_seeds[(i - opt.start_id) * opt.dimension / CHAR_BIT + j]));
+            vector_with_id->mutable_vector()->add_binary_values(byte_data);
+          }
+        } else {
+          std::cout << "random seeds is empty" << std::endl;
+          return;
         }
 
         if (!opt.without_scalar) {
@@ -750,17 +873,33 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
 
   std::mt19937 rng;
   std::uniform_real_distribution<> distrib(0.0, 10.0);
+  std::uniform_real_distribution<> distrib_binary(0, 255);
 
-  std::vector<float> random_seeds;
-  random_seeds.resize(opt.count * opt.dimension);
-  for (uint32_t i = 0; i < opt.count; ++i) {
-    for (uint32_t j = 0; j < opt.dimension; ++j) {
-      random_seeds[i * opt.dimension + j] = distrib(rng);
+  std::vector<float> float_random_seeds;
+  std::vector<uint8_t> binary_random_seeds;
+  if (opt.value_type == "binary") {
+    binary_random_seeds.resize(opt.count * opt.dimension / CHAR_BIT);
+    for (uint32_t i = 0; i < opt.count; ++i) {
+      for (uint32_t j = 0; j < opt.dimension / CHAR_BIT; ++j) {
+        binary_random_seeds[i * opt.dimension / CHAR_BIT + j] = distrib_binary(rng);
+      }
+      if (i % 10000 == 0) {
+        std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+      }
     }
-
-    if (i % 10000 == 0) {
-      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+  } else if (opt.value_type == "float") {
+    float_random_seeds.resize(opt.count * opt.dimension);
+    for (uint32_t i = 0; i < opt.count; ++i) {
+      for (uint32_t j = 0; j < opt.dimension; ++j) {
+        float_random_seeds[i * opt.dimension + j] = distrib(rng);
+      }
+      if (i % 10000 == 0) {
+        std::cout << fmt::format("generate random seeds: {}/{}", i, opt.count) << std::endl;
+      }
     }
+  } else {
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    return;
   }
 
   // Add data to index
@@ -791,9 +930,20 @@ void SendVectorAddBatchDebug(VectorAddBatchDebugOptions const& opt) {
         auto* vector_with_id = request.add_vectors();
         vector_with_id->set_id(i);
         vector_with_id->mutable_vector()->set_dimension(opt.dimension);
-        vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
-        for (int j = 0; j < opt.dimension; j++) {
-          vector_with_id->mutable_vector()->add_float_values(random_seeds[(i - opt.start_id) * opt.dimension + j]);
+        if (!float_random_seeds.empty()) {
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+          for (int j = 0; j < opt.dimension; j++) {
+            vector_with_id->mutable_vector()->add_float_values(
+                float_random_seeds[(i - opt.start_id) * opt.dimension + j]);
+          }
+
+        } else if (!binary_random_seeds.empty()) {
+          vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
+          for (int j = 0; j < opt.dimension / CHAR_BIT; j++) {
+            std::string byte_data(
+                1, static_cast<char>(binary_random_seeds[(i - opt.start_id) * opt.dimension / CHAR_BIT + j]));
+            vector_with_id->mutable_vector()->add_binary_values(byte_data);
+          }
         }
 
         if (!opt.without_scalar) {
@@ -1046,18 +1196,39 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
     return;
   }
 
-  if (opt.vector_data.empty()) {
-    for (int i = 0; i < opt.dimension; i++) {
-      vector->mutable_vector()->add_float_values(1.0 * i);
+  if (opt.value_type == "binary") {
+    vector->mutable_vector()->set_value_type(dingodb::pb::common::ValueType::UINT8);
+    if (opt.vector_data.empty()) {
+      for (int i = 0; i < opt.dimension / CHAR_BIT; i++) {
+        std::string byte_code(1, static_cast<char>(1 * i));
+        vector->mutable_vector()->add_binary_values(byte_code);
+      }
+    } else {
+      std::vector<uint8_t> row = dingodb::Helper::StringToVectorBinary(opt.vector_data);
+
+      CHECK(opt.dimension == row.size()) << "dimension not match" << std::endl;
+      for (auto v : row) {
+        std::string byte_data(1, static_cast<char>(v));
+        vector->mutable_vector()->add_binary_values(byte_data);
+      }
+    }
+  } else if (opt.value_type == "float") {
+    vector->mutable_vector()->set_value_type(dingodb::pb::common::ValueType::FLOAT);
+    if (opt.vector_data.empty()) {
+      for (int i = 0; i < opt.dimension; i++) {
+        vector->mutable_vector()->add_float_values(1.0 * i);
+      }
+    } else {
+      std::vector<float> row = dingodb::Helper::StringToVector(opt.vector_data);
+      CHECK(opt.dimension == row.size()) << "dimension not match" << std::endl;
+
+      for (auto v : row) {
+        vector->mutable_vector()->add_float_values(v);
+      }
     }
   } else {
-    std::vector<float> row = dingodb::Helper::StringToVector(opt.vector_data);
-
-    CHECK(opt.dimension == row.size()) << "dimension not match" << std::endl;
-
-    for (auto v : row) {
-      vector->mutable_vector()->add_float_values(v);
-    }
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    return;
   }
 
   request.mutable_parameter()->set_top_n(opt.topn);
@@ -1266,7 +1437,6 @@ void SendVectorSearch(VectorSearchOptions const& opt) {
   if (opt.bruteforce) {
     request.mutable_parameter()->set_use_brute_force(opt.bruteforce);
   }
-
   if (opt.print_vector_search_delay) {
     auto start = std::chrono::steady_clock::now();
     InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
@@ -1417,6 +1587,10 @@ void SendVectorSearchDebug(VectorSearchDebugOptions const& opt) {
     std::cout << "batch_count is 0" << std::endl;
     return;
   }
+  if (opt.value_type != "binary" && opt.value_type != "float") {
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    return;
+  }
 
   if (opt.start_vector_id > 0) {
     for (int count = 0; count < opt.batch_count; count++) {
@@ -1427,12 +1601,25 @@ void SendVectorSearchDebug(VectorSearchDebugOptions const& opt) {
     std::random_device seed;
     std::ranlux48 engine(seed());
     std::uniform_int_distribution<> distrib(0, 100);
+    std::uniform_int_distribution<> distrib_binary(0, 255);
 
     for (int count = 0; count < opt.batch_count; count++) {
       auto* vector = request.add_vector_with_ids()->mutable_vector();
-      for (int i = 0; i < opt.dimension; i++) {
-        auto random = static_cast<double>(distrib(engine)) / 10.123;
-        vector->add_float_values(random);
+      if (opt.value_type == "float") {
+        vector->set_value_type(dingodb::pb::common::ValueType::FLOAT);
+        for (int i = 0; i < opt.dimension; i++) {
+          auto random = static_cast<double>(distrib(engine)) / 10.123;
+          vector->add_float_values(random);
+        }
+      } else if (opt.value_type == "binary") {
+        vector->set_value_type(dingodb::pb::common::ValueType::UINT8);
+        for (int i = 0; i < opt.dimension / CHAR_BIT; i++) {
+          std::string byte_data(1, static_cast<char>(distrib(engine)));
+          vector->add_binary_values(byte_data);
+        }
+      } else {
+        std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+        return;
       }
     }
 
@@ -1627,8 +1814,21 @@ void SendVectorRangeSearch(VectorRangeSearchOptions const& opt) {
     return;
   }
 
-  for (int i = 0; i < opt.dimension; i++) {
-    vector->mutable_vector()->add_float_values(1.0 * i);
+  if (opt.value_type == "binary") {
+    vector->mutable_vector()->set_value_type(dingodb::pb::common::ValueType::UINT8);
+    for (int i = 0; i < opt.dimension / CHAR_BIT; i++) {
+      std::string byte_code(1, static_cast<char>(1 + i));
+      vector->mutable_vector()->add_binary_values(byte_code);
+    }
+  } else if (opt.value_type == "float") {
+    vector->mutable_vector()->set_value_type(dingodb::pb::common::ValueType::FLOAT);
+    for (int i = 0; i < opt.dimension; i++) {
+      vector->mutable_vector()->add_float_values(1.0 * i);
+    }
+
+  } else {
+    std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+    return;
   }
 
   request.mutable_parameter()->set_top_n(0);
@@ -1819,12 +2019,25 @@ void SendVectorRangeSearchDebug(VectorRangeSearchDebugOptions const& opt) {
     std::random_device seed;
     std::ranlux48 engine(seed());
     std::uniform_int_distribution<> distrib(0, 100);
+    std::uniform_int_distribution<> distrib_binary(0, 255);
 
     for (int count = 0; count < opt.batch_count; count++) {
       auto* vector = request.add_vector_with_ids()->mutable_vector();
-      for (int i = 0; i < opt.dimension; i++) {
-        auto random = static_cast<double>(distrib(engine)) / 10.123;
-        vector->add_float_values(random);
+      if (opt.value_type == "float") {
+        vector->set_value_type(dingodb::pb::common::ValueType::FLOAT);
+        for (int i = 0; i < opt.dimension; i++) {
+          auto random = static_cast<double>(distrib(engine)) / 10.123;
+          vector->add_float_values(random);
+        }
+      } else if (opt.value_type == "binary") {
+        vector->set_value_type(dingodb::pb::common::ValueType::UINT8);
+        for (int i = 0; i < opt.dimension / CHAR_BIT; i++) {
+          std::string byte_data(1, static_cast<char>(distrib(engine)));
+          vector->add_binary_values(byte_data);
+        }
+      } else {
+        std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+        return;
       }
     }
 
@@ -2034,12 +2247,25 @@ void SendVectorBatchSearch(VectorBatchSearchOptions const& opt) {
   std::random_device seed;
   std::ranlux48 engine(seed());
   std::uniform_int_distribution<> distrib(0, 100);
+  std::uniform_int_distribution<> distrib_binary(0, 255);
 
   for (int count = 0; count < opt.batch_count; count++) {
     auto* vector = request.add_vector_with_ids()->mutable_vector();
-    for (int i = 0; i < opt.dimension; i++) {
-      auto random = static_cast<double>(distrib(engine)) / 10.123;
-      vector->add_float_values(random);
+    if (opt.value_type == "float") {
+      vector->set_value_type(dingodb::pb::common::ValueType::FLOAT);
+      for (int i = 0; i < opt.dimension; i++) {
+        auto random = static_cast<double>(distrib(engine)) / 10.123;
+        vector->add_float_values(random);
+      }
+    } else if (opt.value_type == "binary") {
+      vector->set_value_type(dingodb::pb::common::ValueType::UINT8);
+      for (int i = 0; i < opt.dimension / CHAR_BIT; i++) {
+        std::string byte_data(1, static_cast<char>(distrib_binary(engine)));
+        vector->add_binary_values(byte_data);
+      }
+    } else {
+      std::cout << "value_type only support float|binary , not support " << opt.value_type << std::endl;
+      return;
     }
   }
 
@@ -2415,9 +2641,10 @@ void SetUpCreateIndex(CLI::App& app) {
       ->default_str("false");
   cmd->add_option("--replica", opt->replica, "Request parameter replica num, must greater than 0")->default_val(3);
   cmd->add_option("--vector_index_type", opt->vector_index_type,
-                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq|diskann");
+                  "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq|diskann|binary_Flat|binary_ivf_flat");
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
-  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE")->ignore_case();
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE|HAMMING")
+      ->ignore_case();
   cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
   cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction");
   cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks");
@@ -2514,8 +2741,14 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
   } else if (opt.vector_index_type == "diskann") {
     vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN);
+  } else if (opt.vector_index_type == "binary_flat") {
+    vector_index_parameter->set_vector_index_type(
+        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT);
+  } else if (opt.vector_index_type == "binary_ivf_flat") {
+    vector_index_parameter->set_vector_index_type(
+        ::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT);
   } else {
-    std::cout << "vector_index_type is invalid, now only support hnsw and flat" << std::endl;
+    std::cout << "vector_index_type is invalid " << std::endl;
     return;
   }
 
@@ -2532,8 +2765,10 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
     metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
   } else if (opt.metrics_type == "COSINE" || opt.metrics_type == "cosine") {
     metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+  } else if (opt.metrics_type == "HAMMING" || opt.metrics_type == "hamming") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_HAMMING;
   } else {
-    std::cout << "metrics_type is invalid, now only support L2, IP and COSINE" << std::endl;
+    DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP, COSINE and HAMMING";
     return;
   }
 
@@ -2587,6 +2822,15 @@ void RunCreateIndex(CreateIndexOptions const& opt) {
     diskann_parameter->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
     diskann_parameter->set_max_degree(opt.max_degree);
     diskann_parameter->set_search_list_size(opt.search_list_size);
+  } else if (opt.vector_index_type == "binary_flat") {
+    auto* binary_flat_parameter = vector_index_parameter->mutable_binary_flat_parameter();
+    binary_flat_parameter->set_metric_type(metric_type);
+    binary_flat_parameter->set_dimension(opt.dimension);
+  } else if (opt.vector_index_type == "binary_ivf_flat") {
+    auto* binary_ivf_flat_parameter = vector_index_parameter->mutable_binary_ivf_flat_parameter();
+    binary_ivf_flat_parameter->set_metric_type(metric_type);
+    binary_ivf_flat_parameter->set_dimension(opt.dimension);
+    binary_ivf_flat_parameter->set_ncentroids(opt.ncentroids);
   }
 
   index_definition->set_version(1);
@@ -2910,8 +3154,9 @@ void SetUpVectorSearch(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
-  cmd->add_option("--vector_data", opt->vector_data, "Request parameter vector data");
+  cmd->add_option("--vector_data", opt->vector_data, "Request parameter vector data, if binary need 01010101");
   cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
       ->default_val(false)
       ->default_str("false");
@@ -2962,6 +3207,7 @@ void SetUpVectorSearchDebug(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
   cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch count")->required();
@@ -3003,6 +3249,7 @@ void SetUpVectorRangeSearch(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
   cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
       ->default_val(false)
@@ -3043,6 +3290,7 @@ void SetUpVectorRangeSearchDebug(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--start_vector_id", opt->start_vector_id, "Request parameter start_vector_id");
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
   cmd->add_option("--radius", opt->radius, "Request parameter radius")->default_val(10.1);
@@ -3087,6 +3335,7 @@ void SetUpVectorBatchSearch(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--topn", opt->topn, "Request parameter topn")->required();
   cmd->add_option("--batch_count", opt->batch_count, "Request parameter batch_count")->required();
   cmd->add_option("--without_vector", opt->without_vector, "Search vector without output vector data")
@@ -3231,6 +3480,9 @@ void SetUpVectorAdd(CLI::App& app) {
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--table_id", opt->table_id, "Request parameter table_id");
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")
+      ->default_val("float")
+      ->default_str("float");
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
   cmd->add_option("--count", opt->count, "Request parameter count");
   cmd->add_option("--step_count", opt->step_count, "Request parameter step_count");
@@ -3320,6 +3572,7 @@ void SetUpVectorAddBatch(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
   cmd->add_option("--count", opt->count, "Request parameter count");
   cmd->add_option("--step_count", opt->step_count, "Request parameter step_count")->required();
@@ -3344,6 +3597,7 @@ void SetUpVectorAddBatchDebug(CLI::App& app) {
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension")->required();
+  cmd->add_option("--value_type", opt->value_type, "Request parameter value_type  float|binary")->default_val("float")->default_str("float");
   cmd->add_option("--start_id", opt->start_id, "Request parameter start_id")->required();
   cmd->add_option("--count", opt->count, "Request parameter count");
   cmd->add_option("--step_count", opt->step_count, "Request parameter step_count")->required();

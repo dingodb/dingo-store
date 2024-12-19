@@ -333,6 +333,7 @@ class Helper {
   static double StringToDouble(const std::string& str);
 
   static std::vector<float> StringToVector(const std::string& str);
+  static std::vector<uint8_t> StringToVectorBinary(const std::string& str);
 
   // Clean string first slash, e.g. /name.txt -> name.txt
   static std::string CleanFirstSlash(const std::string& str);

@@ -54,6 +54,7 @@ class IvfFlatIDSelector : public faiss::IDSelector {
   std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters_;
 };
 
+template <typename T, typename U>
 class VectorIndexIvfFlat : public VectorIndex {
  public:
   explicit VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
@@ -101,6 +102,7 @@ class VectorIndexIvfFlat : public VectorIndex {
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
   bool IsExceedsMaxElements() override;
 
+  butil::Status Train(std::vector<uint8_t>& train_datas) override;
   butil::Status Train(std::vector<float>& train_datas) override;
   butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) override;
   bool NeedToRebuild() override;
@@ -121,7 +123,7 @@ class VectorIndexIvfFlat : public VectorIndex {
   // Dimension of the elements
   faiss::idx_t dimension_;
 
-  // only support L2 and IP
+  // only support L2 and IP Hamming
   pb::common::MetricType metric_type_;
 
   RWLock rw_lock_;
@@ -132,9 +134,9 @@ class VectorIndexIvfFlat : public VectorIndex {
   // from  vector_index_parameter.ivf_flat_parameter().ncentroids()
   size_t nlist_org_;
 
-  std::unique_ptr<faiss::Index> quantizer_;
+  std::unique_ptr<T> quantizer_;
 
-  std::unique_ptr<faiss::IndexIVFFlat> index_;
+  std::unique_ptr<U> index_;
 
   // normalize vector
   bool normalize_;
