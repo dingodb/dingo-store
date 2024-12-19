@@ -192,6 +192,7 @@ class VectorIndex {
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
   virtual butil::Status Train(std::vector<float>& train_datas) = 0;
+  virtual butil::Status Train(std::vector<uint8_t>& ) { return butil::Status::OK(); }
   virtual butil::Status TrainByParallel(std::vector<float>& train_datas);
   virtual butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) = 0;
   virtual bool NeedToRebuild() = 0;

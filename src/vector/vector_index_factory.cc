@@ -21,6 +21,8 @@
 #include "proto/common.pb.h"
 #include "server/server.h"
 #include "vector/vector_index.h"
+#include "vector/vector_index_binary_flat.h"
+#include "vector/vector_index_binary_ivf_flat.h"
 #include "vector/vector_index_bruteforce.h"
 #include "vector/vector_index_diskann.h"
 #include "vector/vector_index_flat.h"
@@ -62,6 +64,14 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::New(int64_t id,
     }
     case pb::common::VECTOR_INDEX_TYPE_DISKANN: {
       vector_index = NewDiskANN(id, index_parameter, epoch, range, thread_pool);
+      break;
+    }
+    case pb::common::VECTOR_INDEX_TYPE_BINARY_FLAT: {
+      vector_index = NewBinaryFlat(id, index_parameter, epoch, range, thread_pool);
+      break;
+    }
+    case pb::common::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT: {
+      vector_index = NewBinaryIVFFlat(id, index_parameter, epoch, range, thread_pool);
       break;
     }
     case pb::common::VectorIndexType_INT_MIN_SENTINEL_DO_NOT_USE_:
@@ -145,8 +155,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewBruteForce(int64_t id,
   try {
     auto new_bruteforce_index = std::make_shared<VectorIndexBruteforce>(id, index_parameter, epoch, range, thread_pool);
     if (new_bruteforce_index == nullptr) {
-      DINGO_LOG(ERROR) << "create bruteforce index failed of new_bruteforce_index is nullptr"
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(ERROR) << "create bruteforce index failed of new_bruteforce_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
       DINGO_LOG(INFO) << "create bruteforce index success, id=" << id
@@ -179,8 +189,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewFlat(int64_t id,
   try {
     auto new_flat_index = std::make_shared<VectorIndexFlat>(id, index_parameter, epoch, range, thread_pool);
     if (new_flat_index == nullptr) {
-      DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr"
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(ERROR) << "create flat index failed of new_flat_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
       DINGO_LOG(INFO) << "create flat index success, id=" << id << ", parameter=" << index_parameter.ShortDebugString();
@@ -219,8 +229,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfFlat(int64_t id,
   try {
     auto new_ivf_flat_index = std::make_shared<VectorIndexIvfFlat>(id, index_parameter, epoch, range, thread_pool);
     if (new_ivf_flat_index == nullptr) {
-      DINGO_LOG(ERROR) << "create ivf flat index failed of new_ivf_flat_index is nullptr"
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(ERROR) << "create ivf flat index failed of new_ivf_flat_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
       DINGO_LOG(INFO) << "create ivf flat index success, id=" << id
@@ -306,8 +316,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewIvfPq(int64_t id,
   try {
     auto new_ivf_pq_index = std::make_shared<VectorIndexIvfPq>(id, index_parameter, epoch, range, thread_pool);
     if (new_ivf_pq_index == nullptr) {
-      DINGO_LOG(ERROR) << "create ivf pq index failed of new_ivf_pq_index is nullptr"
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(ERROR) << "create ivf pq index failed of new_ivf_pq_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
       DINGO_LOG(INFO) << "create ivf pq index success, id=" << id
@@ -335,8 +345,8 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewDiskANN(int64_t id,
   try {
     auto new_diskann_index = std::make_shared<VectorIndexDiskANN>(id, index_parameter, epoch, range, thread_pool);
     if (new_diskann_index == nullptr) {
-      DINGO_LOG(ERROR) << "create diskann index failed of new_diskann_index is nullptr"
-                       << ", id=" << id << ", parameter=" << index_parameter.ShortDebugString();
+      DINGO_LOG(ERROR) << "create diskann index failed of new_diskann_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
       return nullptr;
     } else {
       DINGO_LOG(INFO) << "create diskann index success, id=" << id
@@ -349,5 +359,84 @@ std::shared_ptr<VectorIndex> VectorIndexFactory::NewDiskANN(int64_t id,
     return nullptr;
   }
 }
+
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewBinaryFlat(int64_t id,
+                                                               const pb::common::VectorIndexParameter& index_parameter,
+                                                               const pb::common::RegionEpoch& epoch,
+                                                               const pb::common::Range& range,
+                                                               ThreadPoolPtr thread_pool) {
+  const auto& binary_flat_parameter = index_parameter.binary_flat_parameter();
+
+  if (binary_flat_parameter.dimension() <= 0) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, dimension <= 0";
+    return nullptr;
+  }
+  if (binary_flat_parameter.dimension() % 8 != 0) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, dimension % 8 != 0";
+    return nullptr;
+  }
+  if (binary_flat_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_HAMMING) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, not METRIC_TYPE_HAMMING";
+    return nullptr;
+  }
+
+  // create index may throw exeception, so we need to catch it
+  try {
+    auto new_binary_flat_index =
+        std::make_shared<VectorIndexBinaryFlat>(id, index_parameter, epoch, range, thread_pool);
+    if (new_binary_flat_index == nullptr) {
+      DINGO_LOG(ERROR) << "create binary flat index failed of new_binary_flat_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
+      return nullptr;
+    } else {
+      DINGO_LOG(INFO) << "create binary flat index success, id=" << id
+                      << ", parameter=" << index_parameter.ShortDebugString();
+    }
+    return new_binary_flat_index;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << "create binary flat index failed of exception occured, " << e.what() << ", id=" << id
+                     << ", parameter=" << index_parameter.ShortDebugString();
+    return nullptr;
+  }
+}
+
+std::shared_ptr<VectorIndex> VectorIndexFactory::NewBinaryIVFFlat(
+    int64_t id, const pb::common::VectorIndexParameter& index_parameter, const pb::common::RegionEpoch& epoch,
+    const pb::common::Range& range, ThreadPoolPtr thread_pool) {
+  const auto& binary_flat_parameter = index_parameter.binary_ivf_flat_parameter();
+
+  if (binary_flat_parameter.dimension() <= 0) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, dimension <= 0";
+    return nullptr;
+  }
+  if (binary_flat_parameter.dimension() % 8 != 0) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, dimension % 8 != 0";
+    return nullptr;
+  }
+  if (binary_flat_parameter.metric_type() != pb::common::MetricType::METRIC_TYPE_HAMMING) {
+    DINGO_LOG(ERROR) << "vector_binary_index_parameter is illegal, not METRIC_TYPE_HAMMING";
+    return nullptr;
+  }
+
+  // create index may throw exeception, so we need to catch it
+  try {
+    auto new_binary_ivf_flat_index =
+        std::make_shared<VectorIndexBinaryIvfFlat>(id, index_parameter, epoch, range, thread_pool);
+    if (new_binary_ivf_flat_index == nullptr) {
+      DINGO_LOG(ERROR) << "create ivf flat index failed of new_binary_ivf_flat_index is nullptr" << ", id=" << id
+                       << ", parameter=" << index_parameter.ShortDebugString();
+      return nullptr;
+    } else {
+      DINGO_LOG(INFO) << "create binary ivf flat index success, id=" << id
+                      << ", parameter=" << index_parameter.ShortDebugString();
+    }
+    return new_binary_ivf_flat_index;
+  } catch (std::exception& e) {
+    DINGO_LOG(ERROR) << "create binary ivf flat index failed of exception occurred, " << e.what() << ", id=" << id
+                     << ", parameter=" << index_parameter.ShortDebugString();
+    return nullptr;
+  }
+}
+
 
 }  // namespace dingodb

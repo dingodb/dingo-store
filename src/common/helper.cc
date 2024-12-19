@@ -1621,6 +1621,17 @@ std::vector<float> Helper::StringToVector(const std::string& str) {
 
   return vec;
 }
+std::vector<uint8_t> Helper::StringToVectorBinary(const std::string& str) {
+  std::vector<uint8_t> vec;
+  std::stringstream ss(str);
+  std::string token;
+
+  while (std::getline(ss, token, ',')) {
+    vec.push_back(std::stoi(token, nullptr, 2));
+  }
+
+  return vec;
+}
 
 std::string Helper::CleanFirstSlash(const std::string& str) { return (str.front() == '/') ? str.substr(1) : str; }
 
@@ -1897,8 +1908,8 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
           if (line[i].size() <= 64) {
             os << brpc::min_width(line[i], min_widths[i]);
           } else {
-            os << "<div class=\"part\">" << line[i].substr(0, 64) << "..."
-               << "<span class=\"full\">" << line[i] << "</span></div>";
+            os << "<div class=\"part\">" << line[i].substr(0, 64) << "..." << "<span class=\"full\">" << line[i]
+               << "</span></div>";
           }
         }
       } else {

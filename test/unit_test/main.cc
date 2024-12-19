@@ -80,7 +80,7 @@ int main(int argc, char* argv[]) {
     default_run_case += ":SplitCheckerTest.*";
 
     default_run_case += ":CandidateStoresTest.*";
-    
+
     default_run_case += ":CandidateStoresTestByBlanceRegion.*";
 
     default_run_case += ":RocksLogStorageTest.*";
@@ -112,6 +112,8 @@ int main(int argc, char* argv[]) {
     default_run_case += ":VectorIndexFlatTest.*";
     default_run_case += ":VectorIndexFlatSearchParamTest.*";
     default_run_case += ":VectorIndexFlatSearchParamLimitTest.*";
+    default_run_case += ":VectorIndexBinaryFlatTest.*";
+    default_run_case += ":VectorIndexBinaryIvfFlatTest.*";
 
     // transaction
     default_run_case += ":TxnGcTest.*";
