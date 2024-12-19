@@ -888,6 +888,9 @@ butil::Status MergeRegionTask::MergeRegion() {
 
   ADD_REGION_CHANGE_RECORD(*region_cmd_);
 
+  // Disable region change
+  store_region_meta->UpdateTemporaryDisableChange(source_region, true);
+  store_region_meta->UpdateTemporaryDisableChange(target_region, true);
   // Commit raft cmd
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(source_region->Id());
@@ -898,13 +901,10 @@ butil::Status MergeRegionTask::MergeRegion() {
   status = Server::GetInstance().GetStorage()->PrepareMerge(ctx, region_cmd_->job_id(), target_region->Definition(),
                                                             min_applied_log_id);
   if (!status.ok()) {
+    store_region_meta->UpdateTemporaryDisableChange(source_region, false);
+    store_region_meta->UpdateTemporaryDisableChange(target_region, false);
     return status;
   }
-
-  // Disable region change
-  store_region_meta->UpdateTemporaryDisableChange(source_region, true);
-  store_region_meta->UpdateTemporaryDisableChange(target_region, true);
-
   return butil::Status();
 }
 
