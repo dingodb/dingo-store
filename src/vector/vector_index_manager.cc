@@ -956,10 +956,22 @@ VectorIndexPtr VectorIndexManager::BuildVectorIndex(VectorIndexWrapperPtr vector
 
     std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
     CHECK(vector.mutable_vector()->ParseFromString(value)) << "parse vector pb failed.";
-
-    if (vector.vector().float_values_size() <= 0) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})][trace({})] vector values_size error.",
-                                        vector_index_id, trace);
+    if (vector.vector().value_type() == pb::common::ValueType::FLOAT) {
+      if (vector.vector().float_values_size() <= 0) {
+        DINGO_LOG(WARNING) << fmt::format(
+            "[vector_index.build][index_id({})][trace({})] vector float_values_size error.", vector_index_id, trace);
+        continue;
+      }
+    } else if (vector.vector().value_type() == pb::common::ValueType::UINT8) {
+      if (vector.vector().binary_values_size() <= 0) {
+        DINGO_LOG(WARNING) << fmt::format(
+            "[vector_index.build][index_id({})][trace({})] vector binary_values_size error.", vector_index_id, trace);
+        continue;
+      }
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})][trace({})] not support {} .",
+                                        vector_index_id, trace,
+                                        pb::common::ValueType_Name(vector.vector().value_type()));
       continue;
     }
 
@@ -1006,7 +1018,8 @@ void VectorIndexManager::LaunchRebuildVectorIndex(VectorIndexWrapperPtr vector_i
   assert(vector_index_wrapper != nullptr);
 
   DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.launch][index_id({})][trace({})] Launch rebuild vector index, rebuild({}) pending tasks({}) total "
+      "[vector_index.launch][index_id({})][trace({})] Launch rebuild vector index, rebuild({}) pending tasks({}) "
+      "total "
       "running({}).",
       vector_index_wrapper->Id(), vector_index_wrapper->RebuildingNum(), vector_index_wrapper->PendingTaskNum(),
       GetVectorIndexTaskRunningNum(), trace);
@@ -1364,9 +1377,21 @@ butil::Status VectorIndexManager::TrainForBuild(VectorIndexPtr vector_index, mvc
     std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
     CHECK(vector.mutable_vector()->ParseFromString(value)) << "parse vector pb failed.";
 
-    if (vector.vector().float_values_size() <= 0) {
-      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector values_size error.",
-                                        vector_index->Id());
+    if (vector.vector().value_type() == pb::common::ValueType::FLOAT) {
+      if (vector.vector().float_values_size() <= 0) {
+        DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector float_values_size error.",
+                                          vector_index->Id());
+        continue;
+      }
+    } else if (vector.vector().value_type() == pb::common::ValueType::UINT8) {
+      if (vector.vector().binary_values_size() <= 0) {
+        DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] vector binary_values_size error.",
+                                          vector_index->Id());
+        continue;
+      }
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("[vector_index.build][index_id({})] not support {} .", vector_index->Id(),
+                                        pb::common::ValueType_Name(vector.vector().value_type()));
       continue;
     }
 
