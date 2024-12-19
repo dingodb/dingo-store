@@ -14,6 +14,7 @@
 
 #include "server/index_service.h"
 
+#include <climits>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -242,6 +243,43 @@ static butil::Status ValidateVectorSearchRequest(StoragePtr storage, const pb::i
     }
   }
 
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  auto dimension = vector_index_wrapper->GetDimension();
+  for (const auto& vector : request->vector_with_ids()) {
+    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+      if (vector.vector().value_type() != pb::common::ValueType::FLOAT) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::FLOAT));
+      }
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT ||
+               vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+      if (vector.vector().value_type() != pb::common::ValueType::UINT8) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::UINT8));
+      }
+      if (vector.vector().binary_values().size() != dimension / CHAR_BIT) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      return butil::Status(
+          pb::error::EILLEGAL_PARAMTETERS,
+          "not support vector index type " + pb::common::VectorIndexType_Name(vector_index_wrapper->Type()));
+    }
+  }
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
@@ -393,9 +431,17 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
                            "Param vector id is not allowed to be zero, INT64_MAX or negative");
     }
-
-    if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
-      return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+    if (vector.vector().value_type() == pb::common::ValueType::FLOAT) {
+      if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
+        return butil::Status(pb::error::EVECTOR_EMPTY, "Float Vector is empty");
+      }
+    } else if (vector.vector().value_type() == pb::common::ValueType::UINT8) {
+      if (BAIDU_UNLIKELY(vector.vector().binary_values().empty())) {
+        return butil::Status(pb::error::EVECTOR_EMPTY, "Binary Vector is empty");
+      }
+    } else {
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                           "not support value type " + pb::common::ValueType_Name(vector.vector().value_type()));
     }
   }
 
@@ -407,17 +453,32 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
         vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+      if (vector.vector().value_type() != pb::common::ValueType::FLOAT) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::FLOAT));
+      }
       if (vector.vector().float_values().size() != dimension) {
         return butil::Status(
             pb::error::EILLEGAL_PARAMTETERS,
             "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
       }
-    } else {
-      if (vector.vector().binary_values().size() != dimension) {
+    } else if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT ||
+               vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+      if (vector.vector().value_type() != pb::common::ValueType::UINT8) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::UINT8));
+      }
+      if (vector.vector().binary_values().size() != dimension / CHAR_BIT) {
         return butil::Status(
             pb::error::EILLEGAL_PARAMTETERS,
             "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
       }
+    } else {
+      return butil::Status(
+          pb::error::EILLEGAL_PARAMTETERS,
+          "not support vector index type " + pb::common::VectorIndexType_Name(vector_index_wrapper->Type()));
     }
   }
 
@@ -1948,6 +2009,43 @@ static butil::Status ValidateVectorSearchDebugRequest(StoragePtr storage,
     }
   }
 
+  auto dimension = vector_index_wrapper->GetDimension();
+  for (const auto& vector : request->vector_with_ids()) {
+    if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
+        vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
+      if (vector.vector().value_type() != pb::common::ValueType::FLOAT) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::FLOAT));
+      }
+      if (vector.vector().float_values().size() != dimension) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT ||
+               vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+      if (vector.vector().value_type() != pb::common::ValueType::UINT8) {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "Param vector value type is error, correct value type is " +
+                                 pb::common::ValueType_Name(pb::common::ValueType::UINT8));
+      }
+      if (vector.vector().binary_values().size() != dimension / CHAR_BIT) {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
+      }
+    } else {
+      return butil::Status(
+          pb::error::EILLEGAL_PARAMTETERS,
+          "not support vector index type " + pb::common::VectorIndexType_Name(vector_index_wrapper->Type()));
+    }
+  }
+
   return ServiceHelper::ValidateIndexRegion(region, vector_ids);
 }
 
@@ -2603,8 +2701,17 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
                              "the mutation key and VectorWithId");
       }
 
-      if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
-        return butil::Status(pb::error::EVECTOR_EMPTY, "Vector is empty");
+      if (vector.vector().value_type() == pb::common::ValueType::FLOAT) {
+        if (BAIDU_UNLIKELY(vector.vector().float_values().empty())) {
+          return butil::Status(pb::error::EVECTOR_EMPTY, "Float Vector is empty");
+        }
+      } else if (vector.vector().value_type() == pb::common::ValueType::UINT8) {
+        if (BAIDU_UNLIKELY(vector.vector().binary_values().empty())) {
+          return butil::Status(pb::error::EVECTOR_EMPTY, "Binary Vector is empty");
+        }
+      } else {
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                             "not support value type " + pb::common::ValueType_Name(vector.vector().value_type()));
       }
 
       // check vector dimension
@@ -2614,17 +2721,32 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ ||
           vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
-        if (BAIDU_UNLIKELY(vector.vector().float_values().size() != dimension)) {
+        if (vector.vector().value_type() != pb::common::ValueType::FLOAT) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector value type is error, correct value type is " +
+                                   pb::common::ValueType_Name(pb::common::ValueType::FLOAT));
+        }
+        if (vector.vector().float_values().size() != dimension) {
           return butil::Status(
               pb::error::EILLEGAL_PARAMTETERS,
               "Param vector float dimension is error, correct dimension is " + std::to_string(dimension));
         }
-      } else {
-        if (BAIDU_UNLIKELY(vector.vector().binary_values().size() != dimension)) {
+      } else if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT ||
+                 vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT) {
+        if (vector.vector().value_type() != pb::common::ValueType::UINT8) {
+          return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                               "Param vector value type is error, correct value type is " +
+                                   pb::common::ValueType_Name(pb::common::ValueType::UINT8));
+        }
+        if (vector.vector().binary_values().size() != dimension / CHAR_BIT) {
           return butil::Status(
               pb::error::EILLEGAL_PARAMTETERS,
               "Param vector binary dimension is error, correct dimension is " + std::to_string(dimension));
         }
+      } else {
+        return butil::Status(
+            pb::error::EILLEGAL_PARAMTETERS,
+            "not support vector index type " + pb::common::VectorIndexType_Name(vector_index_wrapper->Type()));
       }
 
       auto scalar_schema = region->ScalarSchema();

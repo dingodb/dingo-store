@@ -174,6 +174,9 @@ class Constant {
   static constexpr int32_t kCreateIvfFlatParamNcentroids = 2048;
   static constexpr int32_t kSearchIvfFlatParamNprobe = 80;
 
+  static constexpr int32_t kCreateBinaryIvfFlatParamNcentroids = 2048;
+  static constexpr int32_t kSearchBinaryIvfFlatParamNprobe = 80;
+
   static constexpr int32_t kCreateIvfPqParamNcentroids = 2048;
   static constexpr int32_t kCreateIvfPqParamNsubvector = 64;
   static constexpr int32_t kCreateIvfPqParamNbitsPerIdx = 8;

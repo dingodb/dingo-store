@@ -21,7 +21,9 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "common/threadpool.h"
 #include "faiss/Index.h"
+#include "faiss/IndexBinary.h"
 #include "faiss/impl/AuxIndexStructures.h"
 #include "proto/common.pb.h"
 #include "proto/index.pb.h"
@@ -160,21 +162,22 @@ class VectorIndexUtils {
   static void NormalizeVectorForFaiss(float* x, int32_t d);
   static void NormalizeVectorForHnsw(const float* data, uint32_t dimension, float* norm_array);
 
-  static butil::Status CheckVectorDimension(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                            int dimension);
+  static butil::Status CheckVectorDimension(
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, int dimension);
 
   static std::unique_ptr<faiss::idx_t[]> CastVectorId(const std::vector<int64_t>& delete_ids);
 
   static std::unique_ptr<faiss::idx_t[]> ExtractVectorId(const std::vector<pb::common::VectorWithId>& vector_with_ids);
   static butil::Status CheckVectorIdDuplicated(const std::unique_ptr<faiss::idx_t[]>& ids, size_t size);
 
-  static std::unique_ptr<float[]> ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                                     faiss::idx_t dimension, bool normalize);
+  template <typename T>
+  static std::unique_ptr<T[]> ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                 faiss::idx_t dimension, bool normalize = false);
 
+  template <typename T>
   static butil::Status FillSearchResult(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
-                                        const std::vector<faiss::Index::distance_t>& distances,
-                                        const std::vector<faiss::idx_t>& labels, pb::common::MetricType metric_type,
-                                        faiss::idx_t dimension,
+                                        const std::vector<T>& distances, const std::vector<faiss::idx_t>& labels,
+                                        pb::common::MetricType metric_type, faiss::idx_t dimension,
                                         std::vector<pb::index::VectorWithDistanceResult>& results);
 
   static butil::Status FillRangeSearchResult(const std::unique_ptr<faiss::RangeSearchResult>& range_search_result,

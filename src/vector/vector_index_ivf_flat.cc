@@ -15,12 +15,14 @@
 #include "vector/vector_index_ivf_flat.h"
 
 #include <algorithm>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <future>
 #include <memory>
 #include <string>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -29,7 +31,11 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "faiss/Index.h"
+#include "faiss/IndexBinary.h"
+#include "faiss/IndexBinaryFlat.h"
+#include "faiss/IndexBinaryIVF.h"
 #include "faiss/IndexFlat.h"
+#include "faiss/IndexIVFFlat.h"
 #include "faiss/MetricType.h"
 #include "faiss/impl/AuxIndexStructures.h"
 #include "faiss/index_io.h"
@@ -51,16 +57,30 @@ bvar::LatencyRecorder g_ivf_flat_delete_latency("dingo_ivf_flat_delete_latency")
 bvar::LatencyRecorder g_ivf_flat_load_latency("dingo_ivf_flat_load_latency");
 bvar::LatencyRecorder g_ivf_flat_train_latency("dingo_ivf_flat_train_latency");
 
-VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
-                                       const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
-                                       ThreadPoolPtr thread_pool)
-    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
-  metric_type_ = vector_index_parameter.ivf_flat_parameter().metric_type();
-  dimension_ = vector_index_parameter.ivf_flat_parameter().dimension();
+template class VectorIndexIvfFlat<faiss::Index, faiss::IndexIVFFlat>;
 
-  nlist_org_ = vector_index_parameter.ivf_flat_parameter().ncentroids() > 0
-                   ? vector_index_parameter.ivf_flat_parameter().ncentroids()
-                   : Constant::kCreateIvfFlatParamNcentroids;
+template class VectorIndexIvfFlat<faiss::IndexBinary, faiss::IndexBinaryIVF>;
+
+template <typename T, typename U>
+VectorIndexIvfFlat<T, U>::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndexParameter& vector_index_parameter,
+                                             const pb::common::RegionEpoch& epoch, const pb::common::Range& range,
+                                             ThreadPoolPtr thread_pool)
+    : VectorIndex(id, vector_index_parameter, epoch, range, thread_pool) {
+  if constexpr (std::is_same<T, faiss::Index>::value) {
+    metric_type_ = vector_index_parameter.ivf_flat_parameter().metric_type();
+    dimension_ = vector_index_parameter.ivf_flat_parameter().dimension();
+    nlist_org_ = vector_index_parameter.ivf_flat_parameter().ncentroids() > 0
+                     ? vector_index_parameter.ivf_flat_parameter().ncentroids()
+                     : Constant::kCreateIvfFlatParamNcentroids;
+  } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+    metric_type_ = vector_index_parameter.binary_ivf_flat_parameter().metric_type();
+    dimension_ = vector_index_parameter.binary_ivf_flat_parameter().dimension();
+    nlist_org_ = vector_index_parameter.binary_ivf_flat_parameter().ncentroids() > 0
+                     ? vector_index_parameter.binary_ivf_flat_parameter().ncentroids()
+                     : Constant::kCreateBinaryIvfFlatParamNcentroids;
+  } else {
+    DINGO_LOG(ERROR) << "not support template index type";
+  }
 
   nlist_ = nlist_org_;
 
@@ -69,10 +89,12 @@ VectorIndexIvfFlat::VectorIndexIvfFlat(int64_t id, const pb::common::VectorIndex
   train_data_size_ = 0;
 }
 
-VectorIndexIvfFlat::~VectorIndexIvfFlat() = default;
+template <typename T, typename U>
+VectorIndexIvfFlat<T, U>::~VectorIndexIvfFlat() = default;
 
-butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                              bool is_upsert) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::AddOrUpsert(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                    bool is_upsert) {
   if (vector_with_ids.empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
   }
@@ -82,7 +104,6 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
   }
 
   const auto& ids = VectorIndexUtils::ExtractVectorId(vector_with_ids);
-  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_upsert_latency);
   RWLockWriteGuard guard(&rw_lock_);
@@ -95,13 +116,22 @@ butil::Status VectorIndexIvfFlat::AddOrUpsert(const std::vector<pb::common::Vect
     faiss::IDSelectorBatch sel(vector_with_ids.size(), ids.get());
     index_->remove_ids(sel);
   }
-  index_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
+  if constexpr (std::is_same<T, faiss::Index>::value) {
+    const auto& vector_values = VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
+    index_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
+  } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+    const auto& vector_values = VectorIndexUtils::ExtractVectorValue<uint8_t>(vector_with_ids, dimension_, normalize_);
+    index_->add_with_ids(vector_with_ids.size(), vector_values.get(), ids.get());
+  } else {
+    DINGO_LOG(FATAL);
+  }
 
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                                     bool is_upsert) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::AddOrUpsertWrapper(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                                           bool is_upsert) {
   auto status = AddOrUpsert(vector_with_ids, is_upsert);
   if (BAIDU_UNLIKELY(pb::error::Errno::EVECTOR_NOT_TRAIN == status.error_code())) {
     status = Train(vector_with_ids);
@@ -119,15 +149,18 @@ butil::Status VectorIndexIvfFlat::AddOrUpsertWrapper(const std::vector<pb::commo
   return status;
 }
 
-butil::Status VectorIndexIvfFlat::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Upsert(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
   return AddOrUpsertWrapper(vector_with_ids, true);
 }
 
-butil::Status VectorIndexIvfFlat::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) {
   return AddOrUpsertWrapper(vector_with_ids, false);
 }
 
-butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Delete(const std::vector<int64_t>& delete_ids) {
   if (delete_ids.empty()) {
     return butil::Status::OK();
   }
@@ -154,10 +187,12 @@ butil::Status VectorIndexIvfFlat::Delete(const std::vector<int64_t>& delete_ids)
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids, uint32_t topk,
-                                         const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool,
-                                         const pb::common::VectorSearchParameter& parameter,
-                                         std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Search(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                               uint32_t topk,
+                                               const std::vector<std::shared_ptr<FilterFunctor>>& filters, bool,
+                                               const pb::common::VectorSearchParameter& parameter,
+                                               std::vector<pb::index::VectorWithDistanceResult>& results) {  // NOLINT
 
   if (vector_with_ids.empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
@@ -168,16 +203,18 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
   if (!status.ok()) {
     return status;
   }
+  int32_t nprobe = 0;
+  if (std::is_same<T, faiss::IndexBinary>::value) {
+    nprobe = parameter.binary_ivf_flat().nprobe() > 0 ? parameter.binary_ivf_flat().nprobe()
+                                                      : Constant::kSearchBinaryIvfFlatParamNprobe;
+  } else if (std::is_same<T, faiss::Index>::value) {
+    nprobe = parameter.ivf_flat().nprobe() > 0 ? parameter.ivf_flat().nprobe() : Constant::kSearchIvfFlatParamNprobe;
+  } else {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "parameter is empty");
+  }
 
-  int32_t nprobe =
-      parameter.ivf_flat().nprobe() > 0 ? parameter.ivf_flat().nprobe() : Constant::kSearchIvfFlatParamNprobe;
-
-  std::vector<faiss::Index::distance_t> distances;
-  distances.resize(topk * vector_with_ids.size(), 0.0f);
   std::vector<faiss::idx_t> labels;
   labels.resize(topk * vector_with_ids.size(), -1);
-
-  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
 
   {
     BvarLatencyGuard bvar_guard(&g_ivf_flat_search_latency);
@@ -200,30 +237,48 @@ butil::Status VectorIndexIvfFlat::Search(const std::vector<pb::common::VectorWit
     ivf_search_parameters.nprobe = nprobe;
     ivf_search_parameters.max_codes = 0;
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
-
-    if (!filters.empty()) {
-      auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
-      ivf_search_parameters.sel = ivf_flat_filter.get();
-      index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
-                     &ivf_search_parameters);
+    if constexpr (std::is_same<T, faiss ::Index>::value) {
+      std::vector<faiss::Index::distance_t> distances;
+      distances.resize(topk * vector_with_ids.size(), 0.0f);
+      const auto& vector_values = VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
+      if (!filters.empty()) {
+        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+        ivf_search_parameters.sel = ivf_flat_filter.get();
+        index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      } else {
+        index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      }
+      VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
+    } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+      std::vector<faiss::IndexBinary::distance_t> distances;
+      distances.resize(topk * vector_with_ids.size(), 0);
+      const auto& vector_values = VectorIndexUtils::ExtractVectorValue<uint8_t>(vector_with_ids, dimension_);
+      if (!filters.empty()) {
+        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+        ivf_search_parameters.sel = ivf_flat_filter.get();
+        index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      } else {
+        index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
+                       &ivf_search_parameters);
+      }
+      VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
     } else {
-      index_->search(vector_with_ids.size(), vector_values.get(), topk, distances.data(), labels.data(),
-                     &ivf_search_parameters);
+      DINGO_LOG(FATAL);
     }
   }
-
-  VectorIndexUtils::FillSearchResult(vector_with_ids, topk, distances, labels, metric_type_, dimension_, results);
-
   DINGO_LOG(DEBUG) << fmt::format("[vector_index.ivf_flat][id({})] result size {}", Id(), results.size());
 
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::VectorWithId>& vector_with_ids,
-                                              float radius,
-                                              const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
-                                              bool /*reconstruct*/, const pb::common::VectorSearchParameter& parameter,
-                                              std::vector<pb::index::VectorWithDistanceResult>& results) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::RangeSearch(
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, float radius,
+    const std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters, bool /*reconstruct*/,
+    const pb::common::VectorSearchParameter& parameter, std::vector<pb::index::VectorWithDistanceResult>& results) {
   if (vector_with_ids.empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "vector_with_ids is empty");
   }
@@ -231,11 +286,15 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
   if (!status.ok()) {
     return status;
   }
-
-  int32_t nprobe =
-      parameter.ivf_flat().nprobe() > 0 ? parameter.ivf_flat().nprobe() : Constant::kSearchIvfFlatParamNprobe;
-
-  const auto& vector_values = VectorIndexUtils::ExtractVectorValue(vector_with_ids, dimension_, normalize_);
+  int32_t nprobe = 0;
+  if (std::is_same<T, faiss::IndexBinary>::value) {
+    nprobe = parameter.binary_ivf_flat().nprobe() > 0 ? parameter.binary_ivf_flat().nprobe()
+                                                      : Constant::kSearchBinaryIvfFlatParamNprobe;
+  } else if (std::is_same<T, faiss::Index>::value) {
+    nprobe = parameter.ivf_flat().nprobe() > 0 ? parameter.ivf_flat().nprobe() : Constant::kSearchIvfFlatParamNprobe;
+  } else {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "parameter is empty");
+  }
 
   std::unique_ptr<faiss::RangeSearchResult> range_search_result =
       std::make_unique<faiss::RangeSearchResult>(vector_with_ids.size());
@@ -268,16 +327,32 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
     ivf_search_parameters.quantizer_params = nullptr;  // search for nlist . ignore
 
     try {
-      if (!filters.empty()) {
-        auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
-        ivf_search_parameters.sel = ivf_flat_filter.get();
-        index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
-                             &ivf_search_parameters);
+      if constexpr (std::is_same<T, faiss::Index>::value) {
+        const auto& vector_values =
+            VectorIndexUtils::ExtractVectorValue<float>(vector_with_ids, dimension_, normalize_);
+        if (!filters.empty()) {
+          auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+          ivf_search_parameters.sel = ivf_flat_filter.get();
+          index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
+                               &ivf_search_parameters);
+        } else {
+          index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
+                               &ivf_search_parameters);
+        }
+      } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+        const auto& vector_values = VectorIndexUtils::ExtractVectorValue<uint8_t>(vector_with_ids, dimension_);
+        if (!filters.empty()) {
+          auto ivf_flat_filter = filters.empty() ? nullptr : std::make_shared<IvfFlatIDSelector>(filters);
+          ivf_search_parameters.sel = ivf_flat_filter.get();
+          index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
+                               &ivf_search_parameters);
+        } else {
+          index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
+                               &ivf_search_parameters);
+        }
       } else {
-        index_->range_search(vector_with_ids.size(), vector_values.get(), radius, range_search_result.get(),
-                             &ivf_search_parameters);
+        DINGO_LOG(FATAL);
       }
-
     } catch (std::exception& e) {
       std::string s = fmt::format("range search exception: {}", e.what());
       DINGO_LOG(ERROR) << fmt::format("[vector_index.ivf_flat][id({})] {}", Id(), s);
@@ -292,13 +367,23 @@ butil::Status VectorIndexIvfFlat::RangeSearch(const std::vector<pb::common::Vect
   return butil::Status::OK();
 }
 
-void VectorIndexIvfFlat::LockWrite() { rw_lock_.LockWrite(); }
+template <typename T, typename U>
+void VectorIndexIvfFlat<T, U>::LockWrite() {
+  rw_lock_.LockWrite();
+}
 
-void VectorIndexIvfFlat::UnlockWrite() { rw_lock_.UnlockWrite(); }
+template <typename T, typename U>
+void VectorIndexIvfFlat<T, U>::UnlockWrite() {
+  rw_lock_.UnlockWrite();
+}
 
-bool VectorIndexIvfFlat::SupportSave() { return true; }
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::SupportSave() {
+  return true;
+}
 
-butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Save(const std::string& path) {
   // Warning : read me first !!!!
   // Currently, the save function is executed in the fork child process.
   // When calling glog,
@@ -309,7 +394,14 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   }
 
   try {
-    faiss::write_index(index_.get(), path.c_str());
+    if constexpr (std::is_same<T, faiss::Index>::value) {
+      faiss::write_index(index_.get(), path.c_str());
+    } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+      faiss::write_index_binary(index_.get(), path.c_str());
+    } else {
+      DINGO_LOG(FATAL);
+    }
+
   } catch (std::exception& e) {
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("write index exception: {}", e.what()));
   }
@@ -317,23 +409,30 @@ butil::Status VectorIndexIvfFlat::Save(const std::string& path) {
   return butil::Status();
 }
 
-butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Load(const std::string& path) {
   if (path.empty()) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "path is empty");
   }
 
   BvarLatencyGuard bvar_guard(&g_ivf_flat_load_latency);
 
-  faiss::Index* internal_raw_index = nullptr;
+  T* internal_raw_index = nullptr;
   try {
-    internal_raw_index = faiss::read_index(path.c_str(), 0);
+    if constexpr (std::is_same<T, faiss::Index>::value) {
+      internal_raw_index = faiss::read_index(path.c_str(), 0);
+    } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+      internal_raw_index = faiss::read_index_binary(path.c_str(), 0);
+    } else {
+      DINGO_LOG(FATAL);
+    }
 
   } catch (std::exception& e) {
     delete internal_raw_index;
     return butil::Status(pb::error::Errno::EINTERNAL, fmt::format("read index exception: {} {}", path, e.what()));
   }
 
-  faiss::IndexIVFFlat* internal_index = dynamic_cast<faiss::IndexIVFFlat*>(internal_raw_index);
+  U* internal_index = dynamic_cast<U*>(internal_raw_index);
   if (BAIDU_UNLIKELY(!internal_index)) {
     if (internal_raw_index) {
       delete internal_raw_index;
@@ -344,7 +443,7 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
   }
 
   // avoid mem leak!!!
-  std::unique_ptr<faiss::IndexIVFFlat> internal_index_ivf_flat(internal_index);
+  std::unique_ptr<U> internal_index_ivf_flat(internal_index);
 
   // double check
   if (BAIDU_UNLIKELY(internal_index->d != dimension_)) {
@@ -363,6 +462,14 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
       if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_L2)) {
         std::string s = fmt::format("metric type not match, {} {}", static_cast<int>(internal_index->metric_type),
                                     pb::common::MetricType_Name(metric_type_));
+        return butil::Status(pb::error::Errno::EINTERNAL, s);
+      }
+      break;
+    }
+    case pb::common::METRIC_TYPE_HAMMING: {
+      // faiss::MetricType not support HAMMING ,L2 means min-heap, MetricType just for sort by heap
+      if (BAIDU_UNLIKELY(internal_index->metric_type != faiss::MetricType::METRIC_L2)) {
+        std::string s = fmt::format("metric type not match, {} L2 ", static_cast<int>(internal_index->metric_type));
         return butil::Status(pb::error::Errno::EINTERNAL, s);
       }
       break;
@@ -406,11 +513,18 @@ butil::Status VectorIndexIvfFlat::Load(const std::string& path) {
   return butil::Status::OK();
 }
 
-int32_t VectorIndexIvfFlat::GetDimension() { return this->dimension_; }
+template <typename T, typename U>
+int32_t VectorIndexIvfFlat<T, U>::GetDimension() {
+  return this->dimension_;
+}
 
-pb::common::MetricType VectorIndexIvfFlat::GetMetricType() { return this->metric_type_; }
+template <typename T, typename U>
+pb::common::MetricType VectorIndexIvfFlat<T, U>::GetMetricType() {
+  return this->metric_type_;
+}
 
-butil::Status VectorIndexIvfFlat::GetCount(int64_t& count) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::GetCount(int64_t& count) {
   RWLockReadGuard guard(&rw_lock_);
 
   if (IsTrainedImpl()) {
@@ -421,12 +535,14 @@ butil::Status VectorIndexIvfFlat::GetCount(int64_t& count) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::GetDeletedCount(int64_t& deleted_count) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::GetDeletedCount(int64_t& deleted_count) {
   deleted_count = 0;
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::GetMemorySize(int64_t& memory_size) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::GetMemorySize(int64_t& memory_size) {
   RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
@@ -439,15 +555,93 @@ butil::Status VectorIndexIvfFlat::GetMemorySize(int64_t& memory_size) {
     memory_size = 0;
     return butil::Status::OK();
   }
+  if (std::is_same<T, faiss ::Index>::value) {
+    memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t) +
+                  nlist_ * dimension_ * sizeof(faiss::Index::component_t);
+  } else if (std::is_same<T, faiss::IndexBinary>::value) {
+    memory_size = count * sizeof(faiss::idx_t) +
+                  count * dimension_ / CHAR_BIT * sizeof(faiss::IndexBinary::component_t) +
+                  nlist_ * dimension_ / CHAR_BIT * sizeof(faiss::IndexBinary::component_t);
+  } else {
+    return butil::Status(pb::error::Errno::EINTERNAL, "not support template index type");
+  }
 
-  memory_size = count * sizeof(faiss::idx_t) + count * dimension_ * sizeof(faiss::Index::component_t) +
-                nlist_ * dimension_ * sizeof(faiss::Index::component_t);
   return butil::Status::OK();
 }
 
-bool VectorIndexIvfFlat::IsExceedsMaxElements() { return false; }
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::IsExceedsMaxElements() {
+  return false;
+}
 
-butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Train(std::vector<uint8_t>& train_datas) {
+  size_t data_size = train_datas.size() / (dimension_ / CHAR_BIT);
+  if (data_size == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "data size invalid");
+  }
+  if (train_datas.size() % (dimension_ / CHAR_BIT) != 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS,
+                         fmt::format("dimension not match {} * CHAR_BIT(8) {}", train_datas.size(), dimension_));
+  }
+
+  faiss::ClusteringParameters clustering_parameters;
+  if (BAIDU_UNLIKELY(data_size < (clustering_parameters.min_points_per_centroid * nlist_))) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.binary_ivf_flat][id({})] train_datas size({}) not enough, suggest at least {}.", Id(), data_size,
+        clustering_parameters.min_points_per_centroid * nlist_);
+  } else if (BAIDU_UNLIKELY(data_size >= clustering_parameters.min_points_per_centroid * nlist_ &&
+                            data_size < clustering_parameters.max_points_per_centroid * nlist_)) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.binary_ivf_flat][id({})] train_datas size({}) not enough, suggest at least {}.", Id(), data_size,
+        clustering_parameters.max_points_per_centroid * nlist_);
+  }
+
+  BvarLatencyGuard bvar_guard(&g_ivf_flat_train_latency);
+  RWLockWriteGuard guard(&rw_lock_);
+
+  if (BAIDU_UNLIKELY(IsTrainedImpl())) {
+    return butil::Status::OK();
+  }
+
+  DINGO_LOG(INFO) << fmt::format("[vector_index.binary_ivf_flat][id({})] train size: {}.", Id(), data_size);
+
+  // critical code
+  if (BAIDU_UNLIKELY(data_size < nlist_)) {
+    DINGO_LOG(WARNING) << fmt::format(
+        "[vector_index.binary_ivf_flat][id({})] data size({}) too small, nlist({}) degenerate to 1.", Id(), data_size,
+        nlist_);
+    nlist_ = 1;
+  }
+
+  // init index
+  Init();
+
+  train_data_size_ = 0;
+
+  try {
+    if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+      index_->train(data_size, train_datas.data());
+    } else {
+      DINGO_LOG(FATAL);
+    }
+    if (!index_->is_trained) {
+      Reset();
+      return butil::Status(pb::error::Errno::EINTERNAL, "check binary_ivf_flat index train failed");
+    }
+
+  } catch (std::exception& e) {
+    Reset();
+    return butil::Status(pb::error::Errno::EINTERNAL, "train binary_ivf_flat exception");
+  }
+
+  train_data_size_ = data_size;
+
+  return butil::Status::OK();
+}
+
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;
   if (data_size == 0) {
     return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "data size invalid");
@@ -497,7 +691,11 @@ butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
   }
 
   try {
-    index_->train(data_size, train_datas.data());
+    if constexpr (std::is_same<T, faiss::Index>::value) {
+      index_->train(data_size, train_datas.data());
+    } else {
+      DINGO_LOG(FATAL);
+    }
     if (!index_->is_trained) {
       Reset();
       return butil::Status(pb::error::Errno::EINTERNAL, "check ivf_flat index train failed");
@@ -513,21 +711,44 @@ butil::Status VectorIndexIvfFlat::Train(std::vector<float>& train_datas) {
   return butil::Status::OK();
 }
 
-butil::Status VectorIndexIvfFlat::Train(const std::vector<pb::common::VectorWithId>& vectors) {
-  std::vector<float> train_datas;
-  train_datas.reserve(dimension_ * vectors.size());
-  for (const auto& vector : vectors) {
-    if (BAIDU_UNLIKELY(dimension_ != vector.vector().float_values().size())) {
-      std::string s = fmt::format("dimension not match {} {}", vector.vector().float_values().size(), dimension_);
-      return butil::Status(pb::error::Errno::EINTERNAL, s);
+template <typename T, typename U>
+butil::Status VectorIndexIvfFlat<T, U>::Train(const std::vector<pb::common::VectorWithId>& vectors) {
+  if constexpr (std::is_same<T, faiss::Index>::value) {
+    std::vector<float> train_datas;
+    train_datas.reserve(dimension_ * vectors.size());
+    for (const auto& vector : vectors) {
+      if (BAIDU_UNLIKELY(dimension_ != vector.vector().float_values().size())) {
+        std::string s = fmt::format("dimension not match {} {}", vector.vector().float_values().size(), dimension_);
+        return butil::Status(pb::error::Errno::EINTERNAL, s);
+      }
+      train_datas.insert(train_datas.end(), vector.vector().float_values().begin(),
+                         vector.vector().float_values().end());
     }
-    train_datas.insert(train_datas.end(), vector.vector().float_values().begin(), vector.vector().float_values().end());
+    return VectorIndexIvfFlat<T, U>::Train(train_datas);
+  } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+    std::vector<uint8_t> train_datas;
+    train_datas.reserve((dimension_ / CHAR_BIT) * vectors.size());
+    for (const auto& vector : vectors) {
+      if (BAIDU_UNLIKELY((dimension_ / CHAR_BIT) != vector.vector().binary_values().size())) {
+        std::string s =
+            fmt::format("dimension not match {} * CHAR_BIT(8) {}", vector.vector().binary_values().size(), dimension_);
+        return butil::Status(pb::error::Errno::EINTERNAL, s);
+      }
+      for (auto val : vector.vector().binary_values()) {
+        uint8_t value = static_cast<uint8_t>(val[0]);
+        train_datas.push_back(value);
+      }
+    }
+    return VectorIndexIvfFlat<T, U>::Train(train_datas);
+  } else {
+    DINGO_LOG(FATAL);
   }
 
-  return VectorIndexIvfFlat::Train(train_datas);
+  return butil::Status(pb::error::Errno::EINTERNAL, "train ivf_flat not support template index ");
 }
 
-bool VectorIndexIvfFlat::NeedToRebuild() {
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::NeedToRebuild() {
   RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
@@ -554,13 +775,15 @@ bool VectorIndexIvfFlat::NeedToRebuild() {
   return false;
 }
 
-bool VectorIndexIvfFlat::IsTrained() {
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::IsTrained() {
   RWLockReadGuard guard(&rw_lock_);
 
   return IsTrainedImpl();
 }
 
-bool VectorIndexIvfFlat::NeedToSave(int64_t last_save_log_behind) {
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::NeedToSave(int64_t last_save_log_behind) {
   RWLockReadGuard guard(&rw_lock_);
 
   if (BAIDU_UNLIKELY(!IsTrainedImpl())) {
@@ -578,28 +801,43 @@ bool VectorIndexIvfFlat::NeedToSave(int64_t last_save_log_behind) {
   return false;
 }
 
-void VectorIndexIvfFlat::Init() {
-  if (pb::common::MetricType::METRIC_TYPE_L2 == metric_type_) {
-    quantizer_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
-    index_ = std::make_unique<faiss::IndexIVFFlat>(quantizer_.get(), dimension_, nlist_);
-  } else if (pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT == metric_type_) {
-    quantizer_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
-    index_ = std::make_unique<faiss::IndexIVFFlat>(quantizer_.get(), dimension_, nlist_,
-                                                   faiss::MetricType::METRIC_INNER_PRODUCT);
-  } else if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
-    normalize_ = true;
-    quantizer_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
-    index_ = std::make_unique<faiss::IndexIVFFlat>(quantizer_.get(), dimension_, nlist_,
-                                                   faiss::MetricType::METRIC_INNER_PRODUCT);
+template <typename T, typename U>
+void VectorIndexIvfFlat<T, U>::Init() {
+  if constexpr (std::is_same<T, faiss::Index>::value) {
+    if (pb::common::MetricType::METRIC_TYPE_L2 == metric_type_) {
+      quantizer_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
+      index_ = std::make_unique<U>(quantizer_.get(), dimension_, nlist_);
+    } else if (pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT == metric_type_) {
+      quantizer_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
+      index_ = std::make_unique<U>(quantizer_.get(), dimension_, nlist_, faiss::MetricType::METRIC_INNER_PRODUCT);
+    } else if (pb::common::MetricType::METRIC_TYPE_COSINE == metric_type_) {
+      normalize_ = true;
+      quantizer_ = std::make_unique<faiss::IndexFlatIP>(dimension_);
+      index_ = std::make_unique<U>(quantizer_.get(), dimension_, nlist_, faiss::MetricType::METRIC_INNER_PRODUCT);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("Ivf Flat : not support metric type : {} use L2 default",
+                                        static_cast<int>(metric_type_));
+      quantizer_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
+      index_ =
+          std::make_unique<faiss::IndexIVFFlat>(quantizer_.get(), dimension_, nlist_, faiss::MetricType::METRIC_L2);
+    }
+  } else if constexpr (std::is_same<T, faiss::IndexBinary>::value) {
+    if (pb::common::MetricType::METRIC_TYPE_HAMMING == metric_type_) {
+      quantizer_ = std::make_unique<faiss::IndexBinaryFlat>(dimension_);
+      index_ = std::make_unique<U>(quantizer_.get(), dimension_, nlist_);
+    } else {
+      DINGO_LOG(WARNING) << fmt::format("Ivf Flat : not support metric type : {} use HAMMING default",
+                                        static_cast<int>(metric_type_));
+      quantizer_ = std::make_unique<faiss::IndexBinaryFlat>(dimension_);
+      index_ = std::make_unique<U>(quantizer_.get(), dimension_, nlist_);
+    }
   } else {
-    DINGO_LOG(WARNING) << fmt::format("Ivf Flat : not support metric type : {} use L2 default",
-                                      static_cast<int>(metric_type_));
-    quantizer_ = std::make_unique<faiss::IndexFlatL2>(dimension_);
-    index_ = std::make_unique<faiss::IndexIVFFlat>(quantizer_.get(), dimension_, nlist_, faiss::MetricType::METRIC_L2);
+    DINGO_LOG(FATAL);
   }
 }
 
-bool VectorIndexIvfFlat::IsTrainedImpl() {
+template <typename T, typename U>
+bool VectorIndexIvfFlat<T, U>::IsTrainedImpl() {
   bool is_trained = ((index_ && !quantizer_ && index_->own_fields) || (quantizer_ && index_ && !index_->own_fields))
                         ? index_->is_trained
                         : false;
@@ -608,7 +846,8 @@ bool VectorIndexIvfFlat::IsTrainedImpl() {
   return is_trained;
 }
 
-void VectorIndexIvfFlat::Reset() {
+template <typename T, typename U>
+void VectorIndexIvfFlat<T, U>::Reset() {
   quantizer_->reset();
   index_->reset();
   nlist_ = nlist_org_;
