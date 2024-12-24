@@ -59,4 +59,18 @@ public final class Utils {
         }
         return new int[] {keySize, valueSize};
     }
+
+    public static int[] getApproPerRecordSizeV2(List<DingoSchema> schemas) {
+        // prefix is namespace(1) and common id(8), codec version(1) and other(3)
+        int keySize = 1 + 8 + 4;
+        int valueSize = 4;
+        for (DingoSchema schema : schemas) {
+            if (schema.isKey()) {
+                keySize += (schema.getWithNullTagLength() == 1 ? 100 : schema.getWithNullTagLength());
+            } else {
+                valueSize += (schema.getValueLengthV2() == 0 ? 100 : schema.getValueLengthV2());
+            }
+        }
+        return new int[] {keySize, valueSize};
+    }
 }

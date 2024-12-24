@@ -18,6 +18,7 @@ package io.dingodb.sdk.common.serial;
 
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import lombok.Setter;
 
 import java.util.Arrays;
 import java.util.List;
@@ -28,19 +29,132 @@ public class RecordEncoder {
     private final long id;
     private int keyBufSize;
     private int valueBufSize;
+    private int valueColumnCount;
+
+    @Setter
+    private int codecVersion;
+
+    private byte[] encodeValueV1(Object[] record) {
+        Buf valueBuf = new BufImpl(valueBufSize);
+        encodeSchemaVersion(valueBuf);
+        for (DingoSchema schema : schemas) {
+            if (!schema.isKey()) {
+                schema.encodeValue(valueBuf, record[schema.getIndex()]);
+            }
+        }
+        return valueBuf.getBytes();
+    }
+
+    private byte[] encodeValueV2(Object[] record) {
+        int cntNotNullCols = 0;
+        int cntNullCols = 0;
+        int totalLength = 0;
+
+        int cntNotNullPos = 4;  //The first 4 bytes is for schema version.
+        int cntNullPos = cntNotNullPos + 2;
+        int idPos = cntNullPos + 2;
+        int offsetPos = idPos + Config.idUnit * this.valueColumnCount;
+        int dataPos = offsetPos + Config.offsetUnit * this.valueColumnCount;
+        totalLength = 8;
+
+        Buf valueBuf = new BufImpl(dataPos + valueBufSize, dataPos);
+        encodeSchemaVersion(0, valueBuf);
+        for (DingoSchema schema : schemas) {
+
+            if (!schema.isKey()) {
+                int index = schema.getIndex();
+                Object column = record[index];
+
+                if (column == null) {
+                    cntNullCols++;
+
+                    //Write id.
+                    valueBuf.writeShort(idPos, (short) index);
+                    idPos += 2;
+
+                    //write offset.
+                    valueBuf.writeInt(offsetPos, -1);
+                    offsetPos += 4;
+                } else {
+                    cntNotNullCols++;
+
+                    //write id.
+                    valueBuf.writeShort(idPos, (short) index);
+                    idPos += 2;
+
+                    //write offset.
+                    valueBuf.writeInt(offsetPos, dataPos);
+                    offsetPos += 4;
+
+                    //write data.
+                    dataPos += schema.encodeValueV2(valueBuf, record[schema.getIndex()]);
+                }
+            }
+        }
+
+        valueBuf.writeShort(cntNotNullPos, (short) cntNotNullCols);
+        valueBuf.writeShort(cntNullPos, (short) cntNullCols);
+
+        return valueBuf.getBytes();
+    }
+
+    private int getValueColumnCount() {
+        int count = 0;
+        for ( DingoSchema schema : schemas ) {
+            if (!schema.isKey()) {
+                count++;
+            }
+        }
+        return count;
+    }
 
     public RecordEncoder(int schemaVersion, List<DingoSchema> schemas, long id) {
         this.schemaVersion = schemaVersion;
         this.schemas = schemas;
         this.id = id;
-        int[] size = Utils.getApproPerRecordSize(schemas);
-        this.keyBufSize = size[0];
-        this.valueBufSize = size[1];
+        this.codecVersion = Config.CODEC_VERSION_V2;
+
+        if (this.codecVersion == Config.CODEC_VERSION_V2) {
+            int[] size = Utils.getApproPerRecordSizeV2(schemas);
+            this.keyBufSize = size[0];
+            this.valueBufSize = size[1];
+        } else {
+            int[] size = Utils.getApproPerRecordSize(schemas);
+            this.keyBufSize = size[0];
+            this.valueBufSize = size[1];
+        }
+        this.valueColumnCount = getValueColumnCount();
     }
 
     public RecordEncoder(int schemaVersion, long id) {
         this.schemaVersion = schemaVersion;
         this.id = id;
+        this.codecVersion = Config.CODEC_VERSION_V2;
+    }
+
+    public RecordEncoder(int codecVersion, int schemaVersion, List<DingoSchema> schemas, long id) {
+        this.schemaVersion = schemaVersion;
+        this.schemas = schemas;
+        this.id = id;
+        this.codecVersion = codecVersion;
+
+        if (this.codecVersion == Config.CODEC_VERSION_V2) {
+            int[] size = Utils.getApproPerRecordSizeV2(schemas);
+            this.keyBufSize = size[0];
+            this.valueBufSize = size[1];
+        } else {
+            int[] size = Utils.getApproPerRecordSize(schemas);
+            this.keyBufSize = size[0];
+            this.valueBufSize = size[1];
+        }
+
+        this.valueColumnCount = getValueColumnCount();
+    }
+
+    public RecordEncoder(int codecVersion, int schemaVersion, long id) {
+        this.schemaVersion = schemaVersion;
+        this.id = id;
+        this.codecVersion = codecVersion;
     }
 
     private void encodePrefix(Buf buf) {
@@ -49,7 +163,7 @@ public class RecordEncoder {
     }
 
     private void encodeTag(Buf buf) {
-        buf.reverseWrite(Config.CODEC_VERSION);
+        buf.reverseWrite((byte)this.codecVersion);
         buf.reverseWrite((byte) 0);
         buf.reverseWrite((byte) 0);
         buf.reverseWrite((byte) 0);
@@ -66,6 +180,10 @@ public class RecordEncoder {
         buf.writeInt(schemaVersion);
     }
 
+    private void encodeSchemaVersion(int pos, Buf buf) {
+        buf.writeInt(pos, schemaVersion);
+    }
+
     public KeyValue encode(Object[] record) {
         KeyValue kv = new KeyValue(null, null);
         kv.setKey(encodeKey(record));
@@ -73,7 +191,7 @@ public class RecordEncoder {
         return kv;
     }
 
-    public byte[] encodeKey(Object[] record) {
+    private byte[] encodeKeyV1(Object[] record) {
         Buf keyBuf = new BufImpl(keyBufSize);
 
         encodeTag(keyBuf);
@@ -87,15 +205,34 @@ public class RecordEncoder {
         return keyBuf.getBytes();
     }
 
-    public byte[] encodeValue(Object[] record) {
-        Buf valueBuf = new BufImpl(valueBufSize);
-        encodeSchemaVersion(valueBuf);
+    private byte[] encodeKeyV2(Object[] record) {
+        Buf keyBuf = new BufImpl(keyBufSize);
+
+        encodeTag(keyBuf);
+        encodePrefix(keyBuf);
+
         for (DingoSchema schema : schemas) {
-            if (!schema.isKey()) {
-                schema.encodeValue(valueBuf, record[schema.getIndex()]);
+            if (schema.isKey()) {
+                schema.encodeKeyV2(keyBuf, record[schema.getIndex()]);
             }
         }
-        return valueBuf.getBytes();
+        return keyBuf.getBytes();
+    }
+
+    public byte[] encodeKey(Object[] record) {
+        if ( this.codecVersion == Config.CODEC_VERSION) {
+            return encodeKeyV1(record);
+        } else {
+            return encodeKeyV2(record);
+        }
+    }
+
+    public byte[] encodeValue(Object[] record) {
+        if ( this.codecVersion == Config.CODEC_VERSION) {
+            return encodeValueV1(record);
+        } else {
+            return encodeValueV2(record);
+        }
     }
 
     public byte[] encodeMinKeyPrefix() {

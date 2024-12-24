@@ -75,7 +75,7 @@ class CoprocessorV2 : public RawCoprocessor {
   butil::Status DoExecute(const std::string& key, const std::string& value, bool* has_result_kv,
                           pb::common::KeyValue* result_kv);
   butil::Status DoFilter(const std::string& key, const std::string& value, bool* is_reserved);
-  butil::Status DoRelExprCore(const std::vector<std::any>& original_record,
+  butil::Status DoRelExprCore(int codec_version, const std::vector<std::any>& original_record,
                               std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr);  // NOLINT
   butil::Status DoRelExprCoreWrapper(const std::string& key, const std::string& value,
                                      std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr);  // NOLINT
@@ -90,6 +90,14 @@ class CoprocessorV2 : public RawCoprocessor {
   void ShowOriginalColumnIndexes();
   void ShowSelectionColumnIndexes();
   void ShowResultColumnIndexes();
+
+  int GetCodecVersion(const std::string& key) {
+    if (key.empty()) {
+      throw std::runtime_error("key should not be empty in func GetCodecVersion.");
+    }
+
+    return key.c_str()[key.length() - 1];
+  }
 
   char prefix_;                                                                        // NOLINT
   pb::common::CoprocessorV2 coprocessor_;                                              // NOLINT

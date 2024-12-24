@@ -103,7 +103,7 @@ butil::Status CoprocessorScalar::Filter(const pb::common::VectorScalardata& scal
 
   std::unique_ptr<std::vector<expr::Operand>> result_operand_ptr;
 
-  status = DoRelExprCore(original_record, result_operand_ptr);
+  status = DoRelExprCore(0x02, original_record, result_operand_ptr);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;

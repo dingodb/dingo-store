@@ -22,5 +22,8 @@ public class Config {
     public final static int KEY_REVERSE_TAG_SIZE = 4;
 
     public final static byte CODEC_VERSION = 1;
+    public final static byte CODEC_VERSION_V2 = 2;
 
+    public final static int idUnit = 2;
+    public final static int offsetUnit = 4;
 }

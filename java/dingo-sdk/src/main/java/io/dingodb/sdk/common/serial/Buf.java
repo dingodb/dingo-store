@@ -24,6 +24,13 @@ public interface Buf {
     void writeInt(int i);
     void writeLong(long l);
 
+    void write(int pos, byte b);
+    void write(int pos, byte[] b);
+    void write(int srcPos, byte[] b, int pos, int length);
+    void writeShort(int pos, short i);
+    void writeInt(int pos, int i);
+    void writeLong(int pos, long l);
+
     byte peek();
     int peekInt();
     long peekLong();
@@ -31,8 +38,16 @@ public interface Buf {
     byte read();
     byte[] read(int length);
     void read(byte[] b, int pos, int length);
+    short readShort();
     int readInt();
     long readLong();
+
+    byte readAt(int pos);
+    byte[] readAt(int pos, int length);
+    void readAt(int srcPos, byte[] b, int pos, int length);
+    short readShortAt(int pos);
+    int readIntAt(int pos);
+    long readLongAt(int pos);
 
     void reverseWrite(byte b);
     byte reverseRead();
@@ -44,6 +59,9 @@ public interface Buf {
     void reverseSkipInt();
     void ensureRemainder(int length);
     void resize(int oldSize, int newSize);
+    void setForwardOffset(int pos);
+    int restReadableSize();
+    int readOffset();
 
     boolean isEnd();
 

@@ -30,6 +30,8 @@ public class TestListType {
     public static void main(String[] args) {
         List<DingoSchema> table = getTable();
         RecordEncoder re = new RecordEncoder(0, table, 0L);
+        //re.setCodecVersion(0x01);
+
         RecordDecoder rd = new RecordDecoder(0, table, 0L);
 
         List<Object[]> records = getRecords();
@@ -59,6 +61,7 @@ public class TestListType {
         int[] index = new int[]{4,5,10};
         long tag3 = System.currentTimeMillis();
         for (KeyValue kv : kvs) {
+            //rd.decodeValue(kv, index);
             rd.decodeValue(kv, index);
         }
         long tag4 = System.currentTimeMillis();
@@ -276,7 +279,7 @@ public class TestListType {
         };
 
         List<Object[]> allRecord = new ArrayList<>();
-        for (int i = 0; i < 1000000; i ++) {
+        for (int i = 0; i < 10000; i ++) {
             Object[] r = new Object[16];
             System.arraycopy(record, 1, r, 1, 15);
             r[0] = i;
