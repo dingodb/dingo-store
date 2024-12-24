@@ -351,7 +351,7 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
       runner.Decode(reinterpret_cast<const expr::Byte*>(coprocessor_.expression().c_str()),
                     coprocessor_.expression().length());
       auto tuple = std::make_unique<expr::Tuple>();
-      RelExprHelper::TransToOperandWrapper(original_serial_schemas_, selection_column_indexes_, original_record, tuple);
+      RelExprHelper::TransToOperandWrapper(0x02, original_serial_schemas_, selection_column_indexes_, original_record, tuple);
       runner.BindTuple(tuple.get());
       runner.Run();
       std::optional<bool> ok = runner.GetOptional<bool>();

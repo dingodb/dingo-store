@@ -66,6 +66,16 @@ public class VectorSchema implements DingoSchema<String> {
     }
 
     @Override
+    public int getWithNullTagLength() {
+        return 1;
+    }
+
+    @Override
+    public int getValueLengthV2() {
+        return 0;
+    }
+
+    @Override
     public void setAllowNull(boolean allowNull) {
         this.allowNull = allowNull;
     }
@@ -79,13 +89,27 @@ public class VectorSchema implements DingoSchema<String> {
         throw new RuntimeException("Vector cannot be key");
     }
 
+    public void encodeKeyV2(Buf buf, String data) {
+        throw new RuntimeException("Vector cannot be key");
+    }
+
     @Override
     public void encodeKeyForUpdate(Buf buf, String data) {
         throw new RuntimeException("Vector cannot be key");
     }
 
     @Override
+    public void encodeKeyForUpdateV2(Buf buf, String data) {
+        throw new RuntimeException("Vector cannot be key");
+    }
+
+    @Override
     public String decodeKey(Buf buf) {
+        throw new RuntimeException("Vector cannot be key");
+    }
+
+    @Override
+    public String decodeKeyV2(Buf buf) {
         throw new RuntimeException("Vector cannot be key");
     }
 
@@ -96,6 +120,11 @@ public class VectorSchema implements DingoSchema<String> {
 
     @Override
     public void skipKey(Buf buf) {
+        throw new RuntimeException("Vector cannot be key");
+    }
+
+    @Override
+    public void skipKeyV2(Buf buf) {
         throw new RuntimeException("Vector cannot be key");
     }
 
@@ -126,6 +155,34 @@ public class VectorSchema implements DingoSchema<String> {
     }
 
     @Override
+    public int encodeValueV2(Buf buf, String data) {
+        int len = 0;
+
+        if (allowNull) {
+            if (data == null) {
+                return 0;
+            } else {
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                buf.ensureRemainder(4 + bytes.length);
+                buf.write(NOTNULL);
+                buf.writeInt(bytes.length);
+                buf.write(bytes);
+
+                len += 4 + bytes.length;
+            }
+        } else {
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            buf.ensureRemainder(4 + bytes.length);
+            buf.writeInt(bytes.length);
+            buf.write(bytes);
+
+            len += 4 + bytes.length;
+        }
+
+        return len;
+    }
+
+    @Override
     public String decodeValue(Buf buf) {
         if (allowNull) {
             if (buf.read() == NULL) {
@@ -138,6 +195,11 @@ public class VectorSchema implements DingoSchema<String> {
     }
 
     @Override
+    public String decodeValueV2(Buf buf) {
+        return new String(buf.read(buf.readInt()), StandardCharsets.UTF_8);
+    }
+
+    @Override
     public void skipValue(Buf buf) {
         if (allowNull) {
             if (buf.read() == NOTNULL) {
@@ -146,5 +208,10 @@ public class VectorSchema implements DingoSchema<String> {
         } else {
             buf.skip(buf.readInt());
         }
+    }
+
+    @Override
+    public void skipValueV2(Buf buf) {
+        buf.skip(buf.readInt());
     }
 }

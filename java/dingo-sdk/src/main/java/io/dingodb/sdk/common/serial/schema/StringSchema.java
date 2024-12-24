@@ -64,6 +64,16 @@ public class StringSchema implements DingoSchema<String> {
     }
 
     @Override
+    public int getWithNullTagLength() {
+        return 1;
+    }
+
+    @Override
+    public int getValueLengthV2() {
+        return 0;
+    }
+
+    @Override
     public void setAllowNull(boolean allowNull) {
         this.allowNull = allowNull;
     }
@@ -92,6 +102,33 @@ public class StringSchema implements DingoSchema<String> {
             int size = internalEncodeKey(buf, bytes);
             buf.ensureRemainder(4);
             buf.reverseWriteInt(size);
+        }
+    }
+
+    public void encodeKeyV2(Buf buf, String data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.ensureRemainder(1);
+                buf.write(NULL);
+                //buf.reverseWriteInt0();
+            } else {
+                buf.ensureRemainder(1);
+                buf.write(NOTNULL);
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                int size = internalEncodeKey(buf, bytes);
+                //buf.ensureRemainder(4);
+                //buf.reverseWriteInt(size);
+            }
+        } else {
+            if (data == null) {
+                throw new RuntimeException("Data is not allow as null.");
+            }
+            //buf.ensureRemainder(1);
+            //buf.write(NOTNULL);
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            int size = internalEncodeKey(buf, bytes);
+            //buf.ensureRemainder(4);
+            //buf.reverseWriteInt(size);
         }
     }
 
@@ -133,8 +170,32 @@ public class StringSchema implements DingoSchema<String> {
                 buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
             }
         } else {
+            buf.write(NOTNULL);
             byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
             buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
+        }
+    }
+
+    @Override
+    public void encodeKeyForUpdateV2(Buf buf, String data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                //buf.reverseWriteInt0();
+            } else {
+                buf.write(NOTNULL);
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                //buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
+                internalEncodeKeyForUpdate(buf, bytes);
+            }
+        } else {
+            if (data == null) {
+                throw new RuntimeException("Data is not allow as null.");
+            }
+            buf.write(NOTNULL);
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            //buf.reverseWriteInt(internalEncodeKeyForUpdate(buf, bytes));
+            internalEncodeKeyForUpdate(buf, bytes);
         }
     }
 
@@ -179,6 +240,20 @@ public class StringSchema implements DingoSchema<String> {
     }
 
     @Override
+    public String decodeKeyV2(Buf buf) {
+        if (allowNull) {
+            if (buf.read() == NULL) {
+                //buf.reverseSkipInt();
+                return null;
+            }
+        }
+
+        return new String(internalReadBytesV2(buf), StandardCharsets.UTF_8);
+    }
+
+    //This interface is both used by v1 and v2. We use same way to decode key prefix.
+    //In the new way, we decode string value directly but not by length field.
+    @Override
     public String decodeKeyPrefix(Buf buf) {
         if (allowNull) {
             if (buf.read() == NULL) {
@@ -193,7 +268,8 @@ public class StringSchema implements DingoSchema<String> {
         do {
             length += 9;
             buf.skip(8);
-        } while(buf.read() == (byte) 255);
+        }
+        while (buf.read() == (byte) 255);
         int groupNum = length / 9;
         buf.skip(-1);
         int reminderZero = 255 - buf.read() & 0xFF;
@@ -236,6 +312,10 @@ public class StringSchema implements DingoSchema<String> {
         return data;
     }
 
+    private byte[] internalReadBytesV2(Buf buf) {
+        return internalReadKeyPrefixBytes(buf);
+    }
+
     @Override
     public void skipKey(Buf buf) {
         if (allowNull) {
@@ -243,6 +323,16 @@ public class StringSchema implements DingoSchema<String> {
         } else {
             buf.skip(buf.reverseReadInt());
         }
+    }
+
+    @Override
+    public void skipKeyV2(Buf buf) {
+        if (allowNull) {
+            //buf.skip(buf.reverseReadInt() + 1);
+            buf.skip(1);
+        }
+
+        internalReadBytesV2(buf);
     }
 
     @Override
@@ -284,6 +374,33 @@ public class StringSchema implements DingoSchema<String> {
     }
 
     @Override
+    public int encodeValueV2(Buf buf, String data) {
+        int len = 0;
+
+        if (allowNull) {
+            if (data == null) {
+                return 0;
+            } else {
+                byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+                buf.ensureRemainder(4 + bytes.length);
+                buf.writeInt(bytes.length);
+                buf.write(bytes);
+
+                len += 4 + bytes.length;
+            }
+        } else {
+            byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
+            buf.ensureRemainder(4 + bytes.length);
+            buf.writeInt(bytes.length);
+            buf.write(bytes);
+
+            len += 4 + bytes.length;
+        }
+
+        return len;
+    }
+
+    @Override
     public String decodeValue(Buf buf) {
         if (allowNull) {
             if (buf.read() == NULL) {
@@ -296,6 +413,11 @@ public class StringSchema implements DingoSchema<String> {
     }
 
     @Override
+    public String decodeValueV2(Buf buf) {
+        return new String(buf.read(buf.readInt()), StandardCharsets.UTF_8);
+    }
+
+    @Override
     public void skipValue(Buf buf) {
         if (allowNull) {
             if (buf.read() == NOTNULL) {
@@ -304,5 +426,10 @@ public class StringSchema implements DingoSchema<String> {
         } else {
             buf.skip(buf.readInt());
         }
+    }
+
+    @Override
+    public void skipValueV2(Buf buf) {
+        buf.skip(buf.readInt());
     }
 }
