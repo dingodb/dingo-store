@@ -257,6 +257,9 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
     bool has_result_kv = false;
     pb::common::KeyValue result_key_value;
     DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
+
+    //Get codec version from key.
+    //int codec_version = GetCodecVersion(kv.key);
     status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_key_value);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
@@ -447,7 +450,8 @@ butil::Status CoprocessorV2::DoExecute(const std::string& key, const std::string
       trans_field_spend_time_ms += lambda_time_diff_microseconds_function(trans_start, trans_end);
     });
 #endif
-    status = RelExprHelper::TransFromOperandWrapper(result_operand_ptr, result_serial_schemas_, result_column_indexes_,
+    int codec_version = GetCodecVersion(key);
+    status = RelExprHelper::TransFromOperandWrapper(codec_version, result_operand_ptr, result_serial_schemas_, result_column_indexes_,
                                                     result_record);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
@@ -495,7 +499,7 @@ butil::Status CoprocessorV2::DoFilter(const std::string& key, const std::string&
   return status;
 }
 
-butil::Status CoprocessorV2::DoRelExprCore(const std::vector<std::any>& original_record,
+butil::Status CoprocessorV2::DoRelExprCore(int codec_version, const std::vector<std::any>& original_record,
                                            std::unique_ptr<std::vector<expr::Operand>>& result_operand_ptr) {
   butil::Status status;
 
@@ -516,7 +520,7 @@ butil::Status CoprocessorV2::DoRelExprCore(const std::vector<std::any>& original
     });
 #endif
 
-    status = RelExprHelper::TransToOperandWrapper(original_serial_schemas_, selection_column_indexes_, original_record,
+    status = RelExprHelper::TransToOperandWrapper(codec_version, original_serial_schemas_, selection_column_indexes_, original_record,
                                                   operand_ptr);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
@@ -554,6 +558,8 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
   butil::Status status;
 
   std::vector<std::any> original_record;
+  int codec_version = GetCodecVersion(key);
+
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   {
     auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
@@ -584,8 +590,7 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
 #if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   }
 #endif
-
-  return DoRelExprCore(original_record, result_operand_ptr);
+  return DoRelExprCore(codec_version, original_record, result_operand_ptr);
 }
 
 butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::KeyValue>* kvs) {
@@ -633,7 +638,8 @@ butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::Ke
         trans_field_spend_time_ms += lambda_time_diff_microseconds_function(trans_start, trans_end);
       });
 #endif
-      status = RelExprHelper::TransFromOperandWrapper(result_operand_ptr, result_serial_schemas_,
+      //int codec_version = GetCodecVersion(kv.key());
+      status = RelExprHelper::TransFromOperandWrapper(0x02, result_operand_ptr, result_serial_schemas_,
                                                       result_column_indexes_, result_record);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();

@@ -22,6 +22,10 @@ public class BufImpl implements Buf {
     private int forwardPos;
     private int reversePos;
 
+    private void setForwardPos(int pos) {
+        this.forwardPos = pos;
+    }
+
     public BufImpl(int bufSize) {
         this.buf = new byte[bufSize];
         this.forwardPos = 0;
@@ -34,9 +38,20 @@ public class BufImpl implements Buf {
         this.reversePos = keyBuf.length - 1;
     }
 
+    public BufImpl(int bufSize, int dataPos) {
+        this.buf = new byte[bufSize];
+        this.forwardPos = dataPos;
+        this.reversePos = bufSize - 1;
+    }
+
     @Override
     public void write(byte b) {
         buf[forwardPos++] = b;
+    }
+
+    @Override
+    public void write(int pos, byte b) {
+        buf[pos] = b;
     }
 
     @Override
@@ -46,9 +61,25 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public void write(int pos, byte[] b) {
+        System.arraycopy(b, 0, buf, pos, b.length);
+    }
+
+    @Override
     public void write(byte[] b, int pos, int length) {
         System.arraycopy(b, pos, buf, forwardPos, length);
         forwardPos += length;
+    }
+
+    @Override
+    public void write(int srcPos, byte[] b, int pos, int length) {
+        System.arraycopy(b, pos, buf, srcPos, length);
+    }
+
+    @Override
+    public void writeShort(int pos, short i) {
+        buf[pos] = (byte) (i >>> 8);
+        buf[pos + 1] = (byte) i;
     }
 
     @Override
@@ -57,6 +88,14 @@ public class BufImpl implements Buf {
         buf[forwardPos++] = (byte) (i >>> 16);
         buf[forwardPos++] = (byte) (i >>> 8);
         buf[forwardPos++] = (byte) i;
+    }
+
+    @Override
+    public void writeInt(int pos, int i) {
+        buf[pos] = (byte) (i >>> 24);
+        buf[pos + 1] = (byte) (i >>> 16);
+        buf[pos + 2] = (byte) (i >>> 8);
+        buf[pos + 3] = (byte) i;
     }
 
     @Override
@@ -69,6 +108,18 @@ public class BufImpl implements Buf {
         buf[forwardPos++] = (byte) (l >>> 16);
         buf[forwardPos++] = (byte) (l >>> 8);
         buf[forwardPos++] = (byte) l;
+    }
+
+    @Override
+    public void writeLong(int pos, long l) {
+        buf[pos] = (byte) (l >>> 56);
+        buf[pos + 1] = (byte) (l >>> 48);
+        buf[pos + 2] = (byte) (l >>> 40);
+        buf[pos + 3] = (byte) (l >>> 32);
+        buf[pos + 4] = (byte) (l >>> 24);
+        buf[pos + 5] = (byte) (l >>> 16);
+        buf[pos + 6] = (byte) (l >>> 8);
+        buf[pos + 7] = (byte) l;
     }
 
     @Override
@@ -102,6 +153,11 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public byte readAt(int pos) {
+        return buf[pos];
+    }
+
+    @Override
     public byte[] read(int length) {
         byte[] b = new byte[length];
         System.arraycopy(buf, forwardPos, b, 0, length);
@@ -110,9 +166,33 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public byte[] readAt(int pos, int length) {
+        byte[] b = new byte[length];
+        System.arraycopy(buf, pos, b, 0, length);
+        return b;
+    }
+
+    @Override
     public void read(byte[] b, int pos, int length) {
         System.arraycopy(buf, forwardPos, b, pos, length);
         forwardPos += length;
+    }
+
+    @Override
+    public void readAt(int srcPos, byte[] b, int pos, int length) {
+        System.arraycopy(buf, srcPos, b, pos, length);
+    }
+
+    @Override
+    public short readShortAt(int pos) {
+        return (short)(((buf[pos] & 0xFF) << 8)
+                | buf[pos + 1] & 0xFF);
+    }
+
+    @Override
+    public short readShort() {
+        return (short)(((buf[forwardPos++] & 0xFF) << 8)
+                | buf[forwardPos++] & 0xFF);
     }
 
     @Override
@@ -124,11 +204,29 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public int readIntAt(int pos) {
+        return (((buf[pos++] & 0xFF) << 24)
+                | ((buf[pos++] & 0xFF) << 16)
+                | ((buf[pos++] & 0xFF) << 8)
+                | buf[pos++] & 0xFF);
+    }
+
+    @Override
     public long readLong() {
         long l = buf[forwardPos++]  & 0xFF;
         for (int i = 0; i < 7; i++) {
             l <<= 8;
             l |= buf[forwardPos++] & 0xFF;
+        }
+        return l;
+    }
+
+    @Override
+    public long readLongAt(int pos) {
+        long l = buf[pos++]  & 0xFF;
+        for (int i = 0; i < 7; i++) {
+            l <<= 8;
+            l |= buf[pos++] & 0xFF;
         }
         return l;
     }
@@ -214,8 +312,23 @@ public class BufImpl implements Buf {
     }
 
     @Override
+    public void setForwardOffset(int pos) {
+        this.forwardPos = pos;
+    }
+
+    @Override
     public boolean isEnd() {
         return (reversePos - forwardPos + 1) == 0;
+    }
+
+    @Override
+    public int restReadableSize() {
+        return this.buf.length - forwardPos - 1;
+    }
+
+    @Override
+    public int readOffset() {
+        return forwardPos;
     }
 
     @Override

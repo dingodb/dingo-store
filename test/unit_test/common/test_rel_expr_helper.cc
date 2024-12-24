@@ -806,7 +806,7 @@ TEST_F(RelExprHelperTest, TransToOperandWrapper) {
     std::vector<std::any> original_record;
     std::unique_ptr<std::vector<expr::Operand>> operand_ptr;
 
-    ok = RelExprHelper::TransToOperandWrapper(original_serial_schemas, selection_column_indexes, original_record,
+    ok = RelExprHelper::TransToOperandWrapper(0x01, original_serial_schemas, selection_column_indexes, original_record,
                                               operand_ptr);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
@@ -823,7 +823,7 @@ TEST_F(RelExprHelperTest, TransToOperandWrapper) {
     ok = Utils::TransToSerialSchema(pb_schemas, &original_serial_schemas);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
-    ok = RelExprHelper::TransToOperandWrapper(original_serial_schemas, selection_column_indexes, original_record,
+    ok = RelExprHelper::TransToOperandWrapper(0x01, original_serial_schemas, selection_column_indexes, original_record,
                                               operand_ptr);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
@@ -896,7 +896,7 @@ TEST_F(RelExprHelperTest, TransToOperandWrapper) {
     original_record.emplace_back(std::optional<float>(1.23f));
     original_record.emplace_back(std::optional<int32_t>(10));
     original_record.emplace_back(std::optional<bool>(true));
-    ok = RelExprHelper::TransToOperandWrapper(original_serial_schemas, selection_column_indexes, original_record,
+    ok = RelExprHelper::TransToOperandWrapper(0x01, original_serial_schemas, selection_column_indexes, original_record,
                                               operand_ptr);
     EXPECT_EQ(ok.error_code(), pb::error::OK);
 
@@ -971,7 +971,7 @@ TEST_F(RelExprHelperTest, TransFromOperandWrapper) {
     std::vector<int> result_column_indexes;
     std::vector<std::any> result_record;
 
-    ok = RelExprHelper::TransFromOperandWrapper(operand_ptr, result_serial_schemas, result_column_indexes,
+    ok = RelExprHelper::TransFromOperandWrapper(0x01, operand_ptr, result_serial_schemas, result_column_indexes,
                                                 result_record);
   }
 
@@ -1095,7 +1095,7 @@ TEST_F(RelExprHelperTest, TransFromOperandWrapper) {
     result_column_indexes.push_back(4);
     result_column_indexes.push_back(5);
 
-    ok = RelExprHelper::TransFromOperandWrapper(operand_ptr, result_serial_schemas, result_column_indexes,
+    ok = RelExprHelper::TransFromOperandWrapper(0x01, operand_ptr, result_serial_schemas, result_column_indexes,
                                                 result_record);
 
     for (const auto &record : result_record) {
@@ -1267,7 +1267,7 @@ TEST_F(RelExprHelperTest, TransFromOperandWrapper) {
     result_column_indexes.push_back(1);
     result_column_indexes.push_back(0);
 
-    ok = RelExprHelper::TransFromOperandWrapper(operand_ptr, result_serial_schemas, result_column_indexes,
+    ok = RelExprHelper::TransFromOperandWrapper(0x01, operand_ptr, result_serial_schemas, result_column_indexes,
                                                 result_record);
 
     for (const auto &record : result_record) {

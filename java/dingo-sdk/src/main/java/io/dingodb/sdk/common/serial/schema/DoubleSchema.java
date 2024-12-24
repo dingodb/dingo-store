@@ -64,7 +64,13 @@ public class DoubleSchema implements DingoSchema<Double> {
         return getDataLength();
     }
 
-    private int getWithNullTagLength() {
+    @Override
+    public int getValueLengthV2() {
+        return getDataLength();
+    }
+
+    @Override
+    public int getWithNullTagLength() {
         return 9;
     }
 
@@ -99,6 +105,10 @@ public class DoubleSchema implements DingoSchema<Double> {
         }
     }
 
+    public void encodeKeyV2(Buf buf, Double data) {
+        encodeKey(buf, data);
+    }
+
     @Override
     public void encodeKeyForUpdate(Buf buf, Double data) {
         if (allowNull) {
@@ -110,6 +120,25 @@ public class DoubleSchema implements DingoSchema<Double> {
                 internalEncodeKey(buf, data);
             }
         } else {
+            internalEncodeKey(buf, data);
+        }
+    }
+
+    @Override
+    public void encodeKeyForUpdateV2(Buf buf, Double data) {
+        if (allowNull) {
+            if (data == null) {
+                buf.write(NULL);
+                internalEncodeNull(buf);
+            } else {
+                buf.write(NOTNULL);
+                internalEncodeKey(buf, data);
+            }
+        } else {
+            if (data == null) {
+                throw new RuntimeException("Data is not allow as null.");
+            }
+            buf.write(NOTNULL);
             internalEncodeKey(buf, data);
         }
     }
@@ -174,6 +203,10 @@ public class DoubleSchema implements DingoSchema<Double> {
         return Double.longBitsToDouble(l);
     }
 
+    public Double decodeKeyV2(Buf buf) {
+        return decodeKey(buf);
+    }
+
     @Override
     public Double decodeKeyPrefix(Buf buf) {
         return decodeKey(buf);
@@ -182,6 +215,11 @@ public class DoubleSchema implements DingoSchema<Double> {
     @Override
     public void skipKey(Buf buf) {
         buf.skip(getLength());
+    }
+
+    @Override
+    public void skipKeyV2(Buf buf) {
+        skipKey(buf);
     }
 
     @Override
@@ -204,6 +242,24 @@ public class DoubleSchema implements DingoSchema<Double> {
             buf.ensureRemainder(getDataLength());
             internalEncodeValue(buf, data);
         }
+    }
+
+    @Override
+    public int encodeValueV2(Buf buf, Double data) {
+        int len = getValueLengthV2();
+        buf.ensureRemainder(len);
+
+        if (allowNull) {
+            if (data == null) {
+                return 0;
+            } else {
+                internalEncodeValue(buf, data);
+            }
+        } else {
+            internalEncodeValue(buf, data);
+        }
+
+        return len;
     }
 
     private void internalEncodeValue(Buf buf, Double data) {
@@ -235,7 +291,22 @@ public class DoubleSchema implements DingoSchema<Double> {
     }
 
     @Override
+    public Double decodeValueV2(Buf buf) {
+        long l = buf.read()  & 0xFF;
+        for (int i = 0; i < 7; i++) {
+            l <<= 8;
+            l |= buf.read() & 0xFF;
+        }
+        return Double.longBitsToDouble(l);
+    }
+
+    @Override
     public void skipValue(Buf buf) {
         buf.skip(getLength());
+    }
+
+    @Override
+    public void skipValueV2(Buf buf) {
+        buf.skip(getValueLengthV2());
     }
 }
