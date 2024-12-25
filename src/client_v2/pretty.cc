@@ -922,6 +922,30 @@ void Pretty::Show(dingodb::pb::document::DocumentSearchResponse& response) {
 
   PrintTable(rows);
 }
+
+void Pretty::Show(dingodb::pb::document::DocumentSearchAllResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+  if (response.document_with_scores_size() == 0) {
+    std::cout << "Not search document ." << std::endl;
+    return;
+  }
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("DocumentId"),
+      ftxui::paragraph("Score"),
+  }};
+  for (auto const& document_with_score : response.document_with_scores()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", document_with_score.document_with_id().id())),
+        ftxui::paragraph(fmt::format("{}", document_with_score.score())),
+    };
+    rows.push_back(row);
+  }
+
+  PrintTable(rows);
+}
+
 void Pretty::Show(dingodb::pb::document::DocumentBatchQueryResponse& response) {
   if (ShowError(response.error())) {
     return;
