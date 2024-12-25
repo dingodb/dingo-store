@@ -56,6 +56,7 @@ class Pretty {
 
   static void Show(dingodb::pb::meta::CreateIndexResponse &response);
   static void Show(dingodb::pb::document::DocumentSearchResponse &response);
+  static void Show(dingodb::pb::document::DocumentSearchAllResponse &response);
   static void Show(dingodb::pb::document::DocumentBatchQueryResponse &response);
   static void Show(dingodb::pb::document::DocumentGetBorderIdResponse &response);
   static void Show(dingodb::pb::document::DocumentScanQueryResponse &response);

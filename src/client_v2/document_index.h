@@ -97,6 +97,9 @@ struct DocumentSearchOptions {
 void SetUpDocumentSearch(CLI::App &app);
 void RunDocumentSearch(DocumentSearchOptions const &opt);
 
+void SetUpDocumentSearchAll(CLI::App &app);
+void RunDocumentSearchAll(DocumentSearchOptions const &opt);
+
 struct DocumentBatchQueryOptions {
   std::string coor_url;
   int64_t region_id;
@@ -156,6 +159,7 @@ void SendDocumentAdd(DocumentAddOptions const &opt);
 void SendDocumentBatchAdd(DocumentAddOptions const &opt);
 void SendDocumentDelete(DocumentDeleteOptions const &opt);
 void SendDocumentSearch(DocumentSearchOptions const &opt);
+void SendDocumentSearchAll(DocumentSearchOptions const &opt);
 void SendDocumentBatchQuery(DocumentBatchQueryOptions const &opt);
 void SendDocumentGetMaxId(DocumentGetMaxIdOptions const &opt);
 void SendDocumentGetMinId(DocumentGetMinIdOptions const &opt);
@@ -163,6 +167,7 @@ void SendDocumentScanQuery(DocumentScanQueryOptions const &opt);
 void SendDocumentCount(DocumentCountOptions const &opt);
 void SendDocumentGetRegionMetrics(DocumentGetRegionMetricsOptions const &opt);
 
+dingodb::pb::document::DocumentSearchAllResponse SendSearchAllByStreamMode(DocumentSearchOptions const &opt);
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_DOCUMENT_INDEX_H_

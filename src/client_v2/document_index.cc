@@ -16,9 +16,12 @@
 
 #include <cstdint>
 
+#include "client_v2/coordinator.h"
 #include "client_v2/pretty.h"
 #include "common/helper.h"
 #include "fmt/format.h"
+
+const int kBatchSize = 3;
 
 namespace client_v2 {
 
@@ -28,6 +31,7 @@ void SetUpDocumentIndexSubCommands(CLI::App& app) {
   SetUpDocumentBatchAdd(app);
   SetUpDocumentDelete(app);
   SetUpDocumentSearch(app);
+  SetUpDocumentSearchAll(app);
   SetUpDocumentBatchQuery(app);
   SetUpDocumentScanQuery(app);
   SetUpDocumentGetMaxId(app);
@@ -322,6 +326,69 @@ void SendDocumentSearch(DocumentSearchOptions const& opt) {
   InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentSearch", request, response);
 
   Pretty::Show(response);
+}
+
+void SendDocumentSearchAll(DocumentSearchOptions const& opt) {
+  // dingodb::pb::document::DocumentSearchRequest request;
+  // dingodb::pb::document::DocumentSearchResponse response;
+
+  if (opt.query_string.empty()) {
+    std::cout << "query_string is empty" << std::endl;
+    return;
+  }
+
+  auto response = SendSearchAllByStreamMode(opt);
+  std::cout << "search all documents response:" << response.DebugString() << std::endl;
+  Pretty::Show(response);
+}
+
+dingodb::pb::document::DocumentSearchAllResponse SendSearchAllByStreamMode(DocumentSearchOptions const& opt) {
+  dingodb::pb::document::DocumentSearchAllRequest request;
+  dingodb::pb::document::DocumentSearchAllResponse response;
+  auto* parameter = request.mutable_parameter();
+  parameter->set_query_string(opt.query_string);
+  parameter->set_without_scalar_data(opt.without_scalar);
+  parameter->set_query_unlimited(true);
+  request.mutable_stream_meta()->set_limit(kBatchSize);
+  if (opt.doc_id > 0) {
+    parameter->add_document_ids(opt.doc_id);
+  }
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
+
+  for (;;) {
+    dingodb::pb::document::DocumentSearchAllResponse sub_response;
+    // maybe current store interaction is not store node, so need reset.
+    InteractionManager::GetInstance().ResetStoreInteraction();
+    auto status = InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentSearchAll",
+                                                                           request, sub_response);
+    std::cout << "search all request: " << request.DebugString() << ", sub_response: " << sub_response.DebugString()
+              << std::endl;
+    if (!status.ok()) {
+      response.mutable_error()->set_errcode(dingodb::pb::error::Errno(status.error_code()));
+      response.mutable_error()->set_errmsg(status.error_str());
+      break;
+    }
+
+    if (sub_response.error().errcode() != dingodb::pb::error::OK) {
+      *response.mutable_error() = sub_response.error();
+      break;
+    }
+
+    // set request stream id
+    if (!sub_response.stream_meta().stream_id().empty()) {
+      request.mutable_stream_meta()->set_stream_id(sub_response.stream_meta().stream_id());
+    }
+
+    // copy data
+    for (int i = 0; i < sub_response.document_with_scores_size(); ++i) {
+      response.add_document_with_scores()->Swap(&sub_response.mutable_document_with_scores()->at(i));
+    }
+    if (!sub_response.stream_meta().has_more()) {
+      break;
+    }
+  }
+
+  return response;
 }
 
 void SendDocumentBatchQuery(DocumentBatchQueryOptions const& opt) {
@@ -643,6 +710,26 @@ void RunDocumentSearch(DocumentSearchOptions const& opt) {
     exit(-1);
   }
   client_v2::SendDocumentSearch(opt);
+}
+
+void SetUpDocumentSearchAll(CLI::App& app) {
+  auto opt = std::make_shared<DocumentSearchOptions>();
+  auto* cmd = app.add_subcommand("DocumentSearchAll", "Document search all documents")->group("Document Commands");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
+  cmd->add_option("--query_string", opt->query_string, "Request parameter query_string")->required();
+  cmd->add_option("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--doc_id", opt->doc_id, "Request parameter alive id");
+  cmd->callback([opt]() { RunDocumentSearchAll(*opt); });
+}
+
+void RunDocumentSearchAll(DocumentSearchOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
+    exit(-1);
+  }
+  client_v2::SendDocumentSearchAll(opt);
 }
 
 void SetUpDocumentBatchQuery(CLI::App& app) {
