@@ -75,6 +75,23 @@ else()
   set(ENABLE_XDPROCKS OFF)
 endif()
 
+# third-party install path
+if(NOT DINGO_EUREKA_INSTALL_PATH)
+  set(DINGO_EUREKA_INSTALL_PATH "$ENV{HOME}/.local/dingo-eureka")
+endif()
+message("DINGO_EUREKA_INSTALL_PATH:${DINGO_EUREKA_INSTALL_PATH}")
+
+include_directories(${DINGO_EUREKA_INSTALL_PATH}/include)
+
+set(CMAKE_PREFIX_PATH
+  ${DINGO_EUREKA_INSTALL_PATH}
+  ${CMAKE_PREFIX_PATH}
+  )
+message("CMAKE_PREFIX_PATH:${CMAKE_PREFIX_PATH}")
+
+set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
+message("CMAKE_FIND_LIBRARY_SUFFIXES: ${CMAKE_FIND_LIBRARY_SUFFIXES}")
+
 if(BRPC_ENABLE_CPU_PROFILER)
   message(STATUS "Enable BRPC_ENABLE_CPU_PROFILER")
   add_definitions(-DBRPC_ENABLE_CPU_PROFILER=ON)
@@ -175,10 +192,11 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules")
+
 set(THIRD_PARTY_PATH ${CMAKE_CURRENT_BINARY_DIR}/third-party)
 
 set(CMAKE_VERBOSE_MAKEFILE ON)
-set(CMAKE_PREFIX_PATH ${OUTPUT_PATH})
 
 execute_process(COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/contrib/.clang-tidy ${CMAKE_CURRENT_BINARY_DIR}/)
 
@@ -204,36 +222,65 @@ endif()
 
 message(STATUS "OpenMP library: ${OPENMP_LIBRARY}")
 
-include(gflags)
-include(lz4)
-include(zstd)
-include(zlib)
-include(snappy)
-include(openssl)
-include(glog)
-include(gtest)
-include(fmt)
-include(protobuf)
+# find third-party
+set(gflags_DIR ${DINGO_EUREKA_INSTALL_PATH}/lib/cmake/gflags)
+find_package(gflags REQUIRED)
+message("Using gflags ${gflags_VERSION}, include_dir:${gflags_INCLUDE_DIR}")
+
+# openssl
+if(NOT OPENSSL_ROOT_DIR) 
+  set(OPENSSL_ROOT_DIR ${DINGO_EUREKA_INSTALL_PATH})
+endif()
+find_package(OpenSSL REQUIRED)
+message("OpenSSL libraries: ${OPENSSL_LIBRARIES}, include dir: ${OPENSSL_INCLUDE_DIR}")
+
+find_package(Snappy)
+message("Using Snappy ${Snappy_VERSION}")
+
+find_package(fmt REQUIRED)
+message("Using fmt ${fmt_VERSION}")
+
+set(ZLIB_USE_STATIC_LIBS "ON")
+find_package(ZLIB REQUIRED)
+message("Using zlib ${ZLIB_VERSION}, include_dir:${ZLIB_INCLUDE_DIR}")
+
+find_package (glog REQUIRED)
+# used for glog 0.7.0
+add_compile_definitions(GLOG_USE_GLOG_EXPORT)
+message("Using glog ${glog_VERSION}")
+
+find_package(GTest CONFIG REQUIRED)
+message("Using GTest ${GTest_VERSION}")
+
+set(protobuf_MODULE_COMPATIBLE TRUE)
+find_package(Protobuf CONFIG REQUIRED)
+message("Using protobuf ${Protobuf_VERSION}" )
+
+find_program(PROTOC protoc REQUIRED)
+message("Using protoc ${PROTOC}")
+
+find_package(nlohmann_json REQUIRED)
+message("Using nlohmann_json ${nlohmann_json_VERSION}")
+
+find_package(RapidJSON REQUIRED)
+message("Using RapidJSON ${RapidJSON_VERSION}, include_dir:${RapidJSON_INCLUDE_DIR}")
+
+find_package(leveldb REQUIRED)
+find_package(brpc REQUIRED)
+find_package(braft REQUIRED)
+find_package(uring REQUIRED)
+find_package(unwind REQUIRED)
+find_package(gperftools REQUIRED)
+find_package(backtrace REQUIRED)
+
+# provoided by rocksdb cmake
+find_package(RocksDB REQUIRED)
+
 include(yaml-cpp)
-include(libunwind)
-include(libbacktrace)
-include(liburing)
 include(ftxui)
 include(hnswlib)
-include(rapidjson)
-include(leveldb)
-include(rocksdb)
 include(bdb)
-include(brpc)
-include(braft)
-include(nlohmann)
 include(tantivy-search)
-
-message(STATUS "protoc: ${PROTOBUF_PROTOC_EXECUTABLE}")
-message(STATUS "protoc lib: ${PROTOBUF_PROTOC_LIBRARY}")
-message(STATUS "protobuf include: ${PROTOBUF_INCLUDE_DIR}")
-message(STATUS "protobuf lib: ${PROTOBUF_LIBRARIES}")
-message(STATUS "protobuf lite lib: ${PROTOBUF_LITE_LIBRARY}")
 
 set(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/dingo-store-proto/proto)
 set(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -261,7 +308,7 @@ foreach(msg ${MSG_PROTOS})
   add_custom_command(
     OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.cc" "${CMAKE_CURRENT_BINARY_DIR}/proto/${FIL_WE}.pb.h"
     COMMAND ${PROTOBUF_PROTOC_EXECUTABLE} ARGS --cpp_out ${PROTO_META_BASE_DIR} -I ${MESSAGE_SOURCE_DIR} ${msg}
-    DEPENDS protobuf ${msg}
+    DEPENDS ${msg}
     COMMENT "Running C++ protocol buffer compiler on ${msg}"
     VERBATIM)
 endforeach()
@@ -279,55 +326,34 @@ add_custom_target(
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/serial/src/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libexpr/src/)
-include_directories(${ZSTD_INCLUDE_DIR})
-include_directories(${ZLIB_INCLUDE_DIR})
-if(WITH_LIBURING)
-  include_directories(${LIBURING_INCLUDE_DIR})
-endif()
-include_directories(${BRAFT_INCLUDE_DIR})
-include_directories(${BRPC_INCLUDE_DIR})
-include_directories(${GLOG_INCLUDE_DIR})
-include_directories(${GTEST_INCLUDE_DIR})
-include_directories(${GMOCK_INCLUDE_DIR})
-include_directories(${GFLAGS_INCLUDE_DIR})
-include_directories(${ROCKSDB_INCLUDE_DIR})
 include_directories(${BDB_INCLUDE_DIR})
-include_directories(${RAPIDJSON_INCLUDE_DIR})
-include_directories(${NLOHMANN_JSON_INCLUDE_DIR})
 if(ENABLE_XDPROCKS)
   include_directories(${XDPROCKS_PATH}/include)
 endif()
 include_directories(${YAMLCPP_INCLUDE_DIR})
-include_directories(${FMT_INCLUDE_DIR})
-include_directories(${OPENSSL_INCLUDE_DIR})
-include_directories(${LIBUNWIND_INCLUDE_DIR})
-include_directories(${LIBBACKTRACE_INCLUDE_DIR})
 include_directories(${PROJECT_SOURCE_DIR}/src)
 include_directories(${TANTIVY_SEARCH_INCLUDE_DIR})
 include_directories(${FTXUI_INCLUDE_DIR})
 
 # CAUTION: the order of the libraries is important, please do not change it.
 set(DYNAMIC_LIB
-    ${BRAFT_LIBRARIES}
-    ${BRPC_LIBRARIES}
-    ${PROTOBUF_LIBRARIES}
-    ${GFLAGS_LIBRARIES}
-    ${LEVELDB_LIBRARIES}
-    ${ROCKSDB_LIBRARIES}
-    ${SNAPPY_LIBRARIES}
-    ${LZ4_LIBRARIES}
-    ${ZSTD_LIBRARIES}
+    braft::braft
+    brpc::brpc
+    protobuf::libprotobuf
+    gflags
+    leveldb::leveldb
+    RocksDB::rocksdb
+    Snappy::snappy
+    fmt::fmt
+    glog::glog
+    GTest::gtest
+    GTest::gmock
+    OpenSSL::SSL
+    unwind::unwind
+    unwind::unwind-generic
+    backtrace::backtrace
+    ZLIB::ZLIB
     ${YAMLCPP_LIBRARIES}
-    ${FMT_LIBRARIES}
-    ${OPENSSL_LIBRARIES}
-    ${CRYPTO_LIBRARIES}
-    ${GLOG_LIBRARIES}
-    ${GTEST_LIBRARIES}
-    ${LIBUNWIND_LIBRARIES}
-    ${LIBUNWIND_GENERIC_LIBRARIES}
-    ${LIBUNWIND_ARCH_LIBRARIES}
-    ${LIBBACKTRACE_LIBRARIES}
-    ${ZLIB_LIBRARIES}
     ${BDB_LIBRARIES}
     ${TANTIVY_SEARCH_LIBRARIES}
     ${FTXUI_COMPONENT_LIBRARY}
@@ -346,32 +372,13 @@ if(ENABLE_COVERAGE)
 endif()
 
 if(WITH_LIBURING)
-  set(DYNAMIC_LIB ${DYNAMIC_LIB} liburing)
+  set(DYNAMIC_LIB ${DYNAMIC_LIB} uring::uring)
 endif()
 
 set(DEPEND_LIBS
-    openssl
-    crypto
-    zlib
-    gflags
-    protobuf
-    leveldb
-    braft
-    brpc
-    rocksdb
-    snappy
-    lz4
-    zstd
-    glog
     yamlcpp
     faiss
-    fmt
-    gtest
-    libunwind
-    libbacktrace
     bdb
-    rapidjson
-    nlohmann-json
     tantivy-search
     ftxui)
 
@@ -469,20 +476,13 @@ if(LINK_TCMALLOC)
 
   message(STATUS "Build DingoDB with tcmalloc")
 
-  include(gperftools)
-  include_directories(${GPERFTOOLS_INCLUDE_DIR})
-
   if(BRPC_ENABLE_CPU_PROFILER)
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_LIBRARIES})
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} gperftools::gperftools)
   else()
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${GPERFTOOLS_MINIMAL_LIBRARIES})
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} gperftools::gperftools_minimal)
   endif()
-  set(DEPEND_LIBS ${DEPEND_LIBS} gperftools)
 endif()
 
-if(WITH_LIBURING)
-  set(DEPEND_LIBS ${DEPEND_LIBS} liburing)
-endif()
 
 # source file
 file(GLOB_RECURSE DINGO_SERIAL_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/*.cc)
