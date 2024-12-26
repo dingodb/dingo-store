@@ -736,9 +736,9 @@ void Helper::SetPbMessageError(butil::Status status, google::protobuf::Message* 
 
 std::string Helper::MessageToJsonString(const google::protobuf::Message& message) {
   std::string json_string;
-  google::protobuf::util::JsonOptions options;
+  google::protobuf::util::JsonPrintOptions options;
   options.always_print_primitive_fields = true;
-  google::protobuf::util::Status status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
+  auto status = google::protobuf::util::MessageToJsonString(message, &json_string, options);
   if (!status.ok()) {
     std::cerr << "Failed to convert message to JSON: [" << status.message() << "]" << '\n';
   }

@@ -117,7 +117,7 @@ class DeferDone {
  private:
   uint64_t closure_id_;
   std::string watch_key_;
-  bthread_mutex_t mutex_;
+  // bthread_mutex_t mutex_;
   google::protobuf::Closure *done_;
   pb::version::WatchResponse *response_;
   int64_t create_time_;
