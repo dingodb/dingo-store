@@ -61,6 +61,21 @@ class Lock {
 struct Slot {
   Slot() { CHECK_EQ(0, bthread_mutex_init(&mutex, nullptr)); }
   ~Slot() { CHECK_EQ(0, bthread_mutex_destroy(&mutex)); }
+
+  Slot(const Slot& other) {
+    CHECK_EQ(0, bthread_mutex_init(&mutex, nullptr));
+    latch = other.latch;
+  }
+
+  Slot& operator=(const Slot& other) {
+    if (this != &other) {
+      CHECK_EQ(0, bthread_mutex_destroy(&mutex));
+      CHECK_EQ(0, bthread_mutex_init(&mutex, nullptr));
+      latch = other.latch;
+    }
+    return *this;
+  }
+
   bthread_mutex_t mutex;
   Latch latch;
 };
