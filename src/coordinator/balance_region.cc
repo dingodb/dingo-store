@@ -287,15 +287,23 @@ float StoreEntry::Score() {
   capacity_score_ = (capacity_score > 100) ? 100 : capacity_score;
 
   float region_count_score = 0;
-  int64_t region_approximate_size = ConfigHelper::GetSplitCheckApproximateSize();
   auto region_count = store_metric_.region_metrics_map_size();
-  float max_region_count = static_cast<float>(capacity) / region_approximate_size;
+  int32_t default_region_size = 0;
+  if (store_.store_type() == pb::common::StoreType::NODE_TYPE_INDEX) {
+    default_region_size = ConfigHelper::GetBalanceRegionDefaultIndexRegionSize();
+  } else if (store_.store_type() == pb::common::StoreType::NODE_TYPE_STORE) {
+    default_region_size = ConfigHelper::GetBalanceRegionDefaultStoreRegionSize();
+  } else {
+    DINGO_LOG(FATAL) << fmt::format("[balance.region] not support store_type: {}",
+                                    pb::common::StoreType_Name(store_.store_type()));
+  }
+  float max_region_count = static_cast<float>(capacity) / default_region_size;
   region_count_score = static_cast<float>(region_count) / max_region_count * FLAGS_balance_region_default_score;
   if (region_count_score > 100 || region_count_score < 0) {
     DINGO_LOG(WARNING) << fmt::format(
-        "[balance.region] region count score : {} {} , region_approximate_size : {} , region_count : {} , "
+        "[balance.region] region count score : {} {} , default region size : {} , region_count : {} , "
         "max region count : {}",
-        region_count_score, region_count_score > 100 ? "higher than 100" : "lower than 0", region_approximate_size,
+        region_count_score, region_count_score > 100 ? "higher than 100" : "lower than 0", default_region_size,
         region_count, max_region_count);
   }
   region_count_score_ = (region_count_score < 0) ? 0 : region_count_score;

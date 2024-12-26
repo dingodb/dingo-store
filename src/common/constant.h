@@ -239,6 +239,8 @@ class Constant {
 
   // balance region
   inline static const float kBalanceRegionDefaultRegionCountRatio = 0.8f;
+  inline static const int32_t kBalanceRegionDefaultIndexRegionSize = 536870912;  // 512M
+  inline static const int32_t kBalanceRegionDefaultStoreRegionSize = 268435456;  // 256M
 
   // force_read_only
   inline static const std::string kForceReadOnlyKey = "FORCE_READ_ONLY";

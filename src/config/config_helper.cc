@@ -280,6 +280,24 @@ float ConfigHelper::GetBalanceRegionCountRatio() {
   return (count < 0 || count > 1) ? Constant::kBalanceRegionDefaultRegionCountRatio : count;
 }
 
+int32_t ConfigHelper::GetBalanceRegionDefaultIndexRegionSize() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kBalanceRegionDefaultIndexRegionSize;
+  }
+  int32_t size = config->GetInt("coordinator.balance_region_default_index_region_size");
+  return (size <= 0) ? Constant::kBalanceRegionDefaultIndexRegionSize : size;
+}
+
+int32_t ConfigHelper::GetBalanceRegionDefaultStoreRegionSize() {
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kBalanceRegionDefaultStoreRegionSize;
+  }
+  int32_t size = config->GetInt("coordinator.balance_region_default_store_region_size");
+  return (size <= 0) ? Constant::kBalanceRegionDefaultStoreRegionSize : size;
+}
+
 int32_t ConfigHelper::GetWorkerThreadNum() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
