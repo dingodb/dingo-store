@@ -18,6 +18,7 @@
 #include <serial/schema/base_schema.h>
 
 #include <any>
+#include <cstdint>
 #include <vector>
 
 #include "butil/status.h"
@@ -59,6 +60,7 @@ class CoprocessorScalar : public CoprocessorV2 {
   static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_scalar_running_num;
   static bvar::Adder<uint64_t> bvar_coprocessor_v2_filter_scalar_total_num;
   static bvar::LatencyRecorder coprocessor_v2_filter_scalar_latency;
+  const int default_scalar_codec_version_{1};
 };
 
 }  // namespace dingodb
