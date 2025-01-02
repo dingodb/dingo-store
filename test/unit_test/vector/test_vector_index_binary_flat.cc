@@ -101,7 +101,8 @@ TEST_F(VectorIndexBinaryFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT);
     index_parameter.mutable_binary_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_binary_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
+    index_parameter.mutable_binary_flat_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
     vector_index_binary_flat =
         VectorIndexFactory::NewBinaryFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_binary_flat.get(), nullptr);
@@ -113,7 +114,8 @@ TEST_F(VectorIndexBinaryFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT);
     index_parameter.mutable_binary_flat_parameter()->set_dimension(dimension);
-    index_parameter.mutable_binary_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_HAMMING);
+    index_parameter.mutable_binary_flat_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_HAMMING);
     vector_index_binary_flat =
         VectorIndexFactory::NewBinaryFlat(id, index_parameter, kEpoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_binary_flat.get(), nullptr);
@@ -403,6 +405,8 @@ TEST_F(VectorIndexBinaryFlatTest, Add) {
       std::string byte_to_str(1, static_cast<char>(value));
       vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -423,6 +427,8 @@ TEST_F(VectorIndexBinaryFlatTest, Add) {
         std::string byte_to_str(1, static_cast<char>(value));
         vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -530,6 +536,8 @@ TEST_F(VectorIndexBinaryFlatTest, UpsertWithDuplicated) {
         std::string byte_to_str(1, static_cast<char>(value));
         vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -543,6 +551,8 @@ TEST_F(VectorIndexBinaryFlatTest, UpsertWithDuplicated) {
         std::string byte_to_str(1, static_cast<char>(value));
         vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -594,6 +604,8 @@ TEST_F(VectorIndexBinaryFlatTest, Upsert) {
         std::string byte_to_str(1, static_cast<char>(value));
         vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -659,6 +671,8 @@ TEST_F(VectorIndexBinaryFlatTest, Upsert) {
         std::string byte_to_str(1, static_cast<char>(value));
         vector_with_id.mutable_vector()->add_binary_values(byte_to_str);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }

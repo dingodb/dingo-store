@@ -121,7 +121,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Create) {
     pb::common::VectorIndexParameter index_parameter;
     index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT);
     index_parameter.mutable_binary_ivf_flat_parameter()->set_dimension(64);
-    index_parameter.mutable_binary_ivf_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
+    index_parameter.mutable_binary_ivf_flat_parameter()->set_metric_type(
+        ::dingodb::pb::common::MetricType::METRIC_TYPE_NONE);
     vector_index_binary_ivf_flat =
         VectorIndexFactory::NewBinaryIVFFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_EQ(vector_index_binary_ivf_flat.get(), nullptr);
@@ -148,7 +149,7 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Create) {
     index_parameter.mutable_binary_ivf_flat_parameter()->set_dimension(dimension);
     index_parameter.mutable_binary_ivf_flat_parameter()->set_metric_type(
         ::dingodb::pb::common::MetricType::METRIC_TYPE_HAMMING);
-        index_parameter.mutable_binary_ivf_flat_parameter()->set_ncentroids(0);
+    index_parameter.mutable_binary_ivf_flat_parameter()->set_ncentroids(0);
     vector_index_binary_ivf_flat =
         VectorIndexFactory::NewBinaryIVFFlat(id, index_parameter, k_epoch, kRange, vector_index_thread_pool);
     EXPECT_NE(vector_index_binary_ivf_flat.get(), nullptr);
@@ -226,18 +227,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, SearchNotTrain) {
       for (int j = 0; j < dim; j++) data_base[dim * i + j] = distrib(rng);
       data_base[dim * i] += i / 255;
     }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]" << " [";
-      for (faiss::idx_t j = 0; j < dim; j++) {
-        if (0 != j) {
-          LOG(INFO) << ",";
-        }
-        LOG(INFO) << std::setw(10) << data_base[i * dim + j];
-      }
-
-      LOG(INFO) << "]";
-    }
   }
 
   // ok
@@ -274,18 +263,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, RangeSearchNotTrain) {
     for (int i = 0; i < data_base_size; i++) {
       for (int j = 0; j < dim; j++) data_base[dim * i + j] = distrib(rng);
       data_base[dim * i] += i / 255;
-    }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]" << " [";
-      for (faiss::idx_t j = 0; j < dim; j++) {
-        if (0 != j) {
-          LOG(INFO) << ",";
-        }
-        LOG(INFO) << std::setw(10) << data_base[i * dim + j];
-      }
-
-      LOG(INFO) << "]";
     }
   }
 
@@ -324,6 +301,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, AddNotTrain) {
       std::string byte_data(1, static_cast<char>(data_base[i]));
       vector_with_id.mutable_vector()->add_binary_values(byte_data);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -362,18 +341,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, TrainVectorWithId) {
       for (int j = 0; j < dim; j++) data_base[dim * i + j] = distrib(rng);
       data_base[dim * i] += i / 255;
     }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]" << " [";
-      for (faiss::idx_t j = 0; j < dim; j++) {
-        if (0 != j) {
-          LOG(INFO) << ",";
-        }
-        LOG(INFO) << std::setw(10) << data_base[i * dim + j];
-      }
-
-      LOG(INFO) << "]";
-    }
   }
 
   // invalid.  no data
@@ -398,9 +365,9 @@ TEST_F(VectorIndexBinaryIvfFlatTest, TrainVectorWithId) {
       vector_with_ids.push_back(vector_with_id);
     }
 
-    //not align
+    // not align
     pb::common::VectorWithId vector_with_id;
-    for (int j = 0; j < dim-1; j++) {
+    for (int j = 0; j < dim - 1; j++) {
       std::string byte_data(1, static_cast<char>(data_base_not_align[(data_base_size - 1) * dim + j]));
       vector_with_id.mutable_vector()->add_binary_values(byte_data);
     }
@@ -469,18 +436,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Train) {
     for (int i = 0; i < data_base_size; i++) {
       for (int j = 0; j < dim; j++) data_base[dim * i + j] = distrib(rng);
       data_base[dim * i] += i / 255;
-    }
-
-    for (size_t i = 0; i < data_base_size; i++) {
-      LOG(INFO) << "[" << i << "]" << " [";
-      for (faiss::idx_t j = 0; j < dim; j++) {
-        if (0 != j) {
-          LOG(INFO) << ",";
-        }
-        LOG(INFO) << std::setw(10) << data_base[i * dim + j];
-      }
-
-      LOG(INFO) << "]";
     }
   }
 
@@ -567,6 +522,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Add) {
       std::string byte_data(1, static_cast<char>(data_base[i]));
       vector_with_id.mutable_vector()->add_binary_values(byte_data);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
+    vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -586,6 +543,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Add) {
         std::string byte_data(1, static_cast<char>(data_base[id * dim + i]));
         vector_with_id.mutable_vector()->add_binary_values(byte_data);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -648,6 +607,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Upsert) {
         std::string byte_data(1, static_cast<char>(data_base[id * dim + i]));
         vector_with_id.mutable_vector()->add_binary_values(byte_data);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -675,6 +636,8 @@ TEST_F(VectorIndexBinaryIvfFlatTest, Upsert) {
         std::string byte_data(1, static_cast<char>(data_base[id * dim + i]));
         vector_with_id.mutable_vector()->add_binary_values(byte_data);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
+      vector_with_id.mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::UINT8);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -1008,12 +971,10 @@ TEST_F(VectorIndexBinaryIvfFlatTest, SearchAfterLoad) {
     ok = vector_index_binary_ivf_flat->Search(vector_with_ids, topk, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-
     for (const auto& result : results) {
       DINGO_LOG(INFO) << "results:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
-
   }
 
   // ok with param
@@ -1070,7 +1031,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, SearchAfterLoad) {
     if (is_all_in_vector) {
       DINGO_LOG(INFO) << "All Id in  vectors ";
     }
-
   }
 }
 
@@ -1086,7 +1046,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, RangeSearchAfterLoad) {
     std::vector<pb::index::VectorWithDistanceResult> results;
     ok = vector_index_binary_ivf_flat->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
-
   }
 
   // invalid param failed, topk == 0, return OK
@@ -1106,7 +1065,6 @@ TEST_F(VectorIndexBinaryIvfFlatTest, RangeSearchAfterLoad) {
 
     ok = vector_index_binary_ivf_flat->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
-  
   }
 
   // ok
@@ -1127,12 +1085,10 @@ TEST_F(VectorIndexBinaryIvfFlatTest, RangeSearchAfterLoad) {
     ok = vector_index_binary_ivf_flat->RangeSearch(vector_with_ids, radius, {}, false, {}, results);
     EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
-
     for (const auto& result : results) {
       DINGO_LOG(INFO) << "results:" << result.DebugString();
       DINGO_LOG(INFO) << "";
     }
-
   }
 
   // ok with param
