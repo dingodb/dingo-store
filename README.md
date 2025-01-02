@@ -39,6 +39,10 @@ Welcome to visit [DingoDB](https://github.com/dingodb/dingo). The documentation 
 
 Dingo-Store is a hybrid project of C++ and Java, where C++ provides distributed storage and computing capabilities, while the Java layer provides basic API interfaces.
 
+### Build dingo-eureka
+
+refer https://github.com/dingodb/dingo-eureka
+
 ### Roles of Dingo-Store(C++)
 
 ```shell

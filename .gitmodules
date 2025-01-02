@@ -1,57 +1,6 @@
-[submodule "contrib/braft"]
-	path = contrib/braft
-	url = https://github.com/dingodb/braft
-[submodule "contrib/brpc"]
-	path = contrib/brpc
-	url = https://github.com/apache/brpc
-[submodule "contrib/gflags"]
-	path = contrib/gflags
-	url = https://github.com/gflags/gflags
-[submodule "contrib/glog"]
-	path = contrib/glog
-	url = https://github.com/google/glog
-[submodule "contrib/gtest"]
-	path = contrib/gtest
-	url = https://github.com/google/googletest
-[submodule "contrib/leveldb"]
-	path = contrib/leveldb
-	url = https://github.com/google/leveldb
-[submodule "contrib/protobuf"]
-	path = contrib/protobuf
-	url = https://github.com/protocolbuffers/protobuf
-[submodule "contrib/rocksdb"]
-	path = contrib/rocksdb
-	url = https://github.com/facebook/rocksdb
-[submodule "contrib/snappy"]
-	path = contrib/snappy
-	url = https://github.com/google/snappy
 [submodule "contrib/yaml-cpp"]
 	path = contrib/yaml-cpp
 	url = https://github.com/jbeder/yaml-cpp
-[submodule "contrib/zlib"]
-	path = contrib/zlib
-	url = https://github.com/madler/zlib
-[submodule "contrib/openssl"]
-	path = contrib/openssl
-	url = https://github.com/openssl/openssl
-[submodule "contrib/lz4"]
-	path = contrib/lz4
-	url = https://github.com/lz4/lz4
-[submodule "contrib/zstd"]
-	path = contrib/zstd
-	url = https://github.com/facebook/zstd
-[submodule "contrib/libunwind"]
-	path = contrib/libunwind
-	url = https://github.com/libunwind/libunwind
-[submodule "contrib/gperftools"]
-	path = contrib/gperftools
-	url = https://github.com/gperftools/gperftools
-[submodule "contrib/fmt"]
-	path = contrib/fmt
-	url = https://github.com/fmtlib/fmt
-[submodule "contrib/libbacktrace"]
-	path = contrib/libbacktrace
-	url = https://github.com/ianlancetaylor/libbacktrace
 [submodule "contrib/hnswlib"]
 	path = contrib/hnswlib
 	url = https://github.com/dingodb/hnswlib
@@ -70,9 +19,6 @@
 [submodule "src/libexpr"]
 	path = src/libexpr
 	url = https://github.com/dingodb/dingo-libexpr.git
-[submodule "contrib/rapidjson"]
-	path = contrib/rapidjson
-	url = https://github.com/Tencent/rapidjson.git
 [submodule "contrib/tantivy-search"]
 	path = contrib/tantivy-search
 	url = https://github.com/dingodb/tantivy-search
@@ -82,15 +28,9 @@
 [submodule "dingo-store-proto"]
 	path = dingo-store-proto
 	url = https://github.com/dingodb/dingo-store-proto
-[submodule "contrib/nlohmann-json"]
-	path = contrib/nlohmann-json
-	url = https://github.com/nlohmann/json.git
 [submodule "contrib/cli11"]
 	path = contrib/cli11
 	url = https://github.com/CLIUtils/CLI11.git
 [submodule "contrib/FTXUI"]
 	path = contrib/FTXUI
 	url = https://github.com/ArthurSonzogni/FTXUI.git
-[submodule "contrib/liburing"]
-	path = contrib/liburing
-	url = https://github.com/axboe/liburing.git
