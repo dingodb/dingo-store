@@ -489,7 +489,8 @@ void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<Coordinator
 
   AtomicGuard guard(g_coordinator_push_to_store_running);
 
-  coordinator_control->TryToSendStoreOperations();
+  // yjddebug not use send
+  // coordinator_control->TryToSendStoreOperations();
 }
 
 // this is for coordinator
@@ -591,7 +592,7 @@ void BalanceLeaderTask::DoBalanceLeader() {
   }
 }
 
-void BalanceRegionTask::DoBalanceRegion(){
+void BalanceRegionTask::DoBalanceRegion() {
   auto coordinator_controller = Server::GetInstance().GetCoordinatorControl();
   if (!coordinator_controller->IsLeader()) {
     return;
@@ -619,7 +620,6 @@ void BalanceRegionTask::DoBalanceRegion(){
     DINGO_LOG_IF(INFO, !status.ok()) << fmt::format("[balance.region] index process error: {}", status.error_str());
     tracker->Print();
   }
-
 }
 
 bool Heartbeat::Init() {
@@ -719,10 +719,9 @@ void Heartbeat::TriggerBalanceLeader(void*) {
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
-void Heartbeat::TriggerBalanceRegion(void*){
+void Heartbeat::TriggerBalanceRegion(void*) {
   auto task = std::make_shared<BalanceRegionTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
-
 
 }  // namespace dingodb

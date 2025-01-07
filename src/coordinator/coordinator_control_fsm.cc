@@ -1037,7 +1037,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
   if (index <= applied_index && term <= applied_term) {
     DINGO_LOG(WARNING)
         << "SKIP ApplyMetaIncrement index <= applied_index && term <<= applied_term, just return, [index=" << index
-        << "][applied_index=" << applied_index << "]" << "[term=" << term << "][applied_term=" << applied_term << "]";
+        << "][applied_index=" << applied_index << "]"
+        << "[term=" << term << "][applied_term=" << applied_term << "]";
     return;
   } else if (meta_increment.ByteSizeLong() > 0) {
     DINGO_LOG(INFO) << "NORMAL ApplyMetaIncrement [index=" << index << "][applied_index=" << applied_index << "]"
@@ -2408,61 +2409,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         }
 
       } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        if (!task_list.is_partial_update()) {
-          auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
-          if (!ret.ok()) {
-            DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
-                             << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
-          } else {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
-          }
+        auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
+        if (!ret.ok()) {
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
+                           << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
-          // partial update
-          bool is_updated = false;
-          pb::coordinator::TaskList task_list_temp;
-          int ret = task_list_map_.Get(task_list.id(), task_list_temp);
-          if (ret > 0) {
-            for (int i = 0; i < task_list_temp.tasks_size(); i++) {
-              auto* task_ptr = task_list_temp.mutable_tasks(i);
-
-              for (int j = 0; j < task_ptr->store_operations_size(); j++) {
-                auto* store_operation_ptr = task_ptr->mutable_store_operations(j);
-
-                for (int k = 0; k < store_operation_ptr->region_cmds_size(); k++) {
-                  auto* region_cmd_ptr = store_operation_ptr->mutable_region_cmds(k);
-
-                  for (const auto& region_cmd_status_update : task_list.region_cmds_status()) {
-                    if (region_cmd_ptr->id() == region_cmd_status_update.region_cmd_id()) {
-                      region_cmd_ptr->set_status(region_cmd_status_update.status());
-                      *region_cmd_ptr->mutable_error() = region_cmd_status_update.error();
-                      is_updated = true;
-                      DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, partial update, [id=" << task_list.id()
-                                      << "], region_cmd_id=" << region_cmd_ptr->id()
-                                      << " status from: " << region_cmd_ptr->status()
-                                      << ", to: " << region_cmd_status_update.status()
-                                      << " error from: " << region_cmd_ptr->error().ShortDebugString()
-                                      << ", to: " << region_cmd_status_update.error().ShortDebugString()
-                                      << ", region_cmd: " << region_cmd_ptr->ShortDebugString();
-                    }
-                  }
-                }
-              }
-            }
-
-            if (is_updated) {
-              auto ret1 = task_list_meta_->Put(task_list.id(), task_list_temp);
-              if (!ret1.ok()) {
-                DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
-                                 << "], errcode: " << ret1.error_code() << ", errmsg: " << ret1.error_str()
-                                 << ", task_list_temp: " << task_list_temp.ShortDebugString();
-              } else {
-                DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
-              }
-            }
-          } else {
-            DINGO_LOG(ERROR) << " UPDATE task_list apply illegal task_list_id=" << task_list.id()
-                             << " task_list_id=" << task_list.id() << ", task_list: " << task_list.ShortDebugString();
-          }
+          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
         }
       } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // archive task list
@@ -2473,6 +2425,7 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         }
         temp_task_list.set_finish_time(Helper::NowTime());
+        temp_task_list.set_status("success");
         ret = task_list_archive_->Put(task_list.id(), temp_task_list);
         if (!ret.ok()) {
           DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but archive Put failed, [id=" << task_list.id()
@@ -2485,6 +2438,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
           DINGO_LOG(INFO) << "ApplyMetaIncrement task_list DELETE, success [id=" << task_list.id() << "]";
+        }
+      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::MODIFY) {
+        auto status = UpdateTaskProcess(task_list);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("ApplyMetaIncrement UpdateTaskProcess failed, error:{}",
+                                          Helper::PrintStatus(status));
         }
       }
     }

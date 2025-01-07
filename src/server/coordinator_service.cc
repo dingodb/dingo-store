@@ -1311,6 +1311,13 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     ret = coordinator_control->CreateRegionFinal(
         region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
         index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+    ret = coordinator_control->CreateRegionWithTaskList(store_operations, new_region_id, meta_increment);
   } else {
     // store_ids is empty, will auto select store
     std::vector<int64_t> store_ids;
@@ -1319,6 +1326,13 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     ret = coordinator_control->CreateRegionFinal(
         region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
         index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+    ret = coordinator_control->CreateRegionWithTaskList(store_operations, new_region_id, meta_increment);
   }
 
   if (!ret.ok()) {
