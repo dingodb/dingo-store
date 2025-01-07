@@ -318,6 +318,11 @@ class CoordinatorControl : public MetaControl {
   butil::Status TransferLeaderRegionWithTaskList(int64_t region_id, int64_t new_leader_store_id, bool is_force,
                                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // create region
+  butil::Status CreateRegionWithTaskList(std::vector<pb::coordinator::StoreOperation> &store_operations,
+                                         int64_t new_region_id,
+                                         pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // create schema
   // in: tenant_id
   // in: schema_name
@@ -512,6 +517,7 @@ class CoordinatorControl : public MetaControl {
   // get storemap
   void GetStoreMap(pb::common::StoreMap &store_map);
   void GetStoreMap(pb::common::StoreMap &store_map, pb::common::StoreType store_type);
+  std::vector<pb::common::Store> GetShuffleStores();
   pb::common::Store GetStore(int64_t store_id);
 
   // get store metrics
@@ -846,21 +852,23 @@ class CoordinatorControl : public MetaControl {
   void AddSplitTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                     int64_t split_to_region_id, const std::string &water_shed_key, bool store_create_region,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddSnapshotVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+  void AddSnapshotVectorIndexTask(pb::coordinator::Task *region_save_vector_task, int64_t store_id, int64_t region_id,
                                   int64_t snapshot_log_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, int64_t split_to_region_id);
-  static void AddCheckStoreVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
-                                           int64_t vector_index_version);
-  static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::TaskList *task_list, int64_t region_id,
-                                                   int64_t vector_snapshot_log_id);
-  void AddLoadVectorIndexTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
+  static void AddCheckSplitResultTask(pb::coordinator::TaskList *task_list, int64_t store_id,
+                                      int64_t split_to_region_id);
+  static void AddCheckStoreVectorIndexTask(pb::coordinator::Task *check_vector_task, int64_t store_id,
+                                           int64_t region_id, int64_t vector_index_version);
+  static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::TaskList *task_list, int64_t store_id,
+                                                   int64_t region_id, int64_t vector_snapshot_log_id);
+  void AddLoadVectorIndexTask(pb::coordinator::Task *load_vector_task, int64_t store_id, int64_t region_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCheckStoreRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
-  static void AddCheckChangePeerResultTask(pb::coordinator::TaskList *task_list, int64_t region_id,
+  static void AddCheckStoreRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id, int64_t region_id);
+  static void AddCheckChangePeerResultTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id,
                                            const pb::common::RegionDefinition &region_definition);
-  static void AddCheckMergeResultTask(pb::coordinator::TaskList *task_list, int64_t merge_to_region_id,
-                                      const pb::common::Range &range);
-  static void AddCheckTombstoneRegionTask(pb::coordinator::TaskList *task_list, int64_t store_id, int64_t region_id);
+  static void AddCheckMergeResultTask(pb::coordinator::TaskList *task_list, int64_t store_id,
+                                      int64_t merge_to_region_id, const pb::common::Range &range);
+  static void AddCheckTombstoneRegionTask(pb::coordinator::Task *check_tombstone_region_task, int64_t store_id,
+                                          int64_t region_id);
 
   void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
                                      int64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
@@ -871,8 +879,43 @@ class CoordinatorControl : public MetaControl {
 
   // process single task
   butil::Status ProcessSingleTaskList(const pb::coordinator::TaskList &task_list,
-                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+                                      pb::coordinator_internal::MetaIncrement &meta_increment,
+                                      std::map<int64_t, pb::coordinator::StoreOperation> &store_operation_map);
   void ReleaseProcessTaskListStatus(const butil::Status &);
+
+  butil::Status GenStoreOperationByTaskList(int64_t store_id, int64_t job_id,
+                                            const pb::coordinator::RegionCmd &region_cmd,
+                                            pb::coordinator::StoreOperation &store_operation);
+
+  butil::Status SendTaskStoreOperation(int64_t store_id, const pb::coordinator::StoreOperation &store_operation,
+                                       pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // move region_cmd from one store to another store
+  butil::Status MoveTaskRegionCmd(int64_t task_list_id, int64_t old_store_id, int64_t new_store_id,
+                                  int64_t region_cmd_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status UpdateTaskStatus(int64_t task_list_id, int64_t region_cmd_id, pb::coordinator::RegionCmdStatus status,
+                                 pb::error::Error error, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status UpdateTaskProcess(const pb::coordinator_internal::MetaIncrementTaskList &task_list);
+
+  bool MoveRegionCmdInStoreOperation(pb::coordinator::TaskList &task_list, int64_t new_store_id, int64_t region_cmd_id);
+
+  void UpdateTaskRegionCmdStatus(pb::coordinator::StoreOperation &store_operation,
+                                 pb::coordinator_internal::MetaIncrementRegionCmdStatus region_cmd_status);
+
+  void UpdateTaskListNextStep(pb::coordinator::TaskList &task_list, pb::coordinator::Task &current_task,
+                              int64_t region_cmd_id);
+
+  bool AllParallelTasksSuccess(pb::coordinator::TaskList &task_list, int64_t region_cmd_id);
+
+  bool NeedAutoCleanTaskList(const pb::coordinator::TaskList &task_list,
+                             const pb::coordinator::StoreOperation &current_store_operation);
+
+  pb::coordinator::Task *FindTaskByRegionCmd(pb::coordinator::TaskList &task_list, int64_t region_cmd_id,
+                                             int32_t &current_step);
+
+  pb::coordinator::StoreOperation *FindExecuteStoreOperation(pb::coordinator::Task &task, int64_t region_cmd_id);
 
   bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 

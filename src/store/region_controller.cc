@@ -390,10 +390,6 @@ butil::Status SplitRegionTask::PreValidateSplitRegion(const pb::coordinator::Reg
         "[control.region][split.spliting][job_id({}).region({}->{})] Split failed, error: {}", command.job_id(),
         command.split_request().split_from_region_id(), command.split_request().split_to_region_id(),
         Helper::PrintStatus(status));
-
-    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
-      return butil::Status(pb::error::EREGION_SPLITING, status.error_str());
-    }
   }
 
   return status;
@@ -596,9 +592,6 @@ butil::Status MergeRegionTask::PreValidateMergeRegion(const pb::coordinator::Reg
     DINGO_LOG(INFO) << fmt::format(
         "[control.region][merge.merging][job_id({}).region({}/{})] Merge failed, error: {} {}", command.job_id(),
         merge_request.source_region_id(), merge_request.target_region_id(), status.error_code(), status.error_str());
-    if (status.error_code() != pb::error::ERAFT_NOTLEADER) {
-      return butil::Status(pb::error::EREGION_MERGEING, status.error_str());
-    }
   }
 
   return status;
@@ -1956,7 +1949,7 @@ butil::Status RegionController::DispatchRegionControlCommandImpl(std::shared_ptr
 butil::Status RegionController::DispatchRegionControlCommand(std::shared_ptr<Context> ctx, RegionCmdPtr command) {
   // Check repeat region command
   auto region_command_manager = Server::GetInstance().GetRegionCommandManager();
-  if (region_command_manager->IsExist(command->id())) {
+  if (!command->retry() && region_command_manager->IsExist(command->id())) {
     return butil::Status(pb::error::EREGION_REPEAT_COMMAND, "Repeat region control command");
   }
 
