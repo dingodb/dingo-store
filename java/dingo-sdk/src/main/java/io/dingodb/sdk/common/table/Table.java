@@ -59,6 +59,10 @@ public interface Table {
 
     String getCollate();
 
+    default int getCodecVersion() {
+        return 2;
+    }
+
     default String getTableType() {
         return "BASE TABLE";
     }

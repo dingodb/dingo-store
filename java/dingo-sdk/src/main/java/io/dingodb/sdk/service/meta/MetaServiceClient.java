@@ -426,7 +426,7 @@ public class MetaServiceClient {
         );
         Table table = mapping(definitionWithId);
         DingoCommonId tableId = mapping(definitionWithId.getTableId());
-        DingoKeyValueCodec codec = DingoKeyValueCodec.of(tableId.entityId(), table.getKeyColumns());
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(table.getCodecVersion(), tableId.entityId(), table.getKeyColumns());
         try {
             byte[] key = codec.encodeKeyPrefix(partitionDetail.getOperand(), partitionDetail.getOperand().length);
             RangeDistribution distribution = getRangeDistribution(tableName, new ComparableByteArray(key, POS));

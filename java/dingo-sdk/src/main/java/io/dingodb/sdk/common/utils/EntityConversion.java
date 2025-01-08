@@ -160,7 +160,7 @@ public class EntityConversion {
         if (partition.getPartitionsCount() < 1) {
             return null;
         }
-        DingoKeyValueCodec codec = DingoKeyValueCodec.of(id, columns);
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(tableDefinition.getCodecVersion(), id, columns);
         List<PartitionDetail> details = partition.getPartitionsList().stream()
                 .map(Meta.Partition::getRange)
                 .map(Common.Range::getStartKey)
@@ -863,7 +863,7 @@ public class EntityConversion {
         DingoCommonId tableId1 = mapping(tableId);
         List<Column> keyColumns = table.getKeyColumns();
         keyColumns.sort(Comparator.comparingInt(Column::getPrimary));
-        KeyValueCodec codec = DingoKeyValueCodec.of(tableId1.entityId(), keyColumns);
+        KeyValueCodec codec = DingoKeyValueCodec.of(table.getCodecVersion(), tableId1.entityId(), keyColumns);
         byte[] minKeyPrefix = codec.encodeMinKeyPrefix();
         byte[] maxKeyPrefix = codec.encodeMaxKeyPrefix();
         Meta.PartitionRule.Builder builder = Meta.PartitionRule.newBuilder();

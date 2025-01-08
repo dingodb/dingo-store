@@ -53,5 +53,6 @@ public class TableDefinition implements Table {
     private String rowFormat;
     private long createTime;
     private long updateTime;
+    private int codecVersion;
 
 }
