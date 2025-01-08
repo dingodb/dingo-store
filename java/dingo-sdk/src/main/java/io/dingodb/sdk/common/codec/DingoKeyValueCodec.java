@@ -46,8 +46,16 @@ public class DingoKeyValueCodec implements KeyValueCodec {
         rd = new RecordDecoder(schemaVersion, schemas, id);
     }
 
+    public DingoKeyValueCodec(int codecVersion, int schemaVersion, long id, List<DingoSchema> schemas) {
+        this.schemas = schemas;
+        this.id = id;
+        re = new RecordEncoder(codecVersion, schemaVersion, schemas, id);
+        rd = new RecordDecoder(schemaVersion, schemas, id);
+    }
+
     public static DingoKeyValueCodec of(Table table) {
         return of(
+                table.getCodecVersion(),
                 table.getVersion(),
                 Optional.mapOrGet(table.id(), DingoCommonId::entityId, () -> 0L),
                 table.getColumns()
@@ -58,16 +66,16 @@ public class DingoKeyValueCodec implements KeyValueCodec {
         return of(table.getVersion(), id, table);
     }
 
-    public static DingoKeyValueCodec of(long id, List<Column> columns) {
-        return of(1, id, columns);
+    public static DingoKeyValueCodec of(int codecVersion, long id, List<Column> columns) {
+        return of(codecVersion, 1, id, columns);
     }
 
     public static DingoKeyValueCodec of(int schemaVersion,long id, Table table) {
-        return of(schemaVersion, id, table.getColumns());
+        return of(table.getCodecVersion(), schemaVersion, id, table.getColumns());
     }
 
-    public static DingoKeyValueCodec of(int schemaVersion, long id, List<Column> columns) {
-        return new DingoKeyValueCodec(schemaVersion, id, CodecUtils.createSchemaForColumns(columns));
+    public static DingoKeyValueCodec of(int codecVersion, int schemaVersion, long id, List<Column> columns) {
+        return new DingoKeyValueCodec(codecVersion, schemaVersion, id, CodecUtils.createSchemaForColumns(columns));
     }
 
     @Override
