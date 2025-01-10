@@ -118,7 +118,7 @@ public class AutoIncrementService {
             AutoIncrement autoIncrement = innerCache.computeIfAbsent(tableId,
                     id -> new AutoIncrement(id, increment, offset, this::fetcher));
             if (autoIncrement.getLimit() == 0) {
-                autoIncrement.inc();
+                autoIncrement.init();
             }
             if (incrementId < autoIncrement.getLimit() && incrementId >= autoIncrement.current()) {
                 autoIncrement.inc(incrementId);

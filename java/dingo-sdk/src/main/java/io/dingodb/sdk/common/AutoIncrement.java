@@ -46,6 +46,12 @@ public class AutoIncrement {
         return current;
     }
 
+    public synchronized void init() {
+        if (inc >= limit) {
+            fetch();
+        }
+    }
+
     public synchronized void inc(long targetInc) {
         if (targetInc > inc) {
             inc = targetInc;
