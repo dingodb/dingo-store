@@ -40,7 +40,7 @@ public class CodecTest {
         TableDefinition tableDefinition = TableDefinition.builder()
             .name("TEST_ENCODE")
             .columns(Arrays.asList(c1, c2, c3, c4))
-            .version(1)
+            .version(1).codecVersion(2)
             .build();
 
         DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
@@ -60,13 +60,13 @@ public class CodecTest {
         TableDefinition beforeTable = TableDefinition.builder()
             .name("TEST_BEFORE")
             .columns(Arrays.asList(c1, c2, c3))
-            .version(1)
+            .version(1).codecVersion(2)
             .build();
 
         TableDefinition afterTable = TableDefinition.builder()
             .name("TEST_AFTER")
             .columns(Arrays.asList(c1, c2, c3, c4))
-            .version(2)
+            .version(2).codecVersion(2)
             .build();
 
         Object[] beforeRecord = {"id1_1", true, 1.02};
@@ -98,13 +98,13 @@ public class CodecTest {
         TableDefinition beforeTable = TableDefinition.builder()
             .name("TEST_BEFORE")
             .columns(Arrays.asList(c1, c2, c3, c4))
-            .version(1)
+            .version(1).codecVersion(2)
             .build();
 
         TableDefinition afterTable = TableDefinition.builder()
             .name("TEST_AFTER")
             .columns(Arrays.asList(c1, c2, c3))
-            .version(2)
+            .version(2).codecVersion(2)
             .build();
 
         Object[] beforeRecord = {"id1_1", true, 1.02, 123L};
