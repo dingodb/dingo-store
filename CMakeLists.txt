@@ -77,7 +77,11 @@ endif()
 
 # third-party install path
 if(NOT DINGO_EUREKA_INSTALL_PATH)
-  set(DINGO_EUREKA_INSTALL_PATH "$ENV{HOME}/.local/dingo-eureka")
+  if(DEFINED ENV{DINGO_EUREKA_INSTALL_PATH})
+    set(DINGO_EUREKA_INSTALL_PATH $ENV{DINGO_EUREKA_INSTALL_PATH})
+  else()
+    set(DINGO_EUREKA_INSTALL_PATH "$ENV{HOME}/.local/dingo-eureka")
+  endif()
 endif()
 message("DINGO_EUREKA_INSTALL_PATH:${DINGO_EUREKA_INSTALL_PATH}")
 
