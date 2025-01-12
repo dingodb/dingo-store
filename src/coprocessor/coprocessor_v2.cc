@@ -413,6 +413,7 @@ void CoprocessorV2::Close() {
   original_serial_schemas_.reset();
   original_column_indexes_.clear();
   selection_column_indexes_.clear();
+  selection_column_indexes_serial_.clear();
   result_serial_schemas_.reset();
   result_record_encoder_.reset();
   original_record_decoder_.reset();
@@ -575,7 +576,8 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
     int ret = 0;
     try {
       // decode some column. not decode all
-      ret = original_record_decoder_->Decode(key, value, selection_column_indexes_, original_record);
+      ret = original_record_decoder_->Decode(key, value, selection_column_indexes_,
+                                             selection_column_indexes_serial_, original_record);
     } catch (const std::exception& my_exception) {
       std::string error_message = fmt::format("serial::Decode failed exception : {}", my_exception.what());
       DINGO_LOG(ERROR) << error_message;
@@ -722,6 +724,7 @@ void CoprocessorV2::GetSelectionColumnIndexes() {
       int i = index;
       DINGO_LOG(DEBUG) << "index:" << i;
       selection_column_indexes_.push_back(original_column_indexes_[i]);
+      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
     }
   } else {
     DINGO_LOG(DEBUG) << "selection_columns empty()";

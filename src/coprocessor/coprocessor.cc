@@ -312,7 +312,8 @@ butil::Status Coprocessor::DoExecute(const pb::common::KeyValue& kv, bool* has_r
   int ret = 0;
   try {
     // decode some column. not decode all
-    ret = original_record_decoder.Decode(kv.key(), kv.value(), selection_column_indexes_, original_record);
+    ret = original_record_decoder.Decode(kv.key(), kv.value(), selection_column_indexes_,
+                                         selection_column_indexes_serial_, original_record);
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Decode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
@@ -657,6 +658,7 @@ void Coprocessor::Close() {
 
   original_column_indexes_.clear();
   selection_column_indexes_.clear();
+  selection_column_indexes_serial_.clear();
 
   if (original_serial_schemas_sorted_) {
     original_serial_schemas_sorted_.reset();
@@ -804,6 +806,7 @@ void Coprocessor::GetSelectionColumnIndexes() {
       int i = index;
       DINGO_LOG(DEBUG) << "i:" << i;
       selection_column_indexes_.push_back(i);
+      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
     }
     // sort and unique
     // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j;
@@ -818,6 +821,7 @@ void Coprocessor::GetSelectionColumnIndexes() {
       int i = index;
       DINGO_LOG(DEBUG) << "index:" << i;
       selection_column_indexes_.push_back(original_column_indexes_[i]);
+      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
     }
     // sort and unique
     // std::sort(selection_column_indexes_.begin(), selection_column_indexes_.end(), [](int i, int j) { return i < j;

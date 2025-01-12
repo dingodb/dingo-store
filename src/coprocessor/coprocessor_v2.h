@@ -22,6 +22,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "butil/status.h"
 #include "coprocessor/raw_coprocessor.h"
@@ -106,6 +107,7 @@ class CoprocessorV2 : public RawCoprocessor {
   std::vector<int> original_column_indexes_;  // NOLINT
   // index = dummy ; value =  original schema index
   std::vector<int> selection_column_indexes_;                                        // NOLINT
+  std::unordered_map<int, int> selection_column_indexes_serial_;                                 // NOLINT
   std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> result_serial_schemas_;  // NOLINT
   std::shared_ptr<RecordEncoder> result_record_encoder_;                             // NOLINT
   std::shared_ptr<RecordDecoder> original_record_decoder_;                           // NOLINT
