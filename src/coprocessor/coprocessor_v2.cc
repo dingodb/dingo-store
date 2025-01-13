@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "coprocessor/utils.h"
 #include "fmt/core.h"
+#include "gflags/gflags.h"
 #include "mvcc/codec.h"
 #include "proto/error.pb.h"
 #include "proto/store.pb.h"
@@ -36,6 +37,8 @@
 #include "serial/record_encoder.h"
 
 namespace dingodb {
+
+DEFINE_bool(enable_coprocessor_v2_statistics_time_consumption, false, "enable coprocessor_v2 statistics time consumption default is false");
 
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_running_num("dingo_coprocessor_v2_object_running_num");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_total_num("dingo_coprocessor_v2_object_total_num");
@@ -55,9 +58,7 @@ bvar::LatencyRecorder CoprocessorV2::coprocessor_v2_filter_latency("dingo_coproc
 
 CoprocessorV2::CoprocessorV2(char prefix)
     : bvar_guard_for_coprocessor_v2_latency_(&coprocessor_v2_latency),
-      prefix_(prefix)
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-      ,
+      prefix_(prefix),
       coprocessor_v2_start_time_point(std::chrono::steady_clock::now()),
       coprocessor_v2_spend_time_ms(0),
       iter_next_spend_time_ms(0),
@@ -66,54 +67,52 @@ CoprocessorV2::CoprocessorV2(char prefix)
       decode_spend_time_ms(0),
       rel_expr_spend_time_ms(0),
       misc_spend_time_ms(0),
-      open_spend_time_ms(0)
-#endif
-{
+      open_spend_time_ms(0) {
   bvar_coprocessor_v2_object_running_num << 1;
   bvar_coprocessor_v2_object_total_num << 1;
 };
 CoprocessorV2::~CoprocessorV2() {
   Close();
   bvar_coprocessor_v2_object_running_num << -1;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  // coprocessor_v2_end_time_point = std::chrono::steady_clock::now();
-  coprocessor_v2_spend_time_ms = std::chrono::duration_cast<std::chrono::microseconds>(coprocessor_v2_end_time_point -
-                                                                                       coprocessor_v2_start_time_point)
-                                     .count();
-  misc_spend_time_ms = coprocessor_v2_spend_time_ms - iter_next_spend_time_ms - get_kv_spend_time_ms -
-                       trans_field_spend_time_ms - decode_spend_time_ms - rel_expr_spend_time_ms - open_spend_time_ms;
-  DINGO_LOG(INFO) << fmt::format(
-      "CoprocessorV2 time_consumption total:{}ms, iter next:{}ms, get kv:{}ms, trans field:{}ms, decode and "
-      "encode:{}ms, rel expr:{}ms, misc:{}ms, open:{}ms",
-      coprocessor_v2_spend_time_ms, iter_next_spend_time_ms, get_kv_spend_time_ms, trans_field_spend_time_ms,
-      decode_spend_time_ms, rel_expr_spend_time_ms, misc_spend_time_ms, open_spend_time_ms);
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    // coprocessor_v2_end_time_point = std::chrono::steady_clock::now();
+    coprocessor_v2_spend_time_ms = std::chrono::duration_cast<std::chrono::microseconds>(
+                                       coprocessor_v2_end_time_point - coprocessor_v2_start_time_point)
+                                       .count();
+    misc_spend_time_ms = coprocessor_v2_spend_time_ms - iter_next_spend_time_ms - get_kv_spend_time_ms -
+                         trans_field_spend_time_ms - decode_spend_time_ms - rel_expr_spend_time_ms - open_spend_time_ms;
+    DINGO_LOG(INFO) << fmt::format(
+        "CoprocessorV2 time_consumption total:{}ms, iter next:{}ms, get kv:{}ms, trans field:{}ms, decode and "
+        "encode:{}ms, rel expr:{}ms, misc:{}ms, open:{}ms",
+        coprocessor_v2_spend_time_ms, iter_next_spend_time_ms, get_kv_spend_time_ms, trans_field_spend_time_ms,
+        decode_spend_time_ms, rel_expr_spend_time_ms, misc_spend_time_ms, open_spend_time_ms);
 
-  DINGO_LOG(INFO) << fmt::format(
-      "CoprocessorV2 time_consumption percent:  iter next:{}%, get kv:{}% trans field:{}%, decode and "
-      "encode:{}%, rel expr:{}%, misc:{}%, open:{}%",
-      static_cast<double>(iter_next_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(get_kv_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(trans_field_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(decode_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(rel_expr_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(misc_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
-      static_cast<double>(open_spend_time_ms) / coprocessor_v2_spend_time_ms * 100);
-#endif
+    DINGO_LOG(INFO) << fmt::format(
+        "CoprocessorV2 time_consumption percent:  iter next:{}%, get kv:{}% trans field:{}%, decode and "
+        "encode:{}%, rel expr:{}%, misc:{}%, open:{}%",
+        static_cast<double>(iter_next_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(get_kv_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(trans_field_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(decode_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(rel_expr_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(misc_spend_time_ms) / coprocessor_v2_spend_time_ms * 100,
+        static_cast<double>(open_spend_time_ms) / coprocessor_v2_spend_time_ms * 100);
+  }
 }
 
 butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
-  auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
-    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-  };
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+    auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+      return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+    };
 
-  auto open_start = lambda_time_now_function();
-  ON_SCOPE_EXIT([&]() {
-    auto open_end = lambda_time_now_function();
-    open_spend_time_ms += lambda_time_diff_microseconds_function(open_start, open_end);
-  });
-#endif
+    auto open_start = lambda_time_now_function();
+    ON_SCOPE_EXIT([&]() {
+      auto open_end = lambda_time_now_function();
+      open_spend_time_ms += lambda_time_diff_microseconds_function(open_start, open_end);
+    });
+  }
   butil::Status status;
 
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Open Enter");
@@ -221,13 +220,15 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
 
 butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max_fetch_cnt, int64_t max_bytes_rpc,
                                      std::vector<pb::common::KeyValue>* kvs, bool& has_more) {
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
+  // coprocessor_v2_statistics_time_consumption
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
-  ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
-#endif
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
+  }
+
   BvarLatencyGuard bvar_guard(&coprocessor_v2_execute_latency);
   CoprocessorV2::bvar_coprocessor_v2_execute_running_num << 1;
   CoprocessorV2::bvar_coprocessor_v2_execute_total_num << 1;
@@ -238,28 +239,25 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
   has_more = false;
   while (iter->Valid()) {
     pb::common::KeyValue kv;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto kv_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto kv_end = lambda_time_now_function();
         get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
       });
-#endif
-      std::string plain_key;
-      mvcc::Codec::DecodeKey(iter->Key(), plain_key);
-      kv.mutable_key()->swap(plain_key);
-      std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
-      kv.mutable_value()->swap(value);
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    std::string plain_key;
+    mvcc::Codec::DecodeKey(iter->Key(), plain_key);
+    kv.mutable_key()->swap(plain_key);
+    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+    kv.mutable_value()->swap(value);
+
     bool has_result_kv = false;
     pb::common::KeyValue result_key_value;
     DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
 
-    //Get codec version from key.
-    //int codec_version = GetCodecVersion(kv.key);
+    // Get codec version from key.
+    // int codec_version = GetCodecVersion(kv.key);
     status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_key_value);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
@@ -280,32 +278,25 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
           "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
           "cur_bytes_rpc : {}",
           key_only, max_fetch_cnt, max_bytes_rpc, scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-      {
+      if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
         auto next_start = lambda_time_now_function();
         ON_SCOPE_EXIT([&]() {
           auto next_end = lambda_time_now_function();
           iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
         });
-#endif
-        iter->Next();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
       }
-#endif
+      iter->Next();
+
       break;
     }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto next_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto next_end = lambda_time_now_function();
         iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
       });
-#endif
-      iter->Next();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    iter->Next();
   }
 
   status = GetKvFromExprEndOfFinish(kvs);
@@ -318,13 +309,14 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
 butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*is_reverse*/, StopChecker& stop_checker,
                                      pb::store::TxnResultInfo& txn_result_info, std::vector<pb::common::KeyValue>& kvs,
                                      bool& has_more) {
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
+  // coprocessor_v2_statistics_time_consumption
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
-  ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
-#endif
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
+  }
   BvarLatencyGuard bvar_guard(&coprocessor_v2_execute_txn_latency);
   CoprocessorV2::bvar_coprocessor_v2_execute_txn_running_num << 1;
   CoprocessorV2::bvar_coprocessor_v2_execute_txn_total_num << 1;
@@ -336,19 +328,16 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
   size_t bytes = 0;
   while (iter->Valid(txn_result_info)) {
     pb::common::KeyValue kv;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto kv_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto kv_end = lambda_time_now_function();
         get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
       });
-#endif
-      *kv.mutable_key() = iter->Key();
-      *kv.mutable_value() = iter->Value();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    *kv.mutable_key() = iter->Key();
+    *kv.mutable_value() = iter->Value();
+
     bool has_result_kv = false;
     pb::common::KeyValue result_kv;
     DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
@@ -372,18 +361,14 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
       break;
     }
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto next_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto next_end = lambda_time_now_function();
         iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
       });
-#endif
-      iter->Next();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    iter->Next();
   }
 
   status = GetKvFromExprEndOfFinish(&kvs);
@@ -394,9 +379,9 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
 }
 
 butil::Status CoprocessorV2::Filter(const std::string& key, const std::string& value, bool& is_reserved) {
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
-#endif
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    ON_SCOPE_EXIT([&]() { coprocessor_v2_end_time_point = std::chrono::steady_clock::now(); });
+  }
   BvarLatencyGuard bvar_guard(&coprocessor_v2_filter_latency);
   CoprocessorV2::bvar_coprocessor_v2_filter_running_num << 1;
   CoprocessorV2::bvar_coprocessor_v2_filter_total_num << 1;
@@ -413,7 +398,6 @@ void CoprocessorV2::Close() {
   original_serial_schemas_.reset();
   original_column_indexes_.clear();
   selection_column_indexes_.clear();
-  selection_column_indexes_serial_.clear();
   result_serial_schemas_.reset();
   result_record_encoder_.reset();
   original_record_decoder_.reset();
@@ -439,36 +423,33 @@ butil::Status CoprocessorV2::DoExecute(const std::string& key, const std::string
   }
 
   std::vector<std::any> result_record;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
-  {
+
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
     auto trans_start = lambda_time_now_function();
     ON_SCOPE_EXIT([&]() {
       auto trans_end = lambda_time_now_function();
       trans_field_spend_time_ms += lambda_time_diff_microseconds_function(trans_start, trans_end);
     });
-#endif
-    int codec_version = GetCodecVersion(key);
-    status = RelExprHelper::TransFromOperandWrapper(codec_version, result_operand_ptr, result_serial_schemas_, result_column_indexes_,
-                                                    result_record);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   }
-#endif
+  int codec_version = GetCodecVersion(key);
+  status = RelExprHelper::TransFromOperandWrapper(codec_version, result_operand_ptr, result_serial_schemas_,
+                                                  result_column_indexes_, result_record);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  auto encode_start = lambda_time_now_function();
-  ON_SCOPE_EXIT([&]() {
-    auto encode_end = lambda_time_now_function();
-    decode_spend_time_ms += lambda_time_diff_microseconds_function(encode_start, encode_end);
-  });
-#endif
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    auto encode_start = lambda_time_now_function();
+    ON_SCOPE_EXIT([&]() {
+      auto encode_end = lambda_time_now_function();
+      decode_spend_time_ms += lambda_time_diff_microseconds_function(encode_start, encode_end);
+    });
+  }
 
   status = GetKvFromExpr(result_record, has_result_kv, result_kv);
   if (!status.ok()) {
@@ -508,37 +489,32 @@ butil::Status CoprocessorV2::DoRelExprCore(int codec_version, const std::vector<
   Utils::DebugPrintAnyArray(original_record, "From Decode");
 #endif
   std::unique_ptr<std::vector<expr::Operand>> operand_ptr = std::make_unique<std::vector<expr::Operand>>();
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
-  {
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
     auto trans_start = lambda_time_now_function();
     ON_SCOPE_EXIT([&]() {
       auto trans_end = lambda_time_now_function();
       trans_field_spend_time_ms += lambda_time_diff_microseconds_function(trans_start, trans_end);
     });
-#endif
+  };
 
-    status = RelExprHelper::TransToOperandWrapper(codec_version, original_serial_schemas_, selection_column_indexes_, original_record,
-                                                  operand_ptr);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
+  status = RelExprHelper::TransToOperandWrapper(codec_version, original_serial_schemas_, selection_column_indexes_,
+                                                original_record, operand_ptr);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
   }
-#endif
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  auto expr_start = lambda_time_now_function();
-  ON_SCOPE_EXIT([&]() {
-    auto expr_end = lambda_time_now_function();
-    rel_expr_spend_time_ms += lambda_time_diff_microseconds_function(expr_start, expr_end);
-  });
-#endif
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+    auto expr_start = lambda_time_now_function();
+    ON_SCOPE_EXIT([&]() {
+      auto expr_end = lambda_time_now_function();
+      rel_expr_spend_time_ms += lambda_time_diff_microseconds_function(expr_start, expr_end);
+    });
+  }
 
   try {
     std::vector<expr::Operand>* raw_operand_ptr = operand_ptr.release();
@@ -561,8 +537,7 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
   std::vector<std::any> original_record;
   int codec_version = GetCodecVersion(key);
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-  {
+  if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
     auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
     auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
       return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
@@ -572,103 +547,86 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
       auto decode_end = lambda_time_now_function();
       decode_spend_time_ms += lambda_time_diff_microseconds_function(decode_start, decode_end);
     });
-#endif
-    int ret = 0;
-    try {
-      // decode some column. not decode all
-      ret = original_record_decoder_->Decode(key, value, selection_column_indexes_,
-                                             selection_column_indexes_serial_, original_record);
-    } catch (const std::exception& my_exception) {
-      std::string error_message = fmt::format("serial::Decode failed exception : {}", my_exception.what());
-      DINGO_LOG(ERROR) << error_message;
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-    }
-
-    if (ret < 0) {
-      std::string error_message = fmt::format("serial::Decode failed");
-      DINGO_LOG(ERROR) << error_message;
-      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-    }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   }
-#endif
+  int ret = 0;
+  try {
+    // decode some column. not decode all
+    ret = original_record_decoder_->Decode(key, value, selection_column_indexes_, original_record);
+  } catch (const std::exception& my_exception) {
+    std::string error_message = fmt::format("serial::Decode failed exception : {}", my_exception.what());
+    DINGO_LOG(ERROR) << error_message;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  }
+
+  if (ret < 0) {
+    std::string error_message = fmt::format("serial::Decode failed");
+    DINGO_LOG(ERROR) << error_message;
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+  }
+
   return DoRelExprCore(codec_version, original_record, result_operand_ptr);
 }
 
 butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::KeyValue>* kvs) {
   butil::Status status;
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
   auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
   auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
     return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
   };
-#endif
 
   while (true) {
     std::unique_ptr<std::vector<expr::Operand>> result_operand_ptr;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto expr_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto expr_end = lambda_time_now_function();
         rel_expr_spend_time_ms += lambda_time_diff_microseconds_function(expr_start, expr_end);
       });
-#endif
-      try {
-        const expr::Tuple* result_tuple = rel_runner_->Get();
-        result_operand_ptr.reset(const_cast<expr::Tuple*>(result_tuple));
-      } catch (const std::exception& my_exception) {
-        std::string error_message = fmt::format("rel::RelRunner Get failed. exception : {}", my_exception.what());
-        DINGO_LOG(ERROR) << error_message;
-        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
-      }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    try {
+      const expr::Tuple* result_tuple = rel_runner_->Get();
+      result_operand_ptr.reset(const_cast<expr::Tuple*>(result_tuple));
+    } catch (const std::exception& my_exception) {
+      std::string error_message = fmt::format("rel::RelRunner Get failed. exception : {}", my_exception.what());
+      DINGO_LOG(ERROR) << error_message;
+      return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
+    }
 
     if (!result_operand_ptr) {
       break;
     }
 
     std::vector<std::any> result_record;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto trans_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto trans_end = lambda_time_now_function();
         trans_field_spend_time_ms += lambda_time_diff_microseconds_function(trans_start, trans_end);
       });
-#endif
-      //int codec_version = GetCodecVersion(kv.key());
-      status = RelExprHelper::TransFromOperandWrapper(0x02, result_operand_ptr, result_serial_schemas_,
-                                                      result_column_indexes_, result_record);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
-        return status;
-      }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    // int codec_version = GetCodecVersion(kv.key());
+    status = RelExprHelper::TransFromOperandWrapper(0x02, result_operand_ptr, result_serial_schemas_,
+                                                    result_column_indexes_, result_record);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
     bool has_result_kv = false;
     pb::common::KeyValue result_kv;
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
-    {
+    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
       auto encode_start = lambda_time_now_function();
       ON_SCOPE_EXIT([&]() {
         auto encode_end = lambda_time_now_function();
         decode_spend_time_ms += lambda_time_diff_microseconds_function(encode_start, encode_end);
       });
-#endif
-      status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
-        return status;
-      }
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
     }
-#endif
+    status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
     if (has_result_kv) {
       kvs->emplace_back(std::move(result_kv));
@@ -724,7 +682,6 @@ void CoprocessorV2::GetSelectionColumnIndexes() {
       int i = index;
       DINGO_LOG(DEBUG) << "index:" << i;
       selection_column_indexes_.push_back(original_column_indexes_[i]);
-      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
     }
   } else {
     DINGO_LOG(DEBUG) << "selection_columns empty()";

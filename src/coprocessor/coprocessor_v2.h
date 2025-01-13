@@ -28,6 +28,7 @@
 #include "coprocessor/raw_coprocessor.h"
 #include "coprocessor/rel_expr_helper.h"  // IWYU pragma: keep
 #include "engine/iterator.h"
+#include "glog/logging.h"
 #include "proto/common.pb.h"
 #include "rel/rel_runner.h"  // IWYU pragma: keep
 #include "serial/record_decoder.h"
@@ -35,11 +36,7 @@
 
 namespace dingodb {
 
-#ifndef ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
-#define ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
-#endif
-
-#undef ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION
+DECLARE_bool(enable_coprocessor_v2_statistics_time_consumption);
 
 class CoprocessorV2;
 using CoprocessorV2Ptr = std::shared_ptr<CoprocessorV2>;
@@ -135,7 +132,7 @@ class CoprocessorV2 : public RawCoprocessor {
 
   BvarLatencyGuard bvar_guard_for_coprocessor_v2_latency_;  // NOLINT
 
-#if defined(ENABLE_COPROCESSOR_V2_STATISTICS_TIME_CONSUMPTION)
+  // coprocessor_v2_statistics_time_consumption
   std::chrono::steady_clock::time_point coprocessor_v2_start_time_point;
   std::chrono::steady_clock::time_point coprocessor_v2_end_time_point;
   int64_t coprocessor_v2_spend_time_ms;
@@ -146,7 +143,6 @@ class CoprocessorV2 : public RawCoprocessor {
   int64_t rel_expr_spend_time_ms;
   int64_t misc_spend_time_ms;
   int64_t open_spend_time_ms;
-#endif
 };
 
 }  // namespace dingodb
