@@ -914,6 +914,7 @@ rocksdb::DB* RocksRawEngine::InitDB(const std::string& db_path, rocks::ColumnFam
   db_options.max_subcompactions = db_options.max_background_jobs / 4 * 3;
   db_options.stats_dump_period_sec = ConfigHelper::GetRocksDBStatsDumpPeriodSec();
   db_options.use_direct_io_for_flush_and_compaction = true;
+  db_options.statistics=rocksdb::CreateDBStatistics();
 
   DINGO_LOG(INFO) << fmt::format("[rocksdb] config max_background_jobs({}) max_subcompactions({})",
                                  db_options.max_background_jobs, db_options.max_subcompactions);

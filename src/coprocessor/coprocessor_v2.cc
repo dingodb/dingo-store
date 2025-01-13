@@ -38,7 +38,8 @@
 
 namespace dingodb {
 
-DEFINE_bool(enable_coprocessor_v2_statistics_time_consumption, false, "enable coprocessor_v2 statistics time consumption default is false");
+DEFINE_bool(enable_coprocessor_v2_statistics_time_consumption, false,
+            "enable coprocessor_v2 statistics time consumption default is false");
 
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_running_num("dingo_coprocessor_v2_object_running_num");
 bvar::Adder<uint64_t> CoprocessorV2::bvar_coprocessor_v2_object_total_num("dingo_coprocessor_v2_object_total_num");
@@ -551,7 +552,8 @@ butil::Status CoprocessorV2::DoRelExprCoreWrapper(const std::string& key, const 
   int ret = 0;
   try {
     // decode some column. not decode all
-    ret = original_record_decoder_->Decode(key, value, selection_column_indexes_, original_record);
+    ret = original_record_decoder_->Decode(key, value, selection_column_indexes_, selection_column_indexes_serial_,
+                                           original_record);
   } catch (const std::exception& my_exception) {
     std::string error_message = fmt::format("serial::Decode failed exception : {}", my_exception.what());
     DINGO_LOG(ERROR) << error_message;
