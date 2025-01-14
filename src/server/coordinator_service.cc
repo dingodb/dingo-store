@@ -1317,7 +1317,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       response->mutable_error()->set_errmsg(ret.error_str());
       return;
     }
-    ret = coordinator_control->CreateRegionWithTaskList(store_operations, new_region_id, meta_increment);
+    ret = coordinator_control->CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
   } else {
     // store_ids is empty, will auto select store
     std::vector<int64_t> store_ids;
@@ -1332,7 +1332,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       response->mutable_error()->set_errmsg(ret.error_str());
       return;
     }
-    ret = coordinator_control->CreateRegionWithTaskList(store_operations, new_region_id, meta_increment);
+    ret = coordinator_control->CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
   }
 
   if (!ret.ok()) {
@@ -1471,7 +1471,7 @@ void DoSplitRegion(google::protobuf::RpcController * /*controller*/, const pb::c
   const auto &split_request = request->split_request();
   bool store_create_region = request->split_request().store_create_region();
 
-  auto ret = coordinator_control->SplitRegionWithTaskList(
+  auto ret = coordinator_control->SplitRegionWithJobList(
       split_request.split_from_region_id(), split_request.split_to_region_id(), split_request.split_watershed_key(),
       store_create_region, meta_increment);
   if (!ret.ok()) {
@@ -1521,8 +1521,8 @@ void DoMergeRegion(google::protobuf::RpcController * /*controller*/, const pb::c
 
   const auto &merge_request = request->merge_request();
 
-  auto ret = coordinator_control->MergeRegionWithTaskList(merge_request.source_region_id(),
-                                                          merge_request.target_region_id(), meta_increment);
+  auto ret = coordinator_control->MergeRegionWithJobList(merge_request.source_region_id(),
+                                                         merge_request.target_region_id(), meta_increment);
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -1586,7 +1586,7 @@ void DoChangePeerRegion(google::protobuf::RpcController * /*controller*/,
     new_store_ids.push_back(it.store_id());
   }
 
-  auto ret = coordinator_control->ChangePeerRegionWithTaskList(region_definition.id(), new_store_ids, meta_increment);
+  auto ret = coordinator_control->ChangePeerRegionWithJobList(region_definition.id(), new_store_ids, meta_increment);
 
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1635,8 +1635,8 @@ void DoTransferLeaderRegion(google::protobuf::RpcController * /*controller*/,
     response->mutable_error()->set_errmsg("region_id or leader_store_id is illegal");
     return;
   }
-  auto ret = coordinator_control->TransferLeaderRegionWithTaskList(request->region_id(), request->leader_store_id(),
-                                                                   request->is_force(), meta_increment);
+  auto ret = coordinator_control->TransferLeaderRegionWithJobList(request->region_id(), request->leader_store_id(),
+                                                                  request->is_force(), meta_increment);
 
   if (!ret.ok()) {
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1900,9 +1900,9 @@ void DoGetRegionCmd(google::protobuf::RpcController * /*controller*/,
 }
 
 // task list
-void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::coordinator::GetTaskListRequest *request,
-                   pb::coordinator::GetTaskListResponse *response, TrackClosure *done,
-                   std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+void DoGetJobList(google::protobuf::RpcController * /*controller*/, const pb::coordinator::GetJobListRequest *request,
+                  pb::coordinator::GetJobListResponse *response, TrackClosure *done,
+                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
@@ -1915,22 +1915,22 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
     return coordinator_control->RedirectResponse(response);
   }
 
-  if (request->task_list_id() == 0) {
-    butil::FlatMap<int64_t, pb::coordinator::TaskList> task_lists;
-    task_lists.init(100);
-    coordinator_control->GetTaskListAll(task_lists);
+  if (request->job_list_id() == 0) {
+    butil::FlatMap<int64_t, pb::coordinator::JobList> job_lists;
+    job_lists.init(100);
+    coordinator_control->GetJobListAll(job_lists);
 
-    if (request->get_task_list_id_only()) {
-      for (const auto &it : task_lists) {
-        auto *new_task_list = response->add_task_lists();
-        new_task_list->set_id(it.first);
+    if (request->get_job_list_id_only()) {
+      for (const auto &it : job_lists) {
+        auto *new_job_list = response->add_job_lists();
+        new_job_list->set_id(it.first);
       }
     } else {
-      for (const auto &it : task_lists) {
-        auto *new_task_list = response->add_task_lists();
-        *new_task_list = it.second;
-        for (int i = 0; i < new_task_list->tasks_size(); ++i) {
-          new_task_list->mutable_tasks(i)->set_step(i);
+      for (const auto &it : job_lists) {
+        auto *new_job_list = response->add_job_lists();
+        *new_job_list = it.second;
+        for (int i = 0; i < new_job_list->tasks_size(); ++i) {
+          new_job_list->mutable_tasks(i)->set_step(i);
         }
       }
     }
@@ -1938,60 +1938,60 @@ void DoGetTaskList(google::protobuf::RpcController * /*controller*/, const pb::c
     // history
     if (request->include_archive()) {
       int32_t limit = request->archive_limit() > 0 ? request->archive_limit() : INT32_MAX;
-      if (request->get_task_list_id_only()) {
-        std::vector<int64_t> task_list_ids;
-        coordinator_control->GetArchiveTaskListIds(task_list_ids, request->archive_start_id(), limit);
-        for (const auto &task_list_id : task_list_ids) {
-          response->add_task_lists()->set_id(task_list_id);
+      if (request->get_job_list_id_only()) {
+        std::vector<int64_t> job_list_ids;
+        coordinator_control->GetArchiveJobListIds(job_list_ids, request->archive_start_id(), limit);
+        for (const auto &job_list_id : job_list_ids) {
+          response->add_job_lists()->set_id(job_list_id);
         }
       } else {
-        std::vector<pb::coordinator::TaskList> task_lists;
-        coordinator_control->GetArchiveTaskList(task_lists, request->archive_start_id(), limit);
-        for (auto &task_list : task_lists) {
-          for (int i = 0; i < task_list.tasks_size(); ++i) {
-            task_list.mutable_tasks(i)->set_step(i);
+        std::vector<pb::coordinator::JobList> job_lists;
+        coordinator_control->GetArchiveJobList(job_lists, request->archive_start_id(), limit);
+        for (auto &job_list : job_lists) {
+          for (int i = 0; i < job_list.tasks_size(); ++i) {
+            job_list.mutable_tasks(i)->set_step(i);
           }
-          *response->add_task_lists() = task_list;
+          *response->add_job_lists() = job_list;
         }
       }
     }
   } else {
-    pb::coordinator::TaskList task_list;
-    coordinator_control->GetTaskList(request->task_list_id(), task_list);
-    // take task_list from archive
-    if (task_list.id() == 0 && request->include_archive()) {
-      coordinator_control->GetArchiveTaskList(request->task_list_id(), task_list);
+    pb::coordinator::JobList job_list;
+    coordinator_control->GetJobList(request->job_list_id(), job_list);
+    // take job_list from archive
+    if (job_list.id() == 0 && request->include_archive()) {
+      coordinator_control->GetArchiveJobList(request->job_list_id(), job_list);
     }
 
-    *response->add_task_lists() = task_list;
-    for (int i = 0; i < task_list.tasks_size(); ++i) {
-      response->mutable_task_lists(0)->mutable_tasks(i)->set_step(i);
+    *response->add_job_lists() = job_list;
+    for (int i = 0; i < job_list.tasks_size(); ++i) {
+      response->mutable_job_lists(0)->mutable_tasks(i)->set_step(i);
     }
   }
 }
 
-void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
-                     const pb::coordinator::CleanTaskListRequest *request,
-                     pb::coordinator::CleanTaskListResponse *response, TrackClosure *done,
-                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+void DoCleanJobList(google::protobuf::RpcController * /*controller*/,
+                    const pb::coordinator::CleanJobListRequest *request,
+                    pb::coordinator::CleanJobListResponse *response, TrackClosure *done,
+                    std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
   brpc::ClosureGuard done_guard(done);
   auto tracker = done->Tracker();
   tracker->SetServiceQueueWaitTime();
 
   auto is_leader = coordinator_control->IsLeader();
   if (!is_leader) {
-    DINGO_LOG(WARNING) << "Receive Clean TaskList Request, IsLeader:" << is_leader
+    DINGO_LOG(WARNING) << "Receive Clean JobList Request, IsLeader:" << is_leader
                        << ", Request:" << request->ShortDebugString();
     return coordinator_control->RedirectResponse(response);
   }
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  auto task_list_id = request->task_list_id();
+  auto job_list_id = request->job_list_id();
 
-  auto ret = coordinator_control->CleanTaskList(task_list_id, meta_increment);
+  auto ret = coordinator_control->CleanJobList(job_list_id, meta_increment);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "CleanTaskList failed, task_list_id:" << task_list_id << ", errcode:" << ret.error_code()
+    DINGO_LOG(ERROR) << "CleanJobList failed, job_list_id:" << job_list_id << ", errcode:" << ret.error_code()
                      << ", errmsg:" << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
     response->mutable_error()->set_errmsg(ret.error_str());
@@ -2009,7 +2009,7 @@ void DoCleanTaskList(google::protobuf::RpcController * /*controller*/,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "CleanTaskList Write failed:  task_list_id=" << request->task_list_id();
+    DINGO_LOG(ERROR) << "CleanJobList Write failed:  job_list_id=" << request->job_list_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     return;
   }
@@ -2419,10 +2419,10 @@ void DoUpdateRegionCmdStatus(google::protobuf::RpcController * /*controller*/,
 
   pb::coordinator_internal::MetaIncrement meta_increment;
 
-  auto ret = coordinator_control->UpdateRegionCmdStatus(request->task_list_id(), request->region_cmd_id(),
+  auto ret = coordinator_control->UpdateRegionCmdStatus(request->job_list_id(), request->region_cmd_id(),
                                                         request->status(), request->error(), meta_increment);
   if (!ret.ok()) {
-    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus failed, task_list_id:" << request->task_list_id()
+    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus failed, job_list_id:" << request->job_list_id()
                      << ", region_cmd_id:" << request->region_cmd_id() << ", status:" << request->status()
                      << ", errcode:" << pb::error::Errno_Name(ret.error_code()) << ", errmsg:" << ret.error_str();
     response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -2441,7 +2441,7 @@ void DoUpdateRegionCmdStatus(google::protobuf::RpcController * /*controller*/,
   // this is a async operation will be block by closure
   auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
   if (!ret2.ok()) {
-    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus Write failed:  task_list_id=" << request->task_list_id()
+    DINGO_LOG(ERROR) << "UpdateRegionCmdStatus Write failed:  job_list_id=" << request->job_list_id()
                      << ", region_cmd_id=" << request->region_cmd_id();
     ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
     return;
@@ -3515,10 +3515,10 @@ void CoordinatorServiceImpl::GetRegionCmd(google::protobuf::RpcController *contr
 }
 
 // task list
-void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController *controller,
-                                         const pb::coordinator::GetTaskListRequest *request,
-                                         pb::coordinator::GetTaskListResponse *response,
-                                         google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::GetJobList(google::protobuf::RpcController *controller,
+                                        const pb::coordinator::GetJobListRequest *request,
+                                        pb::coordinator::GetJobListResponse *response,
+                                        google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
   DINGO_LOG(DEBUG) << "Receive Get StoreOperation Request, IsLeader:" << is_leader
@@ -3531,7 +3531,7 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController *contro
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoGetTaskList(controller, request, response, svr_done, coordinator_control_, engine_);
+    DoGetJobList(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
@@ -3540,13 +3540,13 @@ void CoordinatorServiceImpl::GetTaskList(google::protobuf::RpcController *contro
   }
 }
 
-void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *controller,
-                                           const pb::coordinator::CleanTaskListRequest *request,
-                                           pb::coordinator::CleanTaskListResponse *response,
-                                           google::protobuf::Closure *done) {
+void CoordinatorServiceImpl::CleanJobList(google::protobuf::RpcController *controller,
+                                          const pb::coordinator::CleanJobListRequest *request,
+                                          pb::coordinator::CleanJobListResponse *response,
+                                          google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   auto is_leader = coordinator_control_->IsLeader();
-  DINGO_LOG(DEBUG) << "Receive Clean TaskList Request, IsLeader:" << is_leader
+  DINGO_LOG(DEBUG) << "Receive Clean JobList Request, IsLeader:" << is_leader
                    << ", Request:" << request->ShortDebugString();
 
   if (!is_leader) {
@@ -3556,7 +3556,7 @@ void CoordinatorServiceImpl::CleanTaskList(google::protobuf::RpcController *cont
   // Run in queue.
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoCleanTaskList(controller, request, response, svr_done, coordinator_control_, engine_);
+    DoCleanJobList(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
@@ -3697,8 +3697,8 @@ void CoordinatorServiceImpl::UpdateRegionCmdStatus(google::protobuf::RpcControll
   if (!is_leader) {
     return coordinator_control_->RedirectResponse(response);
   }
-  if (request->task_list_id() <= 0) {
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "task_list_id is illegal");
+  if (request->job_list_id() <= 0) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS, "job_list_id is illegal");
     return;
   }
   if (request->region_cmd_id() <= 0) {

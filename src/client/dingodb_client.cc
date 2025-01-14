@@ -67,7 +67,7 @@ DEFINE_int64(start_region_cmd_id, 0, "start_region_cmd_id");
 DEFINE_int64(end_region_cmd_id, 0, "end_region_cmd_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
-DEFINE_int64(task_list_id, 0, "task_list_id");
+DEFINE_int64(job_list_id, 0, "job_list_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_int32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");
@@ -808,10 +808,10 @@ int CoordinatorSender() {
     SendGetRangeRegionMap(coordinator_interaction);
   } else if (FLAGS_method == "GetStoreOperation") {
     SendGetStoreOperation(coordinator_interaction);
-  } else if (FLAGS_method == "GetTaskList") {
-    SendGetTaskList(coordinator_interaction);
-  } else if (FLAGS_method == "CleanTaskList") {
-    SendCleanTaskList(coordinator_interaction);
+  } else if (FLAGS_method == "GetJobList") {
+    SendGetJobList(coordinator_interaction);
+  } else if (FLAGS_method == "CleanJobList") {
+    SendCleanJobList(coordinator_interaction);
   } else if (FLAGS_method == "UpdateRegionCmdStatus") {
     SendUpdateRegionCmdStatus(coordinator_interaction);
   } else if (FLAGS_method == "CleanStoreOperation") {
@@ -1018,7 +1018,7 @@ int CoordinatorSender() {
   else if (FLAGS_method == "BalanceRegion") {
     SendBalanceRegion(coordinator_interaction);
   }
-  
+
   // force_read_only
   else if (FLAGS_method == "UpdateForceReadOnly") {
     SendUpdateForceReadOnly(coordinator_interaction);

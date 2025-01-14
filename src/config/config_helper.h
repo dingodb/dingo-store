@@ -41,7 +41,7 @@ class ConfigHelper {
 
   static uint32_t GetLeaderNumWeight();
 
-  static uint32_t GetReserveTaskListRecentDay();
+  static uint32_t GetReserveJobListRecentDay();
 
   static std::string GetBalanceLeaderInspectionTimePeriod();
 

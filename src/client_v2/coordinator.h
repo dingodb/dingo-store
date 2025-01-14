@@ -42,7 +42,7 @@ dingodb::pb::common::Region SendQueryRegion(int64_t region_id);
 void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id);
 void SendTransferLeaderByCoordinator(int64_t region_id, int64_t leader_store_id);
 void SendMergeRegionToCoor(int64_t source_id, int64_t target_id);
-uint32_t SendGetTaskList();
+uint32_t SendGetJobList();
 dingodb::pb::common::StoreMap SendGetStoreMap();
 void SendChangePeer(const dingodb::pb::common::RegionDefinition &region_definition);
 void SendSplitRegion(const dingodb::pb::common::RegionDefinition &region_definition);
@@ -407,7 +407,7 @@ struct GetStoreOperationOption {
 void SetUpGetStoreOperation(CLI::App &app);
 void RunGetStoreOperation(GetStoreOperationOption const &opt);
 
-struct GetTaskListOptions {
+struct GetJobListOptions {
   std::string coor_url;
   int64_t id;
   bool include_archive;
@@ -415,19 +415,19 @@ struct GetTaskListOptions {
   int64_t limit;
   bool json_type;
 };
-void SetUpGetTaskList(CLI::App &app);
-void RunGetTaskList(GetTaskListOptions const &opt);
+void SetUpGetJobList(CLI::App &app);
+void RunGetJobList(GetJobListOptions const &opt);
 
-struct CleanTaskListOption {
+struct CleanJobListOption {
   std::string coor_url;
   int64_t id;
 };
-void SetUpCleanTaskList(CLI::App &app);
-void RunCleanTaskList(CleanTaskListOption const &opt);
+void SetUpCleanJobList(CLI::App &app);
+void RunCleanJobList(CleanJobListOption const &opt);
 
 struct UpdateRegionCmdStatusOptions {
   std::string coor_url;
-  int64_t task_list_id;
+  int64_t job_list_id;
   int64_t region_cmd_id;
   int64_t status;
   int64_t errcode;

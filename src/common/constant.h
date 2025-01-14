@@ -253,7 +253,7 @@ class Constant {
 
   static const uint32_t kLeaderNumWeightDefaultValue = 1;
 
-  static const uint32_t kReserveTaskListRecentDayDefaultValue = 7;
+  static const uint32_t kReserveJobListRecentDayDefaultValue = 7;
 
   // diskann
   // min count of vectors for diskann

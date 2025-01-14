@@ -1550,7 +1550,7 @@ void AutoMergeRegion(AutoMergeRegionOptions const& opt) {
         continue;
       }
 
-      auto task_num = SendGetTaskList();
+      auto task_num = SendGetJobList();
       if (task_num > 0) {
         DINGO_LOG(INFO) << fmt::format("Exist task, task num: {}", task_num);
         continue;

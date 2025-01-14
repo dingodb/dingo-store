@@ -52,7 +52,7 @@ DECLARE_int64(peer_add_store_id);
 DECLARE_int64(peer_del_store_id);
 DECLARE_int64(store_id);
 DECLARE_int64(region_id);
-DECLARE_int64(task_list_id);
+DECLARE_int64(job_list_id);
 DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
 DECLARE_int64(index);
@@ -277,7 +277,8 @@ void SendRaftTransferLeader() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -319,7 +320,8 @@ void SendRaftSnapshot() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -383,7 +385,8 @@ void SendRaftResetPeer() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response"
+                    << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -419,7 +422,8 @@ void SendGetNodeInfo() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
+    DINGO_LOG(INFO) << "Received response"
+                    << " cluster_id=" << request.cluster_id()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
@@ -1889,12 +1893,12 @@ void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> c
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-  dingodb::pb::coordinator::GetTaskListRequest request;
-  dingodb::pb::coordinator::GetTaskListResponse response;
+void SendGetJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_task_list_id(std::stoll(FLAGS_id));
+    request.set_job_list_id(std::stoll(FLAGS_id));
   }
 
   request.set_include_archive(FLAGS_include_archive);
@@ -1905,26 +1909,26 @@ void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinato
     request.set_archive_limit(FLAGS_limit);
   }
 
-  auto status = coordinator_interaction->SendRequest("GetTaskList", request, response);
+  auto status = coordinator_interaction->SendRequest("GetJobList", request, response);
   DINGO_LOG_IF(INFO, !status.ok()) << "SendRequest status=" << status;
   DINGO_LOG_IF(INFO, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
 
-  for (const auto& task_list : response.task_lists()) {
-    DINGO_LOG(INFO) << "task_list: " << (FLAGS_show_pretty ? task_list.DebugString() : task_list.ShortDebugString());
+  for (const auto& job_list : response.job_lists()) {
+    DINGO_LOG(INFO) << "job_list: " << (FLAGS_show_pretty ? job_list.DebugString() : job_list.ShortDebugString());
   }
 }
 
-void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
-  dingodb::pb::coordinator::CleanTaskListRequest request;
-  dingodb::pb::coordinator::CleanTaskListResponse response;
+void SendCleanJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::coordinator::CleanJobListRequest request;
+  dingodb::pb::coordinator::CleanJobListResponse response;
 
   if (FLAGS_id.empty()) {
-    DINGO_LOG(ERROR) << "id is empty, if you want to clean all task_list, set --id=0";
+    DINGO_LOG(ERROR) << "id is empty, if you want to clean all job_list, set --id=0";
     return;
   }
-  request.set_task_list_id(std::stoll(FLAGS_id));
+  request.set_job_list_id(std::stoll(FLAGS_id));
 
-  auto status = coordinator_interaction->SendRequest("CleanTaskList", request, response);
+  auto status = coordinator_interaction->SendRequest("CleanJobList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 }
@@ -2073,7 +2077,6 @@ void SendBalanceLeader(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   }
 }
 
-
 void SendBalanceRegion(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::coordinator::BalanceRegionRequest request;
   dingodb::pb::coordinator::BalanceRegionResponse response;
@@ -2093,8 +2096,8 @@ void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> 
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
   dingodb::pb::coordinator::UpdateRegionCmdStatusResponse response;
 
-  if (FLAGS_task_list_id <= 0) {
-    DINGO_LOG(ERROR) << "task_list_id is empty";
+  if (FLAGS_job_list_id <= 0) {
+    DINGO_LOG(ERROR) << "job_list_id is empty";
     return;
   }
 
@@ -2118,7 +2121,7 @@ void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> 
     return;
   }
 
-  request.set_task_list_id(FLAGS_task_list_id);
+  request.set_job_list_id(FLAGS_job_list_id);
   request.set_region_cmd_id(FLAGS_region_cmd_id);
   request.set_status(static_cast<dingodb::pb::coordinator::RegionCmdStatus>(FLAGS_status));
   request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(FLAGS_errcode));

@@ -92,21 +92,21 @@ class CoordinatorUpdateStateTask : public TaskRunnable {
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
-class CoordinatorTaskListProcessTask : public TaskRunnable {
+class CoordinatorJobListProcessTask : public TaskRunnable {
  public:
-  CoordinatorTaskListProcessTask(std::shared_ptr<CoordinatorControl> coordinator_control)
+  CoordinatorJobListProcessTask(std::shared_ptr<CoordinatorControl> coordinator_control)
       : coordinator_control_(coordinator_control) {}
-  ~CoordinatorTaskListProcessTask() override = default;
+  ~CoordinatorJobListProcessTask() override = default;
 
   std::string Type() override { return "COORDINATOR_TASK_LIST_PROCESS"; }
 
   void Run() override {
-    // DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
-    CoordinatorTaskListProcess(coordinator_control_);
+    // DINGO_LOG(DEBUG) << "start process CoordinatorJobListProcess";
+    CoordinatorJobListProcess(coordinator_control_);
   }
 
  private:
-  static void CoordinatorTaskListProcess(std::shared_ptr<CoordinatorControl> coordinator_control);
+  static void CoordinatorJobListProcess(std::shared_ptr<CoordinatorControl> coordinator_control);
   std::shared_ptr<CoordinatorControl> coordinator_control_;
 };
 
@@ -172,7 +172,7 @@ class CalculateTableMetricsTask : public TaskRunnable {
   std::string Type() override { return "CALCULATE_TABLE_METRICS"; }
 
   void Run() override {
-    DINGO_LOG(DEBUG) << "start process CoordinatorTaskListProcess";
+    DINGO_LOG(DEBUG) << "start process CoordinatorJobListProcess";
     CalculateTableMetrics(coordinator_control_);
   }
 
@@ -265,7 +265,7 @@ class Heartbeat {
   static void TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version = false);
   static void TriggerCoordinatorPushToStore(void*);
   static void TriggerCoordinatorUpdateState(void*);
-  static void TriggerCoordinatorTaskListProcess(void*);
+  static void TriggerCoordinatorJobListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);
   static void TriggerCoordinatorMetaWatchClean(void*);
   static void TriggerKvRemoveOneTimeWatch(void*);

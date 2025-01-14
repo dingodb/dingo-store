@@ -3836,13 +3836,13 @@ void SendMergeRegionToCoor(int64_t source_id, int64_t target_id) {
   InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "MergeRegion", request, response);
 }
 
-uint32_t SendGetTaskList() {
-  dingodb::pb::coordinator::GetTaskListRequest request;
-  dingodb::pb::coordinator::GetTaskListResponse response;
+uint32_t SendGetJobList() {
+  dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse response;
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetTaskList", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetJobList", request, response);
 
-  return response.task_lists().size();
+  return response.job_lists().size();
 }
 
 struct BatchPutGetParam {
@@ -4453,7 +4453,7 @@ void AutoMergeRegion(std::shared_ptr<Context> ctx) {
         continue;
       }
 
-      auto task_num = SendGetTaskList();
+      auto task_num = SendGetJobList();
       if (task_num > 0) {
         DINGO_LOG(INFO) << fmt::format("Exist task, task num: {}", task_num);
         continue;
