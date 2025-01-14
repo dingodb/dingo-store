@@ -59,6 +59,8 @@ class ConfigHelper {
   static int64_t GetSplitMergeInterval();
   static float GetMergeSizeRatio();
   static float GetMergeKeysRatio();
+
+  static std::string GetBlockCacheValue();
 };
 
 }  // namespace dingodb

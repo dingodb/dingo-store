@@ -738,7 +738,7 @@ RocksRawEngine::~RocksRawEngine() = default;
 static rocks::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
   rocks::ColumnFamily::ColumnFamilyConfig default_config;
   default_config.emplace(Constant::kBlockSize, Constant::kBlockSizeDefaultValue);
-  default_config.emplace(Constant::kBlockCache, Constant::kBlockCacheDefaultValue);
+  default_config.emplace(Constant::kBlockCache, ConfigHelper::GetBlockCacheValue());
   default_config.emplace(Constant::kArenaBlockSize, Constant::kArenaBlockSizeDefaultValue);
   default_config.emplace(Constant::kMinWriteBufferNumberToMerge, Constant::kMinWriteBufferNumberToMergeDefaultValue);
   default_config.emplace(Constant::kMaxWriteBufferNumber, Constant::kMaxWriteBufferNumberDefaultValue);

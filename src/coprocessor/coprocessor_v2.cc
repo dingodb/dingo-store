@@ -399,6 +399,7 @@ void CoprocessorV2::Close() {
   original_serial_schemas_.reset();
   original_column_indexes_.clear();
   selection_column_indexes_.clear();
+  selection_column_indexes_serial_.clear();
   result_serial_schemas_.reset();
   result_record_encoder_.reset();
   original_record_decoder_.reset();
@@ -684,6 +685,7 @@ void CoprocessorV2::GetSelectionColumnIndexes() {
       int i = index;
       DINGO_LOG(DEBUG) << "index:" << i;
       selection_column_indexes_.push_back(original_column_indexes_[i]);
+      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
     }
   } else {
     DINGO_LOG(DEBUG) << "selection_columns empty()";
