@@ -1547,7 +1547,7 @@ butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region
   if (!ret1.ok()) {
     return ret1;
   }
-  return CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
+  return CreateRegionWithJobList(store_operations, meta_increment);
 }
 
 butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, int32_t replica_num,
@@ -3767,7 +3767,7 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithJobList(
 }
 
 butil::Status CoordinatorControl::CreateRegionWithJobList(
-    std::vector<pb::coordinator::StoreOperation>& store_operations, int64_t new_region_id,
+    std::vector<pb::coordinator::StoreOperation>& store_operations, 
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   // create task list
   auto* new_job_list = CreateJobList(meta_increment, "CreateRegion");
@@ -5958,7 +5958,7 @@ butil::Status CoordinatorControl::ProcessJobList() {
   }
   // process store_operation_map
   for (const auto& [store_id, store_operation] : store_operation_map) {
-    auto status = SendTaskStoreOperation(store_id, store_operation, meta_increment);
+    auto status = SendStoreOperation(store_id, store_operation, meta_increment);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << fmt::format(
           "[joblist] ProcessSingleJobList failed, error:{}, store_id:{}, store_operation:{}",
@@ -6710,9 +6710,9 @@ butil::Status CoordinatorControl::UpdateTaskProcess(const pb::coordinator_intern
   return butil::Status::OK();
 }
 
-butil::Status CoordinatorControl::SendTaskStoreOperation(int64_t store_id,
-                                                         const pb::coordinator::StoreOperation& store_operation,
-                                                         pb::coordinator_internal::MetaIncrement& meta_increment) {
+butil::Status CoordinatorControl::SendStoreOperation(int64_t store_id,
+                                                     const pb::coordinator::StoreOperation& store_operation,
+                                                     pb::coordinator_internal::MetaIncrement& meta_increment) {
   auto store = GetStore(store_id);
 
   if (store.state() == pb::common::StoreState::STORE_NORMAL) {

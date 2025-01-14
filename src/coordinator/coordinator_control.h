@@ -320,7 +320,7 @@ class CoordinatorControl : public MetaControl {
 
   // create region
   butil::Status CreateRegionWithJobList(std::vector<pb::coordinator::StoreOperation> &store_operations,
-                                        int64_t new_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: tenant_id
@@ -885,7 +885,7 @@ class CoordinatorControl : public MetaControl {
                                            const pb::coordinator::RegionCmd &region_cmd,
                                            pb::coordinator::StoreOperation &store_operation);
 
-  butil::Status SendTaskStoreOperation(int64_t store_id, const pb::coordinator::StoreOperation &store_operation,
+  butil::Status SendStoreOperation(int64_t store_id, const pb::coordinator::StoreOperation &store_operation,
                                        pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // move region_cmd from one store to another store

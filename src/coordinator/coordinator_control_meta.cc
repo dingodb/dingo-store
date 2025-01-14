@@ -755,7 +755,7 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
       return ret;
     }
-    CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
+    CreateRegionWithJobList(store_operations, meta_increment);
     DINGO_LOG(INFO) << "CreateTable create region success, region_id=" << new_region_id;
 
     new_region_ids.push_back(new_region_id);
@@ -1408,7 +1408,7 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;
     }
-    CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
+    CreateRegionWithJobList(store_operations, meta_increment);
     DINGO_LOG(INFO) << "CreateIndex create region success, region_id=" << new_region_id;
 
     new_region_ids.push_back(new_region_id);

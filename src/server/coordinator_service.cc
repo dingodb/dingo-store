@@ -1317,7 +1317,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       response->mutable_error()->set_errmsg(ret.error_str());
       return;
     }
-    ret = coordinator_control->CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
+    ret = coordinator_control->CreateRegionWithJobList(store_operations, meta_increment);
   } else {
     // store_ids is empty, will auto select store
     std::vector<int64_t> store_ids;
@@ -1332,7 +1332,7 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       response->mutable_error()->set_errmsg(ret.error_str());
       return;
     }
-    ret = coordinator_control->CreateRegionWithJobList(store_operations, new_region_id, meta_increment);
+    ret = coordinator_control->CreateRegionWithJobList(store_operations, meta_increment);
   }
 
   if (!ret.ok()) {
