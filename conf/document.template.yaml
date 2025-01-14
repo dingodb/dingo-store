@@ -44,6 +44,7 @@ store:
   fast_background_thread_num: 8 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120
+  block_cache_size: 1073741824 # 1GB
 gc:
   update_safe_point_interval_s: 60
   do_gc_interval_s: 60
