@@ -485,7 +485,7 @@ butil::Status BalanceRegionScheduler::LaunchBalanceRegion(std::shared_ptr<Coordi
   }
 
   if (!dryrun) {
-    balance_region_scheduler->CommitChangRegionTaskList(change_region_task);
+    balance_region_scheduler->CommitChangRegionJobList(change_region_task);
   }
 
   if (tracker) {
@@ -588,11 +588,11 @@ ChangeRegionTaskPtr BalanceRegionScheduler::Schedule(const pb::common::RegionMap
 }
 
 // commit change region task to raft
-void BalanceRegionScheduler::CommitChangRegionTaskList(const ChangeRegionTaskPtr& task) {
+void BalanceRegionScheduler::CommitChangRegionJobList(const ChangeRegionTaskPtr& task) {
   dingodb::pb::coordinator_internal::MetaIncrement meta_increment;
   auto status1 =
-      coordinator_controller_->ChangePairPeerRegionWithTaskList(task->region_id, task->new_store_ids, meta_increment);
-  DINGO_LOG_IF(ERROR, !status1.ok()) << fmt::format("generate ChangePairPeerRegionWithTaskList, error: {}",
+      coordinator_controller_->ChangePairPeerRegionWithJobList(task->region_id, task->new_store_ids, meta_increment);
+  DINGO_LOG_IF(ERROR, !status1.ok()) << fmt::format("generate ChangePairPeerRegionWithJobList, error: {}",
                                                     status1.error_str());
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();

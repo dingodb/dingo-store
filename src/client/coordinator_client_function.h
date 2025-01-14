@@ -89,8 +89,8 @@ void SendRemoveStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> c
 void SendGetRegionCmd(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // task list
-void SendGetTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
-void SendCleanTaskList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendGetJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCleanJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 
 // meta service functions

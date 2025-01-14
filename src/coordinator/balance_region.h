@@ -275,7 +275,7 @@ class BalanceRegionScheduler {
   // parse config item(coordinator.balance_leader_inspection_time_period)
   static std::vector<std::pair<int, int>> ParseTimePeriod(const std::string& time_period);
   // commit change region task to raft
-  void CommitChangRegionTaskList(const ChangeRegionTaskPtr& task);
+  void CommitChangRegionJobList(const ChangeRegionTaskPtr& task);
 
   static pb::common::Store GetStore(const pb::common::StoreMap& store_map, int64_t store_id);
 

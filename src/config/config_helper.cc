@@ -242,14 +242,14 @@ uint32_t ConfigHelper::GetLeaderNumWeight() {
   return (num <= 0) ? Constant::kLeaderNumWeightDefaultValue : num;
 }
 
-uint32_t ConfigHelper::GetReserveTaskListRecentDay() {
+uint32_t ConfigHelper::GetReserveJobListRecentDay() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
-    return Constant::kReserveTaskListRecentDayDefaultValue;
+    return Constant::kReserveJobListRecentDayDefaultValue;
   }
 
-  int num = config->GetInt("coordinator.reserve_task_list_recent_day");
-  return (num <= 0) ? Constant::kReserveTaskListRecentDayDefaultValue : num;
+  int num = config->GetInt("coordinator.reserve_job_list_recent_day");
+  return (num <= 0) ? Constant::kReserveJobListRecentDayDefaultValue : num;
 }
 
 std::string ConfigHelper::GetBalanceLeaderInspectionTimePeriod() {

@@ -285,12 +285,12 @@ void ClusterStatImpl::default_method(::google::protobuf::RpcController* controll
       }
     }
 
-    // add url for task_list
+    // add url for job_list
     os << (use_html ? "<br>CoordinatorStatus:\n" : "\n");
     if (use_html) {
-      os << "<a href=\"/task_list/"
+      os << "<a href=\"/job_list/"
          << "\">"
-         << "GET_TASK_LIST"
+         << "GET_JOB_LIST"
          << "</a>" << '\n';
       os << "<a href=\"/store_operation/"
          << "\">"

@@ -87,7 +87,7 @@ DEFINE_int32(region_split_check_interval_s, 300, "split check interval seconds")
 DEFINE_int32(region_merge_check_interval_s, 300, "merge check interval seconds");
 DEFINE_int32(coordinator_push_interval_s, 1, "coordinator push interval seconds");
 DEFINE_int32(coordinator_update_state_interval_s, 10, "coordinator update state interval seconds");
-DEFINE_int32(coordinator_task_list_interval_s, 1, "coordinator task list interval seconds");
+DEFINE_int32(coordinator_job_list_interval_s, 1, "coordinator job list interval seconds");
 DEFINE_int32(coordinator_calc_metrics_interval_s, 60, "coordinator calc metrics interval seconds");
 DEFINE_int32(coordinator_recycle_orphan_interval_s, 60, "coordinator recycle orphan interval seconds");
 DEFINE_int32(coordinator_meta_watch_clean_interval_s, 60, "coordinator meta watch clean interval seconds");
@@ -100,7 +100,7 @@ DEFINE_int32(gc_update_safe_point_interval_s, 60, "gc update safe point interval
 DEFINE_int32(gc_do_gc_interval_s, 60, "gc do gc interval seconds");
 DEFINE_int32(balance_leader_interval_s, 60, "balance leader interval seconds");
 DEFINE_int32(balance_region_interval_s, 120, "balance region interval seconds");
-DEFINE_int32(recycle_task_list_interval_s, 60, "recycle task list interval seconds");
+DEFINE_int32(recycle_job_list_interval_s, 60, "recycle job list interval seconds");
 
 DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
 
@@ -622,14 +622,14 @@ bool Server::InitCrontabManager() {
   });
 
   // Add task list process crontab
-  FLAGS_coordinator_task_list_interval_s =
-      GetInterval(config, "coordinator.task_list_interval_s", FLAGS_coordinator_task_list_interval_s);
+  FLAGS_coordinator_job_list_interval_s =
+      GetInterval(config, "coordinator.job_list_interval_s", FLAGS_coordinator_job_list_interval_s);
   crontab_configs_.push_back({
-      "TASKLIST",
+      "JOBLIST",
       {pb::common::COORDINATOR},
-      FLAGS_coordinator_task_list_interval_s * 1000,
+      FLAGS_coordinator_job_list_interval_s * 1000,
       true,
-      [](void*) { Heartbeat::TriggerCoordinatorTaskListProcess(nullptr); },
+      [](void*) { Heartbeat::TriggerCoordinatorJobListProcess(nullptr); },
   });
 
   // Add calculate crontab
@@ -794,16 +794,16 @@ bool Server::InitCrontabManager() {
   }
 
   // recycle
-  FLAGS_recycle_task_list_interval_s =
-      GetInterval(config, "coordinator.recycle_task_list_interval_s", FLAGS_recycle_task_list_interval_s);
+  FLAGS_recycle_job_list_interval_s =
+      GetInterval(config, "coordinator.recycle_job_list_interval_s", FLAGS_recycle_job_list_interval_s);
   crontab_configs_.push_back({
       "RECYCLE_TASK_LIST",
       {pb::common::COORDINATOR},
-      FLAGS_recycle_task_list_interval_s * 1000,
+      FLAGS_recycle_job_list_interval_s * 1000,
       true,
       [](void*) {
         auto coordinator_control = Server::GetInstance().GetCoordinatorControl();
-        coordinator_control->RecycleArchiveTaskList();
+        coordinator_control->RecycleArchiveJobList();
       },
   });
 

@@ -325,16 +325,16 @@ bool CoordinatorControl::LoadMetaToSnapshotFile(std::shared_ptr<Snapshot> snapsh
   DINGO_LOG(INFO) << "Snapshot executor_user_meta_, count=" << kvs.size();
   kvs.clear();
 
-  // 11.task_list map
-  if (!meta_reader_->Scan(snapshot, task_list_meta_->Prefix(), kvs)) {
+  // 11.job_list map
+  if (!meta_reader_->Scan(snapshot, job_list_meta_->Prefix(), kvs)) {
     return false;
   }
 
   for (const auto& kv : kvs) {
-    auto* snapshot_file_kv = meta_snapshot_file.add_task_list_map_kvs();
+    auto* snapshot_file_kv = meta_snapshot_file.add_job_list_map_kvs();
     *snapshot_file_kv = kv;
   }
-  DINGO_LOG(INFO) << "Snapshot task_list_meta_, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Snapshot job_list_meta_, count=" << kvs.size();
   kvs.clear();
 
   // 12.index map
@@ -756,31 +756,31 @@ bool CoordinatorControl::LoadMetaFromSnapshotFile(pb::coordinator_internal::Meta
   DINGO_LOG(INFO) << "LoadSnapshot executor_user_meta, count=" << kvs.size();
   kvs.clear();
 
-  // 11.task_list map
-  kvs.reserve(meta_snapshot_file.task_list_map_kvs_size());
-  for (int i = 0; i < meta_snapshot_file.task_list_map_kvs_size(); i++) {
-    kvs.push_back(meta_snapshot_file.task_list_map_kvs(i));
+  // 11.job_list map
+  kvs.reserve(meta_snapshot_file.job_list_map_kvs_size());
+  for (int i = 0; i < meta_snapshot_file.job_list_map_kvs_size(); i++) {
+    kvs.push_back(meta_snapshot_file.job_list_map_kvs(i));
   }
   {
-    if (!task_list_meta_->Recover(kvs)) {
+    if (!job_list_meta_->Recover(kvs)) {
       return false;
     }
 
     // remove data in rocksdb
-    if (!meta_writer_->DeletePrefix(task_list_meta_->internal_prefix)) {
-      DINGO_LOG(ERROR) << "Coordinator delete task_list_meta_ range failed in LoadMetaFromSnapshotFile";
+    if (!meta_writer_->DeletePrefix(job_list_meta_->internal_prefix)) {
+      DINGO_LOG(ERROR) << "Coordinator delete job_list_meta_ range failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator delete range task_list_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator delete range job_list_meta_ success in LoadMetaFromSnapshotFile";
 
     // write data to rocksdb
     if (!meta_writer_->Put(kvs)) {
-      DINGO_LOG(ERROR) << "Coordinator write task_list_meta_ failed in LoadMetaFromSnapshotFile";
+      DINGO_LOG(ERROR) << "Coordinator write job_list_meta_ failed in LoadMetaFromSnapshotFile";
       return false;
     }
-    DINGO_LOG(INFO) << "Coordinator put task_list_meta_ success in LoadMetaFromSnapshotFile";
+    DINGO_LOG(INFO) << "Coordinator put job_list_meta_ success in LoadMetaFromSnapshotFile";
   }
-  DINGO_LOG(INFO) << "LoadSnapshot task_list_meta, count=" << kvs.size();
+  DINGO_LOG(INFO) << "LoadSnapshot job_list_meta, count=" << kvs.size();
   kvs.clear();
 
   // 12.index map
@@ -998,8 +998,8 @@ void LogMetaIncrementSize(pb::coordinator_internal::MetaIncrement& meta_incremen
   if (meta_increment.executor_users_size() > 0) {
     DINGO_LOG(DEBUG) << "10.executor_users_size=" << meta_increment.executor_users_size();
   }
-  if (meta_increment.task_lists_size() > 0) {
-    DINGO_LOG(DEBUG) << "11.task_lists_size=" << meta_increment.task_lists_size();
+  if (meta_increment.job_lists_size() > 0) {
+    DINGO_LOG(DEBUG) << "11.job_lists_size=" << meta_increment.job_lists_size();
   }
   if (meta_increment.indexes_size() > 0) {
     DINGO_LOG(DEBUG) << "12.indexes_size=" << meta_increment.indexes_size();
@@ -2335,12 +2335,12 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           DINGO_LOG(INFO) << "ApplyMetaIncrement region_cmd UPDATE, [id=" << region_cmd.id() << "] success";
         }
 
-        UpdateTaskListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
-                            region_cmd.region_cmd().error());
+        UpdateJobListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
+                           region_cmd.region_cmd().error());
 
       } else if (region_cmd.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
-        UpdateTaskListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
-                            region_cmd.region_cmd().error());
+        UpdateJobListError(region_cmd.region_cmd().region_cmd().job_id(), region_cmd.id(),
+                           region_cmd.region_cmd().error());
 
         auto ret = region_cmd_meta_->Erase(region_cmd.id());
         if (!ret.ok()) {
@@ -2391,56 +2391,56 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
     }
   }
 
-  // 11.task_list_map
+  // 11.job_list_map
   {
-    if (meta_increment.task_lists_size() > 0) {
-      DINGO_LOG(INFO) << "task_list_map increment size=" << meta_increment.task_lists_size();
+    if (meta_increment.job_lists_size() > 0) {
+      DINGO_LOG(INFO) << "job_list_map increment size=" << meta_increment.job_lists_size();
     }
 
-    for (int i = 0; i < meta_increment.task_lists_size(); i++) {
-      const auto& task_list = meta_increment.task_lists(i);
-      if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
-        auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
+    for (int i = 0; i < meta_increment.job_lists_size(); i++) {
+      const auto& job_list = meta_increment.job_lists(i);
+      if (job_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::CREATE) {
+        auto ret = job_list_meta_->Put(job_list.id(), job_list.job_list());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list CREATE, but Put failed, [id=" << task_list.id()
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement job_list CREATE, but Put failed, [id=" << job_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list CREATE, success [id=" << task_list.id() << "]";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement job_list CREATE, success [id=" << job_list.id() << "]";
         }
 
-      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
-        auto ret = task_list_meta_->Put(task_list.id(), task_list.task_list());
+      } else if (job_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::UPDATE) {
+        auto ret = job_list_meta_->Put(job_list.id(), job_list.job_list());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list UPDATE, but Put failed, [id=" << task_list.id()
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement job_list UPDATE, but Put failed, [id=" << job_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list UPDATE, success [id=" << task_list.id() << "]";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement job_list UPDATE, success [id=" << job_list.id() << "]";
         }
-      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
+      } else if (job_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::DELETE) {
         // archive task list
-        pb::coordinator::TaskList temp_task_list;
-        auto ret = task_list_meta_->Get(task_list.id(), temp_task_list);
+        pb::coordinator::JobList temp_job_list;
+        auto ret = job_list_meta_->Get(job_list.id(), temp_job_list);
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but Get failed, [id=" << task_list.id()
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement job_list DELETE, but Get failed, [id=" << job_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         }
-        temp_task_list.set_finish_time(Helper::NowTime());
-        temp_task_list.set_status("success");
-        ret = task_list_archive_->Put(task_list.id(), temp_task_list);
+        temp_job_list.set_finish_time(Helper::NowTime());
+        temp_job_list.set_status("success");
+        ret = job_list_archive_->Put(job_list.id(), temp_job_list);
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but archive Put failed, [id=" << task_list.id()
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement job_list DELETE, but archive Put failed, [id=" << job_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         }
 
-        ret = task_list_meta_->Erase(task_list.id());
+        ret = job_list_meta_->Erase(job_list.id());
         if (!ret.ok()) {
-          DINGO_LOG(FATAL) << "ApplyMetaIncrement task_list DELETE, but Delete failed, [id=" << task_list.id()
+          DINGO_LOG(FATAL) << "ApplyMetaIncrement job_list DELETE, but Delete failed, [id=" << job_list.id()
                            << "], errcode: " << ret.error_code() << ", errmsg: " << ret.error_str();
         } else {
-          DINGO_LOG(INFO) << "ApplyMetaIncrement task_list DELETE, success [id=" << task_list.id() << "]";
+          DINGO_LOG(INFO) << "ApplyMetaIncrement job_list DELETE, success [id=" << job_list.id() << "]";
         }
-      } else if (task_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::MODIFY) {
-        auto status = UpdateTaskProcess(task_list);
+      } else if (job_list.op_type() == pb::coordinator_internal::MetaIncrementOpType::MODIFY) {
+        auto status = UpdateTaskProcess(job_list);
         if (!status.ok()) {
           DINGO_LOG(ERROR) << fmt::format("ApplyMetaIncrement UpdateTaskProcess failed, error:{}",
                                           Helper::PrintStatus(status));

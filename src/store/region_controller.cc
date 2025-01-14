@@ -64,7 +64,7 @@ static void NotifyRegionCmdStatus(RegionCmdPtr region_cmd, butil::Status status)
   pb::coordinator::UpdateRegionCmdStatusRequest request;
   pb::coordinator::UpdateRegionCmdStatusResponse response;
 
-  request.set_task_list_id(region_cmd->job_id());
+  request.set_job_list_id(region_cmd->job_id());
   request.set_region_cmd_id(region_cmd->id());
   request.set_status(pb::coordinator::RegionCmdStatus::STATUS_FAIL);
   request.mutable_error()->set_errcode(static_cast<pb::error::Errno>(status.error_code()));

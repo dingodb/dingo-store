@@ -1357,7 +1357,7 @@ void Pretty::Show(dingodb::pb::coordinator::GetGCSafePointResponse& response) {
   }
 }
 
-void Pretty::Show(dingodb::pb::coordinator::GetTaskListResponse& response) {
+void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response) {
   if (ShowError(response.error())) {
     return;
   }
@@ -1369,23 +1369,23 @@ void Pretty::Show(dingodb::pb::coordinator::GetTaskListResponse& response) {
       ftxui::paragraph("CreateTime"),
       ftxui::paragraph("FinishTime"),
   }};
-  if (response.task_lists_size() == 0) {
+  if (response.job_lists_size() == 0) {
     std::cout << "Task list is empty." << std::endl;
     return;
   }
-  for (auto const& task_list : response.task_lists()) {
+  for (auto const& job_list : response.job_lists()) {
     std::vector<ftxui::Element> row = {
-        ftxui::paragraph(fmt::format("{}", task_list.id())),
-        ftxui::paragraph(fmt::format("{}", task_list.name())),
-        ftxui::paragraph(fmt::format("{}", task_list.next_step())),
-        ftxui::paragraph(fmt::format("{}", task_list.tasks_size())),
-        ftxui::paragraph(task_list.create_time()),
-        ftxui::paragraph(task_list.finish_time()),
+        ftxui::paragraph(fmt::format("{}", job_list.id())),
+        ftxui::paragraph(fmt::format("{}", job_list.name())),
+        ftxui::paragraph(fmt::format("{}", job_list.next_step())),
+        ftxui::paragraph(fmt::format("{}", job_list.tasks_size())),
+        ftxui::paragraph(job_list.create_time()),
+        ftxui::paragraph(job_list.finish_time()),
     };
     rows.push_back(row);
   }
   PrintTable(rows);
-  std::cout << "Sumary: total_task_list_size: " << response.task_lists_size() << std::endl;
+  std::cout << "Sumary: total_job_list_size: " << response.job_lists_size() << std::endl;
 }
 
 void Pretty::Show(dingodb::pb::coordinator::GetExecutorMapResponse& response) {

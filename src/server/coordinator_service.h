@@ -267,11 +267,11 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void GetRegionCmd(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionCmdRequest* request,
                     pb::coordinator::GetRegionCmdResponse* response, google::protobuf::Closure* done) override;
 
-  // TaskList
-  void GetTaskList(google::protobuf::RpcController* controller, const pb::coordinator::GetTaskListRequest* request,
-                   pb::coordinator::GetTaskListResponse* response, google::protobuf::Closure* done) override;
-  void CleanTaskList(google::protobuf::RpcController* controller, const pb::coordinator::CleanTaskListRequest* request,
-                     pb::coordinator::CleanTaskListResponse* response, google::protobuf::Closure* done) override;
+  // JobList
+  void GetJobList(google::protobuf::RpcController* controller, const pb::coordinator::GetJobListRequest* request,
+                  pb::coordinator::GetJobListResponse* response, google::protobuf::Closure* done) override;
+  void CleanJobList(google::protobuf::RpcController* controller, const pb::coordinator::CleanJobListRequest* request,
+                    pb::coordinator::CleanJobListResponse* response, google::protobuf::Closure* done) override;
   void UpdateRegionCmdStatus(google::protobuf::RpcController* controller,
                              const pb::coordinator::UpdateRegionCmdStatusRequest* request,
                              pb::coordinator::UpdateRegionCmdStatusResponse* response,

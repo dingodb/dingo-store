@@ -75,7 +75,7 @@ class Pretty {
   static void Show(dingodb::pb::meta::GetTablesBySchemaResponse &response);
 
   static void Show(dingodb::pb::coordinator::GetGCSafePointResponse &response);
-  static void Show(dingodb::pb::coordinator::GetTaskListResponse &response);
+  static void Show(dingodb::pb::coordinator::GetJobListResponse &response);
 
   static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
   static void Show(dingodb::pb::coordinator::QueryRegionResponse &response);

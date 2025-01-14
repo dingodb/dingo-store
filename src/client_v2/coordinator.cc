@@ -32,8 +32,8 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpGetCoordinatorMap(app);
   SetUpGetStoreMap(app);
   SetUpGetRegionMap(app);
-  SetUpGetTaskList(app);
-  SetUpCleanTaskList(app);
+  SetUpGetJobList(app);
+  SetUpCleanJobList(app);
   // region commands
   SetUpAddPeerRegion(app);
   SetUpRemovePeerRegion(app);
@@ -107,13 +107,13 @@ void SendMergeRegionToCoor(int64_t source_id, int64_t target_id) {
   InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "MergeRegion", request, response);
 }
 
-uint32_t SendGetTaskList() {
-  dingodb::pb::coordinator::GetTaskListRequest request;
-  dingodb::pb::coordinator::GetTaskListResponse response;
+uint32_t SendGetJobList() {
+  dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse response;
 
-  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetTaskList", request, response);
+  InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetJobList", request, response);
 
-  return response.task_lists().size();
+  return response.job_lists().size();
 }
 
 dingodb::pb::common::StoreMap SendGetStoreMap() {
@@ -305,7 +305,8 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
-  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response"
+                  << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
   std::cout << "response:" << response.DebugString();
@@ -448,7 +449,8 @@ void RunRaftSnapshot(RaftSnapshotOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response"
+                  << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -512,7 +514,8 @@ void RunRaftResetPeer(RaftResetPeerOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response"
+                  << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -548,7 +551,8 @@ void RunGetNodeInfo(GetNodeInfoOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
 
-  DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
+  DINGO_LOG(INFO) << "Received response"
+                  << " cluster_id=" << request.cluster_id()
                   << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
@@ -1231,7 +1235,8 @@ void SetUpCreateRegion(CLI::App &app) {
   cmd->add_option("--vector_index_type", opt->vector_index_type,
                   "Request parameter vector_index_type, hnsw|flat|ivf_flat|ivf_pq|binary_Flat|binary_ivf_flat");
   cmd->add_option("--dimension", opt->dimension, "Request parameter dimension");
-  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE|HAMMING")->ignore_case();
+  cmd->add_option("--metrics_type", opt->metrics_type, "Request parameter metrics_type, L2|IP|COSINE|HAMMING")
+      ->ignore_case();
   cmd->add_option("--max_elements", opt->max_elements, "Request parameter max_elements");
   cmd->add_option("--efconstruction", opt->efconstruction, "Request parameter efconstruction");
   cmd->add_option("--nlinks", opt->nlinks, "Request parameter nlinks");
@@ -1481,7 +1486,7 @@ void RunCreateRegion(CreateRegionOption const &opt) {
       auto *binary_flat_parameter = vector_index_parameter->mutable_binary_flat_parameter();
       binary_flat_parameter->set_metric_type(metric_type);
       binary_flat_parameter->set_dimension(opt.dimension);
-    }else if(opt.vector_index_type=="binary_ivf_flat") {
+    } else if (opt.vector_index_type == "binary_ivf_flat") {
       auto *binary_ivf_flat_parameter = vector_index_parameter->mutable_binary_ivf_flat_parameter();
       binary_ivf_flat_parameter->set_metric_type(metric_type);
       binary_ivf_flat_parameter->set_dimension(opt.dimension);
@@ -2129,9 +2134,9 @@ void RunGetStoreOperation(GetStoreOperationOption const &opt) {
   }
 }
 
-void SetUpGetTaskList(CLI::App &app) {
-  auto opt = std::make_shared<GetTaskListOptions>();
-  auto *cmd = app.add_subcommand("GetTaskList", "Get task list")->group("Coordinator Command");
+void SetUpGetJobList(CLI::App &app) {
+  auto opt = std::make_shared<GetJobListOptions>();
+  auto *cmd = app.add_subcommand("GetJobList", "Get job list")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter task id");
   cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
@@ -2142,56 +2147,56 @@ void SetUpGetTaskList(CLI::App &app) {
   cmd->add_option("--json_type", opt->json_type, "Request parameter json_type")
       ->default_val(false)
       ->default_str("false");
-  cmd->callback([opt]() { RunGetTaskList(*opt); });
+  cmd->callback([opt]() { RunGetJobList(*opt); });
 }
 
-void RunGetTaskList(GetTaskListOptions const &opt) {
+void RunGetJobList(GetJobListOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::coordinator::GetTaskListRequest request;
-  dingodb::pb::coordinator::GetTaskListResponse response;
+  dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse response;
 
-  request.set_task_list_id(opt.id);
+  request.set_job_list_id(opt.id);
   request.set_include_archive(opt.include_archive);
   request.set_archive_limit(opt.limit);
   request.set_archive_start_id(opt.start_id);
 
   auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetTaskList", request, response);
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetJobList", request, response);
   if (opt.json_type) {
     if (response.error().errcode() != 0) {
       std::cout << "Get task list failed, error:" << response.error().ShortDebugString() << std::endl;
       return;
     }
-    for (const auto &task_list : response.task_lists()) {
-      std::cout << "task_list: " << task_list.DebugString() << std::endl;
+    for (const auto &job_list : response.job_lists()) {
+      std::cout << "job_list: " << job_list.DebugString() << std::endl;
     }
   } else {
     Pretty::Show(response);
   }
 }
 
-void SetUpCleanTaskList(CLI::App &app) {
-  auto opt = std::make_shared<CleanTaskListOption>();
-  auto *cmd = app.add_subcommand("CleanTaskList", "Clean task list")->group("Coordinator Command");
+void SetUpCleanJobList(CLI::App &app) {
+  auto opt = std::make_shared<CleanJobListOption>();
+  auto *cmd = app.add_subcommand("CleanJobList", "Clean task list")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all task_list, set --id=0")
+  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all job_list, set --id=0")
       ->required();
-  cmd->callback([opt]() { RunCleanTaskList(*opt); });
+  cmd->callback([opt]() { RunCleanJobList(*opt); });
 }
 
-void RunCleanTaskList(CleanTaskListOption const &opt) {
+void RunCleanJobList(CleanJobListOption const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::coordinator::CleanTaskListRequest request;
-  dingodb::pb::coordinator::CleanTaskListResponse response;
+  dingodb::pb::coordinator::CleanJobListRequest request;
+  dingodb::pb::coordinator::CleanJobListResponse response;
 
-  request.set_task_list_id(opt.id);
+  request.set_job_list_id(opt.id);
 
   auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanTaskList", request, response);
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList", request, response);
 
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "Clean task list failed , error:"
@@ -2206,7 +2211,7 @@ void SetUpUpdateRegionCmdStatus(CLI::App &app) {
   auto opt = std::make_shared<UpdateRegionCmdStatusOptions>();
   auto *cmd = app.add_subcommand("UpdateRegionCmdStatus", "Update region cmd status")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--task_list_id", opt->task_list_id, "Request parameter task_list_id")->required();
+  cmd->add_option("--job_list_id", opt->job_list_id, "Request parameter job_list_id")->required();
   cmd->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")->required();
   cmd->add_option("--status", opt->status, "Request parameter status, must be 1 [DONE] or 2 [FAIL]")->required();
   cmd->add_option("--errcode", opt->errcode, "Request parameter errcode ")->required();
@@ -2220,7 +2225,7 @@ void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
   }
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
   dingodb::pb::coordinator::UpdateRegionCmdStatusResponse response;
-  request.set_task_list_id(opt.task_list_id);
+  request.set_job_list_id(opt.job_list_id);
   request.set_region_cmd_id(opt.region_cmd_id);
   request.set_status(static_cast<dingodb::pb::coordinator::RegionCmdStatus>(opt.status));
   request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(opt.errcode));
