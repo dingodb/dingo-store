@@ -33,6 +33,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "config/config_helper.h"
 #include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -383,7 +384,7 @@ static rocksdb::ColumnFamilyOptions GenColumnFamilyOptions() {
 
   rocksdb::BlockBasedTableOptions table_options;
   table_options.block_size = Helper::StringToInt64(Constant::kBlockSizeDefaultValue);
-  table_options.block_cache = rocksdb::NewLRUCache(Helper::StringToInt64(Constant::kBlockCacheDefaultValue));
+  table_options.block_cache = rocksdb::NewLRUCache(Helper::StringToInt64(ConfigHelper::GetBlockCacheValue()));
 
   table_options.filter_policy.reset(rocksdb::NewBloomFilterPolicy(10.0, false));
   table_options.whole_key_filtering = true;

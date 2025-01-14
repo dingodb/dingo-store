@@ -690,7 +690,7 @@ XDPRocksRawEngine::~XDPRocksRawEngine() = default;
 static xdp::ColumnFamilyMap GenColumnFamilyByDefaultConfig(const std::vector<std::string>& column_family_names) {
   xdp::ColumnFamily::ColumnFamilyConfig default_config;
   default_config.emplace(Constant::kBlockSize, "4096");
-  default_config.emplace(Constant::kBlockCache, Constant::kBlockCacheDefaultValue);
+  default_config.emplace(Constant::kBlockCache, ConfigHelper::GetBlockCacheValue());
   default_config.emplace(Constant::kArenaBlockSize, Constant::kArenaBlockSizeDefaultValue);
   default_config.emplace(Constant::kMinWriteBufferNumberToMerge, Constant::kMinWriteBufferNumberToMergeDefaultValue);
   default_config.emplace(Constant::kMaxWriteBufferNumber, Constant::kMaxWriteBufferNumberDefaultValue);

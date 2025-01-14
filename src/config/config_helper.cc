@@ -334,4 +334,14 @@ double ConfigHelper::GetRaftWorkerThreadRatio() {
   return config->GetDouble("server.raft_worker_thread_ratio");
 }
 
+std::string ConfigHelper::GetBlockCacheValue(){
+  auto config = ConfigManager::GetInstance().GetRoleConfig();
+  if (config == nullptr) {
+    return Constant::kBlockCacheDefaultValue;
+  }
+
+  int64_t num = config->GetInt64("store.block_cache_size");
+  return (num <= 0) ? Constant::kBlockCacheDefaultValue : std::to_string(num);
+}
+
 }  // namespace dingodb
