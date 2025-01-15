@@ -57,7 +57,7 @@ void StoreOperationImpl::default_method(google::protobuf::RpcController* control
       pb::coordinator::StoreOperation store_operation;
       controller_->GetStoreOperation(store_id, store_operation);
 
-      if (store_operation.id() == 0) {
+      if (store_operation.store_id() == 0) {
         os << "StoreOperation is not found" << '\n';
       } else {
         os << "================ StoreOperation: ================" << '\n';

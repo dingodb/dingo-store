@@ -22,9 +22,9 @@
 
 namespace dingodb {
 
-class JobListImpl : public pb::cluster::job_list {
+class JobImpl : public pb::cluster::job {
  public:
-  JobListImpl() = default;
+  JobImpl() = default;
   void default_method(::google::protobuf::RpcController* controller, const pb::cluster::JobListRequest* request,
                       pb::cluster::JobListResponse* response, ::google::protobuf::Closure* done) override;
   void SetControl(std::shared_ptr<CoordinatorControl> controller) { controller_ = controller; }

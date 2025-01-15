@@ -267,7 +267,7 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void GetRegionCmd(google::protobuf::RpcController* controller, const pb::coordinator::GetRegionCmdRequest* request,
                     pb::coordinator::GetRegionCmdResponse* response, google::protobuf::Closure* done) override;
 
-  // JobList
+  // Job
   void GetJobList(google::protobuf::RpcController* controller, const pb::coordinator::GetJobListRequest* request,
                   pb::coordinator::GetJobListResponse* response, google::protobuf::Closure* done) override;
   void CleanJobList(google::protobuf::RpcController* controller, const pb::coordinator::CleanJobListRequest* request,

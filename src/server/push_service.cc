@@ -55,9 +55,9 @@ void PushServiceImpl::PushStoreOperation(google::protobuf::RpcController* contro
   brpc::Controller* cntl = (brpc::Controller*)controller;
   brpc::ClosureGuard const done_guard(svr_done);
 
-  if (request->store_operation().id() != Server::GetInstance().Id()) {
+  if (request->store_operation().store_id() != Server::GetInstance().Id()) {
     DINGO_LOG(ERROR) << fmt::format("[push.store] store id not match, req/local store id({} / {})",
-                                    request->store_operation().id(), Server::GetInstance().Id());
+                                    request->store_operation().store_id(), Server::GetInstance().Id());
     return;
   }
 

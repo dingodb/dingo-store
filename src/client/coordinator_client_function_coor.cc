@@ -52,7 +52,7 @@ DECLARE_int64(peer_add_store_id);
 DECLARE_int64(peer_del_store_id);
 DECLARE_int64(store_id);
 DECLARE_int64(region_id);
-DECLARE_int64(job_list_id);
+DECLARE_int64(job_id);
 DECLARE_int64(region_cmd_id);
 DECLARE_string(store_ids);
 DECLARE_int64(index);
@@ -1820,11 +1820,11 @@ void SendGetStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto& it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.DebugString();
+    DINGO_LOG(INFO) << "store_id=" << it.store_id() << " store_operation=" << it.DebugString();
   }
 
   for (const auto& it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " cmd_count=" << it.region_cmds_size();
+    DINGO_LOG(INFO) << "store_id=" << it.store_id() << " cmd_count=" << it.region_cmds_size();
   }
 }
 
@@ -1849,7 +1849,7 @@ void SendAddStoreOperation(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   dingodb::pb::coordinator::AddStoreOperationResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.mutable_store_operation()->set_id(std::stoll(FLAGS_id));
+    request.mutable_store_operation()->set_store_id(std::stoll(FLAGS_id));
   } else {
     DINGO_LOG(ERROR) << "id is empty (this is store_id)";
     return;
@@ -1898,7 +1898,7 @@ void SendGetJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   dingodb::pb::coordinator::GetJobListResponse response;
 
   if (!FLAGS_id.empty()) {
-    request.set_job_list_id(std::stoll(FLAGS_id));
+    request.set_job_id(std::stoll(FLAGS_id));
   }
 
   request.set_include_archive(FLAGS_include_archive);
@@ -1913,8 +1913,8 @@ void SendGetJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   DINGO_LOG_IF(INFO, !status.ok()) << "SendRequest status=" << status;
   DINGO_LOG_IF(INFO, response.error().errcode() != 0) << "error: " << response.error().ShortDebugString();
 
-  for (const auto& job_list : response.job_lists()) {
-    DINGO_LOG(INFO) << "job_list: " << (FLAGS_show_pretty ? job_list.DebugString() : job_list.ShortDebugString());
+  for (const auto& job : response.job_list()) {
+    DINGO_LOG(INFO) << "job: " << (FLAGS_show_pretty ? job.DebugString() : job.ShortDebugString());
   }
 }
 
@@ -1923,10 +1923,10 @@ void SendCleanJobList(std::shared_ptr<dingodb::CoordinatorInteraction> coordinat
   dingodb::pb::coordinator::CleanJobListResponse response;
 
   if (FLAGS_id.empty()) {
-    DINGO_LOG(ERROR) << "id is empty, if you want to clean all job_list, set --id=0";
+    DINGO_LOG(ERROR) << "id is empty, if you want to clean all job, set --id=0";
     return;
   }
-  request.set_job_list_id(std::stoll(FLAGS_id));
+  request.set_job_id(std::stoll(FLAGS_id));
 
   auto status = coordinator_interaction->SendRequest("CleanJobList", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
@@ -2096,8 +2096,8 @@ void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> 
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
   dingodb::pb::coordinator::UpdateRegionCmdStatusResponse response;
 
-  if (FLAGS_job_list_id <= 0) {
-    DINGO_LOG(ERROR) << "job_list_id is empty";
+  if (FLAGS_job_id <= 0) {
+    DINGO_LOG(ERROR) << "job_id is empty";
     return;
   }
 
@@ -2121,7 +2121,7 @@ void SendUpdateRegionCmdStatus(std::shared_ptr<dingodb::CoordinatorInteraction> 
     return;
   }
 
-  request.set_job_list_id(FLAGS_job_list_id);
+  request.set_job_id(FLAGS_job_id);
   request.set_region_cmd_id(FLAGS_region_cmd_id);
   request.set_status(static_cast<dingodb::pb::coordinator::RegionCmdStatus>(FLAGS_status));
   request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(FLAGS_errcode));

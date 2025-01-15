@@ -55,25 +55,6 @@ class HeartbeatTask : public TaskRunnable {
   std::vector<int64_t> region_ids_;
   std::shared_ptr<CoordinatorInteraction> coordinator_interaction_;
 };
-
-class CoordinatorPushTask : public TaskRunnable {
- public:
-  CoordinatorPushTask(std::shared_ptr<CoordinatorControl> coordinator_control)
-      : coordinator_control_(coordinator_control) {}
-  ~CoordinatorPushTask() override = default;
-
-  std::string Type() override { return "COORDINATOR_PUSH"; }
-
-  void Run() override {
-    DINGO_LOG(DEBUG) << "start process SendCoordinatorPushToStore";
-    SendCoordinatorPushToStore(coordinator_control_);
-  }
-
- private:
-  static void SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control);
-  std::shared_ptr<CoordinatorControl> coordinator_control_;
-};
-
 class CoordinatorUpdateStateTask : public TaskRunnable {
  public:
   CoordinatorUpdateStateTask(std::shared_ptr<CoordinatorControl> coordinator_control)
@@ -98,7 +79,7 @@ class CoordinatorJobListProcessTask : public TaskRunnable {
       : coordinator_control_(coordinator_control) {}
   ~CoordinatorJobListProcessTask() override = default;
 
-  std::string Type() override { return "COORDINATOR_TASK_LIST_PROCESS"; }
+  std::string Type() override { return "COORDINATOR_JOB_LIST_PROCESS"; }
 
   void Run() override {
     // DINGO_LOG(DEBUG) << "start process CoordinatorJobListProcess";
@@ -172,7 +153,7 @@ class CalculateTableMetricsTask : public TaskRunnable {
   std::string Type() override { return "CALCULATE_TABLE_METRICS"; }
 
   void Run() override {
-    DINGO_LOG(DEBUG) << "start process CoordinatorJobListProcess";
+    DINGO_LOG(DEBUG) << "start process CoordinatorCalculateTableMetricsProcess";
     CalculateTableMetrics(coordinator_control_);
   }
 
@@ -263,7 +244,6 @@ class Heartbeat {
   void Destroy();
 
   static void TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_update_epoch_version = false);
-  static void TriggerCoordinatorPushToStore(void*);
   static void TriggerCoordinatorUpdateState(void*);
   static void TriggerCoordinatorJobListProcess(void*);
   static void TriggerCoordinatorRecycleOrphan(void*);

@@ -113,7 +113,7 @@ uint32_t SendGetJobList() {
 
   InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetJobList", request, response);
 
-  return response.job_lists().size();
+  return response.job_list().size();
 }
 
 dingodb::pb::common::StoreMap SendGetStoreMap() {
@@ -2126,11 +2126,11 @@ void RunGetStoreOperation(GetStoreOperationOption const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " store_operation=" << it.DebugString();
+    DINGO_LOG(INFO) << "store_id=" << it.store_id() << " store_operation=" << it.DebugString();
   }
 
   for (const auto &it : response.store_operations()) {
-    DINGO_LOG(INFO) << "store_id=" << it.id() << " cmd_count=" << it.region_cmds_size();
+    DINGO_LOG(INFO) << "store_id=" << it.store_id() << " cmd_count=" << it.region_cmds_size();
   }
 }
 
@@ -2157,7 +2157,7 @@ void RunGetJobList(GetJobListOptions const &opt) {
   dingodb::pb::coordinator::GetJobListRequest request;
   dingodb::pb::coordinator::GetJobListResponse response;
 
-  request.set_job_list_id(opt.id);
+  request.set_job_id(opt.id);
   request.set_include_archive(opt.include_archive);
   request.set_archive_limit(opt.limit);
   request.set_archive_start_id(opt.start_id);
@@ -2169,8 +2169,8 @@ void RunGetJobList(GetJobListOptions const &opt) {
       std::cout << "Get task list failed, error:" << response.error().ShortDebugString() << std::endl;
       return;
     }
-    for (const auto &job_list : response.job_lists()) {
-      std::cout << "job_list: " << job_list.DebugString() << std::endl;
+    for (const auto &job : response.job_list()) {
+      std::cout << "job: " << job.DebugString() << std::endl;
     }
   } else {
     Pretty::Show(response);
@@ -2181,8 +2181,7 @@ void SetUpCleanJobList(CLI::App &app) {
   auto opt = std::make_shared<CleanJobListOption>();
   auto *cmd = app.add_subcommand("CleanJobList", "Clean task list")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all job_list, set --id=0")
-      ->required();
+  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all job, set --id=0")->required();
   cmd->callback([opt]() { RunCleanJobList(*opt); });
 }
 
@@ -2193,7 +2192,7 @@ void RunCleanJobList(CleanJobListOption const &opt) {
   dingodb::pb::coordinator::CleanJobListRequest request;
   dingodb::pb::coordinator::CleanJobListResponse response;
 
-  request.set_job_list_id(opt.id);
+  request.set_job_id(opt.id);
 
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList", request, response);
@@ -2211,7 +2210,7 @@ void SetUpUpdateRegionCmdStatus(CLI::App &app) {
   auto opt = std::make_shared<UpdateRegionCmdStatusOptions>();
   auto *cmd = app.add_subcommand("UpdateRegionCmdStatus", "Update region cmd status")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--job_list_id", opt->job_list_id, "Request parameter job_list_id")->required();
+  cmd->add_option("--job_id", opt->job_id, "Request parameter job_id")->required();
   cmd->add_option("--region_cmd_id", opt->region_cmd_id, "Request parameter region cmd id")->required();
   cmd->add_option("--status", opt->status, "Request parameter status, must be 1 [DONE] or 2 [FAIL]")->required();
   cmd->add_option("--errcode", opt->errcode, "Request parameter errcode ")->required();
@@ -2225,7 +2224,7 @@ void RunUpdateRegionCmdStatus(UpdateRegionCmdStatusOptions const &opt) {
   }
   dingodb::pb::coordinator::UpdateRegionCmdStatusRequest request;
   dingodb::pb::coordinator::UpdateRegionCmdStatusResponse response;
-  request.set_job_list_id(opt.job_list_id);
+  request.set_job_id(opt.job_id);
   request.set_region_cmd_id(opt.region_cmd_id);
   request.set_status(static_cast<dingodb::pb::coordinator::RegionCmdStatus>(opt.status));
   request.mutable_error()->set_errcode(static_cast<dingodb::pb::error::Errno>(opt.errcode));
@@ -2277,7 +2276,7 @@ void RunAddStoreOperation(AddStoreOperationOptions const &opt) {
   dingodb::pb::coordinator::AddStoreOperationRequest request;
   dingodb::pb::coordinator::AddStoreOperationResponse response;
 
-  request.mutable_store_operation()->set_id(opt.id);
+  request.mutable_store_operation()->set_store_id(opt.id);
   auto *region_cmd = request.mutable_store_operation()->add_region_cmds();
   region_cmd->set_region_id(opt.region_id);
   region_cmd->set_region_cmd_type(::dingodb::pb::coordinator::RegionCmdType::CMD_NONE);

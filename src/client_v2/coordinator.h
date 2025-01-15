@@ -427,7 +427,7 @@ void RunCleanJobList(CleanJobListOption const &opt);
 
 struct UpdateRegionCmdStatusOptions {
   std::string coor_url;
-  int64_t job_list_id;
+  int64_t job_id;
   int64_t region_cmd_id;
   int64_t status;
   int64_t errcode;
