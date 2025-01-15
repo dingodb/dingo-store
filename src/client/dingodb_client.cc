@@ -67,7 +67,7 @@ DEFINE_int64(start_region_cmd_id, 0, "start_region_cmd_id");
 DEFINE_int64(end_region_cmd_id, 0, "end_region_cmd_id");
 DEFINE_int64(region_id, 0, "region_id");
 DEFINE_int64(region_cmd_id, 0, "region_cmd_id");
-DEFINE_int64(job_list_id, 0, "job_list_id");
+DEFINE_int64(job_id, 0, "job_id");
 DEFINE_string(store_ids, "1001,1002,1003", "store_ids splited by ,");
 DEFINE_int64(index, 0, "index");
 DEFINE_int32(service_type, 0, "service type for getting leader, 0: meta or coordinator, 2: auto increment");

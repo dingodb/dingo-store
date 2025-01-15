@@ -300,27 +300,27 @@ class CoordinatorControl : public MetaControl {
   // split region
   butil::Status SplitRegion(int64_t split_from_region_id, int64_t split_to_region_id, std::string split_watershed_key,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status SplitRegionWithJobList(int64_t split_from_region_id, int64_t split_to_region_id,
-                                       std::string split_watershed_key, bool store_create_region,
-                                       pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status SplitRegionWithJob(int64_t split_from_region_id, int64_t split_to_region_id,
+                                   std::string split_watershed_key, bool store_create_region,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // merge region
-  butil::Status MergeRegionWithJobList(int64_t merge_from_region_id, int64_t merge_to_region_id,
-                                       pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status MergeRegionWithJob(int64_t merge_from_region_id, int64_t merge_to_region_id,
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // change peer region
-  butil::Status ChangePeerRegionWithJobList(int64_t region_id, std::vector<int64_t> &new_store_ids,
+  butil::Status ChangePeerRegionWithJob(int64_t region_id, std::vector<int64_t> &new_store_ids,
+                                        pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status ChangePairPeerRegionWithJob(int64_t region_id, std::vector<int64_t> &new_store_ids,
                                             pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status ChangePairPeerRegionWithJobList(int64_t region_id, std::vector<int64_t> &new_store_ids,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // transfer leader region
-  butil::Status TransferLeaderRegionWithJobList(int64_t region_id, int64_t new_leader_store_id, bool is_force,
-                                                pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status TransferLeaderRegionWithJob(int64_t region_id, int64_t new_leader_store_id, bool is_force,
+                                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create region
-  butil::Status CreateRegionWithJobList(std::vector<pb::coordinator::StoreOperation> &store_operations,
-                                        pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CreateRegionWithJob(std::vector<pb::coordinator::StoreOperation> &store_operations,
+                                    pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // create schema
   // in: tenant_id
@@ -535,17 +535,13 @@ class CoordinatorControl : public MetaControl {
   butil::Status GetOrphanRegion(int64_t store_id, std::map<int64_t, pb::common::RegionMetrics> &orphan_regions);
 
   static bool CheckStoreOperationResult(pb::coordinator::RegionCmdType cmd_type, pb::error::Errno errcode);
-  void SendStoreOperation(const pb::common::Store &store, const pb::coordinator::StoreOperation &store_operation,
-                          pb::coordinator_internal::MetaIncrement &meta_increment);
-  void TryToSendStoreOperations();
+
   static butil::Status RpcSendPushStoreOperation(const pb::common::Location &location,
                                                  pb::push::PushStoreOperationRequest &request,
                                                  pb::push::PushStoreOperationResponse &response);
 
   // get store operation
   int GetStoreOperation(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
-  int GetStoreOperationOfNotCreateForSend(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
-  int GetStoreOperationOfCreateForSend(int64_t store_id, pb::coordinator::StoreOperation &store_operation);
 
   // CleanStoreOperation
   // in:  store_id
@@ -562,8 +558,8 @@ class CoordinatorControl : public MetaControl {
                              pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status UpdateRegionCmd(int64_t store_id, const pb::coordinator::RegionCmd &region_cmd,
                                 const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
-  butil::Status RemoveRegionCmd(int64_t store_id, int64_t job_list_id, int64_t region_cmd_id,
-                                const pb::error::Error &error, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status RemoveRegionCmd(int64_t store_id, int64_t job_id, int64_t region_cmd_id, const pb::error::Error &error,
+                                pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status GetRegionCmd(int64_t store_id, int64_t start_region_cmd_id, int64_t end_region_cmd_id,
                              std::vector<pb::coordinator::RegionCmd> &region_cmds,
                              std::vector<pb::error::Error> &region_cmd_errors);
@@ -813,57 +809,55 @@ class CoordinatorControl : public MetaControl {
   bool LoadMetaFromSnapshotFile(
       pb::coordinator_internal::MetaSnapshotFile &meta_snapshot_file) override;  // for raft fsm
 
-  butil::Status UpdateRegionCmdStatus(int64_t job_list_id, int64_t region_cmd_id,
-                                      pb::coordinator::RegionCmdStatus status, pb::error::Error error,
-                                      pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status UpdateRegionCmdStatus(int64_t job_id, int64_t region_cmd_id, pb::coordinator::RegionCmdStatus status,
+                                      pb::error::Error error, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  void GetJobListAll(butil::FlatMap<int64_t, pb::coordinator::JobList> &job_lists);
-  void GetJobList(int64_t job_list_id, pb::coordinator::JobList &job_list);
-  void GetArchiveJobListIds(std::vector<int64_t> &job_list_ids, int64_t job_list_id, int32_t limit);
-  void GetArchiveJobList(std::vector<pb::coordinator::JobList> &job_lists, int64_t job_list_id, int32_t limit);
-  void GetArchiveJobList(int64_t job_list_id, pb::coordinator::JobList &job_list);
+  void GetJobAll(butil::FlatMap<int64_t, pb::coordinator::Job> &job);
+  void GetJob(int64_t job_id, pb::coordinator::Job &job);
+  void GetArchiveJobListIds(std::vector<int64_t> &job_ids, int64_t job_id, int32_t limit);
+  void GetArchiveJobList(std::vector<pb::coordinator::Job> &job, int64_t job_id, int32_t limit);
+  void GetArchiveJob(int64_t job_id, pb::coordinator::Job &job);
 
-  void UpdateJobListError(int64_t job_list_id, int64_t region_cmd_id, pb::error::Error error);
+  void UpdateJobError(int64_t job_id, int64_t region_cmd_id, pb::error::Error error);
 
-  void RecycleArchiveJobList();
+  void RecycleArchiveJob();
 
-  pb::coordinator::JobList *CreateJobList(pb::coordinator_internal::MetaIncrement &meta_increment,
-                                          const std::string &name);
-  void AddCreateTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  pb::coordinator::Job *CreateJob(pb::coordinator_internal::MetaIncrement &meta_increment, const std::string &name);
+  void AddCreateTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                      const pb::common::RegionDefinition &region_definition,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddDeleteTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  void AddDeleteTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                      pb::coordinator::StoreOperation *store_operation,
                      pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddDeleteTaskWithCheck(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  void AddDeleteTaskWithCheck(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                               const ::google::protobuf::RepeatedPtrField<::dingodb::pb::common::Peer> &peers,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
-  // void AddPurgeTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  // void AddPurgeTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
   //                   pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddChangePeerTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  void AddChangePeerTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                          const pb::common::RegionDefinition &region_definition,
                          pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddTransferLeaderTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  void AddTransferLeaderTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                              const pb::common::Peer &new_leader_peer, bool is_force,
                              pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddMergeTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t merge_from_region_id,
+  void AddMergeTask(pb::coordinator::Job *job, int64_t store_id, int64_t merge_from_region_id,
                     int64_t merge_to_region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  void AddSplitTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id, int64_t split_to_region_id,
+  void AddSplitTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id, int64_t split_to_region_id,
                     const std::string &water_shed_key, bool store_create_region,
                     pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddSnapshotVectorIndexTask(pb::coordinator::Task *region_save_vector_task, int64_t store_id, int64_t region_id,
                                   int64_t snapshot_log_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCheckSplitResultTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t split_to_region_id);
+  static void AddCheckSplitResultTask(pb::coordinator::Job *job, int64_t store_id, int64_t split_to_region_id);
   static void AddCheckStoreVectorIndexTask(pb::coordinator::Task *check_vector_task, int64_t store_id,
                                            int64_t region_id, int64_t vector_index_version);
-  static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::JobList *job_list, int64_t store_id,
-                                                   int64_t region_id, int64_t vector_snapshot_log_id);
+  static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
+                                                   int64_t vector_snapshot_log_id);
   void AddLoadVectorIndexTask(pb::coordinator::Task *load_vector_task, int64_t store_id, int64_t region_id,
                               pb::coordinator_internal::MetaIncrement &meta_increment);
   static void AddCheckStoreRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id, int64_t region_id);
-  static void AddCheckChangePeerResultTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t region_id,
+  static void AddCheckChangePeerResultTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
                                            const pb::common::RegionDefinition &region_definition);
-  static void AddCheckMergeResultTask(pb::coordinator::JobList *job_list, int64_t store_id, int64_t merge_to_region_id,
+  static void AddCheckMergeResultTask(pb::coordinator::Job *job, int64_t store_id, int64_t merge_to_region_id,
                                       const pb::common::Range &range);
   static void AddCheckTombstoneRegionTask(pb::coordinator::Task *check_tombstone_region_task, int64_t store_id,
                                           int64_t region_id);
@@ -871,53 +865,47 @@ class CoordinatorControl : public MetaControl {
   void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
                                      int64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  // check if task in job_list can advance
+  // check if task in job can advance
   // if task advance, this function will contruct meta_increment and apply to state_machine
   butil::Status ProcessJobList();
 
-  // process single task
-  butil::Status ProcessSingleJobList(const pb::coordinator::JobList &job_list,
-                                     pb::coordinator_internal::MetaIncrement &meta_increment,
-                                     std::map<int64_t, pb::coordinator::StoreOperation> &store_operation_map);
+  // process job
+  butil::Status ProcessJob(const pb::coordinator::Job &job, pb::coordinator_internal::MetaIncrement &meta_increment,
+                           std::map<int64_t, pb::coordinator::StoreOperation> &store_operation_map);
   void ReleaseProcessJobListStatus(const butil::Status &);
 
-  butil::Status GenStoreOperationByJobList(int64_t store_id, int64_t job_id,
-                                           const pb::coordinator::RegionCmd &region_cmd,
-                                           pb::coordinator::StoreOperation &store_operation);
+  butil::Status GenStoreOperation(int64_t store_id, int64_t job_id, const pb::coordinator::RegionCmd &region_cmd,
+                                  pb::coordinator::StoreOperation &store_operation);
 
   butil::Status SendStoreOperation(int64_t store_id, const pb::coordinator::StoreOperation &store_operation,
-                                       pb::coordinator_internal::MetaIncrement &meta_increment);
+                                   pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // move region_cmd from one store to another store
-  butil::Status MoveTaskRegionCmd(int64_t job_list_id, int64_t old_store_id, int64_t new_store_id,
-                                  int64_t region_cmd_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status MoveTaskRegionCmd(int64_t job_id, int64_t old_store_id, int64_t new_store_id, int64_t region_cmd_id,
+                                  pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  butil::Status UpdateTaskStatus(int64_t job_list_id, int64_t region_cmd_id, pb::coordinator::RegionCmdStatus status,
+  butil::Status UpdateTaskStatus(int64_t job_id, int64_t region_cmd_id, pb::coordinator::RegionCmdStatus status,
                                  pb::error::Error error, pb::coordinator_internal::MetaIncrement &meta_increment);
 
-  butil::Status UpdateTaskProcess(const pb::coordinator_internal::MetaIncrementJobList &job_list);
+  butil::Status UpdateJobProcess(const pb::coordinator_internal::MetaIncrementJob &job);
 
-  bool MoveRegionCmdInStoreOperation(pb::coordinator::JobList &job_list, int64_t new_store_id, int64_t region_cmd_id);
+  bool MoveRegionCmdInStoreOperation(pb::coordinator::Job &job, int64_t new_store_id, int64_t region_cmd_id);
 
   void UpdateTaskRegionCmdStatus(pb::coordinator::StoreOperation &store_operation,
                                  pb::coordinator_internal::MetaIncrementRegionCmdStatus region_cmd_status);
 
-  void UpdateJobListNextStep(pb::coordinator::JobList &job_list, pb::coordinator::Task &current_task,
-                             int64_t region_cmd_id);
+  void UpdateJobNextStep(pb::coordinator::Job &job, pb::coordinator::Task &current_task, int64_t region_cmd_id);
 
-  bool AllParallelTasksSuccess(pb::coordinator::JobList &job_list, int64_t region_cmd_id);
+  bool NeedAutoCleanJob(const pb::coordinator::Job &job,
+                        const pb::coordinator::StoreOperation &current_store_operation);
 
-  bool NeedAutoCleanJobList(const pb::coordinator::JobList &job_list,
-                            const pb::coordinator::StoreOperation &current_store_operation);
-
-  pb::coordinator::Task *FindTaskByRegionCmd(pb::coordinator::JobList &job_list, int64_t region_cmd_id,
-                                             int32_t &current_step);
+  pb::coordinator::Task *FindTaskByRegionCmd(pb::coordinator::Job &job, int64_t region_cmd_id, int32_t &current_step);
 
   pb::coordinator::StoreOperation *FindExecuteStoreOperation(pb::coordinator::Task &task, int64_t region_cmd_id);
 
   bool DoTaskPreCheck(const pb::coordinator::TaskPreCheck &task_pre_check);
 
-  butil::Status CleanJobList(int64_t job_list_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+  butil::Status CleanJobList(int64_t job_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // deleted table and index
   butil::Status GetDeletedTable(int64_t deleted_table_id,
@@ -993,7 +981,7 @@ class CoordinatorControl : public MetaControl {
   butil::Status GetAllPresentId(std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> &id_epoch_type_values);
 
  private:
-  butil::Status ValidateJobListConflict(int64_t region_id, int64_t second_region_id);
+  butil::Status ValidateJobConflict(int64_t region_id, int64_t second_region_id);
 
   butil::Status GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count, pb::meta::EntityType entity_type,
                                           pb::coordinator_internal::MetaIncrement &meta_increment,
@@ -1069,10 +1057,10 @@ class CoordinatorControl : public MetaControl {
       executor_user_map_;                                                              // executor_user -> keyring
   MetaMemMapStd<pb::coordinator_internal::ExecutorUserInternal> *executor_user_meta_;  // need construct
 
-  // 11.job_list
-  DingoSafeMap<int64_t, pb::coordinator::JobList> job_list_map_;  // job_list_id -> job_list
-  MetaMemMapFlat<pb::coordinator::JobList> *job_list_meta_;       // need construct
-  MetaDiskMap<pb::coordinator::JobList> *job_list_archive_;
+  // 11.job
+  DingoSafeMap<int64_t, pb::coordinator::Job> job_map_;  // job_id -> job
+  MetaMemMapFlat<pb::coordinator::Job> *job_meta_;       // need construct
+  MetaDiskMap<pb::coordinator::Job> *job_archive_;
 
   // 12.indexes
   DingoSafeMap<int64_t, pb::coordinator_internal::TableInternal> index_map_;
@@ -1121,7 +1109,7 @@ class CoordinatorControl : public MetaControl {
 
   // raft kv engine
   std::shared_ptr<Engine> engine_;
-  butil::atomic<bool> is_processing_job_list_;
+  butil::atomic<bool> is_processing_job_;
 
   // bvar
   MetaBvarCoordinator coordinator_bvar_;

@@ -152,13 +152,13 @@ bool RegionHealthFilter::Check(int64_t region_id) {
 }
 
 bool TaskFilter::Check(int64_t region_id) {
-  butil::FlatMap<int64_t, pb::coordinator::JobList> job_lists;
-  coordinator_controller_->GetJobListAll(job_lists);
+  butil::FlatMap<int64_t, pb::coordinator::Job> job_map;
+  coordinator_controller_->GetJobAll(job_map);
 
   bool result = true;
   std::string record;
-  for (auto& [_, job_list] : job_lists) {
-    for (const auto& task : job_list.tasks()) {
+  for (auto& [_, job] : job_map) {
+    for (const auto& task : job.tasks()) {
       for (const auto& store_operation : task.store_operations()) {
         for (const auto& region_cmd : store_operation.region_cmds()) {
           if (region_cmd.region_id() == region_id) {
@@ -434,7 +434,7 @@ butil::Status BalanceLeaderScheduler::LaunchBalanceLeader(std::shared_ptr<Coordi
   }
 
   if (!dryrun) {
-    balance_leader_scheduler->CommitTransferLeaderJobList(transfer_leader_tasks);
+    balance_leader_scheduler->CommitTransferLeaderJob(transfer_leader_tasks);
   }
 
   if (tracker) {
@@ -545,19 +545,19 @@ std::vector<TransferLeaderTaskPtr> BalanceLeaderScheduler::Schedule(const pb::co
 }
 
 // commit transfer leader task to raft
-void BalanceLeaderScheduler::CommitTransferLeaderJobList(const std::vector<TransferLeaderTaskPtr>& tasks) {
+void BalanceLeaderScheduler::CommitTransferLeaderJob(const std::vector<TransferLeaderTaskPtr>& tasks) {
   dingodb::pb::coordinator_internal::MetaIncrement meta_increment;
-  auto* job_list = coordinator_controller_->CreateJobList(meta_increment, "BalanceLeader");
+  auto* job = coordinator_controller_->CreateJob(meta_increment, "BalanceLeader");
   for (const auto& task : tasks) {
-    auto* mut_task = job_list->add_tasks();
+    auto* mut_task = job->add_tasks();
 
     auto* mut_store_operation = mut_task->add_store_operations();
-    mut_store_operation->set_id(task->source_store_id);
+    mut_store_operation->set_store_id(task->source_store_id);
 
     auto* mut_region_cmd = mut_store_operation->add_region_cmds();
     mut_region_cmd->set_id(
         coordinator_controller_->GetNextId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, meta_increment));
-    mut_region_cmd->set_job_id(job_list->id());
+    mut_region_cmd->set_job_id(job->id());
     mut_region_cmd->set_region_id(task->region_id);
     mut_region_cmd->set_region_cmd_type(pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER);
 

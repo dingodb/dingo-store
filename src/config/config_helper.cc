@@ -242,14 +242,14 @@ uint32_t ConfigHelper::GetLeaderNumWeight() {
   return (num <= 0) ? Constant::kLeaderNumWeightDefaultValue : num;
 }
 
-uint32_t ConfigHelper::GetReserveJobListRecentDay() {
+uint32_t ConfigHelper::GetReserveJobRecentDay() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
-    return Constant::kReserveJobListRecentDayDefaultValue;
+    return Constant::kReserveJobRecentDayDefaultValue;
   }
 
-  int num = config->GetInt("coordinator.reserve_job_list_recent_day");
-  return (num <= 0) ? Constant::kReserveJobListRecentDayDefaultValue : num;
+  int num = config->GetInt("coordinator.reserve_job_recent_day");
+  return (num <= 0) ? Constant::kReserveJobRecentDayDefaultValue : num;
 }
 
 std::string ConfigHelper::GetBalanceLeaderInspectionTimePeriod() {
@@ -334,7 +334,7 @@ double ConfigHelper::GetRaftWorkerThreadRatio() {
   return config->GetDouble("server.raft_worker_thread_ratio");
 }
 
-std::string ConfigHelper::GetBlockCacheValue(){
+std::string ConfigHelper::GetBlockCacheValue() {
   auto config = ConfigManager::GetInstance().GetRoleConfig();
   if (config == nullptr) {
     return Constant::kBlockCacheDefaultValue;

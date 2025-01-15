@@ -12,7 +12,7 @@ coordinator:
   peers: $COORDINATOR_RAFT_PEERS$
   push_interval_s: 1
   update_state_interval_s: 10
-  job_list_interval_s: 1
+  job_interval_s: 1
   calc_metrics_interval_s: 60
   recycle_orphan_interval_s: 60
   remove_watch_interval_s: 10
@@ -21,8 +21,8 @@ coordinator:
   auto_compaction: true
   compaction_interval_s: 300
   compaction_retention_rev_count: 1000
-  recycle_job_list_interval_s: 600
-  reserve_job_list_recent_day: 7
+  recycle_job_interval_s: 600
+  reserve_job_recent_day: 7
   balance_leader_inspection_time_period: 0,23 # format: start_hour,end_hour;start_hour,end_hour e.g. 2,4;5,6;8,9
   balance_region_inspection_time_period: 0,23 # format: start_hour,end_hour;start_hour,end_hour e.g. 2,4;5,6;8,9
   balance_region_default_region_count_ratio: 0.8

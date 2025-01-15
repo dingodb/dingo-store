@@ -46,7 +46,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   bthread_mutex_init(&meta_watch_bitmap_mutex_, nullptr);
 
   root_schema_writed_to_raft_ = false;
-  is_processing_job_list_.store(false);
+  is_processing_job_.store(false);
   leader_term_.store(-1, butil::memory_order_release);
 
   // the data structure below will write to raft
@@ -74,8 +74,8 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
                                                                                      raw_engine_of_meta);
   executor_user_meta_ = new MetaMemMapStd<pb::coordinator_internal::ExecutorUserInternal>(
       &executor_user_map_, kPrefixExecutorUser, raw_engine_of_meta);
-  job_list_meta_ = new MetaMemMapFlat<pb::coordinator::JobList>(&job_list_map_, kPrefixJobList, raw_engine_of_meta);
-  job_list_archive_ = new MetaDiskMap<pb::coordinator::JobList>(kPrefixJobListArchive, raw_engine_of_meta);
+  job_meta_ = new MetaMemMapFlat<pb::coordinator::Job>(&job_map_, kPrefixJob, raw_engine_of_meta);
+  job_archive_ = new MetaDiskMap<pb::coordinator::Job>(kPrefixJobArchive, raw_engine_of_meta);
 
   index_meta_ =
       new MetaMemMapFlat<pb::coordinator_internal::TableInternal>(&index_map_, kPrefixIndex, raw_engine_of_meta);
@@ -105,7 +105,7 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
   coordinator_map_.Init(10);              // coordinator_map_ is a small map
   store_map_.Init(100);                   // store_map_ is a small map
   table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
-  job_list_map_.Init(100);                // job_list_map_ is a small map
+  job_map_.Init(100);                     // job_map_ is a small map
   index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
   index_map_.Init(10000);                 // index_map_ is a big map
   index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
@@ -329,24 +329,24 @@ bool CoordinatorControl::Recover() {
   DINGO_LOG(INFO) << "Recover executor_user_meta_, count=" << kvs.size();
   kvs.clear();
 
-  // 11.job_list map
-  if (!meta_reader_->Scan(job_list_meta_->Prefix(), kvs)) {
+  // 11.job map
+  if (!meta_reader_->Scan(job_meta_->Prefix(), kvs)) {
     return false;
   }
   {
-    // BAIDU_SCOPED_LOCK(job_list_map_mutex_);
-    if (!job_list_meta_->Recover(kvs)) {
+    // BAIDU_SCOPED_LOCK(job_map_mutex_);
+    if (!job_meta_->Recover(kvs)) {
       return false;
     }
   }
-  DINGO_LOG(INFO) << "Recover job_list_meta_, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover job_meta_, count=" << kvs.size();
   kvs.clear();
 
-  // 11.1 job_list archive
-  if (!meta_reader_->Scan(job_list_archive_->Prefix(), kvs)) {
+  // 11.1 job archive
+  if (!meta_reader_->Scan(job_archive_->Prefix(), kvs)) {
     return false;
   }
-  DINGO_LOG(INFO) << "Recover job_list_archive_, count=" << kvs.size();
+  DINGO_LOG(INFO) << "Recover job_archive_, count=" << kvs.size();
   kvs.clear();
 
   // 12.index map
@@ -672,8 +672,8 @@ butil::Status CoordinatorControl::GetAllPresentId(
   value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD);
   id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_REGION_CMD, value);
 
-  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_JOB_LIST);
-  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_JOB_LIST, value);
+  value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_JOB);
+  id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_JOB, value);
 
   value = id_epoch_map_safe_temp_.GetPresentId(pb::coordinator::IdEpochType::ID_NEXT_LEASE);
   id_epoch_type_values.emplace_back(pb::coordinator::IdEpochType::ID_NEXT_LEASE, value);

@@ -27,7 +27,7 @@
 #include "common/runnable.h"
 #include "fmt/core.h"
 #include "gflags/gflags_declare.h"
-#include "server/job_list_service.h"
+#include "server/job_service.h"
 #include "server/store_metrics_service.h"
 #include "server/store_operation_service.h"
 
@@ -63,7 +63,7 @@
 #include "server/debug_service.h"
 #include "server/file_service.h"
 #include "server/index_service.h"
-#include "server/job_list_service.h"
+#include "server/job_service.h"
 #include "server/meta_service.h"
 #include "server/node_service.h"
 #include "server/push_service.h"
@@ -632,7 +632,7 @@ int main(int argc, char *argv[]) {
   dingodb::TableImpl table_service;
   dingodb::RegionImpl region_service;
   dingodb::StoreMetricsImpl store_metrics_service;
-  dingodb::JobListImpl job_list_service;
+  dingodb::JobImpl job_service;
   dingodb::StoreOperationImpl store_operation_service;
 
   // for store and index
@@ -807,12 +807,12 @@ int main(int argc, char *argv[]) {
       DINGO_LOG(ERROR) << "Fail to add store metrics service";
       return -1;
     }
-    job_list_service.SetControl(dingo_server.GetCoordinatorControl());
-    if (0 != brpc_server.AddService(&job_list_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+    job_service.SetControl(dingo_server.GetCoordinatorControl());
+    if (0 != brpc_server.AddService(&job_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add task list service";
       return -1;
     }
-    if (0 != raft_server.AddService(&job_list_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
+    if (0 != raft_server.AddService(&job_service, brpc::SERVER_DOESNT_OWN_SERVICE)) {
       DINGO_LOG(ERROR) << "Fail to add task list service";
       return -1;
     }

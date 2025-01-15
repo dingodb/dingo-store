@@ -454,7 +454,7 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
 }
 
 // this is for coordinator
-static std::atomic<bool> g_coordinator_job_list_process_running(false);
+static std::atomic<bool> g_coordinator_job_process_running(false);
 void CoordinatorJobListProcessTask::CoordinatorJobListProcess(std::shared_ptr<CoordinatorControl> coordinator_control) {
   if (!coordinator_control->IsLeader()) {
     DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is follower";
@@ -462,34 +462,14 @@ void CoordinatorJobListProcessTask::CoordinatorJobListProcess(std::shared_ptr<Co
   }
   DINGO_LOG(DEBUG) << "CoordinatorUpdateState... this is leader";
 
-  if (g_coordinator_job_list_process_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG(INFO) << "CoordinatorJobListProcess... g_coordinator_job_list_process_running is true, return";
+  if (g_coordinator_job_process_running.load(std::memory_order_relaxed)) {
+    DINGO_LOG(INFO) << "CoordinatorJobListProcess... g_coordinator_job_process_running is true, return";
     return;
   }
 
-  AtomicGuard guard(g_coordinator_job_list_process_running);
+  AtomicGuard guard(g_coordinator_job_process_running);
 
   coordinator_control->ProcessJobList();
-}
-
-// this is for coordinator
-static std::atomic<bool> g_coordinator_push_to_store_running(false);
-void CoordinatorPushTask::SendCoordinatorPushToStore(std::shared_ptr<CoordinatorControl> coordinator_control) {
-  if (!coordinator_control->IsLeader()) {
-    DINGO_LOG(DEBUG) << "... this is follower";
-    return;
-  }
-  DINGO_LOG(DEBUG) << "... this is leader";
-
-  if (g_coordinator_push_to_store_running.load(std::memory_order_relaxed)) {
-    DINGO_LOG(INFO) << "... g_coordinator_push_to_store_running is true, return";
-    return;
-  }
-
-  AtomicGuard guard(g_coordinator_push_to_store_running);
-
-  // yjddebug not use send
-  // coordinator_control->TryToSendStoreOperations();
 }
 
 // this is for coordinator
@@ -649,12 +629,6 @@ void Heartbeat::TriggerStoreHeartbeat(std::vector<int64_t> region_ids, bool is_u
   // Free at ExecuteRoutine()
   auto task = std::make_shared<HeartbeatTask>(Server::GetInstance().GetCoordinatorInteraction(), region_ids,
                                               is_update_epoch_version);
-  Server::GetInstance().GetHeartbeat()->Execute(task);
-}
-
-void Heartbeat::TriggerCoordinatorPushToStore(void*) {
-  // Free at ExecuteRoutine()
-  auto task = std::make_shared<CoordinatorPushTask>(Server::GetInstance().GetCoordinatorControl());
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 

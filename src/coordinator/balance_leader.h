@@ -278,7 +278,7 @@ class BalanceLeaderScheduler {
   // parse config item(coordinator.balance_leader_inspection_time_period)
   static std::vector<std::pair<int, int>> ParseTimePeriod(const std::string& time_period);
   // commit transfer leader tasks to raft
-  void CommitTransferLeaderJobList(const std::vector<TransferLeaderTaskPtr>& tasks);
+  void CommitTransferLeaderJob(const std::vector<TransferLeaderTaskPtr>& tasks);
 
   static pb::common::Store GetStore(const pb::common::StoreMap& store_map, int64_t store_id);
 

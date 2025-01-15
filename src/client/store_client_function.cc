@@ -3842,7 +3842,7 @@ uint32_t SendGetJobList() {
 
   InteractionManager::GetInstance().SendRequestWithoutContext("CoordinatorService", "GetJobList", request, response);
 
-  return response.job_lists().size();
+  return response.job_list().size();
 }
 
 struct BatchPutGetParam {
