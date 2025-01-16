@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <climits>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -22,6 +23,7 @@
 #include <iomanip>
 #include <iostream>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "butil/status.h"
@@ -4218,6 +4220,80 @@ TEST_F(VectorIndexUtilsTest, DoCalcCosineDistanceByFaiss) {
     LOG(INFO) << "DoCalcCosineDistanceByFaiss:data : \t\t";
     for (const auto elem : result_op_right_vectors.float_values()) {
       LOG(INFO) << elem << " ";
+    }
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, DoCalcHammingDistanceByFaiss) {
+  // ok
+  {
+    constexpr uint32_t kDimension = 16;
+    std::array<uint8_t, kDimension / CHAR_BIT> data_left{};
+
+    std::mt19937 rng;
+    std::uniform_real_distribution<> distrib(0, 255);
+    for (auto& elem : data_left) {
+      elem = distrib(rng);
+    }
+
+    LOG(INFO) << "left_data : \t";
+    for (const auto elem : data_left) {
+      LOG(INFO) << std::setw(3) << static_cast<int32_t>(elem) << " ";
+    }
+
+    std::array<uint8_t, kDimension / CHAR_BIT> data_right{};
+    for (auto& elem : data_right) {
+      elem = distrib(rng);
+    }
+
+    LOG(INFO) << "right_data : \t";
+    for (const auto elem : data_right) {
+      LOG(INFO) << std::setw(3) << static_cast<int32_t>(elem) << " ";
+    }
+
+    ::dingodb::pb::common::Vector result_op_left_vectors;
+    ::dingodb::pb::common::Vector result_op_right_vectors;
+    ::dingodb::pb::common::Vector op_left_vectors;
+    ::dingodb::pb::common::Vector op_right_vectors;
+    bool is_return_normlize = true;
+    float distance = 0.0f;
+
+    op_left_vectors.set_value_type(::dingodb::pb::common::ValueType::UINT8);
+    op_right_vectors.set_value_type(::dingodb::pb::common::ValueType::UINT8);
+
+    for (const auto elem : data_left) {
+      std::string str = std::string(1, static_cast<char>(elem));
+      op_left_vectors.add_binary_values(str);
+    }
+
+    for (const auto elem : data_right) {
+      std::string str = std::string(1, static_cast<char>(elem));
+      op_right_vectors.add_binary_values(str);
+    }
+
+    butil::Status ok =
+        VectorIndexUtils::DoCalcHammingDistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distance,
+                                                       result_op_left_vectors, result_op_right_vectors);
+
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:distance:" << distance;
+
+    EXPECT_EQ(result_op_left_vectors.value_type(), ::dingodb::pb::common::ValueType::UINT8);
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:left";
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:value_type : " << result_op_left_vectors.value_type();
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:dimension : " << result_op_left_vectors.dimension();
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:data : \t\t";
+    for (const auto& elem : result_op_left_vectors.binary_values()) {
+      LOG(INFO) << static_cast<int32_t>(elem[0]) << " ";
+    }
+
+    EXPECT_EQ(result_op_right_vectors.value_type(), ::dingodb::pb::common::ValueType::UINT8);
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:right";
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:value_type : " << result_op_right_vectors.value_type();
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:dimension : " << result_op_right_vectors.dimension();
+    LOG(INFO) << "DoCalcHammingDistanceByFaiss:data : \t\t";
+    for (const auto& elem : result_op_right_vectors.binary_values()) {
+      LOG(INFO) << static_cast<int32_t>(elem[0]) << " ";
     }
   }
 }
