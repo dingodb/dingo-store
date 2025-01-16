@@ -92,6 +92,13 @@ class VectorIndexUtils {
       std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,
       std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);
 
+  static butil::Status CalcHammingDistanceByFaiss(
+      const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_left_vectors,
+      const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_right_vectors,
+      bool is_return_normlize, std::vector<std::vector<float>>& distances,
+      std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,
+      std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors);
+
   static butil::Status CalcL2DistanceByHnswlib(
       const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_left_vectors,
       const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_right_vectors,
@@ -132,6 +139,12 @@ class VectorIndexUtils {
                                                    dingodb::pb::common::Vector& result_op_left_vectors,
                                                    dingodb::pb::common::Vector& result_op_right_vectors);
 
+  static butil::Status DoCalcHammingDistanceByFaiss(const ::dingodb::pb::common::Vector& op_left_vectors,
+                                                    const ::dingodb::pb::common::Vector& op_right_vectors,
+                                                    bool is_return_normlize, float& distance,
+                                                    dingodb::pb::common::Vector& result_op_left_vectors,
+                                                    dingodb::pb::common::Vector& result_op_right_vectors);
+
   static butil::Status DoCalcL2DistanceByHnswlib(const ::dingodb::pb::common::Vector& op_left_vectors,
                                                  const ::dingodb::pb::common::Vector& op_right_vectors,
                                                  bool is_return_normlize, float& distance,
@@ -152,6 +165,8 @@ class VectorIndexUtils {
 
   static void ResultOpVectorAssignment(dingodb::pb::common::Vector& result_op_vectors,
                                        const ::dingodb::pb::common::Vector& op_vectors);
+  static void ResultOpBinaryVectorAssignment(dingodb::pb::common::Vector& result_op_vectors,
+                                             const ::dingodb::pb::common::Vector& op_vectors);
 
   static void ResultOpVectorAssignmentWrapper(const ::dingodb::pb::common::Vector& op_left_vectors,
                                               const ::dingodb::pb::common::Vector& op_right_vectors,
@@ -159,11 +174,17 @@ class VectorIndexUtils {
                                               dingodb::pb::common::Vector& result_op_left_vectors,
                                               dingodb::pb::common::Vector& result_op_right_vectors);
 
+  static void ResultOpBinaryVectorAssignmentWrapper(const ::dingodb::pb::common::Vector& op_left_vectors,
+                                                    const ::dingodb::pb::common::Vector& op_right_vectors,
+                                                    bool is_return_normlize,
+                                                    dingodb::pb::common::Vector& result_op_left_vectors,
+                                                    dingodb::pb::common::Vector& result_op_right_vectors);
+
   static void NormalizeVectorForFaiss(float* x, int32_t d);
   static void NormalizeVectorForHnsw(const float* data, uint32_t dimension, float* norm_array);
 
-  static butil::Status CheckVectorDimension(
-      const std::vector<pb::common::VectorWithId>& vector_with_ids, int dimension);
+  static butil::Status CheckVectorDimension(const std::vector<pb::common::VectorWithId>& vector_with_ids,
+                                            int dimension);
 
   static std::unique_ptr<faiss::idx_t[]> CastVectorId(const std::vector<int64_t>& delete_ids);
 

@@ -139,6 +139,10 @@ butil::Status VectorIndexUtils::CalcDistanceByFaiss(
       return CalcCosineDistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distances,
                                        result_op_left_vectors, result_op_right_vectors);
     }
+    case pb::common::METRIC_TYPE_HAMMING: {
+      return CalcHammingDistanceByFaiss(op_left_vectors, op_right_vectors, is_return_normlize, distances,
+                                        result_op_left_vectors, result_op_right_vectors);
+    }
     case pb::common::METRIC_TYPE_NONE:
     case pb::common::MetricType_INT_MIN_SENTINEL_DO_NOT_USE_:
     case pb::common::MetricType_INT_MAX_SENTINEL_DO_NOT_USE_: {
@@ -211,6 +215,17 @@ butil::Status VectorIndexUtils::CalcCosineDistanceByFaiss(
 {                                                                         // NOLINT
   return CalcDistanceCore(op_left_vectors, op_right_vectors, is_return_normlize, distances, result_op_left_vectors,
                           result_op_right_vectors, DoCalcCosineDistanceByFaiss);
+}
+
+butil::Status VectorIndexUtils::CalcHammingDistanceByFaiss(
+    const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_left_vectors,
+    const google::protobuf::RepeatedPtrField<::dingodb::pb::common::Vector>& op_right_vectors, bool is_return_normlize,
+    std::vector<std::vector<float>>& distances,                           // NOLINT
+    std::vector<::dingodb::pb::common::Vector>& result_op_left_vectors,   // NOLINT
+    std::vector<::dingodb::pb::common::Vector>& result_op_right_vectors)  // NOLINT
+{                                                                         // NOLINT
+  return CalcDistanceCore(op_left_vectors, op_right_vectors, is_return_normlize, distances, result_op_left_vectors,
+                          result_op_right_vectors, DoCalcHammingDistanceByFaiss);
 }
 
 butil::Status VectorIndexUtils::CalcL2DistanceByHnswlib(
@@ -307,6 +322,33 @@ butil::Status VectorIndexUtils::DoCalcCosineDistanceByFaiss(
   return butil::Status();
 }
 
+butil::Status VectorIndexUtils::DoCalcHammingDistanceByFaiss(
+    const ::dingodb::pb::common::Vector& op_left_vectors, const ::dingodb::pb::common::Vector& op_right_vectors,
+    bool is_return_normlize,
+    float& distance,                                       // NOLINT
+    dingodb::pb::common::Vector& result_op_left_vectors,   // NOLINT
+    dingodb::pb::common::Vector& result_op_right_vectors)  // NOLINT
+{                                                          // NOLINT
+  faiss::VectorDistance<faiss::MetricType::METRIC_HAMMING> vector_distance;
+  vector_distance.d = op_left_vectors.binary_values().size();
+
+  std::vector<uint8_t> left_vectors = std::vector<uint8_t>(op_left_vectors.binary_values().size());
+  for (int j = 0; j < op_left_vectors.binary_values().size(); j++) {
+    left_vectors[j] = static_cast<uint8_t>(op_left_vectors.binary_values()[j][0]);
+  }
+  std::vector<uint8_t> right_vectors = std::vector<uint8_t>(op_right_vectors.binary_values().size());
+  for (int j = 0; j < op_right_vectors.binary_values().size(); j++) {
+    right_vectors[j] = static_cast<uint8_t>(op_right_vectors.binary_values()[j][0]);
+  }
+
+  distance = vector_distance(left_vectors.data(), right_vectors.data());
+
+  ResultOpBinaryVectorAssignmentWrapper(op_left_vectors, op_right_vectors, is_return_normlize, result_op_left_vectors,
+                                  result_op_right_vectors);
+
+  return butil::Status();
+}
+
 butil::Status VectorIndexUtils::DoCalcL2DistanceByHnswlib(
     const ::dingodb::pb::common::Vector& op_left_vectors, const ::dingodb::pb::common::Vector& op_right_vectors,
     bool is_return_normlize,
@@ -386,6 +428,13 @@ void VectorIndexUtils::ResultOpVectorAssignment(dingodb::pb::common::Vector& res
   result_op_vectors.set_value_type(::dingodb::pb::common::ValueType::FLOAT);
 }
 
+void VectorIndexUtils::ResultOpBinaryVectorAssignment(dingodb::pb::common::Vector& result_op_vectors,
+                                           const ::dingodb::pb::common::Vector& op_vectors) {
+  result_op_vectors = op_vectors;
+  result_op_vectors.set_dimension(result_op_vectors.binary_values().size() * CHAR_BIT);
+  result_op_vectors.set_value_type(::dingodb::pb::common::ValueType::UINT8);
+}
+
 void VectorIndexUtils::ResultOpVectorAssignmentWrapper(const ::dingodb::pb::common::Vector& op_left_vectors,
                                                        const ::dingodb::pb::common::Vector& op_right_vectors,
                                                        bool is_return_normlize,
@@ -399,6 +448,23 @@ void VectorIndexUtils::ResultOpVectorAssignmentWrapper(const ::dingodb::pb::comm
 
     if (result_op_right_vectors.float_values().empty()) {
       ResultOpVectorAssignment(result_op_right_vectors, op_right_vectors);
+    }
+  }
+}
+
+void VectorIndexUtils::ResultOpBinaryVectorAssignmentWrapper(
+    const ::dingodb::pb::common::Vector& op_left_vectors, const ::dingodb::pb::common::Vector& op_right_vectors,
+    bool is_return_normlize,
+    dingodb::pb::common::Vector& result_op_left_vectors,   // NOLINT
+    dingodb::pb::common::Vector& result_op_right_vectors)  // NOLINT
+{                                                          // NOLINT
+  if (is_return_normlize) {
+    if (result_op_left_vectors.binary_values().empty()) {
+      ResultOpBinaryVectorAssignment(result_op_left_vectors, op_left_vectors);
+    }
+
+    if (result_op_right_vectors.binary_values().empty()) {
+      ResultOpBinaryVectorAssignment(result_op_right_vectors, op_right_vectors);
     }
   }
 }
@@ -446,6 +512,10 @@ butil::Status VectorIndexUtils::CheckVectorDimension(const std::vector<pb::commo
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
     }
+    if (vector_with_id.vector().dimension() != dimension) {
+      std::string s = fmt::format("vector dimension not match, {} {}", vector_with_id.vector().dimension(), dimension);
+      return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+    }
   }
 
   return butil::Status::OK();
@@ -486,9 +556,9 @@ template <typename T>
 std::unique_ptr<T[]> VectorIndexUtils::ExtractVectorValue(const std::vector<pb::common::VectorWithId>& vector_with_ids,
                                                           faiss::idx_t dimension, bool normalize) {
   std::unique_ptr<T[]> vectors = nullptr;
-  if (std::is_same<T, float>::value) {
+  if constexpr (std::is_same<T, float>::value) {
     vectors = std::make_unique<T[]>(vector_with_ids.size() * dimension);
-  } else if (std::is_same<T, uint8_t>::value) {
+  } else if constexpr (std::is_same<T, uint8_t>::value) {
     vectors = std::make_unique<T[]>(vector_with_ids.size() * dimension / CHAR_BIT);
   } else {
     std::string s = fmt::format("invalid value typename type");
@@ -497,8 +567,8 @@ std::unique_ptr<T[]> VectorIndexUtils::ExtractVectorValue(const std::vector<pb::
   }
 
   for (size_t i = 0; i < vector_with_ids.size(); ++i) {
-    if (vector_with_ids[i].vector().value_type() == pb::common::ValueType::FLOAT) {
-      if (!std::is_same<T, float>::value) {
+    if constexpr (std::is_same<T, float>::value) {
+      if (vector_with_ids[i].vector().value_type() != pb::common::ValueType::FLOAT) {
         std::string s = fmt::format("template not match vectors value_type : {}",
                                     pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
         DINGO_LOG(ERROR) << s;
@@ -509,15 +579,17 @@ std::unique_ptr<T[]> VectorIndexUtils::ExtractVectorValue(const std::vector<pb::
       if (normalize) {
         VectorIndexUtils::NormalizeVectorForFaiss(reinterpret_cast<float*>(vectors.get()) + i * dimension, dimension);
       }
-    } else if (vector_with_ids[i].vector().value_type() == pb::common::ValueType::UINT8) {
-      if (!std::is_same<T, uint8_t>::value) {
+    } else if constexpr (std::is_same<T, uint8_t>::value) {
+      if (vector_with_ids[i].vector().value_type() != pb::common::ValueType::UINT8) {
         std::string s = fmt::format("template not match vectors value_type : {}",
                                     pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
         DINGO_LOG(ERROR) << s;
         return nullptr;
       }
       const auto& vector_value = vector_with_ids[i].vector().binary_values();
-      memcpy(vectors.get() + i * dimension / CHAR_BIT, vector_value.data(), dimension / CHAR_BIT);
+      for (int j = 0; j < vector_value.size(); j++) {
+        vectors.get()[i * dimension / CHAR_BIT + j] = static_cast<uint8_t>(vector_value[j][0]);
+      }
     } else {
       std::string s =
           fmt::format("invalid value type : {}", pb::common::ValueType_Name(vector_with_ids[i].vector().value_type()));
@@ -855,8 +927,9 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
         !(ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_INNER_PRODUCT) &&
         !(ivf_flat_parameter.metric_type() == pb::common::METRIC_TYPE_L2)) {
       DINGO_LOG(ERROR) << "ivf_flat_parameter.metric_type is illegal " << ivf_flat_parameter.metric_type();
-      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
-                           "ivf_flat_parameter.metric_type is illegal " + std::to_string(ivf_flat_parameter.metric_type()));
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          "ivf_flat_parameter.metric_type is illegal " + std::to_string(ivf_flat_parameter.metric_type()));
     }
 
     // check ivf_flat_parameter.ncentroids
