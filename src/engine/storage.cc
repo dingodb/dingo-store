@@ -14,7 +14,6 @@
 
 #include "engine/storage.h"
 
-#include <climits>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -840,50 +839,23 @@ butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalc
   }
 
   int64_t dimension = 0;
-  auto value_type = op_left_vectors[0].value_type();
 
-  auto lambda_op_vector_check_function = [&dimension,&value_type](const auto& op_vector, const std::string& name) {
+  auto lambda_op_vector_check_function = [&dimension](const auto& op_vector, const std::string& name) {
     if (!op_vector.empty()) {
       size_t i = 0;
       for (const auto& vector : op_vector) {
-        if(vector.value_type() != value_type) {
-          std::string s = fmt::format("{} index : {}  value_type : {} unequal value_type : {}", name, i,
-                                      ::dingodb::pb::common::ValueType_Name(value_type),
-                                      ::dingodb::pb::common::ValueType_Name(vector.value_type()));
+        int64_t current_dimension = static_cast<int64_t>(vector.float_values().size());
+        if (0 == dimension) {
+          dimension = current_dimension;
+        }
+
+        if (dimension != current_dimension) {
+          std::string s = fmt::format("{} index : {}  dimension : {} unequal current_dimension : {}", name, i,
+                                      dimension, current_dimension);
           LOG(ERROR) << s;
           return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
         }
-        if (vector.value_type() == ::dingodb::pb::common::ValueType::FLOAT) {
-          int64_t current_dimension = static_cast<int64_t>(vector.float_values().size());
-          if (0 == dimension) {
-            dimension = current_dimension;
-          }
-
-          if (dimension != current_dimension) {
-            std::string s = fmt::format("{} float index : {}  dimension : {} unequal current_dimension : {}", name, i,
-                                        dimension, current_dimension);
-            LOG(ERROR) << s;
-            return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
-          }
-          i++;
-        } else if (vector.value_type() == ::dingodb::pb::common::ValueType::UINT8) {
-          int64_t current_dimension = static_cast<int64_t>(vector.binary_values().size());
-          if (0 == dimension) {
-            dimension = current_dimension;
-          }
-
-          if (dimension != current_dimension) {
-            std::string s = fmt::format("{} binary index : {}  dimension : {} unequal current_dimension : {}", name, i,
-                                        dimension * CHAR_BIT, current_dimension * CHAR_BIT);
-            LOG(ERROR) << s;
-            return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
-          }
-          i++;
-        } else {
-          std::string s = fmt::format("{} index : {}  value_type : VALUE_TYPE_NONE", name, i);
-          LOG(ERROR) << s;
-          return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
-        }
+        i++;
       }
     }
 
