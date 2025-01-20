@@ -70,37 +70,30 @@ struct KvWatchNode {
 class DeferDone {
  public:
   DeferDone() {
-    // bthread_mutex_init(&mutex_, nullptr);
     create_time_ = butil::gettimeofday_ms();
   }
   DeferDone(uint64_t closure_id, const std::string &watch_key, google::protobuf::Closure *done,
             pb::version::WatchResponse *response)
       : closure_id_(closure_id), watch_key_(watch_key), done_(done), response_(response) {
     create_time_ = butil::gettimeofday_ms();
-    // bthread_mutex_init(&mutex_, nullptr);
   }
 
   ~DeferDone() = default;
 
   bool IsDone() {
-    // bthread_mutex_lock(&mutex_);
     bool is_done = done_ == nullptr;
-    // bthread_mutex_unlock(&mutex_);
     return is_done;
   }
 
   std::string GetWatchKey() { return watch_key_; }
   pb::version::WatchResponse *GetResponse() {
-    // bthread_mutex_lock(&mutex_);
     auto *response = response_;
-    // bthread_mutex_unlock(&mutex_);
     return response;
   }
 
   int64_t GetStartTime() const { return create_time_; }
 
   void Done() {
-    // bthread_mutex_lock(&mutex_);
     if (done_) {
       braft::AsyncClosureGuard done_guard(done_);
       done_ = nullptr;
@@ -111,13 +104,11 @@ class DeferDone {
       DINGO_LOG(INFO) << "Deferred done_again closure_id=" << closure_id_ << " watch_key=" << watch_key_
                       << " cost: " << butil::gettimeofday_ms() - create_time_ << " ms, create_time: " << create_time_;
     }
-    // bthread_mutex_unlock(&mutex_);
   }
 
  private:
   uint64_t closure_id_;
   std::string watch_key_;
-  bthread_mutex_t mutex_;
   google::protobuf::Closure *done_;
   pb::version::WatchResponse *response_;
   int64_t create_time_;

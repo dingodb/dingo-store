@@ -98,11 +98,12 @@ Latches::Latches() {
 
 Latches::~Latches() { delete slots_ptr; }
 
+// NOTE: bthread_mutex_t not allow copy, so we can't resize slots
 // CAUTION: this function is not safe, need to call before any usage begin
-void Latches::SetSlotNum(size_t size) {
-  slots_size = NextPowerOfTwo(size);
-  slots_ptr->resize(slots_size);
-}
+// void Latches::SetSlotNum(size_t size) {
+//   slots_size = NextPowerOfTwo(size);
+//   slots_ptr->resize(slots_size);
+// }
 
 bool Latches::Acquire(Lock* lock, uint64_t who) const {
   size_t acquired_count = 0;
