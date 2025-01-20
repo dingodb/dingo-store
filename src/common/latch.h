@@ -26,7 +26,7 @@ namespace dingodb {
 
 class Latch {
  public:
-  std::deque<std::pair<uint64_t, uint64_t>> waiting{};
+  std::deque<std::pair<uint64_t, uint64_t>> waiting;
 
   Latch() = default;
 
@@ -44,7 +44,7 @@ class Latch {
 
 class Lock {
  public:
-  std::vector<uint64_t> requiredHashes{};
+  std::vector<uint64_t> requiredHashes;
   size_t ownedCount = 0;
 
   Lock(const std::vector<std::string>& keys);
@@ -71,7 +71,8 @@ class Latches {
   explicit Latches();
   ~Latches();
 
-  void SetSlotNum(size_t size);
+  // NOTE: bthread_mutex_t not allow copy, so we can't resize slots
+  // void SetSlotNum(size_t size);
 
   bool Acquire(Lock* lock, uint64_t who) const;
 
