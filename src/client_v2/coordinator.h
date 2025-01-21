@@ -80,14 +80,13 @@ struct RaftRemovePeerOption {
 void SetUpRaftRemovePeer(CLI::App &app);
 void RunRaftRemovePeer(RaftRemovePeerOption const &opt);
 
-// todo
-struct RaftTansferLeaderOption {
+struct RaftTransferLeaderOption {
   std::string coordinator_addr;
   std::string peer;
   int index;
 };
-void SetUpRaftTansferLeader(CLI::App &app);
-void RunRaftTansferLeader(RaftTansferLeaderOption const &opt);
+void SetUpRaftTransferLeader(CLI::App &app);
+void RunRaftTransferLeader(RaftTransferLeaderOption const &opt);
 
 struct RaftSnapshotOption {
   std::string coordinator_addr;

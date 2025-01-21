@@ -356,18 +356,18 @@ void RunRaftRemovePeer(RaftRemovePeerOption const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 }
 
-void SetUpRaftTansferLeader(CLI::App &app) {
-  auto opt = std::make_shared<RaftTansferLeaderOption>();
+void SetUpRaftTransferLeader(CLI::App &app) {
+  auto opt = std::make_shared<RaftTransferLeaderOption>();
 
-  auto *cmd = app.add_subcommand("RaftTansferLeader", "Raft transfer leader")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("RaftTransferLeader", "Raft transfer leader")->group("Coordinator Command");
   cmd->add_option("--coor_addr", opt->coordinator_addr, "Coordinator servr addr, for example: 127.0.0.1:22001")
       ->required();
   cmd->add_option("--peer", opt->peer, "Request parameter peer, for example: 127.0.0.1:22101")->required();
   cmd->add_option("--index", opt->index, "Index")->expected(0, 3);
 
-  cmd->callback([opt]() { RunRaftTansferLeader(*opt); });
+  cmd->callback([opt]() { RunRaftTransferLeader(*opt); });
 }
-void RunRaftTansferLeader(RaftTansferLeaderOption const &opt) {
+void RunRaftTransferLeader(RaftTransferLeaderOption const &opt) {
   dingodb::pb::coordinator::RaftControlRequest request;
   dingodb::pb::coordinator::RaftControlResponse response;
   request.set_add_peer(opt.peer);
@@ -1063,7 +1063,7 @@ void RunGetDeleteRegionMap(GetDeleteRegionMapOption const &opt) {
 
 void SetUpAddDeleteRegionMap(CLI::App &app) {
   auto opt = std::make_shared<AddDeleteRegionMapOption>();
-  auto *cmd = app.add_subcommand("AddDeleteRegionMap", "Add delete region map")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("AddDeletedRegionMap", "Add delete region map")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--is_force", opt->is_force, "Request parameter force ");
   cmd->add_option("--id", opt->id, "Request parameter region id ")->required();
