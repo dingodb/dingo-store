@@ -285,8 +285,8 @@ void RunGetRawKvIndex(GetRawKvIndexOptions const& opt) {
 
   request.set_key(opt.key);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("GetRawKvIndex", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("GetRawKvIndex",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "GetRawKvIndex failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -314,8 +314,8 @@ void RunGetRawKvRev(GetRawKvRevOptions const& opt) {
   request.mutable_revision()->set_main(opt.revision);
   request.mutable_revision()->set_sub(opt.sub_revision);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("GetRawKvRev", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("GetRawKvRev",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "GetRawKvRev failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -331,7 +331,9 @@ void SetUpCoorKvRange(CLI::App& app) {
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")->default_val("");
   cmd->add_option("--sub_rversion", opt->limit, "Request parameter sub_rversion")->default_val(50);
-  cmd->add_option("--keys_only", opt->keys_only, "Request parameter keys_only")->default_val(false)->default_str("false");
+  cmd->add_option("--keys_only", opt->keys_only, "Request parameter keys_only")
+      ->default_val(false)
+      ->default_str("false");
   cmd->add_option("--count_only", opt->count_only, "Request parameter keys_count_only")
       ->default_val(false)
       ->default_str("false");
@@ -351,8 +353,8 @@ void RunCoorKvRange(CoorKvRangeOptions const& opt) {
   request.set_keys_only(opt.keys_only);
   request.set_count_only(opt.count_only);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvRange", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvRange", request,
+                                                                                                     response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "KvRange failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -429,8 +431,8 @@ void RunCoorKvDeleteRange(CoorKvDeleteRangeOptions const& opt) {
   request.set_range_end(opt.range_end);
   request.set_need_prev_kv(opt.need_prev_kv);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvDeleteRange", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvDeleteRange",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "KvDeleteRange failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -442,7 +444,7 @@ void RunCoorKvDeleteRange(CoorKvDeleteRangeOptions const& opt) {
 
 void SetUpCoorKvCompaction(CLI::App& app) {
   auto opt = std::make_shared<CoorKvCompactionOptions>();
-  auto* cmd = app.add_subcommand("CoorKvDeleteCompaction", "Coor kv compaction ")->group("Kv command");
+  auto* cmd = app.add_subcommand("CoorKvCompaction", "Coor kv compaction ")->group("Kv command");
   cmd->add_option("--key", opt->key, "Request parameter key")->required();
   cmd->add_option("--range_end", opt->range_end, "Request parameter range_end")->default_val("");
   cmd->add_option("--revision", opt->revision, "Request parameter revision")->required();
@@ -460,8 +462,8 @@ void RunCoorKvCompaction(CoorKvCompactionOptions const& opt) {
   request.set_range_end(opt.range_end);
   request.set_compact_revision(opt.revision);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvCompaction", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("KvCompaction",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "KvCompaction failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -520,8 +522,8 @@ void RunOneTimeWatch(OneTimeWatchOptions const& opt) {
   for (uint32_t i = 0; i < opt.max_watch_count; i++) {
     // wait 600s for event
     std::cout << "SendRequest watch_count=" << i << std::endl;
-    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("Watch", request,
-                                                                                                response, 600000);
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest(
+        "Watch", request, response, 600000);
     std::cout << "SendRequest status=" << status << ", watch_count=" << i << std::endl;
     std::cout << response.DebugString() << std::endl;
   }
@@ -626,8 +628,8 @@ void RunLeaseGrant(LeaseGrantOptions const& opt) {
   request.set_id(opt.id);
   request.set_ttl(opt.ttl);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseGrant", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseGrant",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "LeaseGrant failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -654,8 +656,8 @@ void RunLeaseRevoke(LeaseRevokeOptions const& opt) {
 
   request.set_id(opt.id);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseRevoke", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseRevoke",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "LeaseRevoke failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -681,8 +683,8 @@ void RunLeaseRenew(LeaseRenewOptions const& opt) {
   dingodb::pb::version::LeaseRenewResponse response;
   request.set_id(opt.id);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseRenew", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseRenew",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "LeaseRenew failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -709,8 +711,8 @@ void RunLeaseQuery(LeaseQueryOptions const& opt) {
   request.set_id(opt.id);
   request.set_keys(true);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseQuery", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("LeaseQuery",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "LeaseQuery failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
@@ -734,8 +736,8 @@ void RunListLeases(ListLeasesOptions const& opt) {
   dingodb::pb::version::ListLeasesRequest request;
   dingodb::pb::version::ListLeasesResponse response;
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("ListLeases", request, response);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionVersion()->SendRequest("ListLeases",
+                                                                                                     request, response);
   if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
     std::cout << "ListLeases failed, error: "
               << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "

@@ -1495,7 +1495,7 @@ void RunDropTenant(DropTenantOptions const &opt) {
 
 void SetUpGetIndexes(CLI::App &app) {
   auto opt = std::make_shared<GetIndexesOptions>();
-  auto *cmd = app.add_subcommand("GetIndexs", "Get index")->group("Meta Command");
+  auto *cmd = app.add_subcommand("GetIndexes", "Get index")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--schema_id", opt->schema_id, "Request parameter schema id")->required();
   cmd->callback([opt]() { RunGetIndexes(*opt); });
@@ -2771,6 +2771,56 @@ void RunGetRegionByTable(GetRegionByTableOptions const &opt) {
     return;
   }
   Pretty::Show(regions);
+}
+
+void SetUpCreateIds(CLI::App &app) {
+  auto opt = std::make_shared<CreateIdsOptions>();
+  auto *cmd = app.add_subcommand("CreateIds", "Create ids")->group("Meta Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--count", opt->count, "Request parameter count")->required();
+  cmd->add_option(
+         "--epoch_type", opt->epoch_type,
+         "Request parameter epoch_type, ID_NEXT_TABLE|ID_NEXT_SCHEMA|ID_SCHEMA_VERSION|ID_DDL_JOB|ID_NEXT_TENANT")
+      ->required();
+
+  cmd->callback([opt]() { RunCreateIds(*opt); });
+}
+
+void RunCreateIds(CreateIdsOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::CreateIdsRequest request;
+  dingodb::pb::coordinator::CreateIdsResponse response;
+
+  if (opt.epoch_type.empty()) {
+    std::cout
+        << "epoch_type is empty, like ID_NEXT_TABLE, ID_NEXT_SCHEMA, ID_SCHEMA_VERSION, ID_DDL_JOB, ID_NEXT_TENANT"
+        << std::endl;
+    return;
+  }
+
+  if (opt.count <= 0) {
+    std::cout << "count must be greater than 0" << std::endl;
+    return;
+  }
+
+  const google::protobuf::EnumDescriptor *descriptor =
+      google::protobuf::GetEnumDescriptor<dingodb::pb::coordinator::IdEpochType>();
+  const google::protobuf::EnumValueDescriptor *enum_value = descriptor->FindValueByName(opt.epoch_type);
+  if (enum_value == nullptr) {
+    std::cout << "id_epoch_type is invalid, like ID_NEXT_TABLE, ID_NEXT_SCHEMA, ID_SCHEMA_VERSION, ID_DDL_JOB, "
+                 "ID_NEXT_TENANT"
+              << std::endl;
+    return;
+  }
+
+  request.set_id_epoch_type(static_cast<dingodb::pb::coordinator::IdEpochType>(enum_value->number()));
+  request.set_count(opt.count);
+
+  CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateIds", request, response);
+
+  Pretty::Show(response);
 }
 
 }  // namespace client_v2

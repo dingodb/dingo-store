@@ -509,6 +509,14 @@ struct GetRegionByTableOptions {
 void SetUpGetRegionByTable(CLI::App &app);
 void RunGetRegionByTable(GetRegionByTableOptions const &opt);
 
+struct CreateIdsOptions {
+  std::string coor_url;
+  int64_t count;
+  std::string epoch_type;
+};
+void SetUpCreateIds(CLI::App &app);
+void RunCreateIds(CreateIdsOptions const &opt);
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_META_H_
