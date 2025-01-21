@@ -50,6 +50,9 @@ git submodule sync --recursive
 git submodule update --init --recursive
 mkdir build && cd build
 
+# If you build dingo-eureka into a specific output path,
+# add -DDINGO_EUREKA_INSTALL_PATH=/path/to/dingo-eureka-output to cmake below
+
 # Release
 cmake -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DDINGO_BUILD_STATIC=ON -DBUILD_UNIT_TESTS=OFF ..
 
@@ -67,7 +70,6 @@ make
 ```java
 cd java && mvn clean package -DskipTests
 ```
-
 
 ## How to make a clean pull request
 
