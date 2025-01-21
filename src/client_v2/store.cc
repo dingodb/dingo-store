@@ -925,7 +925,7 @@ void RunTxnPessimisticLock(TxnPessimisticLockOptions const& opt) {
 
 void SetUpTxnPessimisticRollback(CLI::App& app) {
   auto opt = std::make_shared<TxnPessimisticRollbackOptions>();
-  auto* cmd = app.add_subcommand("TxnPessimisticLockRollback", "Txn pessimistic rollback")->group("Store Command");
+  auto* cmd = app.add_subcommand("TxnPessimisticRollback", "Txn pessimistic rollback")->group("Store Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--region_id", opt->region_id, "Request parameter region id")->required();
   cmd->add_flag("--rc", opt->rc, "read commit")->default_val(false);

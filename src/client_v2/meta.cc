@@ -1231,7 +1231,7 @@ void RunGetTableRange(GetTableRangeOptions const &opt) {
 
 void SetUpGetTableMetrics(CLI::App &app) {
   auto opt = std::make_shared<GetTableMetricsOptions>();
-  auto *cmd = app.add_subcommand("GetTableByName", "Get table by name")->group("Meta Command");
+  auto *cmd = app.add_subcommand("GetTableMetrics", "Get table metrics")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter table id")->required();
   cmd->callback([opt]() { RunGetTableMetrics(*opt); });
@@ -2417,7 +2417,7 @@ void RunGenerateAutoIncrement(GenerateAutoIncrementOptions const &opt) {
 
 void SetUpDeleteAutoIncrement(CLI::App &app) {
   auto opt = std::make_shared<DeleteAutoIncrementOptions>();
-  auto *cmd = app.add_subcommand("GenerateAutoIncrement", "Generate create auto increment ")->group("Meta Command");
+  auto *cmd = app.add_subcommand("DeleteAutoIncrement", "Delete auto increment ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter table id")->required();
 
@@ -2673,7 +2673,7 @@ void RunResetTso(ResetTsoOptions const &opt) {
 
 void SetUpUpdateTso(CLI::App &app) {
   auto opt = std::make_shared<UpdateTsoOptions>();
-  auto *cmd = app.add_subcommand("ResetTso", "Reset tso ")->group("Meta Command");
+  auto *cmd = app.add_subcommand("UpdateTso", "Update tso ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--watch_id", opt->tso_new_physical, "Request parameter tso_new_physical")->required();
   cmd->add_option("--tso_save_physical", opt->tso_save_physical, "Request parameter watch id")->default_val(0);
