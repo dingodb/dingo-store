@@ -1545,6 +1545,7 @@ void Pretty::Show(dingodb::pb::index::VectorGetRegionMetricsResponse& response) 
   rows.push_back(row);
   PrintTable(rows);
 }
+
 void Pretty::Show(dingodb::pb::meta::GetTenantsResponse& response) {
   if (ShowError(response.error())) {
     return;
@@ -1569,5 +1570,23 @@ void Pretty::Show(dingodb::pb::meta::GetTenantsResponse& response) {
     rows.push_back(row);
   }
   PrintTable(rows);
-}  // namespace client_v2
+}
+
+void Pretty::Show(dingodb::pb::coordinator::CreateIdsResponse& response) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  std::vector<std::vector<ftxui::Element>> rows = {{
+      ftxui::paragraph("ID"),
+  }};
+  for (auto const& id : response.ids()) {
+    std::vector<ftxui::Element> row = {
+        ftxui::paragraph(fmt::format("{}", id)),
+    };
+    rows.push_back(row);
+  }
+  PrintTable(rows);
+}
+
 }  // namespace client_v2
