@@ -200,6 +200,7 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
 
   result_record_encoder_ = std::make_shared<RecordEncoder>(coprocessor_.schema_version(), result_serial_schemas_,
                                                            coprocessor_.result_schema().common_id());
+  result_record_encoder_->SetCodecVersion(coprocessor_.codec_version());
 
 #if defined(TEST_COPROCESSOR_V2_MOCK)
   rel_runner_ = std::make_shared<rel::mock::RelRunner>();
@@ -609,7 +610,7 @@ butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::Ke
       });
     }
     // int codec_version = GetCodecVersion(kv.key());
-    status = RelExprHelper::TransFromOperandWrapper(0x02, result_operand_ptr, result_serial_schemas_,
+    status = RelExprHelper::TransFromOperandWrapper(coprocessor_.codec_version(), result_operand_ptr, result_serial_schemas_,
                                                     result_column_indexes_, result_record);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
