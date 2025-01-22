@@ -999,6 +999,41 @@ void RunGetStoreMap(GetStoreMapOption const &opt) {
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetStoreMap", request, response);
   Pretty::Show(response);
+
+  std::map<std::string, dingodb::pb::common::Store> store_map_by_type_id;
+  for (const auto &store : response.storemap().stores()) {
+    store_map_by_type_id[std::to_string(store.store_type()) + "-" + std::to_string(store.id())] = store;
+  }
+
+  int32_t store_count_available = 0;
+  int32_t index_count_available = 0;
+  int32_t document_count_available = 0;
+
+  for (auto const &[first, store] : store_map_by_type_id) {
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_STORE) {
+      store_count_available++;
+    }
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_INDEX) {
+      index_count_available++;
+    }
+    if (store.state() == dingodb::pb::common::StoreState::STORE_NORMAL &&
+        store.store_type() == dingodb::pb::common::StoreType::NODE_TYPE_DOCUMENT) {
+      document_count_available++;
+    }
+  }
+
+  // don't modify this log, it is used by sdk
+  if (store_count_available > 0) {
+    std::cout << "DINGODB_HAVE_STORE_AVAILABLE, store_count=" << store_count_available << "\n";
+  }
+  if (index_count_available > 0) {
+    std::cout << "DINGODB_HAVE_INDEX_AVAILABLE, index_count=" << index_count_available << "\n";
+  }
+  if (document_count_available > 0) {
+    std::cout << "DINGODB_HAVE_DOCUMENT_AVAILABLE, document_count=" << document_count_available << "\n";
+  }
 }
 
 void SetUpGetExecutorMap(CLI::App &app) {
