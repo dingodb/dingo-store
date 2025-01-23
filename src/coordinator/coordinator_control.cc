@@ -92,26 +92,26 @@ CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, 
       &table_index_map_, kPrefixTableIndex, raw_engine_of_meta);
 
   // init SafeMap
-  id_epoch_map_.Init(100);                // id_epoch_map_ is a small map
-  id_epoch_map_safe_temp_.Init(100);      // id_epoch_map_temp_ is a small map
-  schema_name_map_safe_temp_.Init(1000);  // schema_map_ is a big map
-  table_name_map_safe_temp_.Init(10000);  // table_map_ is a big map
-  store_operation_map_.Init(100);         // store_operation_map_ is a small map
-  region_cmd_map_.Init(2000);             // region_cmd_map_ is a big map
-  schema_map_.Init(10000);                // schema_map_ is a big map
-  table_map_.Init(10000);                 // table_map_ is a big map
-  region_map_.Init(30000);                // region_map_ is a big map
-  region_metrics_map_.Init(30000);        // region_metrics_map_ is a big map
-  coordinator_map_.Init(10);              // coordinator_map_ is a small map
-  store_map_.Init(100);                   // store_map_ is a small map
-  table_metrics_map_.Init(10000);         // table_metrics_map_ is a big map
-  job_map_.Init(100);                     // job_map_ is a small map
-  index_name_map_safe_temp_.Init(10000);  // index_map_ is a big map
-  index_map_.Init(10000);                 // index_map_ is a big map
-  index_metrics_map_.Init(10000);         // index_metrics_map_ is a big map
+  id_epoch_map_.Init(100);                 // id_epoch_map_ is a small map
+  id_epoch_map_safe_temp_.Init(100);       // id_epoch_map_temp_ is a small map
+  schema_name_map_safe_temp_.Init(10000);  // schema_map_ is a big map
+  table_name_map_safe_temp_.Init(100000);  // table_map_ is a big map
+  store_operation_map_.Init(10000);        // store_operation_map_ is a big map
+  region_cmd_map_.Init(100000);            // region_cmd_map_ is a big map
+  schema_map_.Init(10000);                 // schema_map_ is a big map
+  table_map_.Init(100000);                 // table_map_ is a big map
+  region_map_.Init(500000);                // region_map_ is a big map
+  region_metrics_map_.Init(500000);        // region_metrics_map_ is a big map
+  coordinator_map_.Init(100);              // coordinator_map_ is a small map
+  store_map_.Init(200);                    // store_map_ is a small map
+  table_metrics_map_.Init(100000);         // table_metrics_map_ is a big map
+  job_map_.Init(100000);                   // job_map_ is a big map
+  index_name_map_safe_temp_.Init(100000);  // index_map_ is a big map
+  index_map_.Init(100000);                 // index_map_ is a big map
+  index_metrics_map_.Init(100000);         // index_metrics_map_ is a big map
 
   // table index
-  table_index_map_.Init(10000);
+  table_index_map_.Init(100000);
 
   // tenant
   tenant_map_.Init(1000);  // tenant_map_ is a small map

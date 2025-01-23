@@ -3637,7 +3637,7 @@ butil::Status CoordinatorControl::CreateRegionWithJob(std::vector<pb::coordinato
 butil::Status CoordinatorControl::ValidateJobConflict(int64_t region_id, int64_t second_region_id) {
   // check job conflict
   butil::FlatMap<int64_t, pb::coordinator::Job> temp_job_map;
-  temp_job_map.init(1000);
+  temp_job_map.init(10000);
   int ret = job_map_.GetRawMapCopy(temp_job_map);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ValidateJobConflict job_map_.GetRawMapCopy "
@@ -3681,7 +3681,7 @@ butil::Status CoordinatorControl::ValidateJobConflict(int64_t region_id, int64_t
 
   // check store operation conflict
   butil::FlatMap<int64_t, pb::coordinator_internal::StoreOperationInternal> store_operation_map_temp;
-  store_operation_map_temp.init(1000);
+  store_operation_map_temp.init(10000);
   ret = store_operation_map_.GetRawMapCopy(store_operation_map_temp);
   if (ret < 0) {
     DINGO_LOG(ERROR) << "ValidateJobConflict store_operation_map_.GetRawMapCopy "
@@ -4622,9 +4622,9 @@ void CoordinatorControl::UpdateRegionMapAndStoreOperation(const pb::common::Stor
         region_to_update.definition().range().end_key() != region_metrics.region_definition().range().end_key()) {
       DINGO_LOG(INFO) << "region range change region_id = " << region_metrics.id() << " old range = ["
                       << Helper::StringToHex(region_to_update.definition().range().start_key()) << ", "
-                      << Helper::StringToHex(region_to_update.definition().range().end_key()) << ")"
-                      << " new range = [" << Helper::StringToHex(region_metrics.region_definition().range().start_key())
-                      << ", " << Helper::StringToHex(region_metrics.region_definition().range().end_key()) << ")";
+                      << Helper::StringToHex(region_to_update.definition().range().end_key()) << ")" << " new range = ["
+                      << Helper::StringToHex(region_metrics.region_definition().range().start_key()) << ", "
+                      << Helper::StringToHex(region_metrics.region_definition().range().end_key()) << ")";
       if (!leader_has_old_epoch) {
         need_update_region_metrics = true;
       }
@@ -6626,6 +6626,9 @@ butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Lo
     cntl.set_timeout_ms(30000L);
 
     pb::push::PushService_Stub(&channel).PushStoreOperation(&cntl, &request, &response, nullptr);
+
+    DINGO_LOG(INFO) << fmt::format("[joblist] send store_operation to store:{}, request:{}",
+                                   location.ShortDebugString(), request.ShortDebugString());
 
     if (cntl.Failed()) {
       DINGO_LOG(ERROR) << fmt::format("[joblist] rpc failed, will retry, error code:{}, error message:{}",
