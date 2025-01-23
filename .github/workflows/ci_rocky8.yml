@@ -32,7 +32,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: source /opt/intel/oneapi/setvars.sh && cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTHIRD_PARTY_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_DISKANN=ON -DWITH_MKL=ON -DBUILD_UNIT_TESTS=OFF -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON -DROCKSDB_PROTABLE_OPTION=1 -DCMAKE_CXX_STANDARD=23 
+      run: source /opt/intel/oneapi/setvars.sh && cmake -B ./build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DTHIRD_PARTY_BUILD_TYPE=${{env.BUILD_TYPE}} -DWITH_DISKANN=ON -DWITH_MKL=ON -DBUILD_UNIT_TESTS=OFF -DBRPC_ENABLE_CPU_PROFILER=OFF -DLINK_TCMALLOC=ON -DCMAKE_CXX_STANDARD=23 
  
     - name: Build
       # Build your program with the given configuration

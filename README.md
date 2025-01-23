@@ -1,5 +1,6 @@
 [![CMake_ubuntu](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_ubuntu.yml)
-[![CMake_rocky8.6](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky.yml)
+[![CMake_rocky8](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky8.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky8.yml)
+[![CMake_rocky9](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky9.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/ci_rocky9.yml)
 [![Java_Maven_Build](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_build.yml)
 [![Maven_Publish_package](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml/badge.svg)](https://github.com/dingodb/dingo-store/actions/workflows/java_package.yml)
 
