@@ -28,7 +28,7 @@ cmake_minimum_required(VERSION 3.23.1 FATAL_ERROR)
 project(dingo-store C CXX)
 
 option(EXAMPLE_LINK_SO "Whether examples are linked dynamically" OFF)
-option(LINK_TCMALLOC "Link tcmalloc if possible" OFF)
+option(LINK_TCMALLOC "Link tcmalloc if possible" ON)
 option(BUILD_UNIT_TESTS "Build unit test" OFF)
 option(ENABLE_COVERAGE "Enable unit test code coverage" OFF)
 option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb binary" ON)
@@ -45,11 +45,15 @@ option(WITH_LIBURING "Build with liburing" ON)
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
 
+set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -DUSE_BTHREAD_MUTEX)
+
 set(CMAKE_C_FLAGS_DEBUG "$ENV{CFLAGS} -O0  -g3 -ggdb")
 set(CMAKE_CXX_FLAGS_DEBUG "$ENV{CXXFLAGS} -O0  -g3 -ggdb")
 
 message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SYSTEM: ${CMAKE_HOST_SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
+message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
 
 # xdprocks
 if(XDPROCKS_PATH)
