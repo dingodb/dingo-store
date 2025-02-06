@@ -457,12 +457,12 @@ int main(int argc, char* argv[]) {
         "HH:MM:SS ]' --storage=local://[path_dir]\n");
     printf("Example: \n");
     printf(
-        "/dingodb_br --br_coor_url=127.0.0.1:22001 --br_type=backup --br_backup_type=full --backupts='2020-01-01 "
+        "./dingodb_br --br_coor_url=127.0.0.1:22001 --br_type=backup --br_backup_type=full --backupts='2020-01-01 "
         "00:00:00 +08:00' "
         "--storage=local:///opt/backup-2020-01-01\n");
 
     printf(
-        "/dingodb_br --br_coor_url=[file://./conf/coor_list] --br_type=backup --br_backup_type=full "
+        "./dingodb_br --br_coor_url=[file://./conf/coor_list] --br_type=backup --br_backup_type=full "
         "--backupts='2020-01-01 "
         "00:00:00 +08:00' "
         "--storage=local:///opt/backup-2020-01-01\n");

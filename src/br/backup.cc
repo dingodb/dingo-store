@@ -632,6 +632,29 @@ butil::Status Backup::GetGcSafePoint() {
   }
 
   DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+  if (FLAGS_br_log_switch_backup_detail) {
+    DINGO_LOG(INFO) << "";
+    DINGO_LOG(INFO) << "tenant id : " << dingodb::Constant::kDefaultTenantId
+                    << " safe point : " << response.safe_point() << "("
+                    << Utils::ConvertTsoToDateTime(response.safe_point()) << ")";
+
+    for (const auto& [id, safe_point] : response.tenant_safe_points()) {
+      DINGO_LOG(INFO) << "tenant id : " << id << " safe point : " << safe_point << "("
+                      << Utils::ConvertTsoToDateTime(safe_point) << ")";
+    }
+
+    DINGO_LOG(INFO) << "";
+
+    DINGO_LOG(INFO) << "tenant id : " << dingodb::Constant::kDefaultTenantId
+                    << " resolve lock safe point : " << response.resolve_lock_safe_point() << "("
+                    << Utils::ConvertTsoToDateTime(response.resolve_lock_safe_point()) << ")";
+
+    for (const auto& [id, safe_point] : response.tenant_resolve_lock_safe_points()) {
+      DINGO_LOG(INFO) << "tenant id : " << id << " resolve lock safe point : " << safe_point << "("
+                      << Utils::ConvertTsoToDateTime(safe_point) << ")";
+    }
+    DINGO_LOG(INFO) << "";
+  }
 
   int64_t max_tenant_safe_points;
   int64_t min_tenant_resolve_lock_safe_points;
@@ -653,18 +676,24 @@ butil::Status Backup::GetGcSafePoint() {
 
   // compare safe points
   if (backuptso_internal_ > max_tenant_safe_points && backuptso_internal_ <= min_tenant_resolve_lock_safe_points) {
-    DINGO_LOG(INFO) << "Backup safe point is " << backuptso_internal_;
+    DINGO_LOG(INFO) << "Backup safe point is " << backuptso_internal_ << " "
+                    << Utils::ConvertTsoToDateTime(backuptso_internal_);
   } else {
     std::string s = fmt::format(
-        "Backup safe point is {}, but max tenant safe point is {}, min tenant resolve lock safe point is {}",
-        backuptso_internal_, max_tenant_safe_points, min_tenant_resolve_lock_safe_points);
+        "Backup safe point is {}({}), but max tenant safe point is {}({}), min tenant resolve lock safe point is "
+        "{}({})",
+        backuptso_internal_, Utils::ConvertTsoToDateTime(backuptso_internal_), max_tenant_safe_points,
+        Utils::ConvertTsoToDateTime(max_tenant_safe_points), min_tenant_resolve_lock_safe_points,
+        Utils::ConvertTsoToDateTime(min_tenant_resolve_lock_safe_points));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EILLEGAL_PARAMTETERS, s);
   }
 
-  std::string s =
-      fmt::format("# max tenant safe points : {} min tenant resolve lock safe points : {} backuptso(internal) : {}",
-                  max_tenant_safe_points, min_tenant_resolve_lock_safe_points, backuptso_internal_);
+  std::string s = fmt::format(
+      "# max tenant safe points : {}({}) min tenant resolve lock safe points : {}({}) backuptso(internal) : {}({})",
+      max_tenant_safe_points, Utils::ConvertTsoToDateTime(max_tenant_safe_points), min_tenant_resolve_lock_safe_points,
+      Utils::ConvertTsoToDateTime(min_tenant_resolve_lock_safe_points), backuptso_internal_,
+      Utils::ConvertTsoToDateTime(backuptso_internal_));
   std::cout << s << std::endl;
   DINGO_LOG(INFO) << s;
 

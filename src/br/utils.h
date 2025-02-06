@@ -34,6 +34,7 @@ class Utils {
 
   static int64_t ConvertToMilliseconds(const std::string& datetime);
   static butil::Status ConvertBackupTsToTso(const std::string& backup_ts, int64_t& tso);
+  static std::string ConvertTsoToDateTime(int64_t tso);
 
  private:
   Utils() = default;

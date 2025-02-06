@@ -261,4 +261,20 @@ butil::Status Utils::ConvertBackupTsToTso(const std::string& backup_ts, int64_t&
   return butil::Status();
 }
 
+std::string Utils::ConvertTsoToDateTime(int64_t tso) {
+  int64_t milliseconds = tso >> dingodb::kLogicalBits;
+  milliseconds += dingodb::kBaseTimestampMs;
+
+  std::chrono::milliseconds ms(milliseconds);
+  auto tp = std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds>(ms);
+
+  std::time_t time = std::chrono::system_clock::to_time_t(tp);
+  std::tm tm = *std::localtime(&time);
+
+  std::ostringstream oss;
+  oss << std::put_time(&tm, "%Y-%m-%d %H:%M:%S");
+
+  return oss.str();
+}
+
 }  // namespace br
