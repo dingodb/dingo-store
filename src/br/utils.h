@@ -16,9 +16,11 @@
 #define DINGODB_BR_UTILS_H_
 
 #include <fstream>
+#include <memory>
 #include <string>
 
 #include "butil/status.h"
+#include "proto/common.pb.h"
 
 namespace br {
 
@@ -35,6 +37,12 @@ class Utils {
   static int64_t ConvertToMilliseconds(const std::string& datetime);
   static butil::Status ConvertBackupTsToTso(const std::string& backup_ts, int64_t& tso);
   static std::string ConvertTsoToDateTime(int64_t tso);
+
+  static butil::Status ReadFile(std::ifstream& reader, const std::string& filename);
+
+  static butil::Status CheckBackupMeta(std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta,
+                                       const std::string& storage_internal, const std::string& file_name,
+                                       const std::string& dir_name, const std::string& exec_node);
 
  private:
   Utils() = default;

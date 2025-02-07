@@ -795,7 +795,9 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
-  *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
+  if (region_internal.definition().has_index_parameter()) {
+    *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
+  }
   region.mutable_definition()->set_tenant_id(region_internal.definition().tenant_id());
   region.mutable_definition()->set_table_id(region_internal.definition().table_id());
   region.mutable_definition()->set_index_id(region_internal.definition().index_id());
@@ -1508,7 +1510,8 @@ butil::Status CoordinatorControl::CreateRegionForSplitInternal(
                              "", store_ids.size(), new_range, split_from_region.definition().schema_id(),
                              split_from_region.definition().table_id(), split_from_region.definition().index_id(),
                              split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
-                             split_from_region.definition().index_parameter(), store_ids, split_from_region_id,
+                             split_from_region.definition().has_index_parameter(),
+                             split_from_region.definition().index_parameter(), false, store_ids, split_from_region_id,
                              new_region_id, store_operations, meta_increment);
   }
 }
@@ -1537,13 +1540,14 @@ butil::Status CoordinatorControl::CreateRegionForSplit(const std::string& region
 
   // create region with split_from_region_id & store_ids
   std::vector<pb::coordinator::StoreOperation> store_operations;
-  auto ret1 =
-      CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(),
-                        split_from_region.definition().store_engine(), resource_tag, store_ids.size(), region_range,
-                        split_from_region.definition().schema_id(), split_from_region.definition().table_id(),
-                        split_from_region.definition().index_id(), split_from_region.definition().part_id(),
-                        split_from_region.definition().tenant_id(), split_from_region.definition().index_parameter(),
-                        store_ids, split_from_region_id, new_region_id, store_operations, meta_increment);
+  auto ret1 = CreateRegionFinal(region_name, region_type, split_from_region.definition().raw_engine(),
+                                split_from_region.definition().store_engine(), resource_tag, store_ids.size(),
+                                region_range, split_from_region.definition().schema_id(),
+                                split_from_region.definition().table_id(), split_from_region.definition().index_id(),
+                                split_from_region.definition().part_id(), split_from_region.definition().tenant_id(),
+                                split_from_region.definition().has_index_parameter(),
+                                split_from_region.definition().index_parameter(), false, store_ids,
+                                split_from_region_id, new_region_id, store_operations, meta_increment);
   if (!ret1.ok()) {
     return ret1;
   }
@@ -2154,8 +2158,8 @@ butil::Status CoordinatorControl::CreateRegionFinal(
     const std::string& region_name, pb::common::RegionType region_type, pb::common::RawEngine raw_engine,
     pb::common::StorageEngine store_engine, const std::string& resource_tag, int32_t replica_num,
     pb::common::Range region_range, int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
-    int64_t tenant_id, const pb::common::IndexParameter& index_parameter, std::vector<int64_t>& store_ids,
-    int64_t split_from_region_id, int64_t& new_region_id,
+    int64_t tenant_id, bool has_index_parameter, const pb::common::IndexParameter& index_parameter,
+    bool use_region_name_direct, std::vector<int64_t>& store_ids, int64_t split_from_region_id, int64_t& new_region_id,
     std::vector<pb::coordinator::StoreOperation>& store_operations,
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
@@ -2164,7 +2168,9 @@ butil::Status CoordinatorControl::CreateRegionFinal(
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
                   << ", part_id=" << part_id << ", tenant_id=" << tenant_id
+                  << ", has_index_parameter=" << has_index_parameter
                   << ", index_parameter=" << index_parameter.ShortDebugString()
+                  << ", use_region_name_direct=" << (use_region_name_direct ? "true" : "false")
                   << ", split_from_region_id=" << split_from_region_id;
 
   auto ret = CheckRegionPrefix(region_range.start_key(), region_range.end_key());
@@ -2293,7 +2299,11 @@ butil::Status CoordinatorControl::CreateRegionFinal(
   // create region definition begin
   auto* region_definition = new_region.mutable_definition();
   region_definition->set_id(create_region_id);
-  region_definition->set_name(region_name + std::string("[") + std::to_string(create_region_id) + std::string("]"));
+  if (use_region_name_direct) {
+    region_definition->set_name(region_name);
+  } else {
+    region_definition->set_name(region_name + std::string("[") + std::to_string(create_region_id) + std::string("]"));
+  }
   region_definition->mutable_epoch()->set_conf_version(1);
   region_definition->mutable_epoch()->set_version(1);
   region_definition->set_schema_id(schema_id);
@@ -2303,7 +2313,9 @@ butil::Status CoordinatorControl::CreateRegionFinal(
   region_definition->set_tenant_id(tenant_id);
   region_definition->set_raw_engine(raw_engine);
   region_definition->set_store_engine(store_engine);
-  *(region_definition->mutable_index_parameter()) = new_index_parameter;
+  if (has_index_parameter) {
+    *(region_definition->mutable_index_parameter()) = new_index_parameter;
+  }
 
   // set region range in region definition, this is provided by sdk
   auto* range_in_definition = region_definition->mutable_range();

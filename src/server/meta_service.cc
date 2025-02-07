@@ -59,7 +59,9 @@ void MetaServiceImpl::TableDefinitionToIndexDefinition(const pb::meta::TableDefi
   index_definition.set_version(table_definition.version());
   *(index_definition.mutable_index_partition()) = table_definition.table_partition();
   index_definition.set_replica(table_definition.replica());
-  *(index_definition.mutable_index_parameter()) = table_definition.index_parameter();
+  if (table_definition.has_index_parameter()) {
+    *(index_definition.mutable_index_parameter()) = table_definition.index_parameter();
+  }
   index_definition.set_with_auto_incrment(table_definition.auto_increment() > 0);
   index_definition.set_auto_increment(table_definition.auto_increment());
 }
@@ -73,7 +75,9 @@ void MetaServiceImpl::IndexDefinitionToTableDefinition(const pb::meta::IndexDefi
   *(table_definition.mutable_table_partition()) = index_definition.index_partition();
   table_definition.set_replica(index_definition.replica());
   table_definition.set_engine(index_definition.engine());
-  *(table_definition.mutable_index_parameter()) = index_definition.index_parameter();
+  if (index_definition.has_index_parameter()) {
+    *(table_definition.mutable_index_parameter()) = index_definition.index_parameter();
+  }
 }
 
 void DoGetSchemas(google::protobuf::RpcController * /*controller*/, const pb::meta::GetSchemasRequest *request,

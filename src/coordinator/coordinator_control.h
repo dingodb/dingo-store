@@ -264,7 +264,8 @@ class CoordinatorControl : public MetaControl {
                                   pb::common::RawEngine raw_engine, pb::common::StorageEngine store_engine,
                                   const std::string &resource_tag, int32_t replica_num, pb::common::Range region_range,
                                   int64_t schema_id, int64_t table_id, int64_t index_id, int64_t part_id,
-                                  int64_t tenant_id, const pb::common::IndexParameter &index_parameter,
+                                  int64_t tenant_id, bool has_index_parameter,
+                                  const pb::common::IndexParameter &index_parameter, bool use_region_name_direct,
                                   std::vector<int64_t> &store_ids, int64_t split_from_region_id, int64_t &new_region_id,
                                   std::vector<pb::coordinator::StoreOperation> &store_operations,
                                   pb::coordinator_internal::MetaIncrement &meta_increment);

@@ -62,11 +62,11 @@ class ServerInteraction {
 
   template <typename Request, typename Response>
   butil::Status SendRequest(const std::string& service_name, const std::string& api_name, const Request& request,
-                            Response& response);
+                            Response& response, int64_t time_out_ms = FLAGS_br_server_interaction_timeout_ms);
 
   template <typename Request, typename Response>
   butil::Status AllSendRequest(const std::string& service_name, const std::string& api_name, const Request& request,
-                               Response& response);
+                               Response& response, int64_t time_out_ms = FLAGS_br_server_interaction_timeout_ms);
 
   int64_t GetLatency() const { return latency_; }
 
@@ -85,7 +85,7 @@ using ServerInteractionPtr = std::shared_ptr<ServerInteraction>;
 
 template <typename Request, typename Response>
 butil::Status ServerInteraction::SendRequest(const std::string& service_name, const std::string& api_name,
-                                             const Request& request, Response& response) {
+                                             const Request& request, Response& response, int64_t time_out_ms) {
   const google::protobuf::MethodDescriptor* method = nullptr;
 
   if (service_name == "CoordinatorService") {
@@ -114,7 +114,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
   int retry_count = 0;
   do {
     brpc::Controller cntl;
-    cntl.set_timeout_ms(FLAGS_br_server_interaction_timeout_ms);
+    cntl.set_timeout_ms(time_out_ms);
     cntl.set_log_id(butil::fast_rand());
     const int leader_index = GetLeader();
     channels_[leader_index]->CallMethod(method, &cntl, &request, &response, nullptr);
@@ -165,9 +165,9 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
 
 template <typename Request, typename Response>
 butil::Status ServerInteraction::AllSendRequest(const std::string& service_name, const std::string& api_name,
-                                                const Request& request, Response& response) {
+                                                const Request& request, Response& response, int64_t time_out_ms) {
   for (int i = 0; i < channels_.size(); ++i) {
-    auto status = SendRequest(service_name, api_name, request, response);
+    auto status = SendRequest(service_name, api_name, request, response, time_out_ms);
     if (!status.ok()) {
       return status;
     }

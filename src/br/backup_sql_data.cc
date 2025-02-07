@@ -164,9 +164,13 @@ butil::Status BackupSqlData::Run() {
   int64_t total_regions_count = wait_for_handle_store_regions_->size() + wait_for_handle_index_regions_->size() +
                                 wait_for_handle_document_regions_->size();
 
+  std::atomic<bool> store_is_thread_exit = false;
+  std::atomic<bool> index_is_thread_exit = false;
+  std::atomic<bool> document_is_thread_exit = false;
+
   // store
   status = DoAsyncBackupRegion(store_interaction_, "StoreService", wait_for_handle_store_regions_,
-                               already_handle_store_regions_, save_store_region_map_);
+                               already_handle_store_regions_, save_store_region_map_, store_is_thread_exit);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -174,7 +178,7 @@ butil::Status BackupSqlData::Run() {
 
   // index
   status = DoAsyncBackupRegion(index_interaction_, "IndexService", wait_for_handle_index_regions_,
-                               already_handle_index_regions_, save_index_region_map_);
+                               already_handle_index_regions_, save_index_region_map_, index_is_thread_exit);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -182,7 +186,7 @@ butil::Status BackupSqlData::Run() {
 
   // document
   status = DoAsyncBackupRegion(document_interaction_, "DocumentService", wait_for_handle_document_regions_,
-                               already_handle_document_regions_, save_document_region_map_);
+                               already_handle_document_regions_, save_document_region_map_, document_is_thread_exit);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -207,6 +211,28 @@ butil::Status BackupSqlData::Run() {
     }
 
     last_already_handle_regions.store(already_handle_regions_);
+
+    sleep(1);
+  }
+
+  // check thread exit
+  int64_t start_time_s = dingodb::Helper::Timestamp();
+  int64_t end_time_s = start_time_s;
+  while (true) {
+    if ((end_time_s - start_time_s) > (FLAGS_br_server_interaction_timeout_ms / 1000 + 5)) {
+      DINGO_LOG(ERROR) << fmt::format("backup sql region data timeout : {}s", (end_time_s - start_time_s));
+      break;
+    }
+
+    bool is_all_thread_exit = false;
+
+    if (store_is_thread_exit && index_is_thread_exit && document_is_thread_exit) {
+      is_all_thread_exit = true;
+    }
+
+    if (is_all_thread_exit) {
+      break;
+    }
 
     sleep(1);
   }
@@ -237,12 +263,13 @@ butil::Status BackupSqlData::DoAsyncBackupRegion(
     ServerInteractionPtr interaction, const std::string& service_name,
     std::shared_ptr<std::vector<dingodb::pb::common::Region>> wait_for_handle_regions,
     std::atomic<int64_t>& already_handle_regions,
-    std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map) {
+    std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map,
+    std::atomic<bool>& is_thread_exit) {
   std::shared_ptr<BackupSqlData> self = GetSelf();
   auto lambda_call = [self, interaction, service_name, wait_for_handle_regions, &already_handle_regions,
-                      save_region_map]() {
+                      save_region_map, &is_thread_exit]() {
     self->DoBackupRegionInternal(interaction, service_name, wait_for_handle_regions, already_handle_regions,
-                                 save_region_map);
+                                 save_region_map, is_thread_exit);
   };
 
 #if defined(ENABLE_BACKUP_SQL_DATA_PTHREAD)

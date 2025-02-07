@@ -291,6 +291,9 @@ class Constant {
   inline static const std::string kStoreRegionSqlMetaSstName = "store_region_sql_meta.sst";
   inline static const std::string kStoreCfSstMetaSqlMetaSstName = "store_cf_sst_meta_sql_meta.sst";
 
+  inline static const std::string kRestoreData = "RESTORE_DATA";
+  inline static const std::string kRestoreMeta = "RESTORE_META";
+
   // sdk data
   inline static const std::string kStoreRegionSdkDataSstName = "store_region_sdk_data.sst";
   inline static const std::string kStoreCfSstMetaSdkDataSstName = "store_cf_sst_meta_sdk_data.sst";

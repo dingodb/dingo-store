@@ -67,3 +67,60 @@ TEST_F(BrUtilsTest, ClearDir) {
 
   br::Utils::RemoveAllDir(dir_path, true);
 }
+
+TEST_F(BrUtilsTest, ReadFile) {
+  std::ofstream writer;
+  auto status = br::Utils::CreateFile(writer, file_path);
+  ASSERT_TRUE(status.ok());
+  writer << "hello world \n";
+  writer << "nin hao!! \n";
+  writer.close();
+
+  std::ifstream reader;
+
+  status = br::Utils::ReadFile(reader, file_path);
+  ASSERT_TRUE(status.ok());
+
+  std::string line;
+  reader >> line;
+  EXPECT_EQ(line, "hello");
+  reader >> line;
+  EXPECT_EQ(line, "world");
+  reader >> line;
+  EXPECT_EQ(line, "nin");
+  reader >> line;
+  EXPECT_EQ(line, "hao!!");
+
+  reader.close();
+
+  status = br::Utils::ReadFile(reader, file_path);
+  ASSERT_TRUE(status.ok());
+
+  std::getline(reader, line);
+  EXPECT_EQ(line, "hello world ");
+
+  std::getline(reader, line);
+  EXPECT_EQ(line, "nin hao!! ");
+
+  std::filesystem::remove(file_path);
+}
+
+TEST_F(BrUtilsTest, CheckBackupMeta) {
+  std::string storage_internal = "./backup2";
+  const std::string& file_name = "backupmeta";
+
+  const std::string& dir_name = "";
+  const std::string& exec_node = "backup";
+  std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta;
+  backup_meta = std::make_shared<dingodb::pb::common::BackupMeta>();
+
+  backup_meta->set_remark("remark");
+  backup_meta->set_dir_name("");
+  backup_meta->set_file_name("backupmeta");
+  backup_meta->set_file_size(1896);
+  backup_meta->set_encryption("b5b8a69893a7666fb6d7d03cc4d2007e2e7b7b63");
+  backup_meta->set_exec_node("backup");
+
+  auto status = br::Utils::CheckBackupMeta(backup_meta, storage_internal, file_name, dir_name, exec_node);
+  EXPECT_TRUE(status.ok());
+}

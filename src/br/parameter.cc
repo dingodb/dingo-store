@@ -43,13 +43,42 @@ DEFINE_bool(br_server_interaction_print_each_rpc_request, false,
 DEFINE_int32(br_server_interaction_max_retry, 5, "br server interaction  max retry. default 5");
 
 // DEFINE_int64(br_server_interaction_timeout_ms, 60000, "br server interaction connect timeout . default 60000 ms");
-DEFINE_int64(br_server_interaction_timeout_ms, 0x7fffffff,
-             "br server interaction connect timeout . default 0x7fffffff ms");
+DEFINE_int64(br_server_interaction_timeout_ms, 60000, "br server interaction connect timeout . default 60000 ms");
 
 DEFINE_bool(br_log_switch_backup_detail, true, "backup detail log");
 
 DEFINE_bool(br_log_switch_backup_detail_detail, false, "backup detail detail log");
 
 DEFINE_string(br_log_dir, "./log", "backup log dir. default ./log");
+
+DEFINE_string(br_restore_type, "full", "restore  type. default: full.");
+
+DEFINE_bool(br_log_switch_restore_detail, true, "restore detail log");
+
+DEFINE_bool(br_log_switch_restore_detail_detail, false, "restore detail detail log");
+
+// restore watch interval in seconds. default 5s
+DEFINE_uint32(restore_watch_interval_s, 5, "restore watch interval in seconds. default 5s");
+
+// restore task timeout in seconds. default 100s
+DEFINE_uint32(restore_task_timeout_s, 100, "restore task timeout in seconds. default 100s");
+
+// restore task max retry times. default 5
+DEFINE_uint32(restore_task_max_retry, 5, "restore task max retry times. default 5");
+
+// default replica number
+DEFINE_int32(br_default_replica_num, 0, "default replica number. default 0");
+
+// create region concurrency
+DEFINE_uint32(create_region_concurrency, 10, "restore create region to coordinator concurrency. default 10");
+
+// restore region concurrency
+DEFINE_uint32(restore_region_concurrency, 5, "restore region concurrency. default 5");
+
+// create region timeout s (second)
+DEFINE_int64(create_region_timeout_s, 60, "restore create region to coordinator timeout s. default 60s");
+
+// restore region timeout s (second)
+DEFINE_int64(restore_region_timeout_s, 600, "restore region timeout s. default 600s");
 
 }  // namespace br

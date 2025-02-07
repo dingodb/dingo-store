@@ -277,4 +277,73 @@ std::string Utils::ConvertTsoToDateTime(int64_t tso) {
   return oss.str();
 }
 
+butil::Status Utils::ReadFile(std::ifstream& reader, const std::string& filename) {
+  reader.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+  reader.open(filename, std::ios::binary | std::ios::in);
+
+  if (reader.fail()) {
+    char buff[1024];
+    auto ret = std::string(strerror_r(errno, buff, 1024));
+    std::string s = std::string("Failed to open file") + filename + " for read because " + buff + ", ret=" + ret;
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status Utils::CheckBackupMeta(std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta,
+                                     const std::string& storage_internal, const std::string& file_name,
+                                     const std::string& dir_name, const std::string& exec_node) {
+  butil::Status status;
+
+  const std::string& internal_file_name = backup_meta->file_name();
+  if (internal_file_name != file_name) {
+    std::string s = fmt::format("file_name: {} is invalid. must be equal to : {} ", internal_file_name, file_name);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::ERESTORE_FIELD_NOT_MATCH, s);
+  }
+
+  const std::string& internal_dir_name = backup_meta->dir_name();
+  if (internal_dir_name != dir_name) {
+    std::string s = fmt::format("dir_name: {} is invalid. must be equal to : {}", internal_dir_name, dir_name);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::ERESTORE_FIELD_NOT_MATCH, s);
+  }
+
+  const std::string& internal_exec_node = backup_meta->exec_node();
+  if (internal_exec_node != exec_node) {
+    std::string s = fmt::format("exec_node: {} is invalid. must be equal to : {}", internal_exec_node, exec_node);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::ERESTORE_FIELD_NOT_MATCH, s);
+  }
+
+  uint64_t file_size = backup_meta->file_size();
+  uint64_t calc_file_size = 0;
+
+  std::string file_path = storage_internal + "/" + file_name;
+  calc_file_size = static_cast<uint64_t>(dingodb::Helper::GetFileSize(file_path));
+  if (file_size != calc_file_size) {
+    std::string s = fmt::format("file_size: {} is invalid. must be equal to : {}", file_size, calc_file_size);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::ERESTORE_FIELD_NOT_MATCH, s);
+  }
+
+  const std::string encryption = backup_meta->encryption();
+  std::string calc_encryption;
+  status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, calc_encryption);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  if (encryption != calc_encryption) {
+    std::string s = fmt::format("encryption: {} is invalid. must be equal to : {}", encryption, calc_encryption);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::ERESTORE_FILE_CHECKSUM_NOT_MATCH, s);
+  }
+
+  return butil::Status::OK();
+}
+
 }  // namespace br

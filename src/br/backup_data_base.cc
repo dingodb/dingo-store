@@ -44,9 +44,11 @@ BackupDataBase::BackupDataBase(ServerInteractionPtr coordinator_interaction, Ser
       already_handle_store_regions_(0),
       already_handle_index_regions_(0),
       already_handle_document_regions_(0),
-      name_(name) {}
+      name_(name) {
+  bthread_mutex_init(&mutex_, nullptr);
+}
 
-BackupDataBase::~BackupDataBase() = default;
+BackupDataBase::~BackupDataBase() { bthread_mutex_destroy(&mutex_); }
 
 void BackupDataBase::SetRegionMap(std::shared_ptr<dingodb::pb::common::RegionMap> region_map) {
   region_map_ = region_map;
@@ -274,7 +276,10 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
     ServerInteractionPtr interaction, const std::string& service_name,
     std::shared_ptr<std::vector<dingodb::pb::common::Region>> wait_for_handle_regions,
     std::atomic<int64_t>& already_handle_regions,
-    std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map) {
+    std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map,
+    std::atomic<bool>& is_thread_exit) {
+  butil::Status status;
+  is_thread_exit = false;
   for (const auto& region : *wait_for_handle_regions) {
     if (is_need_exit_) {
       break;
@@ -296,13 +301,13 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << name_ << " " << request.DebugString();
 
-    butil::Status status = interaction->SendRequest(service_name, "BackupData", request, response);
+    status = interaction->SendRequest(service_name, "BackupData", request, response);
     if (!status.ok()) {
       is_need_exit_ = true;
       std::string s = fmt::format("Fail to backup region, region_id={}, status={}", region.id(), status.error_cstr());
       DINGO_LOG(ERROR) << s;
-      last_error_ = status;
-      return status;
+      status = butil::Status(status.error_code(), s);
+      break;
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
@@ -311,17 +316,24 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
           fmt::format("Fail to backup region, region_id={}, error={}", region.id(), response.error().errmsg());
       DINGO_LOG(ERROR) << s;
       status = butil::Status(response.error().errcode(), s);
-      last_error_ = status;
-      return status;
+      break;
     }
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << name_ << " " << response.DebugString();
 
-    save_region_map->insert({region.id(), response.sst_metas()});
-
+    if (response.sst_metas().backup_data_file_value_sst_metas_size() > 0) {
+      save_region_map->insert({region.id(), response.sst_metas()});
+    }
     already_handle_regions++;
   }
-  return butil::Status::OK();
+
+  is_thread_exit = true;
+  {
+    BAIDU_SCOPED_LOCK(mutex_);
+    last_error_ = status;
+  }
+
+  return status;
 }
 
 }  // namespace br
