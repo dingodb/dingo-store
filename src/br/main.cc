@@ -32,6 +32,7 @@
 #include "br/interaction_manager.h"
 #include "br/interation.h"
 #include "br/parameter.h"
+#include "br/restore.h"
 #include "br/utils.h"
 #include "butil/status.h"
 #include "common/helper.h"
@@ -479,7 +480,7 @@ int main(int argc, char* argv[]) {
     DINGO_LOG(INFO) << fmt::format("args[{}]=[{}]", i, argv[i]);
   }
 
-  std::cout << "Detail BR log in ./log" << std::endl;
+  std::cout << "Detail BR log in " << br::FLAGS_br_log_dir << std::endl;
 
   butil::Status status;
   std::shared_ptr<br::ServerInteraction> coordinator_interaction = std::make_shared<br::ServerInteraction>();
@@ -536,18 +537,21 @@ int main(int argc, char* argv[]) {
                        << br::FLAGS_br_backup_type;
       return -1;
     }
+
+    status = br::Utils::ConvertBackupTsToTso(br::FLAGS_backupts, br::FLAGS_backuptso_internal);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return -1;
+    }
   } else if (br::FLAGS_br_type == "restore") {
-    // TODO : restore
-    DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
-    return -1;
+    if (br::FLAGS_br_restore_type == "full") {
+    } else {
+      DINGO_LOG(ERROR) << "restore type not support, please check parameter --br_restore_type="
+                       << br::FLAGS_br_restore_type;
+      return -1;
+    }
   } else {
     DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
-    return -1;
-  }
-
-  status = br::Utils::ConvertBackupTsToTso(br::FLAGS_backupts, br::FLAGS_backuptso_internal);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
     return -1;
   }
 
@@ -666,7 +670,83 @@ int main(int argc, char* argv[]) {
     }
 
     DINGO_LOG(INFO) << "Backup finish";
+  } else if (br::FLAGS_br_type == "restore") {
+    br::RestoreParams params;
+    params.coor_url = br::FLAGS_br_coor_url;
+    params.br_type = br::FLAGS_br_type;
+    params.br_restore_type = br::FLAGS_br_restore_type;
+    params.storage = br::FLAGS_storage;
+    params.storage_internal = br::FLAGS_storage_internal;
 
+    std::cout << "Full Restore Parameter :" << std::endl;
+    DINGO_LOG(INFO) << "Full Restore Parameter :";
+
+    std::cout << "coordinator url    : "
+              << br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrsAsString() << std::endl;
+    DINGO_LOG(INFO) << "coordinator url    : "
+                    << br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrsAsString();
+
+    std::cout << "store       url    : "
+              << br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrsAsString() << std::endl;
+    DINGO_LOG(INFO) << "store       url    : "
+                    << br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrsAsString();
+
+    std::cout << "index       url    : "
+              << br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString() << std::endl;
+    DINGO_LOG(INFO) << "index       url    : "
+                    << br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString();
+
+    std::cout << "document    url    : "
+              << br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString() << std::endl;
+    DINGO_LOG(INFO) << "document    url    : "
+                    << br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString();
+
+    std::cout << "br type            : " << params.br_type << std::endl;
+    DINGO_LOG(INFO) << "br type            : " << params.br_type;
+
+    std::cout << "br restore type    : " << params.br_restore_type << std::endl;
+    DINGO_LOG(INFO) << "br restore type    : " << params.br_restore_type;
+
+    std::cout << "storage            : " << params.storage << std::endl;
+    DINGO_LOG(INFO) << "storage            : " << params.storage;
+
+    std::cout << "storage_internal   : " << params.storage_internal << std::endl;
+    DINGO_LOG(INFO) << "storage_internal   : " << params.storage_internal;
+
+    std::shared_ptr<br::Restore> restore = std::make_shared<br::Restore>(
+        params, br::FLAGS_create_region_concurrency, br::FLAGS_restore_region_concurrency,
+        br::FLAGS_create_region_timeout_s, br::FLAGS_restore_region_timeout_s, br::FLAGS_br_default_replica_num);
+
+    std::cout << std::endl;
+    DINGO_LOG(INFO) << "";
+
+    std::cout << "Full Restore" << std::endl;
+    DINGO_LOG(INFO) << "Full Restore";
+
+    status = restore->Init();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      std::cout << "Restore failed" << std::endl;
+      DINGO_LOG(INFO) << "Restore failed";
+      return -1;
+    }
+    status = restore->Run();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      std::cout << "Restore failed" << std::endl;
+      DINGO_LOG(INFO) << "Restore failed";
+      return -1;
+    }
+
+    status = restore->Finish();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      std::cout << "Restore failed" << std::endl;
+      DINGO_LOG(INFO) << "Restore failed";
+      return -1;
+    }
+
+    DINGO_LOG(INFO) << "Restore finish";
   } else {
     DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
     return -1;

@@ -65,6 +65,44 @@ DECLARE_bool(br_log_switch_backup_detail_detail);
 
 DECLARE_string(br_log_dir);
 
+DECLARE_string(br_restore_type);
+
+struct RestoreParams {
+  std::string coor_url;
+  std::string br_type;
+  std::string br_restore_type;
+  std::string storage;
+  std::string storage_internal;
+};
+
+DECLARE_bool(br_log_switch_restore_detail);
+
+DECLARE_bool(br_log_switch_restore_detail_detail);
+
+// restore watch interval in seconds. default 10s
+DECLARE_uint32(restore_watch_interval_s);
+
+// restore task timeout in seconds. default 100s
+DECLARE_uint32(restore_task_timeout_s);
+
+// restore task max retry times. default 5
+DECLARE_uint32(restore_task_max_retry);
+
+// default replica number. default 0.
+DECLARE_int32(br_default_replica_num);
+
+// create region concurrency
+DECLARE_uint32(create_region_concurrency);
+
+// restore region concurrency
+DECLARE_uint32(restore_region_concurrency);
+
+// create region timeout s (second)
+DECLARE_int64(create_region_timeout_s);
+
+// restore region timeout s (second)
+DECLARE_int64(restore_region_timeout_s);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_

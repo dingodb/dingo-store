@@ -60,7 +60,7 @@ class BackupMeta : public std::enable_shared_from_this<BackupMeta> {
 
  protected:
  private:
-  butil::Status GetPresentIdsFromCoordinator();
+  butil::Status GetPresentIdsFromMeta();
   butil::Status GetAllTableIncrementFromMeta();
   ServerInteractionPtr coordinator_interaction_;
   ServerInteractionPtr store_interaction_;

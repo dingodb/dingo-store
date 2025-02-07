@@ -208,46 +208,53 @@ butil::Status BackupData::Finish() {
 
   std::map<std::string, std::string> kvs;
 
-  std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sql_backup_meta = backup_sql_data_->GetBackupMeta();
-  std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sdk_backup_meta = backup_sdk_data_->GetBackupMeta();
-  for (const auto& meta : *sql_backup_meta) {
-    kvs.emplace(meta.file_name(), meta.SerializeAsString());
+  if (backup_sql_data_) {
+    std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sql_backup_meta = backup_sql_data_->GetBackupMeta();
+    for (const auto& meta : *sql_backup_meta) {
+      kvs.emplace(meta.file_name(), meta.SerializeAsString());
+    }
   }
 
-  for (const auto& meta : *sdk_backup_meta) {
-    kvs.emplace(meta.file_name(), meta.SerializeAsString());
+  if (backup_sdk_data_) {
+    std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sdk_backup_meta = backup_sdk_data_->GetBackupMeta();
+    for (const auto& meta : *sdk_backup_meta) {
+      kvs.emplace(meta.file_name(), meta.SerializeAsString());
+    }
   }
 
-  rocksdb::Options options;
-  std::shared_ptr<SstFileWriter> sst = std::make_shared<SstFileWriter>(options);
+  if (!kvs.empty()) {
+    rocksdb::Options options;
+    std::shared_ptr<SstFileWriter> sst = std::make_shared<SstFileWriter>(options);
 
-  status = sst->SaveFile(kvs, file_path);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+    status = sst->SaveFile(kvs, file_path);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-  std::string hash_code;
-  status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+    std::string hash_code;
+    status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-  if (!backup_meta_) {
-    backup_meta_ = std::make_shared<dingodb::pb::common::BackupMeta>();
-  }
+    if (!backup_meta_) {
+      backup_meta_ = std::make_shared<dingodb::pb::common::BackupMeta>();
+    }
 
-  backup_meta_->set_remark("backup sdk data and sql data. save dingodb::pb::common::BackupDataFileValueSstMetaGroup. ");
-  backup_meta_->set_exec_node(dingodb::Constant::kBackupRegionName);
-  backup_meta_->set_dir_name("");
-  backup_meta_->set_file_size(sst->GetSize());
-  backup_meta_->set_encryption(hash_code);
-  backup_meta_->set_file_name(file_name);
+    backup_meta_->set_remark(
+        "backup sdk data and sql data. save dingodb::pb::common::BackupDataFileValueSstMetaGroup. ");
+    backup_meta_->set_exec_node(dingodb::Constant::kBackupRegionName);
+    backup_meta_->set_dir_name("");
+    backup_meta_->set_file_size(sst->GetSize());
+    backup_meta_->set_encryption(hash_code);
+    backup_meta_->set_file_name(file_name);
 
-  if (FLAGS_br_log_switch_backup_detail) {
-    DINGO_LOG(INFO) << backup_meta_->DebugString() << std::endl;
-  }
+    if (FLAGS_br_log_switch_backup_detail) {
+      DINGO_LOG(INFO) << backup_meta_->DebugString() << std::endl;
+    }
+  }  // if (!kvs.empty()) {
 
   return butil::Status::OK();
 }
@@ -272,6 +279,20 @@ butil::Status BackupData::GetAllRegionMapFromCoordinator() {
   if (response.error().errcode() != dingodb::pb::error::OK) {
     DINGO_LOG(ERROR) << response.error().errmsg();
     return butil::Status(response.error().errcode(), response.error().errmsg());
+  }
+
+  for (const auto& region : response.regionmap().regions()) {
+    if (region.id() == 80081) {
+      if (region.definition().has_index_parameter()) {
+        DINGO_LOG(INFO) << "has_index_parameter ***************meta store region id : " << region.id()
+                        << ",  name : " << region.definition().name()
+                        << ", index_parameter : " << region.definition().index_parameter().DebugString();
+      } else {
+        DINGO_LOG(INFO) << "no_index_parameter ***************meta store region id : " << region.id()
+                        << ",  name : " << region.definition().name()
+                        << ", index_parameter : " << region.definition().index_parameter().DebugString();
+      }
+    }
   }
 
   region_map_ = std::make_shared<dingodb::pb::common::RegionMap>(response.regionmap());

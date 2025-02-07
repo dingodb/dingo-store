@@ -54,7 +54,8 @@ class BackupSqlData : public BackupDataBase, public std::enable_shared_from_this
       ServerInteractionPtr interaction, const std::string& service_name,
       std::shared_ptr<std::vector<dingodb::pb::common::Region>> wait_for_handle_regions,
       std::atomic<int64_t>& already_handle_regions,
-      std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map);
+      std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map,
+      std::atomic<bool>& is_thread_exit);
 
   std::vector<int64_t> remove_region_list_;
 };

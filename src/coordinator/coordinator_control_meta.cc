@@ -758,8 +758,8 @@ butil::Status CoordinatorControl::CreateTable(int64_t schema_id, const pb::meta:
     std::vector<pb::coordinator::StoreOperation> store_operations;
     auto ret = CreateRegionFinal(region_name, pb::common::RegionType::STORE_REGION, region_raw_engine_type,
                                  region_store_engine_type, "", replica, new_part_range, schema_id, new_table_id, 0,
-                                 new_part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations,
-                                 meta_increment);
+                                 new_part_id, tenant_id, false, index_parameter, false, store_ids, 0, new_region_id,
+                                 store_operations, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateTable table_name=" << table_definition.name()
                        << ", table_definition:" << table_definition.ShortDebugString() << " ret: " << ret.error_str();
@@ -1412,8 +1412,8 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
     std::vector<pb::coordinator::StoreOperation> store_operations;
     auto ret = CreateRegionFinal(region_name, region_type, region_raw_engine_type, region_store_engine_type, "",
                                  replica, new_part_range, schema_id, 0, new_index_id, new_part_id, tenant_id,
-                                 table_definition.index_parameter(), store_ids, 0, new_region_id, store_operations,
-                                 meta_increment);
+                                 table_definition.has_index_parameter(), table_definition.index_parameter(), false,
+                                 store_ids, 0, new_region_id, store_operations, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "CreateRegion failed in CreateIndex index_name=" << table_definition.name();
       return ret;

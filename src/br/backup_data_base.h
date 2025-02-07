@@ -66,7 +66,8 @@ class BackupDataBase {
       ServerInteractionPtr interaction, const std::string& service_name,
       std::shared_ptr<std::vector<dingodb::pb::common::Region>> wait_for_handle_regions,
       std::atomic<int64_t>& already_handle_regions,
-      std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map);
+      std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map,
+      std::atomic<bool>& is_thread_exit);
 
  private:
   ServerInteractionPtr coordinator_interaction_;
@@ -101,6 +102,8 @@ class BackupDataBase {
   std::vector<std::string> save_cf_sst_meta_files_;
 
   std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> backup_data_base_;
+
+  bthread_mutex_t mutex_;
 
   // last error
   butil::Status last_error_;

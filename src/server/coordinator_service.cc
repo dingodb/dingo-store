@@ -1231,9 +1231,11 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
   int64_t part_id = request->part_id();
   int64_t tenant_id = request->tenant_id();
   int64_t split_from_region_id = request->split_from_region_id();
-  int64_t new_region_id = 0;
+  int64_t new_region_id = request->region_id();
   pb::common::RegionType region_type = request->region_type();
   pb::common::IndexParameter index_parameter = request->index_parameter();
+  bool has_index_parameter = request->has_index_parameter();
+  bool use_region_name_direct = request->use_region_name_direct();
 
   if (index_parameter.has_vector_index_parameter()) {
     if (region_type != pb::common::RegionType::INDEX_REGION) {
@@ -1308,9 +1310,10 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
       store_ids.push_back(id);
     }
     std::vector<pb::coordinator::StoreOperation> store_operations;
-    ret = coordinator_control->CreateRegionFinal(
-        region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
-        index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag,
+                                                 replica_num, range, schema_id, table_id, index_id, part_id, tenant_id,
+                                                 has_index_parameter, index_parameter, use_region_name_direct,
+                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
@@ -1323,9 +1326,10 @@ void DoCreateRegion(google::protobuf::RpcController * /*controller*/,
     std::vector<int64_t> store_ids;
     std::vector<pb::coordinator::StoreOperation> store_operations;
 
-    ret = coordinator_control->CreateRegionFinal(
-        region_name, region_type, raw_engine, store_engine, resource_tag, replica_num, range, schema_id, table_id,
-        index_id, part_id, tenant_id, index_parameter, store_ids, 0, new_region_id, store_operations, meta_increment);
+    ret = coordinator_control->CreateRegionFinal(region_name, region_type, raw_engine, store_engine, resource_tag,
+                                                 replica_num, range, schema_id, table_id, index_id, part_id, tenant_id,
+                                                 has_index_parameter, index_parameter, use_region_name_direct,
+                                                 store_ids, 0, new_region_id, store_operations, meta_increment);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "Create Region Failed, errno=" << ret << " Request:" << request->ShortDebugString();
       response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));

@@ -434,12 +434,21 @@ butil::Status Backup::DoRun() {
 
     std::map<std::string, std::string> kvs;
 
-    { kvs.emplace(meta_meta->file_name(), meta_meta->SerializeAsString()); }
+    if (meta_meta) {
+      kvs.emplace(meta_meta->file_name(), meta_meta->SerializeAsString());
+    }
 
-    { kvs.emplace(meta_data->file_name(), meta_data->SerializeAsString()); }
+    if (meta_data) {
+      kvs.emplace(meta_data->file_name(), meta_data->SerializeAsString());
+    }
 
-    { kvs.emplace(dingodb::Constant::kIdEpochTypeAndValueKey, id_epoch_type_and_value->SerializeAsString()); }
-    { kvs.emplace(dingodb::Constant::kTableIncrementKey, table_increment_group->SerializeAsString()); }
+    if (id_epoch_type_and_value) {
+      kvs.emplace(dingodb::Constant::kIdEpochTypeAndValueKey, id_epoch_type_and_value->SerializeAsString());
+    }
+
+    if (table_increment_group) {
+      kvs.emplace(dingodb::Constant::kTableIncrementKey, table_increment_group->SerializeAsString());
+    }
 
     dingodb::pb::common::VersionInfo version_info = dingodb::GetVersionInfo();
 
@@ -501,17 +510,25 @@ butil::Status Backup::DoRun() {
       DINGO_LOG(INFO) << dingodb::Constant::kBackupBackupParamKey << " :";
       DINGO_LOG(INFO) << backup_param.DebugString() << std::endl;
 
-      DINGO_LOG(INFO) << dingodb::Constant::kIdEpochTypeAndValueKey << " :";
-      DINGO_LOG(INFO) << id_epoch_type_and_value->DebugString() << std::endl;
+      if (id_epoch_type_and_value) {
+        DINGO_LOG(INFO) << dingodb::Constant::kIdEpochTypeAndValueKey << " :";
+        DINGO_LOG(INFO) << id_epoch_type_and_value->DebugString() << std::endl;
+      }
 
-      DINGO_LOG(INFO) << dingodb::Constant::kTableIncrementKey << " :";
-      DINGO_LOG(INFO) << table_increment_group->DebugString() << std::endl;
+      if (table_increment_group) {
+        DINGO_LOG(INFO) << dingodb::Constant::kTableIncrementKey << " :";
+        DINGO_LOG(INFO) << table_increment_group->DebugString() << std::endl;
+      }
 
-      DINGO_LOG(INFO) << meta_meta->file_name() << " :";
-      DINGO_LOG(INFO) << meta_meta->DebugString() << std::endl;
+      if (meta_meta) {
+        DINGO_LOG(INFO) << meta_meta->file_name() << " :";
+        DINGO_LOG(INFO) << meta_meta->DebugString() << std::endl;
+      }
 
-      DINGO_LOG(INFO) << meta_data->file_name() << " :";
-      DINGO_LOG(INFO) << meta_data->DebugString() << std::endl;
+      if (meta_data) {
+        DINGO_LOG(INFO) << meta_data->file_name() << " :";
+        DINGO_LOG(INFO) << meta_data->DebugString() << std::endl;
+      }
       DINGO_LOG(INFO) << dingodb::Constant::kBackupMetaName
                       << "<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<";
     }
@@ -535,17 +552,25 @@ butil::Status Backup::DoRun() {
     writer << dingodb::Constant::kBackupBackupParamKey << " : " << std::endl;
     writer << backup_param.DebugString() << std::endl;
 
-    writer << dingodb::Constant::kIdEpochTypeAndValueKey << " : " << std::endl;
-    writer << id_epoch_type_and_value->DebugString() << std::endl;
+    if (id_epoch_type_and_value) {
+      writer << dingodb::Constant::kIdEpochTypeAndValueKey << " : " << std::endl;
+      writer << id_epoch_type_and_value->DebugString() << std::endl;
+    }
 
-    writer << dingodb::Constant::kTableIncrementKey << " : " << std::endl;
-    writer << table_increment_group->DebugString() << std::endl;
+    if (table_increment_group) {
+      writer << dingodb::Constant::kTableIncrementKey << " : " << std::endl;
+      writer << table_increment_group->DebugString() << std::endl;
+    }
 
-    writer << meta_meta->file_name() << " : " << std::endl;
-    writer << meta_meta->DebugString() << std::endl;
+    if (meta_meta) {
+      writer << meta_meta->file_name() << " : " << std::endl;
+      writer << meta_meta->DebugString() << std::endl;
+    }
 
-    writer << meta_data->file_name() << " : " << std::endl;
-    writer << meta_data->DebugString() << std::endl;
+    if (meta_data) {
+      writer << meta_data->file_name() << " : " << std::endl;
+      writer << meta_data->DebugString() << std::endl;
+    }
 
     if (writer.is_open()) {
       writer.close();

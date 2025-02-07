@@ -24,6 +24,7 @@
 #include "br/sst_file_writer.h"
 #include "common/constant.h"
 #include "common/helper.h"
+#include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/common.pb.h"
 
@@ -59,6 +60,12 @@ butil::Status BackupMetaBase::Filter() {
       if (iter != meta_region_list_.end()) {
         if (dingodb::pb::common::RegionType::STORE_REGION == region.region_type()) {
           wait_for_handle_store_regions_->push_back(region);
+
+          if (region.definition().has_index_parameter()) {
+            DINGO_LOG(INFO) << "***************meta store region id : " << region.id()
+                            << ",  name : " << region.definition().name()
+                            << ", index_parameter : " << region.definition().index_parameter().DebugString();
+          }
         }
       }
     }

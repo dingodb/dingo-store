@@ -1378,7 +1378,9 @@ butil::Status UpdateDefinitionTask::UpdateDefinition(std::shared_ptr<Context> /*
       }
 
       // update region definition in store meta
-      region->SetIndexParameter(new_definition.index_parameter());
+      if (new_definition.has_index_parameter()) {
+        region->SetIndexParameter(new_definition.index_parameter());
+      }
       store_region_meta->UpdateRegion(region);
 
       DINGO_LOG(INFO) << fmt::format(

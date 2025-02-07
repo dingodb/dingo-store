@@ -154,44 +154,50 @@ butil::Status BackupMeta::Finish() {
 
   std::map<std::string, std::string> kvs;
 
-  std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sql_meta = backup_sql_meta_->GetBackupMeta();
-  std::shared_ptr<dingodb::pb::common::BackupMeta> sdk_meta = backup_sdk_meta_->GetBackupMeta();
-  for (const auto& meta : *sql_meta) {
-    kvs.emplace(meta.file_name(), meta.SerializeAsString());
+  if (backup_sql_meta_) {
+    std::shared_ptr<std::vector<dingodb::pb::common::BackupMeta>> sql_meta = backup_sql_meta_->GetBackupMeta();
+    for (const auto& meta : *sql_meta) {
+      kvs.emplace(meta.file_name(), meta.SerializeAsString());
+    }
   }
 
-  { kvs.emplace(sdk_meta->file_name(), sdk_meta->SerializeAsString()); }
-
-  rocksdb::Options options;
-  std::shared_ptr<SstFileWriter> sst = std::make_shared<SstFileWriter>(options);
-
-  status = sst->SaveFile(kvs, file_path);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
+  if (backup_sdk_meta_) {
+    std::shared_ptr<dingodb::pb::common::BackupMeta> sdk_meta = backup_sdk_meta_->GetBackupMeta();
+    { kvs.emplace(sdk_meta->file_name(), sdk_meta->SerializeAsString()); }
   }
 
-  std::string hash_code;
-  status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+  if (!kvs.empty()) {
+    rocksdb::Options options;
+    std::shared_ptr<SstFileWriter> sst = std::make_shared<SstFileWriter>(options);
 
-  if (!backup_meta_) {
-    backup_meta_ = std::make_shared<dingodb::pb::common::BackupMeta>();
-  }
+    status = sst->SaveFile(kvs, file_path);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-  backup_meta_->set_remark("backup sdk meta and sql meta. save dingodb::pb::common::BackupDataFileValueSstMetaGroup. ");
-  backup_meta_->set_exec_node(dingodb::Constant::kBackupRegionName);
-  backup_meta_->set_dir_name("");
-  backup_meta_->set_file_size(sst->GetSize());
-  backup_meta_->set_encryption(hash_code);
-  backup_meta_->set_file_name(file_name);
+    std::string hash_code;
+    status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-  if (FLAGS_br_log_switch_backup_detail) {
-    DINGO_LOG(INFO) << backup_meta_->DebugString() << std::endl;
-  }
+    if (!backup_meta_) {
+      backup_meta_ = std::make_shared<dingodb::pb::common::BackupMeta>();
+    }
+
+    backup_meta_->set_remark("backup sdk meta and sql meta. save dingodb::pb::common::BackupMeta. ");
+    backup_meta_->set_exec_node(dingodb::Constant::kBackupRegionName);
+    backup_meta_->set_dir_name("");
+    backup_meta_->set_file_size(sst->GetSize());
+    backup_meta_->set_encryption(hash_code);
+    backup_meta_->set_file_name(file_name);
+
+    if (FLAGS_br_log_switch_backup_detail) {
+      DINGO_LOG(INFO) << backup_meta_->DebugString() << std::endl;
+    }
+  }  // if (!kvs.empty()) {
 
   return butil::Status::OK();
 }
@@ -206,7 +212,7 @@ std::shared_ptr<dingodb::pb::common::BackupMeta> BackupMeta::GetBackupMeta() { r
 
 std::pair<butil::Status, std::shared_ptr<dingodb::pb::meta::IdEpochTypeAndValue>> BackupMeta::GetIdEpochTypeAndValue() {
   butil::Status status;
-  status = GetPresentIdsFromCoordinator();
+  status = GetPresentIdsFromMeta();
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return {status, nullptr};
@@ -224,7 +230,7 @@ std::pair<butil::Status, std::shared_ptr<dingodb::pb::meta::TableIncrementGroup>
   return {butil::Status::OK(), table_increment_group_};
 }
 
-butil::Status BackupMeta::GetPresentIdsFromCoordinator() {
+butil::Status BackupMeta::GetPresentIdsFromMeta() {
   dingodb::pb::meta::SaveIdEpochTypeRequest request;
   dingodb::pb::meta::SaveIdEpochTypeResponse response;
 
