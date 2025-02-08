@@ -392,10 +392,11 @@ butil::Status DocumentIndex::Search(uint32_t topk, const std::string& query_stri
   //     }
   //   }
   // }
+  std::string query_string_encode = Helper::EncodeREContent(query_string);
 
   auto search_result =
-      ffi_bm25_search_with_column_names(index_path_, query_string, topk, alive_ids, use_id_filter, use_range_filter,
-                                        start_id, end_id, column_names, query_unlimited);
+      ffi_bm25_search_with_column_names(index_path_, query_string_encode, topk, alive_ids, use_id_filter,
+                                        use_range_filter, start_id, end_id, column_names, query_unlimited);
 
   if (search_result.error_code == 0) {
     for (const auto& row_id_with_score : search_result.result) {

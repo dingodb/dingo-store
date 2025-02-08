@@ -1911,8 +1911,8 @@ void Helper::PrintHtmlTable(std::ostream& os, bool use_html, const std::vector<s
           if (line[i].size() <= 64) {
             os << brpc::min_width(line[i], min_widths[i]);
           } else {
-            os << "<div class=\"part\">" << line[i].substr(0, 64) << "..." << "<span class=\"full\">" << line[i]
-               << "</span></div>";
+            os << "<div class=\"part\">" << line[i].substr(0, 64) << "..."
+               << "<span class=\"full\">" << line[i] << "</span></div>";
           }
         }
       } else {
@@ -2394,6 +2394,74 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
     }
   }
   config.set_is_error_occurred(false);
+}
+
+bool Helper::IsBase64Encoded(const std::string& input) {
+  if (input.length() % 4 != 0) {
+    return false;
+  }
+
+  for (char c : input) {
+    if (!isalnum(c) && c != '+' && c != '/' && c != '=') {
+      return false;
+    }
+  }
+
+  size_t padding_count = 0;
+  for (size_t i = input.length(); i > 0; --i) {
+    if (input[i - 1] == '=') {
+      padding_count++;
+    } else {
+      break;
+    }
+  }
+  return padding_count <= 2;
+}
+
+std::string Helper::Base64Encode(const std::string& input) {
+  static const char base64_chars[] =
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      "abcdefghijklmnopqrstuvwxyz"
+      "0123456789+/";
+  std::string encoded;
+  int val = 0, valb = -6;
+  for (unsigned char c : input) {
+    val = (val << 8) + c;
+    valb += 8;
+    while (valb >= 0) {
+      encoded.push_back(base64_chars[(val >> valb) & 0x3F]);
+      valb -= 6;
+    }
+  }
+  if (valb > -6) {
+    encoded.push_back(base64_chars[((val << 8) >> (valb + 8)) & 0x3F]);
+  }
+  while (encoded.size() % 4) {
+    encoded.push_back('=');
+  }
+  return encoded;
+}
+
+std::string Helper::EncodeREContent(const std::string& input) {
+  std::regex re_pattern(R"(RE\s*\[((?:[^\[\]]|\[.*?\])*)\])");
+  std::smatch matches;
+  std::string result = input;
+  std::string::const_iterator search_start(input.cbegin());
+
+  while (std::regex_search(search_start, input.cend(), matches, re_pattern)) {
+    std::string matched_text = matches[0];
+    std::string content = matches[1];
+
+    if (!IsBase64Encoded(content)) {
+      std::string encoded_content = Base64Encode(content);
+      std::string replacement = "RE [" + encoded_content + "]";
+      result.replace(matches.position(0), matched_text.length(), replacement);
+    }
+
+    search_start = matches.suffix().first;
+  }
+
+  return result;
 }
 
 }  // namespace dingodb

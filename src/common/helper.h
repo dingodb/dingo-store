@@ -424,6 +424,10 @@ class Helper {
   static bool StringConvertFalse(const std::string& str);
   static void HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                               pb::common::ControlConfigVariable& config, bool& gflags_var);
+
+  static bool IsBase64Encoded(const std::string& input);
+  static std::string Base64Encode(const std::string& input);
+  static std::string EncodeREContent(const std::string& input);
 };
 
 }  // namespace dingodb
