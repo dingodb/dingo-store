@@ -6,7 +6,7 @@ name: Release-Dockerhub
 on:
   # Triggers the workflow on push or pull request events but only for the main branch
   workflow_run:
-    workflows: ["CMake_rocky9"]
+    workflows: ["CMake_rocky8"]
     types:
       - completed
     on:
