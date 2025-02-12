@@ -414,6 +414,11 @@ class CoordinatorControl : public MetaControl {
                             const pb::meta::TableDefinition &new_table_definition_in,
                             pb::coordinator_internal::MetaIncrement &meta_increment);
 
+  // br restore index meta
+  butil::Status RestoreIndexMeta(int64_t schema_id, int64_t index_id,
+                            const pb::meta::TableDefinition &new_table_definition_in,
+                            pb::coordinator_internal::MetaIncrement &meta_increment);
+
   // generate table with part ids
   butil::Status GenerateTableWithPartIds(int64_t schema_id, const pb::meta::TableWithPartCount &count,
                                          pb::coordinator_internal::MetaIncrement &meta_increment,

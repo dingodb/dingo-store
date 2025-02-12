@@ -29,12 +29,15 @@
 #include "common/safe_map.h"
 #include "coordinator/coordinator_meta_storage.h"
 #include "coordinator/coordinator_prefix.h"
+#include "gflags/gflags.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/meta.pb.h"
 #include "server/server.h"
 
 namespace dingodb {
+
+DEFINE_bool(enable_br_update_id_epoch_debug, false, "enable br update id_epoch debug");
 
 CoordinatorControl::CoordinatorControl(std::shared_ptr<MetaReader> meta_reader, std::shared_ptr<MetaWriter> meta_writer,
                                        std::shared_ptr<RawEngine> raw_engine_of_meta)
@@ -597,6 +600,10 @@ int64_t CoordinatorControl::GetPresentId(const pb::coordinator::IdEpochType& key
 
 int64_t CoordinatorControl::UpdatePresentId(const pb::coordinator::IdEpochType& key, int64_t new_id,
                                             pb::coordinator_internal::MetaIncrement& meta_increment) {
+  if (FLAGS_enable_br_update_id_epoch_debug) {
+    DINGO_LOG(WARNING) << "UpdatePresentId key = " << pb::coordinator::IdEpochType_Name(key) << " new_id = " << new_id
+                       << ", old_id = " << id_epoch_map_safe_temp_.GetPresentId(key);
+  }
   // get next id from id_epoch_map_safe_temp_
   id_epoch_map_safe_temp_.UpdatePresentId(key, new_id);
 

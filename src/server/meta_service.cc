@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "brpc/controller.h"
@@ -30,6 +31,7 @@
 #include "fmt/format.h"
 #include "gflags/gflags.h"
 #include "proto/common.pb.h"
+#include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
 #include "proto/error.pb.h"
 #include "proto/meta.pb.h"
@@ -42,6 +44,9 @@ DECLARE_int64(max_hnsw_memory_size_of_region);
 DECLARE_int32(max_hnsw_nlinks_of_region);
 DECLARE_int64(max_partition_num_of_table);
 
+DEFINE_int32(max_check_tenants_count, 100, "max check tenants count");
+DEFINE_int32(max_check_schema_count, 100, "max check schema count");
+DEFINE_int32(max_check_index_count, 100, "max check index count");
 DEFINE_int32(max_check_region_state_count, 600, "max check region state count");
 DEFINE_int32(max_table_definition_count_in_create_tables, 100, "max table definition count in create tables");
 DEFINE_bool(async_create_table, false, "async create table");
@@ -3729,6 +3734,289 @@ void MetaServiceImpl::SaveIdEpochType(google::protobuf::RpcController *controlle
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoSaveIdEpochType(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoImportMeta(google::protobuf::RpcController * /*controller*/, const pb::meta::ImportMetaRequest *request,
+                  pb::meta::ImportMetaResponse *response, TrackClosure *done,
+                  std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  butil::Status ret;
+
+  // restore tenant
+  {
+    pb::coordinator_internal::MetaIncrement meta_increment1;
+    for (auto tenant : request->meta_all().tenants()) {
+      ret = coordinator_control->CreateTenant(tenant, meta_increment1);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateTenant failed in meta_service, error code=" << ret;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg("restore tenant : " + ret.error_str());
+        return;
+      }
+
+      ret = coordinator_control->SubmitMetaIncrementSync(meta_increment1);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << "CreateTenant failed in meta_service, error code=" << ret.error_code()
+                         << ", error str=" << ret.error_str();
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+        response->mutable_error()->set_errmsg("restore tenant : " + ret.error_str());
+        return;
+      }
+
+      uint32_t max_check_check_tenants_count = FLAGS_max_check_tenants_count;
+      while (true) {
+        std::vector<pb::meta::Tenant> tenants;
+        std::vector<int64_t> tenant_ids{tenant.id()};
+        ret = coordinator_control->GetTenants(tenant_ids, tenants);
+        if (ret.ok()) {
+          break;
+        }
+        DINGO_LOG(INFO) << "Create tenants fail, error_code: " << ret.error_code()
+                        << ", error_str: " << ret.error_str();
+        if (max_check_check_tenants_count-- <= 0) {
+          DINGO_LOG(ERROR) << "Create check tenants timeout, " << ret.error_str();
+          response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+          response->mutable_error()->set_errmsg("Restore tenant : Create check tenants timeout");
+          return;
+        }
+        bthread_usleep(500 * 1000);
+      }
+    }
+    DINGO_LOG(INFO) << "Restore Tenant Success. ";
+  }
+
+  // Restore schema and indexes
+  {
+    for (const auto &it : request->meta_all().schemas()) {
+      for (const pb::meta::Schema &schema : it.second.schemas()) {
+        // Restore schema
+        {
+          if (schema.name() == "ROOT" || schema.name() == "META" || schema.name() == "DINGO" ||
+              schema.name() == "MYSQL" || schema.name() == "INFORMATION_SCHEMA") {
+            DINGO_LOG(INFO) << "Already auto creat schema , Skip restore schema: " << schema.name();
+          } else {
+            pb::coordinator_internal::MetaIncrement meta_increment2;
+            int64_t schema_id = schema.id().entity_id();
+            ret = coordinator_control->CreateSchema(schema.tenant_id(), schema.name(), schema_id, meta_increment2);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "CreateSchema failed in meta_service, error code=" << ret;
+              response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+              response->mutable_error()->set_errmsg("restore schema : " + ret.error_str());
+              return;
+            }
+            if (schema.id().entity_id() != schema_id) {
+              DINGO_LOG(ERROR) << "schema_id is not equal to schema.id().entity_id()";
+              response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+              response->mutable_error()->set_errmsg(
+                  "restore schema : schema_id is not equal to schema.id().entity_id()");
+              return;
+            }
+
+            ret = coordinator_control->SubmitMetaIncrementSync(meta_increment2);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "CreateSchema failed in meta_service, error code=" << ret.error_code()
+                               << ", error str=" << ret.error_str();
+              response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+              response->mutable_error()->set_errmsg("restore schema : " + ret.error_str());
+              return;
+            }
+
+            uint32_t max_check_schema_count = FLAGS_max_check_schema_count;
+            while (true) {
+              pb::meta::Schema new_schema;
+              ret = coordinator_control->GetSchema(schema_id, new_schema);
+              if (ret.ok()) {
+                break;
+              }
+              DINGO_LOG(INFO) << "Create schema fail, error_code: " << ret.error_code()
+                              << ", error_str: " << ret.error_str();
+              if (max_check_schema_count-- <= 0) {
+                DINGO_LOG(ERROR) << "Create check schema timeout, " << ret.error_str();
+                response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+                response->mutable_error()->set_errmsg("restore schema : Create check schema timeout");
+                return;
+              }
+              bthread_usleep(500 * 1000);
+            }
+            DINGO_LOG(INFO) << "Restore Schema Success. tenant_id : " << schema.tenant_id()
+                            << " schema_id : " << schema_id << ", schema_name : " << schema.name();
+          }
+        }
+
+        // Restore indexes
+        {
+          // Schema DingoCommonId
+          std::string schema_dingo_common_id = fmt::format("{}|{}|{}", static_cast<int32_t>(schema.id().entity_type()),
+                                                           schema.id().parent_entity_id(), schema.id().entity_id());
+
+          if (request->meta_all().tables_and_indexes().find(schema_dingo_common_id) ==
+              request->meta_all().tables_and_indexes().end()) {
+            DINGO_LOG(ERROR) << "tables_and_indexes not found in meta_all.";
+            response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+            response->mutable_error()->set_errmsg("Restore indexes meta : tables_and_indexes not found in meta_all.");
+            return;
+          }
+
+          const pb::meta::TablesAndIndexes &tables_and_indexes =
+              request->meta_all().tables_and_indexes().at(schema_dingo_common_id);
+          if (tables_and_indexes.tables_size() > FLAGS_max_table_definition_count_in_create_tables) {
+            DINGO_LOG(ERROR) << "table definition_with_ids_size  is too big, size=" << tables_and_indexes.tables_size()
+                             << ", max=" << FLAGS_max_table_definition_count_in_create_tables;
+            response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+            response->mutable_error()->set_errmsg("Restore indexes meta : tables size is too large.");
+            return;
+          }
+
+          // restore index meta
+          for (const auto &index_with_id : tables_and_indexes.indexes()) {
+            pb::coordinator_internal::MetaIncrement meta_increment3;
+            const pb::meta::DingoCommonId &index_common_id = index_with_id.index_id();
+
+            pb::meta::TableDefinitionWithId table_definition_with_id;
+            MetaServiceImpl::IndexDefinitionToTableDefinition(index_with_id.index_definition(),
+                                                              *(table_definition_with_id.mutable_table_definition()));
+
+            const auto &definition = table_definition_with_id.table_definition();
+
+            if (index_common_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+              ret = coordinator_control->RestoreIndexMeta(schema.id().entity_id(), index_common_id.entity_id(),
+                                                          definition, meta_increment3);
+              if (!ret.ok()) {
+                DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret;
+                response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+                response->mutable_error()->set_errmsg("Restore indexes meta : " + ret.error_str());
+                return;
+              }
+              DINGO_LOG(INFO) << "type: " << index_common_id.entity_type()
+                              << ", index_id=" << index_common_id.entity_id();
+            } else {
+              DINGO_LOG(ERROR) << "entity type is illegal : " << index_common_id.entity_type();
+              response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+              response->mutable_error()->set_errmsg("Restore indexes meta : entity type is illegal");
+              return;
+            }
+
+            auto ret = coordinator_control->SubmitMetaIncrementSync(meta_increment3);
+            if (!ret.ok()) {
+              DINGO_LOG(ERROR) << "Restore index meta failed in meta_service, error code=" << ret.error_code()
+                               << ", error str=" << ret.error_str();
+              response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+              response->mutable_error()->set_errmsg("Restore indexes meta : " + ret.error_str());
+              return;
+            }
+            int32_t max_check_index_count = FLAGS_max_check_index_count;
+            while (true) {
+              pb::meta::TableDefinitionWithId table_definition;
+              ret = coordinator_control->GetIndex(schema.id().entity_id(), index_common_id.entity_id(), false,
+                                                  table_definition);
+              if (ret.ok()) {
+                break;
+              }
+              DINGO_LOG(INFO) << "Get index fail, error_code: " << ret.error_code()
+                              << ", error_str: " << ret.error_str();
+              if (max_check_index_count-- <= 0) {
+                DINGO_LOG(ERROR) << "Create check index timeout, " << ret.error_str();
+                response->mutable_error()->set_errcode(pb::error::Errno::EINTERNAL);
+                response->mutable_error()->set_errmsg("Restore indexes meta : Create check index timeout");
+                return;
+              }
+              bthread_usleep(500 * 1000);
+            }
+            DINGO_LOG(INFO) << "Restore index meta Success. tenant_id : " << schema.tenant_id()
+                            << " schema_id : " << schema.id().entity_id() << ", schema_name : " << schema.name()
+                            << ", index_id : " << index_common_id.entity_id();
+          }
+        }
+      }
+    }
+  }
+  DINGO_LOG(INFO) << "ImportMeta Success. ";
+}
+
+void MetaServiceImpl::ImportMeta(google::protobuf::RpcController *controller,
+                                 const pb::meta::ImportMetaRequest *request, pb::meta::ImportMetaResponse *response,
+                                 google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoImportMeta(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoImportEpochType(google::protobuf::RpcController * /*controller*/,
+                       const pb::meta::ImportIdEpochTypeRequest *request, pb::meta::ImportIdEpochTypeResponse *response,
+                       TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                       std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+  std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> type_value;
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  for (const auto &it : request->id_epoch_type_and_value().items()) {
+    if (it.type() == pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT ||
+        it.type() == pb::coordinator::IdEpochType::ID_GC_SAFE_POINT) {
+      DINGO_LOG(INFO) << "skip restore : " << pb::coordinator::IdEpochType_Name(it.type());
+      continue;
+    }
+    coordinator_control->UpdatePresentId(it.type(), it.value(), meta_increment);
+  }
+
+  auto ret = coordinator_control->SubmitMetaIncrementSync(meta_increment);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "ImportIdEpochType failed in meta_service, error code=" << ret.error_code()
+                     << ", error str=" << ret.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg("Import EpochType : " + ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "ImportIdEpochType Success. ";
+}
+
+void MetaServiceImpl::ImportIdEpochType(google::protobuf::RpcController *controller,
+                                        const pb::meta::ImportIdEpochTypeRequest *request,
+                                        pb::meta::ImportIdEpochTypeResponse *response,
+                                        google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoImportEpochType(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
