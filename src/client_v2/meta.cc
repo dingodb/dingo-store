@@ -15,6 +15,11 @@
 
 #include "client_v2/meta.h"
 
+#include <rocksdb/db.h>
+#include <rocksdb/options.h>
+#include <rocksdb/sst_file_reader.h>
+#include <rocksdb/sst_file_writer.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
@@ -60,6 +65,10 @@ void SetUpMetaSubCommands(CLI::App &app) {
   SetUpUpdateTenant(app);
   SetUpDropTenant(app);
   SetUpGetTenant(app);
+
+  // backup and restore meta
+  SetUpImportMeta(app);
+  SetUpExportMeta(app);
 }
 
 dingodb::pb::meta::TableDefinitionWithId SendGetIndex(int64_t index_id) {
@@ -1222,10 +1231,10 @@ void RunGetTableRange(GetTableRangeOptions const &opt) {
   }
 
   for (const auto &it : response.table_range().range_distribution()) {
-    std::cout << "region_id=[" << it.id().entity_id() << "]"
-              << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-              << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-              << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]" << std::endl;
+    std::cout << "region_id=[" << it.id().entity_id() << "]" << "range=["
+              << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+              << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host() << ":"
+              << it.leader().port() << "]" << std::endl;
   }
 }
 
@@ -1312,9 +1321,8 @@ void RunGetDeletedTable(GetDeletedTableOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &table : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]"
-                    << "table_name=[" << table.table_definition().name() << "]"
-                    << " detail: " << table.ShortDebugString();
+    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]" << "table_name=["
+                    << table.table_definition().name() << "]" << " detail: " << table.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted table count=" << response.table_definition_with_ids_size();
 }
@@ -1344,9 +1352,8 @@ void RunGetDeletedIndex(GetDeletedIndexOptions const &opt) {
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto &index : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]"
-                    << "index_name=[" << index.table_definition().name() << "]"
-                    << " detail: " << index.ShortDebugString();
+    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]" << "index_name=["
+                    << index.table_definition().name() << "]" << " detail: " << index.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted index count=" << response.table_definition_with_ids_size();
 }
@@ -1520,8 +1527,8 @@ void RunGetIndexes(GetIndexesOptions const &opt) {
   // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &index_definition_with_id : response.index_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
-                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]" << "index_name=["
+                    << index_definition_with_id.index_definition().name() << "], index_type=["
                     << dingodb::pb::common::IndexType_Name(
                            index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
@@ -1754,10 +1761,10 @@ void RunGetIndexRange(GetIndexRangeOptions const &opt) {
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto &it : response.index_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
+                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
+                    << ":" << it.leader().port() << "]";
   }
 }
 
@@ -2821,6 +2828,118 @@ void RunCreateIds(CreateIdsOptions const &opt) {
   CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CreateIds", request, response);
 
   Pretty::Show(response);
+}
+
+void SetUpImportMeta(CLI::App &app) {
+  auto opt = std::make_shared<ImportMetaOptions>();
+  auto *cmd = app.add_subcommand("ImportMeta", "Import meta ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--meta_file_dir", opt->dir_meta_file, "Request parameter meta_file_dir")->required();
+  cmd->callback([opt]() { RunImportMeta(*opt); });
+}
+
+void RunImportMeta(const ImportMetaOptions &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::meta::ImportMetaRequest request;
+  dingodb::pb::meta::ImportMetaResponse response;
+
+  std::map<std::string, std::string> internal_coordinator_sdk_meta_kvs;
+
+  {
+    // open RocksDB
+    rocksdb::Options options;
+    options.create_if_missing = true;
+
+    // open SST
+    std::string sst_file_path = opt.dir_meta_file;
+    rocksdb::SstFileReader sst_reader(options);
+    rocksdb::ReadOptions read_options;
+
+    sst_reader.Open(sst_file_path);
+
+    // get content
+    rocksdb::Iterator *iter = sst_reader.NewIterator(read_options);
+    for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
+      std::string key(iter->key().data(), iter->key().size());
+      std::string value(iter->value().data(), iter->value().size());
+      internal_coordinator_sdk_meta_kvs.emplace(std::move(key), std::move(value));
+    }
+
+    delete iter;
+  }
+
+  // find kCoordinatorSdkMetaKeyName
+  auto iter = internal_coordinator_sdk_meta_kvs.find(dingodb::Constant::kCoordinatorSdkMetaKeyName);
+  if (iter == internal_coordinator_sdk_meta_kvs.end()) {
+    std::string s =
+        fmt::format("not found {} in coordinator.sdk.meta file.", dingodb::Constant::kCoordinatorSdkMetaKeyName);
+    DINGO_LOG(ERROR) << s;
+    return;
+  }
+  dingodb::pb::meta::MetaALL meta_all;
+  if (!meta_all.ParseFromString(iter->second)) {
+    std::string s =
+        fmt::format("parse dingodb::pb::meta::MetaALL failed : {}", dingodb::Constant::kCoordinatorSdkMetaKeyName);
+    DINGO_LOG(ERROR) << s;
+    return;
+  }
+  request.mutable_meta_all()->CopyFrom(meta_all);
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("ImportMeta", request,
+                                                                                                  response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SetUpExportMeta(CLI::App &app) {
+  auto opt = std::make_shared<ExportMetaOptions>();
+  auto *cmd = app.add_subcommand("ExportMeta", "Export meta ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--meta_file_dir", opt->dir_meta_file, "Request parameter meta_file_dir")->required();
+  cmd->callback([opt]() { RunExportMeta(*opt); });
+}
+
+void RunExportMeta(const ExportMetaOptions &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::meta::ExportMetaRequest request;
+  dingodb::pb::meta::ExportMetaResponse response;
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("ExportMeta", request,
+                                                                                                  response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+
+  std::map<std::string, std::string> kvs;
+
+  kvs.emplace(dingodb::Constant::kCoordinatorSdkMetaKeyName, response.meta_all().SerializeAsString());
+  {
+    // open RocksDB
+    rocksdb::Options options;
+    options.create_if_missing = true;
+
+    rocksdb::SstFileWriter sst_wirter(rocksdb::EnvOptions(), options, nullptr, true);
+    rocksdb::WriteOptions write_options;
+
+    auto status = sst_wirter.Open(opt.dir_meta_file);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.ToString();
+    }
+
+    // write SST
+    for (const auto &[key, value] : kvs) {
+      status = sst_wirter.Put(key, value);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.ToString();
+      }
+    }
+
+    status = sst_wirter.Finish();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.ToString();
+    }
+  }
 }
 
 }  // namespace client_v2

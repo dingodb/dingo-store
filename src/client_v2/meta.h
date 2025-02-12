@@ -517,6 +517,22 @@ struct CreateIdsOptions {
 void SetUpCreateIds(CLI::App &app);
 void RunCreateIds(CreateIdsOptions const &opt);
 
+struct ImportMetaOptions {
+  std::string coor_url;
+  std::string dir_meta_file;
+};
+void SetUpImportMeta(CLI::App &app);
+void RunImportMeta(ImportMetaOptions const &opt);
+
+
+struct ExportMetaOptions {
+  std::string coor_url;
+  std::string dir_meta_file;
+};
+void SetUpExportMeta(CLI::App &app);
+void RunExportMeta(ExportMetaOptions const &opt);
+
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_META_H_
