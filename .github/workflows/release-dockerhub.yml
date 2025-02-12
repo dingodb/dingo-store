@@ -32,7 +32,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v2
         with:
             github_token: ${{secrets.GITHUB_TOKEN}}
-            workflow: ci_rocky9.yml
+            workflow: ci_rocky8.yml
             name: dingo-store.tar.gz
 
       - name: rename artifactory name
