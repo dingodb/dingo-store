@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "document/codec.h"
+#include "proto/coordinator.pb.h"
 
 namespace client_v2 {
 
@@ -52,6 +53,10 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpUpdateTenantGCSafePoint(app);
   SetUpUpdateGCFlag(app);
   SetUpGetGCSafePoint(app);
+
+  // br
+  SetUpGetBackUpStatus(app);
+  SetUpGetRestoreStatus(app);
 }
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
@@ -305,8 +310,7 @@ void RunRaftAddPeer(RaftAddPeerCommandOptions const &opt) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
     // bthread_usleep(FLAGS_timeout_ms * 1000L);
   }
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
   std::cout << "response:" << response.DebugString();
@@ -449,8 +453,7 @@ void RunRaftSnapshot(RaftSnapshotOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -514,8 +517,7 @@ void RunRaftResetPeer(RaftResetPeerOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
   std::cout << "response:" << response.DebugString();
-  DINGO_LOG(INFO) << "Received response"
-                  << " request_attachment=" << cntl.request_attachment().size()
+  DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
 }
 
@@ -551,8 +553,7 @@ void RunGetNodeInfo(GetNodeInfoOption const &opt) {
     // bthread_usleep(timeout_ms * 1000L);
   }
 
-  DINGO_LOG(INFO) << "Received response"
-                  << " cluster_id=" << request.cluster_id()
+  DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
                   << " request_attachment=" << cntl.request_attachment().size()
                   << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
   DINGO_LOG(INFO) << response.DebugString();
@@ -2725,6 +2726,61 @@ void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt) {
                                                                                               request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+}
+
+void SetUpGetBackUpStatus(CLI::App &app) {
+  auto opt = std::make_shared<GetBackUpStatusOptions>();
+  auto *cmd = app.add_subcommand("GetBackUpStatus", "Get backup status ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->callback([opt]() { RunGetBackUpStatus(*opt); });
+}
+void RunGetBackUpStatus(GetBackUpStatusOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::RegisterBackupStatusRequest request;
+  dingodb::pb::coordinator::RegisterBackupStatusResponse response;
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("RegisterBackupStatus",
+                                                                                              request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+    if (response.is_backing_up()) {
+      std::cout << "is backing_up , backing_up name : " << response.backup_name() << std::endl;
+    } else {
+      std::cout << "is not backing_up" << std::endl;
+    }
+  }
+}
+
+void SetUpGetRestoreStatus(CLI::App &app) {
+  auto opt = std::make_shared<GetRestoreStatusOptions>();
+  auto *cmd = app.add_subcommand("GetRestoreStatus", "Get restore status ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->callback([opt]() { RunGetRestoreStatus(*opt); });
+}
+
+void RunGetRestoreStatus(GetRestoreStatusOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::RegisterRestoreStatusRequest request;
+  dingodb::pb::coordinator::RegisterRestoreStatusResponse response;
+
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("RegisterRestoreStatus",
+                                                                                              request, response);
+  if (!status.ok()) {
+    DINGO_LOG(INFO) << "SendRequest status=" << status;
+  } else {
+    DINGO_LOG(INFO) << response.DebugString();
+    if (response.is_restoring()) {
+      std::cout << "is restoring , restore name : " << response.restore_name() << std::endl;
+    } else {
+      std::cout << "is not restoring" << std::endl;
+    }
+  }
 }
 
 // refactor

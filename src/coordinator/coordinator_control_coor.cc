@@ -7000,6 +7000,103 @@ butil::Status BrWatchDogManager::UnRegisterBackup(const std::string& backup_name
   return butil::Status::OK();
 }
 
+butil::Status BrWatchDogManager::RegisterRestore(const std::string& restore_name, const std::string& restore_path,
+                                                 int64_t restore_start_timestamp, int64_t restore_current_timestamp,
+                                                 int64_t restore_timeout_s) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  // check exist
+  if (!br_restore_watch_dog_info_) {
+    br_restore_watch_dog_info_ = std::make_shared<BrRestoreWatchDogInfo>(
+        restore_name, restore_path, restore_start_timestamp, restore_current_timestamp, restore_timeout_s);
+  } else {
+    // get current timestamp
+    int64_t current_timestamp = Helper::Timestamp();
+    // update
+    if (br_restore_watch_dog_info_->restore_name == restore_name) {
+      br_restore_watch_dog_info_->restore_current_timestamp = restore_current_timestamp;
+    } else {  // restore name not match
+      if (current_timestamp >
+          (br_restore_watch_dog_info_->restore_current_timestamp + br_restore_watch_dog_info_->restore_timeout_s)) {
+        // timeout, reset
+        br_restore_watch_dog_info_ = std::make_shared<BrRestoreWatchDogInfo>(
+            restore_name, restore_path, restore_start_timestamp, restore_current_timestamp, restore_timeout_s);
+      } else {
+        // not timeout, update restore_current_timestamp
+        std::string s = fmt::format(
+            "register restore  failed, restore exist. restore name not match, input restore_name={} not "
+            "match "
+            "current "
+            "already exist restore_name={}",
+            restore_name, br_restore_watch_dog_info_->restore_name);
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::ERESTORE_TASK_EXIST, s);
+      }
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status BrWatchDogManager::UnRegisterRestore(const std::string& restore_name) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  // check exist
+  if (!br_restore_watch_dog_info_) {
+    return butil::Status::OK();
+  } else {
+    // restore name equal
+    if (br_restore_watch_dog_info_->restore_name == restore_name) {
+      br_restore_watch_dog_info_.reset();
+    } else {  // restore name not match
+      std::string s = fmt::format(
+          "unregister restore failed. restore name not match, input restore_name={} not match current "
+          "already "
+          "exist "
+          "restore_name={}",
+          restore_name, br_restore_watch_dog_info_->restore_name);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::ERESTORE_TASK_NAME_NOT_MATCH, s);
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status BrWatchDogManager::GetBackupStatus(bool& is_backing_up, std::string& backup_name) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (!br_backup_watch_dog_info_) {
+    is_backing_up = false;
+  } else {
+    // get current timestamp
+    int64_t current_timestamp = Helper::Timestamp();
+    if (current_timestamp >
+        (br_restore_watch_dog_info_->restore_current_timestamp + br_restore_watch_dog_info_->restore_timeout_s)) {
+      // timeout
+      is_backing_up = false;
+    } else {
+      is_backing_up = true;
+      backup_name = br_backup_watch_dog_info_->backup_name;
+    }
+  }
+  return butil::Status::OK();
+}
+
+butil::Status BrWatchDogManager::GetRestoreStatus(bool& is_restoring, std::string& restore_name) {
+  BAIDU_SCOPED_LOCK(mutex_);
+  if (!br_restore_watch_dog_info_) {
+    is_restoring = false;
+  } else {
+    // get current timestamp
+    int64_t current_timestamp = Helper::Timestamp();
+    if (current_timestamp >
+        (br_restore_watch_dog_info_->restore_current_timestamp + br_restore_watch_dog_info_->restore_timeout_s)) {
+      // timeout
+      is_restoring = false;
+    } else {
+      is_restoring = true;
+      restore_name = br_restore_watch_dog_info_->restore_name;
+    }
+  }
+  return butil::Status::OK();
+}
+
 butil::Status CoordinatorControl::RegisterBackup(const std::string& backup_name, const std::string& backup_path,
                                                  int64_t backup_start_timestamp, int64_t backup_current_timestamp,
                                                  int64_t backup_timeout_s) {
@@ -7009,6 +7106,25 @@ butil::Status CoordinatorControl::RegisterBackup(const std::string& backup_name,
 
 butil::Status CoordinatorControl::UnRegisterBackup(const std::string& backup_name) {
   return BrWatchDogManager::Instance()->UnRegisterBackup(backup_name);
+}
+
+butil::Status CoordinatorControl::RegisterRestore(const std::string& restore_name, const std::string& restore_path,
+                                                  int64_t restore_start_timestamp, int64_t restore_current_timestamp,
+                                                  int64_t restore_timeout_s) {
+  return BrWatchDogManager::Instance()->RegisterRestore(restore_name, restore_path, restore_start_timestamp,
+                                                        restore_current_timestamp, restore_timeout_s);
+}
+
+butil::Status CoordinatorControl::UnRegisterRestore(const std::string& restore_name) {
+  return BrWatchDogManager::Instance()->UnRegisterRestore(restore_name);
+}
+
+butil::Status CoordinatorControl::GetBackupStatus(bool& is_backing_up, std::string& backup_name) {
+  return BrWatchDogManager::Instance()->GetBackupStatus(is_backing_up, backup_name);
+}
+
+butil::Status CoordinatorControl::GetRestoreStatus(bool& is_restoring, std::string& restore_name) {
+  return BrWatchDogManager::Instance()->GetRestoreStatus(is_restoring, restore_name);
 }
 
 }  // namespace dingodb
