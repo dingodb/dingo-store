@@ -2832,7 +2832,7 @@ void RunCreateIds(CreateIdsOptions const &opt) {
 
 void SetUpImportMeta(CLI::App &app) {
   auto opt = std::make_shared<ImportMetaOptions>();
-  auto *cmd = app.add_subcommand("ImportMeta", "Import meta ")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("ImportMeta", "Import meta ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--meta_file_dir", opt->dir_meta_file, "Request parameter meta_file_dir")->required();
   cmd->callback([opt]() { RunImportMeta(*opt); });
@@ -2894,7 +2894,7 @@ void RunImportMeta(const ImportMetaOptions &opt) {
 
 void SetUpExportMeta(CLI::App &app) {
   auto opt = std::make_shared<ExportMetaOptions>();
-  auto *cmd = app.add_subcommand("ExportMeta", "Export meta ")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("ExportMeta", "Export meta ")->group("Meta Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--meta_file_dir", opt->dir_meta_file, "Request parameter meta_file_dir")->required();
   cmd->callback([opt]() { RunExportMeta(*opt); });

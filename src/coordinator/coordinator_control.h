@@ -984,6 +984,16 @@ class CoordinatorControl : public MetaControl {
                                       int64_t backup_timeout_s);
   static butil::Status UnRegisterBackup(const std::string &backup_name);
 
+  static butil::Status RegisterRestore(const std::string &restore_name, const std::string &restore_path,
+                                       int64_t restore_start_timestamp, int64_t restore_current_timestamp,
+                                       int64_t restore_timeout_s);
+
+  static butil::Status UnRegisterRestore(const std::string &restore_name);
+
+  static butil::Status GetBackupStatus(bool &is_backing_up, std::string &backup_name);
+
+  static butil::Status GetRestoreStatus(bool &is_restoring, std::string &restore_name);
+
   butil::Status GetAllPresentId(std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> &id_epoch_type_values);
 
  private:
@@ -1206,6 +1216,25 @@ struct BrBackupWatchDogInfo {
 
   ~BrBackupWatchDogInfo() = default;
 };
+
+struct BrRestoreWatchDogInfo {
+  std::string restore_name;
+  std::string restore_path;
+  int64_t restore_start_timestamp;
+  int64_t restore_current_timestamp;
+  int64_t restore_timeout_s;
+
+  BrRestoreWatchDogInfo(const std::string &restore_name, const std::string &restore_path,
+                        int64_t restore_start_timestamp, int64_t restore_current_timestamp, int64_t restore_timeout_s)
+      : restore_name(restore_name),
+        restore_path(restore_path),
+        restore_start_timestamp(restore_start_timestamp),
+        restore_current_timestamp(restore_current_timestamp),
+        restore_timeout_s(restore_timeout_s) {}
+
+  ~BrRestoreWatchDogInfo() = default;
+};
+
 class BrWatchDogManager {
  public:
   static BrWatchDogManager *Instance();
@@ -1216,10 +1245,21 @@ class BrWatchDogManager {
 
   butil::Status UnRegisterBackup(const std::string &backup_name);
 
+  butil::Status RegisterRestore(const std::string &restore_name, const std::string &restore_path,
+                                int64_t restore_start_timestamp, int64_t restore_current_timestamp,
+                                int64_t restore_timeout_s);
+
+  butil::Status UnRegisterRestore(const std::string &restore_name);
+
+  butil::Status GetBackupStatus(bool &is_backing_up, std::string &backup_name);
+
+  butil::Status GetRestoreStatus(bool &is_restoring, std::string &restore_name);
+
  private:
   BrWatchDogManager();
   ~BrWatchDogManager();
   std::shared_ptr<BrBackupWatchDogInfo> br_backup_watch_dog_info_;
+  std::shared_ptr<BrRestoreWatchDogInfo> br_restore_watch_dog_info_;
   bthread_mutex_t mutex_;
 };
 

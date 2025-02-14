@@ -557,6 +557,18 @@ struct UpdateForceReadOnlyOptions {
 void SetUpUpdateForceReadOnly(CLI::App &app);
 void RunUpdateForceReadOnly(UpdateForceReadOnlyOptions const &opt);
 
+struct GetBackUpStatusOptions {
+  std::string coor_url;
+};
+void SetUpGetBackUpStatus(CLI::App &app);
+void RunGetBackUpStatus(GetBackUpStatusOptions const &opt);
+
+struct GetRestoreStatusOptions {
+  std::string coor_url;
+};
+void SetUpGetRestoreStatus(CLI::App &app);
+void RunGetRestoreStatus(GetRestoreStatusOptions const &opt);
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_COORDINATOR_H_

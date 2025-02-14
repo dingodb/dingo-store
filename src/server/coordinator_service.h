@@ -322,6 +322,25 @@ class CoordinatorServiceImpl : public pb::coordinator::CoordinatorService {
   void ControlConfig(google::protobuf::RpcController* controller, const pb::coordinator::ControlConfigRequest* request,
                      pb::coordinator::ControlConfigResponse* response, google::protobuf::Closure* done) override;
 
+  void RegisterRestore(google::protobuf::RpcController* controller,
+                       const pb::coordinator::RegisterRestoreRequest* request,
+                       pb::coordinator::RegisterRestoreResponse* response, google::protobuf::Closure* done) override;
+
+  void UnRegisterRestore(google::protobuf::RpcController* controller,
+                         const pb::coordinator::UnRegisterRestoreRequest* request,
+                         pb::coordinator::UnRegisterRestoreResponse* response,
+                         google::protobuf::Closure* done) override;
+
+  void RegisterBackupStatus(google::protobuf::RpcController* controller,
+                            const pb::coordinator::RegisterBackupStatusRequest* request,
+                            pb::coordinator::RegisterBackupStatusResponse* response,
+                            google::protobuf::Closure* done) override;
+
+  void RegisterRestoreStatus(google::protobuf::RpcController* controller,
+                             const pb::coordinator::RegisterRestoreStatusRequest* request,
+                             pb::coordinator::RegisterRestoreStatusResponse* response,
+                             google::protobuf::Closure* done) override;
+
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
  private:

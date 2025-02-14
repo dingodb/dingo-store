@@ -38,6 +38,7 @@
 #include "coordinator/coordinator_control.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
+#include "google/protobuf/service.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/coordinator_internal.pb.h"
@@ -4025,6 +4026,186 @@ void CoordinatorServiceImpl::ControlConfig(google::protobuf::RpcController *cont
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoControlConfig(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoRegisterRestore(google::protobuf::RpcController * /*controller*/,
+                       const pb::coordinator::RegisterRestoreRequest *request,
+                       pb::coordinator::RegisterRestoreResponse *response, TrackClosure *done,
+                       std::shared_ptr<CoordinatorControl> coordinator_control,
+                       std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  auto ret = coordinator_control->RegisterRestore(request->restore_name(), request->restore_path(),
+                                                  request->restore_start_timestamp(),
+                                                  request->restore_current_timestamp(), request->restore_timeout_s());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RegisterRestore failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "RegisterRestore Success. restore_name = " << request->restore_name();
+}
+
+void CoordinatorServiceImpl::RegisterRestore(google::protobuf::RpcController *controller,
+                                             const pb::coordinator::RegisterRestoreRequest *request,
+                                             pb::coordinator::RegisterRestoreResponse *response,
+                                             google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRegisterRestore(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoUnRegisterRestore(google::protobuf::RpcController * /*controller*/,
+                         const pb::coordinator::UnRegisterRestoreRequest *request,
+                         pb::coordinator::UnRegisterRestoreResponse *response, TrackClosure *done,
+                         std::shared_ptr<CoordinatorControl> coordinator_control,
+                         std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  auto ret = coordinator_control->UnRegisterRestore(request->restore_name());
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "UnRegisterRestore failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "UnRegisterRestore Success. restore_name = " << request->restore_name();
+}
+
+void CoordinatorServiceImpl::UnRegisterRestore(google::protobuf::RpcController *controller,
+                                               const pb::coordinator::UnRegisterRestoreRequest *request,
+                                               pb::coordinator::UnRegisterRestoreResponse *response,
+                                               google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoUnRegisterRestore(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoRegisterBackupStatus(google::protobuf::RpcController * /*controller*/,
+                            const pb::coordinator::RegisterBackupStatusRequest *request,
+                            pb::coordinator::RegisterBackupStatusResponse *response, TrackClosure *done,
+                            std::shared_ptr<CoordinatorControl> coordinator_control,
+                            std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  bool is_backing_up = false;
+  std::string backup_name;
+  auto ret = coordinator_control->GetBackupStatus(is_backing_up, backup_name);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RegisterBackupStatus failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  if (is_backing_up) {
+    response->set_is_backing_up(true);
+    response->set_backup_name(backup_name);
+  } else {
+    response->set_is_backing_up(false);
+  }
+
+  DINGO_LOG(INFO) << "RegisterBackupStatus Success. " << response->DebugString();
+}
+
+void CoordinatorServiceImpl::RegisterBackupStatus(google::protobuf::RpcController *controller,
+                                                  const pb::coordinator::RegisterBackupStatusRequest *request,
+                                                  pb::coordinator::RegisterBackupStatusResponse *response,
+                                                  google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRegisterBackupStatus(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoRegisterRestoreStatus(google::protobuf::RpcController * /*controller*/,
+                             const pb::coordinator::RegisterRestoreStatusRequest *request,
+                             pb::coordinator::RegisterRestoreStatusResponse *response, TrackClosure *done,
+                             std::shared_ptr<CoordinatorControl> coordinator_control,
+                             std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  bool is_restoring = false;
+  std::string restore_name;
+  auto ret = coordinator_control->GetRestoreStatus(is_restoring, restore_name);
+  if (!ret.ok()) {
+    DINGO_LOG(ERROR) << "RegisterRestoreStatus failed in coordinator_service";
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+    response->mutable_error()->set_errmsg(ret.error_str());
+    return;
+  }
+
+  if (is_restoring) {
+    response->set_is_restoring(true);
+    response->set_restore_name(restore_name);
+  } else {
+    response->set_is_restoring(false);
+  }
+
+  DINGO_LOG(INFO) << "RegisterRestoreStatus Success. " << response->DebugString();
+}
+
+void CoordinatorServiceImpl::RegisterRestoreStatus(google::protobuf::RpcController *controller,
+                                                   const pb::coordinator::RegisterRestoreStatusRequest *request,
+                                                   pb::coordinator::RegisterRestoreStatusResponse *response,
+                                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(DEBUG) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRegisterRestoreStatus(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
