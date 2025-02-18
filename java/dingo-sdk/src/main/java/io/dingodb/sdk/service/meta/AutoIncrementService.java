@@ -129,6 +129,7 @@ public class AutoIncrementService {
                     long maxId = current(tableId);
                     if (incrementId > maxId) {
                         updateIncrement(tableId, incrementId);
+                        reset(tableId);
                     }
                 }
             }
