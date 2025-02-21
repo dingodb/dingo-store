@@ -110,6 +110,7 @@ class CoprocessorV2 : public RawCoprocessor {
   std::shared_ptr<RecordDecoder> original_record_decoder_;                           // NOLINT
   // array index =  result schema member index field ; value = result schema array index
   std::vector<int> result_column_indexes_;  // NOLINT
+  bool forAggCount_; // NOLINT
 
 #if defined(TEST_COPROCESSOR_V2_MOCK)
   std::shared_ptr<rel::mock::RelRunner> rel_runner_;  // NOLINT

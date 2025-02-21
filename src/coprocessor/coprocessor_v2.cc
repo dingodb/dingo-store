@@ -144,6 +144,7 @@ butil::Status CoprocessorV2::Open(const std::any& coprocessor) {
     return status;
   }
 
+  forAggCount_ = coprocessor_.for_agg_count();
   original_serial_schemas_ = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
 
   // init original_serial_schemas
@@ -239,47 +240,76 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
   ScanFilter scan_filter = ScanFilter(false, max_fetch_cnt, max_bytes_rpc);
   butil::Status status;
   has_more = false;
-  while (iter->Valid()) {
-    pb::common::KeyValue kv;
-    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
-      auto kv_start = lambda_time_now_function();
-      ON_SCOPE_EXIT([&]() {
-        auto kv_end = lambda_time_now_function();
-        get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
-      });
-    }
-    std::string plain_key;
-    mvcc::Codec::DecodeKey(iter->Key(), plain_key);
-    kv.mutable_key()->swap(plain_key);
-    std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
-    kv.mutable_value()->swap(value);
 
-    bool has_result_kv = false;
-    pb::common::KeyValue result_key_value;
-    DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
-
-    // Get codec version from key.
-    // int codec_version = GetCodecVersion(kv.key);
-    status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_key_value);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
-      return status;
+  if(forAggCount_) {
+    long count = 0;
+    while (iter->Valid()) {
+      count++;
+      iter->Next();
     }
 
-    if (has_result_kv) {
-      if (key_only) {
-        result_key_value.set_value("");
+    std::vector<std::any> result_record;
+    bool has_result_kv;
+    pb::common::KeyValue result_kv;
+
+    result_record.push_back(std::make_any<long>(count));
+    status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
+    if(has_result_kv) {
+      kvs->emplace_back(std::move(result_kv));
+    }
+  } else {
+    while (iter->Valid()) {
+      pb::common::KeyValue kv;
+      if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+        auto kv_start = lambda_time_now_function();
+        ON_SCOPE_EXIT([&]() {
+          auto kv_end = lambda_time_now_function();
+          get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
+        });
+      }
+      std::string plain_key;
+      mvcc::Codec::DecodeKey(iter->Key(), plain_key);
+      kv.mutable_key()->swap(plain_key);
+      std::string value(mvcc::Codec::UnPackageValue(iter->Value()));
+      kv.mutable_value()->swap(value);
+
+      bool has_result_kv = false;
+      pb::common::KeyValue result_key_value;
+      DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
+
+      // Get codec version from key.
+      // int codec_version = GetCodecVersion(kv.key);
+      status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_key_value);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed");
+        return status;
       }
 
-      kvs->emplace_back(std::move(result_key_value));
-    }
+      if (has_result_kv) {
+        if (key_only) {
+          result_key_value.set_value("");
+        }
 
-    if (scan_filter.UptoLimit(kv)) {
-      has_more = true;
-      DINGO_LOG(WARNING) << fmt::format(
-          "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
-          "cur_bytes_rpc : {}",
-          key_only, max_fetch_cnt, max_bytes_rpc, scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
+        kvs->emplace_back(std::move(result_key_value));
+      }
+
+      if (scan_filter.UptoLimit(kv)) {
+        has_more = true;
+        DINGO_LOG(WARNING) << fmt::format(
+            "CoprocessorV2 UptoLimit. key_only : {} max_fetch_cnt : {} max_bytes_rpc : {} cur_fetch_cnt : {} "
+            "cur_bytes_rpc : {}",
+            key_only, max_fetch_cnt, max_bytes_rpc, scan_filter.GetCurFetchCnt(), scan_filter.GetCurBytesRpc());
+        if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+          auto next_start = lambda_time_now_function();
+          ON_SCOPE_EXIT([&]() {
+            auto next_end = lambda_time_now_function();
+            iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
+          });
+        }
+        iter->Next();
+
+        break;
+      }
       if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
         auto next_start = lambda_time_now_function();
         ON_SCOPE_EXIT([&]() {
@@ -288,21 +318,10 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
         });
       }
       iter->Next();
+    }
 
-      break;
-    }
-    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
-      auto next_start = lambda_time_now_function();
-      ON_SCOPE_EXIT([&]() {
-        auto next_end = lambda_time_now_function();
-        iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
-      });
-    }
-    iter->Next();
+    status = GetKvFromExprEndOfFinish(kvs);
   }
-
-  status = GetKvFromExprEndOfFinish(kvs);
-
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute IteratorPtr Leave");
 
   return status;
@@ -328,53 +347,71 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
   butil::Status status;
 
   size_t bytes = 0;
-  while (iter->Valid(txn_result_info)) {
-    pb::common::KeyValue kv;
-    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
-      auto kv_start = lambda_time_now_function();
-      ON_SCOPE_EXIT([&]() {
-        auto kv_end = lambda_time_now_function();
-        get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
-      });
-    }
-    *kv.mutable_key() = iter->Key();
-    *kv.mutable_value() = iter->Value();
 
-    bool has_result_kv = false;
+  if(forAggCount_) {
+    long count = 0;
+    while (iter->Valid(txn_result_info)) {
+      count++;
+      iter->Next();
+    }
+
+    std::vector<std::any> result_record;
+    bool has_result_kv;
     pb::common::KeyValue result_kv;
-    DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
-    status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_kv);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed, error: {}", status.error_str());
-      return status;
-    }
 
-    if (has_result_kv) {
-      if (key_only) {
-        result_kv.set_value("");
-      }
-
-      bytes += result_kv.ByteSizeLong();
+    result_record.push_back(std::make_any<long>(count));
+    status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
+    if(has_result_kv) {
       kvs.emplace_back(std::move(result_kv));
     }
+  } else {
+    while (iter->Valid(txn_result_info)) {
+      pb::common::KeyValue kv;
+      if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+        auto kv_start = lambda_time_now_function();
+        ON_SCOPE_EXIT([&]() {
+          auto kv_end = lambda_time_now_function();
+          get_kv_spend_time_ms += lambda_time_diff_microseconds_function(kv_start, kv_end);
+        });
+      }
+      *kv.mutable_key() = iter->Key();
+      *kv.mutable_value() = iter->Value();
 
-    if (stop_checker(kvs.size(), bytes)) {
-      has_more = true;
-      break;
+      bool has_result_kv = false;
+      pb::common::KeyValue result_kv;
+      DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::DoExecute Call");
+      status = DoExecute(kv.key(), kv.value(), &has_result_kv, &result_kv);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("CoprocessorV2::Execute failed, error: {}", status.error_str());
+        return status;
+      }
+
+      if (has_result_kv) {
+        if (key_only) {
+          result_kv.set_value("");
+        }
+
+        bytes += result_kv.ByteSizeLong();
+        kvs.emplace_back(std::move(result_kv));
+      }
+
+      if (stop_checker(kvs.size(), bytes)) {
+        has_more = true;
+        break;
+      }
+
+      if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
+        auto next_start = lambda_time_now_function();
+        ON_SCOPE_EXIT([&]() {
+          auto next_end = lambda_time_now_function();
+          iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
+        });
+      }
+      iter->Next();
     }
 
-    if (FLAGS_enable_coprocessor_v2_statistics_time_consumption) {
-      auto next_start = lambda_time_now_function();
-      ON_SCOPE_EXIT([&]() {
-        auto next_end = lambda_time_now_function();
-        iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
-      });
-    }
-    iter->Next();
+    status = GetKvFromExprEndOfFinish(&kvs);
   }
-
-  status = GetKvFromExprEndOfFinish(&kvs);
-
   DINGO_LOG(DEBUG) << fmt::format("CoprocessorV2::Execute TxnIteratorPtr Leave");
 
   return status;
