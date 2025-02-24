@@ -125,6 +125,12 @@ class IndexServiceImpl : public pb::index::IndexService {
   void ControlConfig(google::protobuf::RpcController* controller, const pb::store::ControlConfigRequest* request,
                      pb::store::ControlConfigResponse* response, google::protobuf::Closure* done) override;
 
+  void RestoreMeta(google::protobuf::RpcController* controller, const dingodb::pb::store::RestoreMetaRequest* request,
+                   dingodb::pb::store::RestoreMetaResponse* response, google::protobuf::Closure* done) override;
+
+  void RestoreData(google::protobuf::RpcController* controller, const dingodb::pb::store::RestoreDataRequest* request,
+                   dingodb::pb::store::RestoreDataResponse* response, google::protobuf::Closure* done) override;
+
   void SetStorage(StoragePtr storage) { storage_ = storage; }
   void SetReadWorkSet(WorkerSetPtr worker_set) { read_worker_set_ = worker_set; }
   void SetWriteWorkSet(WorkerSetPtr worker_set) { write_worker_set_ = worker_set; }

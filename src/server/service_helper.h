@@ -82,6 +82,9 @@ class ServiceHelper {
   static butil::Status ValidateIndexRegion(store::RegionPtr region, const std::vector<int64_t>& vector_ids);
   static butil::Status ValidateDocumentRegion(store::RegionPtr region, const std::vector<int64_t>& document_ids);
   static butil::Status ValidateClusterReadOnly();
+  static butil::Status ValidSstMetas(const dingodb::pb::common::StorageBackend& storage_backend,
+                                     const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas,
+                                     store::RegionPtr region);
 
   static void LatchesAcquire(LatchContext& latch_ctx, bool is_txn);
   static void LatchesRelease(LatchContext& latch_ctx);

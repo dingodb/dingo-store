@@ -842,11 +842,11 @@ butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalc
   int64_t dimension = 0;
   auto value_type = op_left_vectors[0].value_type();
 
-  auto lambda_op_vector_check_function = [&dimension,&value_type](const auto& op_vector, const std::string& name) {
+  auto lambda_op_vector_check_function = [&dimension, &value_type](const auto& op_vector, const std::string& name) {
     if (!op_vector.empty()) {
       size_t i = 0;
       for (const auto& vector : op_vector) {
-        if(vector.value_type() != value_type) {
+        if (vector.value_type() != value_type) {
           std::string s = fmt::format("{} index : {}  value_type : {} unequal value_type : {}", name, i,
                                       ::dingodb::pb::common::ValueType_Name(value_type),
                                       ::dingodb::pb::common::ValueType_Name(vector.value_type()));
@@ -1724,6 +1724,22 @@ butil::Status Storage::ControlConfig(std::shared_ptr<Context> /*ctx*/,
     response->mutable_control_config_variable()->Add(std::move(config));
   }
   return butil::Status();
+}
+
+butil::Status Storage::RestoreMeta(std::shared_ptr<Context> ctx, store::RegionPtr region, std::string backup_ts,
+                                   int64_t backup_tso, const pb::common::StorageBackend& storage_backend,
+                                   const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas) {
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
+
+  return TxnEngineHelper::RestoreMeta(ctx, engine, region, backup_ts, backup_tso, storage_backend, sst_metas);
+}
+
+butil::Status Storage::RestoreData(std::shared_ptr<Context> ctx, store::RegionPtr region, std::string backup_ts,
+                                   int64_t backup_tso, const pb::common::StorageBackend& storage_backend,
+                                   const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas) {
+  auto engine = GetStoreEngine(ctx->StoreEngineType());
+
+  return TxnEngineHelper::RestoreData(ctx, engine, region, backup_ts, backup_tso, storage_backend, sst_metas);
 }
 
 }  // namespace dingodb

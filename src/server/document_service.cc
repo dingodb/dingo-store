@@ -2543,6 +2543,59 @@ void DocumentServiceImpl::BackupData(google::protobuf::RpcController* controller
   }
 }
 
+void DoRestoreMeta(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const dingodb::pb::store::RestoreMetaRequest* request,
+                   dingodb::pb::store::RestoreMetaResponse* response, TrackClosure* done, bool is_sync);
+
+void DocumentServiceImpl::RestoreMeta(google::protobuf::RpcController* controller,
+                                      const dingodb::pb::store::RestoreMetaRequest* request,
+                                      dingodb::pb::store::RestoreMetaResponse* response,
+                                      google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRestoreMeta(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+void DoRestoreData(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const dingodb::pb::store::RestoreDataRequest* request,
+                   dingodb::pb::store::RestoreDataResponse* response, TrackClosure* done, bool is_sync);
+
+void DocumentServiceImpl::RestoreData(google::protobuf::RpcController* controller,
+                                      const dingodb::pb::store::RestoreDataRequest* request,
+                                      dingodb::pb::store::RestoreDataResponse* response,
+                                      google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRestoreData(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
 static butil::Status ValidateTxnDumpRequest(const pb::store::TxnDumpRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
@@ -2653,8 +2706,8 @@ void DoHello(google::protobuf::RpcController* controller, const dingodb::pb::doc
 void DocumentServiceImpl::Hello(google::protobuf::RpcController* controller, const pb::document::HelloRequest* request,
                                 pb::document::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done =
-      new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(__func__, done, request, response);
+  auto* svr_done = new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(
+      __func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done); });
 
@@ -2670,7 +2723,8 @@ void DocumentServiceImpl::GetMemoryInfo(google::protobuf::RpcController* control
                                         const pb::document::HelloRequest* request,
                                         pb::document::HelloResponse* response, google::protobuf::Closure* done) {
   // Run in queue.
-  auto* svr_done = new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(__func__, done, request, response);
+  auto* svr_done = new ServiceClosure<pb::document::HelloRequest, pb::document::HelloResponse, false>(
+      __func__, done, request, response);
 
   auto task = std::make_shared<ServiceTask>([=]() { DoHello(controller, request, response, svr_done, true); });
 

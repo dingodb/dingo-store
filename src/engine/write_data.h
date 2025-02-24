@@ -173,6 +173,44 @@ struct VectorAddDatum : public DatumAble {
   bool is_update{false};
 };
 
+struct VectorBatchAddDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kPut; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::VECTOR_BATCH_ADD);
+    pb::raft::VectorBatchAddRequest* vector_batch_add_request = request->mutable_vector_batch_add();
+    for (auto& vector : vectors) {
+      vector_batch_add_request->add_vectors()->Swap(&vector);
+    }
+    for (auto& kv : kvs_default) {
+      vector_batch_add_request->add_kvs_default()->Swap(&kv);
+    }
+    for (auto& kv : kvs_scalar) {
+      vector_batch_add_request->add_kvs_scalar()->Swap(&kv);
+    }
+    for (auto& kv : kvs_table) {
+      vector_batch_add_request->add_kvs_table()->Swap(&kv);
+    }
+    for (auto& kv : kvs_scalar_speed_up) {
+      vector_batch_add_request->add_kvs_scalar_speed_up()->Swap(&kv);
+    }
+    vector_batch_add_request->set_is_update(is_update);
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::vector<pb::common::VectorWithId> vectors;
+  std::vector<pb::common::KeyValue> kvs_default;
+  std::vector<pb::common::KeyValue> kvs_scalar;
+  std::vector<pb::common::KeyValue> kvs_table;
+  std::vector<pb::common::KeyValue> kvs_scalar_speed_up;
+  bool is_update{false};
+};
+
 struct VectorDeleteDatum : public DatumAble {
   ~VectorDeleteDatum() override = default;
   DatumType GetType() override { return DatumType::kDeleteBatch; }
@@ -221,6 +259,34 @@ struct DocumentAddDatum : public DatumAble {
   int64_t ts;
   std::string cf_name;
   std::vector<pb::common::DocumentWithId> documents;
+  bool is_update{false};
+};
+
+struct DocumentBatchAddDatum : public DatumAble {
+  DatumType GetType() override { return DatumType::kPut; }
+
+  pb::raft::Request* TransformToRaft() override {
+    auto* request = new pb::raft::Request();
+
+    request->set_cmd_type(pb::raft::CmdType::DOCUMENT_BATCH_ADD);
+    pb::raft::DocumentBatchAddRequest* document_batch_add_request = request->mutable_document_batch_add();
+    document_batch_add_request->set_cf_name(cf_name);
+    for (auto& document : documents) {
+      document_batch_add_request->add_documents()->Swap(&document);
+    }
+    for (auto& kv : kvs) {
+      document_batch_add_request->add_kvs()->Swap(&kv);
+    }
+    document_batch_add_request->set_is_update(is_update);
+
+    return request;
+  };
+
+  void TransformFromRaft(pb::raft::Response& resonse) override {}
+
+  std::string cf_name;
+  std::vector<pb::common::DocumentWithId> documents;
+  std::vector<pb::common::KeyValue> kvs;
   bool is_update{false};
 };
 
@@ -456,6 +522,26 @@ class WriteDataBuilder {
     return write_data;
   }
 
+  // VectorBatchAdd
+  static std::shared_ptr<WriteData> BuildWrite(const std::vector<pb::common::VectorWithId>& vectors,
+                                               std::vector<pb::common::KeyValue> kvs_default,
+                                               std::vector<pb::common::KeyValue> kvs_scalar,
+                                               std::vector<pb::common::KeyValue> kvs_table,
+                                               std::vector<pb::common::KeyValue> kvs_scalar_speed_up, bool is_update) {
+    auto datum = std::make_shared<VectorBatchAddDatum>();
+    datum->vectors = vectors;
+    datum->kvs_default = kvs_default;
+    datum->kvs_scalar = kvs_scalar;
+    datum->kvs_table = kvs_table;
+    datum->kvs_scalar_speed_up = kvs_scalar_speed_up;
+    datum->is_update = is_update;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
   // VectorDeleteDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name, int64_t ts,
                                                const std::vector<int64_t>& ids) {
@@ -479,6 +565,22 @@ class WriteDataBuilder {
     datum->documents = documents;
     datum->is_update = is_update;
     datum->ts = ts;
+
+    auto write_data = std::make_shared<WriteData>();
+    write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));
+
+    return write_data;
+  }
+
+  // DocumentBatchAddDatum
+  static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
+                                               const std::vector<pb::common::DocumentWithId>& documents,
+                                               const std::vector<pb::common::KeyValue>& kvs, bool is_update) {
+    auto datum = std::make_shared<DocumentBatchAddDatum>();
+    datum->cf_name = cf_name;
+    datum->documents = documents;
+    datum->kvs = kvs;
+    datum->is_update = is_update;
 
     auto write_data = std::make_shared<WriteData>();
     write_data->AddDatums(std::static_pointer_cast<DatumAble>(datum));

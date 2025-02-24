@@ -1324,6 +1324,121 @@ int RebuildVectorIndexHandler::Handle(std::shared_ptr<Context>, store::RegionPtr
   return 0;
 }
 
+int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                  store::RegionMetricsPtr /*region_metrics*/, int64_t /*term_id*/, int64_t log_id) {
+  auto set_ctx_status = [ctx](butil::Status status) {
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  };
+
+  butil::Status status;
+
+  const auto &request = req.vector_batch_add();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
+
+  // Transform vector to kv
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::map<std::string, std::vector<std::string>> kv_deletes_with_cf;
+
+  std::vector<pb::common::KeyValue> kvs_default;          // for vector data
+  std::vector<pb::common::KeyValue> kvs_scalar;           // for vector scalar data
+  std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
+  std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
+
+  // Transform vector to kv
+  for (const auto &kv : request.kvs_default()) {
+    kvs_default.push_back(kv);
+  }
+  for (const auto &kv : request.kvs_scalar()) {
+    kvs_scalar.push_back(kv);
+  }
+  for (const auto &kv : request.kvs_table()) {
+    kvs_table.push_back(kv);
+  }
+  for (const auto &kv : request.kvs_scalar_speed_up()) {
+    kvs_scalar_speed_up.push_back(kv);
+  }
+  
+  if(!kvs_default.empty()){
+    kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
+  }
+  if(!kvs_scalar.empty()){
+   kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
+  }
+  if(!kvs_table.empty()){
+   kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
+  }
+  if(!kvs_scalar_speed_up.empty()){
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kvs_scalar_speed_up);
+  }
+
+  // Put vector data to rocksdb
+  if (!kv_puts_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
+    auto writer = engine->Writer();
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
+      return 0;
+    }
+  }
+
+  if (ctx) {
+    ctx->SetStatus(status);
+  }
+
+  // Handle vector index
+  auto vector_index_wrapper = region->VectorIndexWrapper();
+  int64_t vector_index_id = vector_index_wrapper->Id();
+  bool is_ready = vector_index_wrapper->IsReady();
+
+  if (is_ready) {
+    // Check if the log_id is greater than the ApplyLogIndex of the vector index
+    if (log_id > vector_index_wrapper->ApplyLogId() ||
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+      try {
+        // Build vector_with_ids
+        std::vector<pb::common::VectorWithId> vector_with_ids;
+        vector_with_ids.reserve(request.vectors_size());
+
+        for (const auto &vector : request.vectors()) {
+          pb::common::VectorWithId vector_with_id;
+          *(vector_with_id.mutable_vector()) = vector.vector();
+          vector_with_id.set_id(vector.id());
+          vector_with_ids.push_back(vector_with_id);
+        }
+
+        auto start_time = Helper::TimestampNs();
+        auto status = request.is_update() ? vector_index_wrapper->Upsert(vector_with_ids)
+                                          : vector_index_wrapper->Add(vector_with_ids);
+        if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert vector, count: {} cost: {}us", vector_index_id,
+                                        vector_with_ids.size(), Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+            vector_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert vector failed, count: {} err: {}",
+                                            vector_index_id, vector_with_ids.size(), Helper::PrintStatus(status));
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}", vector_index_id,
+                                        e.what());
+      }
+    }
+  }
+
+  return 0;
+}
+
 int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
                                const pb::raft::Request &req, store::RegionMetricsPtr /*region_metrics*/,
                                int64_t /*term_id*/, int64_t log_id) {
@@ -1521,6 +1636,92 @@ int DocumentDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   return 0;
 }
 
+int DocumentBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                    std::shared_ptr<RawEngine> engine, const pb::raft::Request &req,
+                                    store::RegionMetricsPtr /*region_metrics*/, int64_t /*term_id*/, int64_t log_id) {
+  auto set_ctx_status = [ctx](butil::Status status) {
+    if (ctx) {
+      ctx->SetStatus(status);
+    }
+  };
+
+  butil::Status status;
+  const auto &request = req.document_batch_add();
+  TrackerPtr tracker = ctx != nullptr ? ctx->Tracker() : nullptr;
+
+  std::map<std::string, std::vector<pb::common::KeyValue>> kv_puts_with_cf;
+  std::vector<pb::common::KeyValue> kv_puts;
+  // Transform vector to kv
+  for (const auto &kv : request.kvs()) {
+    kv_puts.push_back(kv);
+  }
+  kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kv_puts);
+
+  // Put data to rocksdb
+  if (!kv_puts_with_cf.empty()) {
+    auto start_time = Helper::TimestampNs();
+    auto writer = engine->Writer();
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, {});
+    if (tracker) tracker->SetStoreWriteTime(Helper::TimestampNs() - start_time);
+    if (status.error_code() == pb::error::Errno::EINTERNAL) {
+      DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] KvBatchPutAndDelete failed, error: {}", region->Id(),
+                                      status.error_str());
+      return 0;
+    }
+  }
+
+  if (ctx) {
+    ctx->SetStatus(status);
+  }
+
+  // Handle document index
+  auto document_index_wrapper = region->DocumentIndexWrapper();
+  int64_t document_index_id = document_index_wrapper->Id();
+  bool is_ready = document_index_wrapper->IsReady();
+
+  if (is_ready) {
+    // Check if the log_id is greater than the ApplyLogIndex of the vector index
+    if (log_id > document_index_wrapper->ApplyLogId() ||
+        region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+      try {
+        // Build vector_with_ids
+        std::vector<pb::common::DocumentWithId> document_with_ids;
+        document_with_ids.reserve(request.documents_size());
+
+        for (const auto &document : request.documents()) {
+          pb::common::DocumentWithId document_with_id;
+          *(document_with_id.mutable_document()) = document.document();
+          document_with_id.set_id(document.id());
+          document_with_ids.push_back(document_with_id);
+        }
+        auto start_time = Helper::TimestampNs();
+        auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
+                                          : document_index_wrapper->Add(document_with_ids);
+        if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}ns",
+                                        document_index_id, document_with_ids.size(),
+                                        Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+            document_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert document failed, count: {} err: {}",
+                                            document_index_id, document_with_ids.size(), Helper::PrintStatus(status));
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert document exception, error: {}",
+                                        document_index_id, e.what());
+      }
+    }
+  }
+
+  return 0;
+}
+
 std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   auto handler_collection = std::make_shared<HandlerCollection>();
   handler_collection->Register(std::make_shared<PutHandler>());
@@ -1532,8 +1733,10 @@ std::shared_ptr<HandlerCollection> RaftApplyHandlerFactory::Build() {
   handler_collection->Register(std::make_shared<RollbackMergeHandler>());
   handler_collection->Register(std::make_shared<VectorAddHandler>());
   handler_collection->Register(std::make_shared<VectorDeleteHandler>());
+  handler_collection->Register(std::make_shared<VectorBatchAddHandler>());
   handler_collection->Register(std::make_shared<DocumentAddHandler>());
   handler_collection->Register(std::make_shared<DocumentDeleteHandler>());
+  handler_collection->Register(std::make_shared<DocumentBatchAddHandler>());
   handler_collection->Register(std::make_shared<RebuildVectorIndexHandler>());
   handler_collection->Register(std::make_shared<SaveRaftSnapshotHandler>());
   handler_collection->Register(std::make_shared<TxnHandler>());

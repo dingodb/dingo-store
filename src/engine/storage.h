@@ -188,7 +188,8 @@ class Storage {
                                    std::vector<pb::common::DocumentWithId>& document_with_ids);
   butil::Status DocumentSearch(std::shared_ptr<Engine::DocumentReader::Context> ctx,
                                std::vector<pb::common::DocumentWithScore>& results);
-  butil::Status DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx, const pb::stream::StreamRequestMeta& req_stream_meta, bool& has_more,
+  butil::Status DocumentSearchAll(std::shared_ptr<Engine::DocumentReader::Context> ctx,
+                                  const pb::stream::StreamRequestMeta& req_stream_meta, bool& has_more,
                                   std::vector<pb::common::DocumentWithScore>& results);
   butil::Status DocumentGetBorderId(store::RegionPtr region, bool get_min, int64_t ts, int64_t& document_id);
   butil::Status DocumentScanQuery(std::shared_ptr<Engine::DocumentReader::Context> ctx,
@@ -245,8 +246,16 @@ class Storage {
                            dingodb::pb::store::BackupMetaResponse* response);
 
   static butil::Status ControlConfig(std::shared_ptr<Context> ctx,
-                              const std::vector<pb::common::ControlConfigVariable>& variables,
-                              dingodb::pb::store::ControlConfigResponse* response);
+                                     const std::vector<pb::common::ControlConfigVariable>& variables,
+                                     dingodb::pb::store::ControlConfigResponse* response);
+
+  butil::Status RestoreMeta(std::shared_ptr<Context> ctx, store::RegionPtr region, std::string backup_ts,
+                            int64_t backup_tso, const pb::common::StorageBackend& storage_backend,
+                            const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas);
+
+  butil::Status RestoreData(std::shared_ptr<Context> ctx, store::RegionPtr region, std::string backup_ts,
+                            int64_t backup_tso, const pb::common::StorageBackend& storage_backend,
+                            const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas);
 
  private:
   std::shared_ptr<Engine> raft_engine_;

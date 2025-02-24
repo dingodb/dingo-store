@@ -16,6 +16,8 @@
 
 #include <cassert>
 #include <cstdint>
+#include <filesystem>
+#include <regex>
 #include <string>
 #include <string_view>
 
@@ -253,6 +255,138 @@ butil::Status ServiceHelper::ValidateClusterReadOnly() {
 
     DINGO_LOG(WARNING) << s;
     return butil::Status(pb::error::ESYSTEM_CLUSTER_READ_ONLY, s);
+  }
+
+  return butil::Status();
+}
+
+static bool ExtractFileParts(const std::string& file_name, std::string& region_id, std::string& region_epoch,
+                             std::string& hash, std::string& backup_start_ts, std::string& cf_name) {
+  std::regex pattern(R"(([^_]+)_([^_]+)_([^_]+)_([^_]+)_([^_]+)\.sst)");
+
+  std::smatch match;
+  if (std::regex_match(file_name, match, pattern)) {
+    region_id = match[1];
+    region_epoch = match[2];
+    hash = match[3];
+    backup_start_ts = match[4];
+    cf_name = match[5];
+    return true;
+  }
+  return false;
+}
+
+static butil::Status ValidFileMeta(const dingodb::pb::common::BackupDataFileValueSstMeta& sst_meta,
+                                   store::RegionPtr region) {
+  std::string region_id_string;
+  std::string reigon_epoch;
+  std::string hash_code;
+  std::string backup_ts;
+  std::string cf_name;
+  int64_t region_id;
+
+  if (!ExtractFileParts(sst_meta.file_name(), region_id_string, reigon_epoch, hash_code, backup_ts, cf_name)) {
+    return butil::Status(pb::error::ERESTORE_PARSE_FILE_NAME_FAILED, "parse file name failed");
+  }
+
+  // check region id
+  try {
+    region_id = std::stoll(region_id_string);
+    if (region_id != sst_meta.region_id()) {
+      return butil::Status(pb::error::ERESTORE_FIELD_NOT_MATCH, "region id not match");
+    }
+  } catch (const std::invalid_argument& e) {
+    DINGO_LOG(ERROR) << fmt::format("[restore][region{}] file name invalid, meta:{}, error:{}", sst_meta.region_id(),
+                                    sst_meta.ShortDebugString(), e.what());
+    return butil::Status(pb::error::EINTERNAL, "file name valid");
+  } catch (const std::out_of_range& e) {
+    DINGO_LOG(ERROR) << fmt::format("[restore][region{}] file name invalid, meta:{}, error:{}", sst_meta.region_id(),
+                                    sst_meta.ShortDebugString(), e.what());
+    return butil::Status(pb::error::EINTERNAL, "file name valid");
+  }
+
+  // check hash_code
+  std::string region_hash_code;
+  Helper::CalSha1CodeWithString(region->Range().start_key(), region_hash_code);
+
+  if (hash_code != region_hash_code) {
+    return butil::Status(pb::error::ERESTORE_FILE_CHECKSUM_NOT_MATCH, "checksum not match");
+  }
+
+  // check cf name
+  if (cf_name != sst_meta.cf()) {
+    return butil::Status(pb::error::ERESTORE_CF_NOT_MATCH, "cf not match");
+  }
+
+  return butil::Status();
+}
+
+butil::Status ServiceHelper::ValidSstMetas(const dingodb::pb::common::StorageBackend& storage_backend,
+                                           const dingodb::pb::common::BackupDataFileValueSstMetaGroup& sst_metas,
+                                           store::RegionPtr region) {
+  std::string dir_path;
+  std::string file_path;
+  if (!storage_backend.has_local()) {
+    return butil::Status(pb::error::ERESTORE_BACKEND_NOT_SUPPORT, "backend not support");
+  }
+
+  for (const auto& sst_meta : sst_metas.backup_data_file_value_sst_metas()) {
+    dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
+    file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
+    std::filesystem::path file_path_check(file_path);
+
+    if (!std::filesystem::exists(file_path_check)) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, file:{} not exist, ", sst_meta.region_id(),
+                                      sst_meta.ShortDebugString(), file_path);
+      return butil::Status(pb::error::EFILE_NOT_EXIST, "file not exist");
+    }
+
+    if (!std::filesystem::is_regular_file(file_path_check)) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, file:{} not regular file, ",
+                                      sst_meta.region_id(), sst_meta.ShortDebugString(), file_path);
+      return butil::Status(pb::error::EFILE_NOT_REGULAR, "not regular file");
+    }
+
+    auto file_size = std::filesystem::file_size(file_path_check);
+    if (file_size != sst_meta.file_size()) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, file:{} size not match {}/{}, ",
+                                      sst_meta.region_id(), sst_meta.ShortDebugString(), file_path, file_size,
+                                      sst_meta.file_size());
+      return butil::Status(pb::error::ERESTORE_FIELD_NOT_MATCH, "file size not match");
+    }
+
+    auto encode_range = region->Range(true);
+
+    auto column_family_names = Helper::GetColumnFamilyNames(encode_range.start_key());
+    if (std::find(column_family_names.begin(), column_family_names.end(), sst_meta.cf()) == column_family_names.end()) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, cf not match ", sst_meta.region_id(),
+                                      sst_meta.ShortDebugString());
+      return butil::Status(pb::error::ERESTORE_CF_NOT_MATCH, "cf not match");
+    }
+
+    // todo need to modify back_up_sst_file name.
+    //  auto status = ValidFileMeta(sst_meta, region);
+    //  if (!status.ok()) {
+    //    DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, ValidFileMeta error:{} ",
+    //    sst_meta.region_id(),
+    //                                    sst_meta.ShortDebugString(), status.error_cstr());
+    //    return status;
+    //  }
+
+    std::string hash_code;
+    auto status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, calsha1 fialed error:{} ",
+                                      sst_meta.region_id(), sst_meta.ShortDebugString(), status.error_cstr());
+      return status;
+    }
+
+    if (hash_code != sst_meta.encryption()) {
+      DINGO_LOG(ERROR) << fmt::format("[restore][region{}], sst_meta:{}, checksum not match {}/{} ",
+                                      sst_meta.region_id(), sst_meta.ShortDebugString(), hash_code,
+                                      sst_meta.encryption());
+      return butil::Status(pb::error::ERESTORE_FILE_CHECKSUM_NOT_MATCH, "checksum not match");
+    }
   }
 
   return butil::Status();
