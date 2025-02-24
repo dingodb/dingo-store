@@ -20,7 +20,6 @@ import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.RecordDecoder;
 import io.dingodb.sdk.common.serial.RecordEncoder;
 import io.dingodb.sdk.common.serial.schema.*;
-import jdk.nashorn.internal.ir.debug.ObjectSizeCalculator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -53,7 +52,6 @@ public class Test {
         }
         long tag6 = System.currentTimeMillis();
 
-        System.out.println(ObjectSizeCalculator.getObjectSize(kvs));
         System.out.println("Stage1 : " + (tag2 - tag1));
         System.out.println("Stage3 : " + (tag6 - tag5));
 
@@ -104,7 +102,6 @@ public class Test {
         }
         long tag6 = System.currentTimeMillis();
 
-        System.out.println(ObjectSizeCalculator.getObjectSize(kvs));
         System.out.println("Stage1 : " + (tag2 - tag1));
         System.out.println("Stage2 : " + (tag4 - tag3));
         System.out.println("Stage3 : " + (tag6 - tag5));
