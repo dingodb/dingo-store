@@ -21,6 +21,7 @@ import io.dingodb.sdk.common.utils.StackTraces;
 import io.dingodb.sdk.service.entity.common.Location;
 import io.grpc.InsecureChannelCredentials;
 import io.grpc.ManagedChannel;
+import io.grpc.internal.DnsNameResolverProvider;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import lombok.extern.slf4j.Slf4j;
 
@@ -73,6 +74,7 @@ public final class ChannelManager {
 
     private static ManagedChannel newChannel(String host, int port) {
         return NettyChannelBuilder.forAddress(host, port, InsecureChannelCredentials.create())
+            .nameResolverFactory(new DnsNameResolverProvider())
             .flowControlWindow(DEFAULT_MAX_MESSAGE_SIZE)
             .maxInboundMessageSize(DEFAULT_MAX_MESSAGE_SIZE)
             .maxInboundMetadataSize(DEFAULT_MAX_MESSAGE_SIZE)
