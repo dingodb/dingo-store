@@ -425,6 +425,70 @@ class TxnEngineHelper {
                                   const std::string &storage_path, const pb::common::StorageBackend &storage_backend,
                                   const pb::common::CompressionType &compression_type, int32_t compression_level,
                                   dingodb::pb::store::BackupMetaResponse *response);
+
+  static butil::Status RestoreMeta(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
+                                   store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
+                                   const pb::common::StorageBackend &storage_backend,
+                                   const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas);
+
+  static butil::Status RestoreData(std::shared_ptr<Context> ctx, std::shared_ptr<Engine> raft_engine,
+                                   store::RegionPtr region, std::string backup_ts, int64_t backup_tso,
+                                   const pb::common::StorageBackend &storage_backend,
+                                   const dingodb::pb::common::BackupDataFileValueSstMetaGroup &sst_metas);
+
+  static butil::Status ReadSstFile(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                   std::shared_ptr<Engine> raft_engine,
+                                   const pb::common::StorageBackend &storage_backend,
+                                   const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group);
+
+  static butil::Status DoReadSstFileForTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                           std::shared_ptr<Engine> raft_engine,
+                                           const pb::common::StorageBackend &storage_backend,
+                                           const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group);
+
+  static butil::Status DoReadSstFileForNonTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                              std::shared_ptr<Engine> raft_engine,
+                                              const pb::common::StorageBackend &storage_backend,
+                                              const pb::common::BackupDataFileValueSstMetaGroup &sst_meta_group);
+
+  static butil::Status RestoreTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                  std::shared_ptr<Engine> raft_engine,
+                                  const std::vector<pb::common::KeyValue> &kv_puts_data,
+                                  const std::vector<pb::common::KeyValue> &kv_puts_write);
+
+  static butil::Status RestoreNonTxnStore(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                          std::shared_ptr<Engine> raft_engine,
+                                          const std::vector<pb::common::KeyValue> &kv_default);
+
+  static butil::Status RestoreNonTxnDocument(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                             std::shared_ptr<Engine> raft_engine,
+                                             const std::vector<pb::common::KeyValue> &kv_default);
+
+  static butil::Status OptimizePreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
+                                                     const std::vector<pb::common::KeyValue> &kv_scalar,
+                                                     const std::vector<pb::common::KeyValue> &kv_table,
+                                                     const std::vector<pb::common::KeyValue> &kv_scalar_speed_up,
+                                                     std::vector<pb::common::VectorWithId> &vector_with_ids);
+
+  static butil::Status PreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
+                                             const std::vector<pb::common::KeyValue> &kv_scalar,
+                                             const std::vector<pb::common::KeyValue> &kv_table,
+                                             const std::vector<pb::common::KeyValue> &kv_scalar_speed_up,
+                                             std::vector<pb::common::VectorWithId> &vector_with_ids);
+
+  static butil::Status RestoreNonTxnIndex(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                          std::shared_ptr<Engine> raft_engine,
+                                          const std::vector<pb::common::KeyValue> &kv_default,
+                                          const std::vector<pb::common::KeyValue> &kv_scalar,
+                                          const std::vector<pb::common::KeyValue> &kv_table,
+                                          const std::vector<pb::common::KeyValue> &kv_scalar_speed_up);
+
+  static butil::Status RestoreNonTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                     std::shared_ptr<Engine> raft_engine,
+                                     const std::vector<pb::common::KeyValue> &kv_default,
+                                     const std::vector<pb::common::KeyValue> &kv_scalar,
+                                     const std::vector<pb::common::KeyValue> &kv_table,
+                                     const std::vector<pb::common::KeyValue> &kv_scalar_speed_up);
 };
 
 }  // namespace dingodb

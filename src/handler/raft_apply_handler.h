@@ -137,6 +137,15 @@ class RebuildVectorIndexHandler : public BaseHandler {
              int64_t log_id) override;
 };
 
+// VectorBatchAddRequest
+class VectorBatchAddHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kVectorBatchAdd; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
+             int64_t log_id) override;
+};
+
 // DocumentAddRequest
 class DocumentAddHandler : public BaseHandler {
  public:
@@ -152,6 +161,14 @@ class DocumentDeleteHandler : public BaseHandler {
   HandlerType GetType() override { return HandlerType::kDocumentDelete; }
   int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
              const pb::raft::Request &req, store::RegionMetricsPtr region_metricss, int64_t term_id,
+             int64_t log_id) override;
+};
+
+class DocumentBatchAddHandler : public BaseHandler {
+ public:
+  HandlerType GetType() override { return HandlerType::kDocumentBatchAdd; }
+  int Handle(std::shared_ptr<Context> ctx, store::RegionPtr region, std::shared_ptr<RawEngine> engine,
+             const pb::raft::Request &req, store::RegionMetricsPtr region_metrics, int64_t term_id,
              int64_t log_id) override;
 };
 

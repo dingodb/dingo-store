@@ -3591,6 +3591,226 @@ void StoreServiceImpl::ControlConfig(google::protobuf::RpcController* controller
   }
 }
 
+static butil::Status ValidateRestoreMetaRequest(const dingodb::pb::store::RestoreMetaRequest* request,
+                                                store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::Range req_range;
+  req_range.set_start_key(request->start_key());
+  req_range.set_end_key(request->end_key());
+
+  status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidSstMetas(request->storage_backend(), request->sst_metas(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoRestoreMeta(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const dingodb::pb::store::RestoreMetaRequest* request,
+                   dingodb::pb::store::RestoreMetaResponse* response, TrackClosure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  butil::Status status;
+
+  // check leader if need
+  if (request->need_leader()) {
+    status = storage->ValidateLeader(region);
+    if (!status.ok()) {
+      ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+      return;
+    }
+  }
+
+  status = ValidateRestoreMetaRequest(request, region);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& sst_meta : request->sst_metas().backup_data_file_value_sst_metas()) {
+    keys_for_lock.push_back(sst_meta.file_name());
+  }
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+
+  status = storage->RestoreMeta(ctx, region, request->backup_ts(), request->backup_tso(), request->storage_backend(),
+                                request->sst_metas());
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (!is_sync) done->Run();
+  }
+}
+
+void StoreServiceImpl::RestoreMeta(google::protobuf::RpcController* controller,
+                                   const dingodb::pb::store::RestoreMetaRequest* request,
+                                   dingodb::pb::store::RestoreMetaResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRestoreMeta(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateRestoreDataRequest(const dingodb::pb::store::RestoreDataRequest* request,
+                                                store::RegionPtr region) {
+  // check if region_epoch is match
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::Range req_range;
+  req_range.set_start_key(request->start_key());
+  req_range.set_end_key(request->end_key());
+
+  status = ServiceHelper::ValidateRange(req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRangeInRange(region->Range(false), req_range);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidSstMetas(request->storage_backend(), request->sst_metas(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateRegionState(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  status = ServiceHelper::ValidateClusterReadOnly();
+  if (!status.ok()) {
+    return status;
+  }
+
+  return butil::Status();
+}
+
+void DoRestoreData(StoragePtr storage, google::protobuf::RpcController* controller,
+                   const dingodb::pb::store::RestoreDataRequest* request,
+                   dingodb::pb::store::RestoreDataResponse* response, TrackClosure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  butil::Status status;
+
+  // check leader if need
+  if (request->need_leader()) {
+    status = storage->ValidateLeader(region);
+    if (!status.ok()) {
+      ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+      return;
+    }
+  }
+  status = ValidateRestoreDataRequest(request, region);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+  // check latches
+  std::vector<std::string> keys_for_lock;
+  for (const auto& sst_meta : request->sst_metas().backup_data_file_value_sst_metas()) {
+    keys_for_lock.push_back(sst_meta.file_name());
+  }
+
+  LatchContext latch_ctx(region, keys_for_lock);
+  ServiceHelper::LatchesAcquire(latch_ctx, false);
+  DEFER(ServiceHelper::LatchesRelease(latch_ctx));
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
+  status = storage->RestoreData(ctx, region, request->backup_ts(), request->backup_tso(), request->storage_backend(),
+                                request->sst_metas());
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (!is_sync) done->Run();
+  }
+}
+
+void StoreServiceImpl::RestoreData(google::protobuf::RpcController* controller,
+                                   const dingodb::pb::store::RestoreDataRequest* request,
+                                   dingodb::pb::store::RestoreDataResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure<pb::store::RestoreDataRequest, pb::store::RestoreDataResponse, false>(
+      __func__, done, request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoRestoreData(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
 static butil::Status ValidateTxnDumpRequest(const dingodb::pb::store::TxnDumpRequest* request,
                                             store::RegionPtr region) {
   // check if region_epoch is match
@@ -3656,7 +3876,6 @@ void DoTxnDump(StoragePtr storage, google::protobuf::RpcController* controller,
   std::vector<pb::store::TxnLockValue> txn_lock_values;
   std::vector<pb::store::TxnDataKey> txn_data_keys;
   std::vector<pb::store::TxnDataValue> txn_data_values;
-
   status = storage->TxnDump(ctx, request->start_key(), request->end_key(), request->start_ts(), request->end_ts(),
                             txn_result_info, txn_write_keys, txn_write_values, txn_lock_keys, txn_lock_values,
                             txn_data_keys, txn_data_values);

@@ -118,8 +118,10 @@ class StoreServiceImpl : public pb::store::StoreService {
   void TxnCheckTxnStatus(google::protobuf::RpcController* controller,
                          const pb::store::TxnCheckTxnStatusRequest* request,
                          pb::store::TxnCheckTxnStatusResponse* response, google::protobuf::Closure* done) override;
-  void TxnCheckSecondaryLocks(google::protobuf::RpcController* controller, const pb::store::TxnCheckSecondaryLocksRequest* request,
-                      pb::store::TxnCheckSecondaryLocksResponse* response, google::protobuf::Closure* done) override;
+  void TxnCheckSecondaryLocks(google::protobuf::RpcController* controller,
+                              const pb::store::TxnCheckSecondaryLocksRequest* request,
+                              pb::store::TxnCheckSecondaryLocksResponse* response,
+                              google::protobuf::Closure* done) override;
   void TxnResolveLock(google::protobuf::RpcController* controller, const pb::store::TxnResolveLockRequest* request,
                       pb::store::TxnResolveLockResponse* response, google::protobuf::Closure* done) override;
   void TxnBatchRollback(google::protobuf::RpcController* controller, const pb::store::TxnBatchRollbackRequest* request,
@@ -140,6 +142,12 @@ class StoreServiceImpl : public pb::store::StoreService {
 
   void ControlConfig(google::protobuf::RpcController* controller, const pb::store::ControlConfigRequest* request,
                      pb::store::ControlConfigResponse* response, google::protobuf::Closure* done) override;
+
+  void RestoreMeta(google::protobuf::RpcController* controller, const dingodb::pb::store::RestoreMetaRequest* request,
+                   dingodb::pb::store::RestoreMetaResponse* response, google::protobuf::Closure* done) override;
+
+  void RestoreData(google::protobuf::RpcController* controller, const dingodb::pb::store::RestoreDataRequest* request,
+                   dingodb::pb::store::RestoreDataResponse* response, google::protobuf::Closure* done) override;
 
   void SetStorage(StoragePtr storage) { storage_ = storage; }
 

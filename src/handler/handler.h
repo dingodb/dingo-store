@@ -47,10 +47,12 @@ enum class HandlerType {
   kVectorAdd = pb::raft::VECTOR_ADD,
   kVectorDelete = pb::raft::VECTOR_DELETE,
   kRebuildVectorIndex = pb::raft::REBUILD_VECTOR_INDEX,
+  kVectorBatchAdd = pb::raft::VECTOR_BATCH_ADD,
 
   // document
   kDocumentAdd = pb::raft::DOCUMENT_ADD,
   kDocumentDelete = pb::raft::DOCUMENT_DELETE,
+  kDocumentBatchAdd = pb::raft::DOCUMENT_BATCH_ADD,
 
   // txn
   kTxn = pb::raft::TXN,
