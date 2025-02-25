@@ -719,11 +719,13 @@ void CoprocessorV2::GetOriginalColumnIndexes() {
 
 void CoprocessorV2::GetSelectionColumnIndexes() {
   if (!coprocessor_.selection_columns().empty()) {
+    int n = 0;
     for (const auto& index : coprocessor_.selection_columns()) {
       int i = index;
-      DINGO_LOG(DEBUG) << "index:" << i;
+      DINGO_LOG(DEBUG) << "selection index:" << i;
       selection_column_indexes_.push_back(original_column_indexes_[i]);
-      selection_column_indexes_serial_[original_column_indexes_[i]] = i;
+      selection_column_indexes_serial_[original_column_indexes_[i]] = n;
+      n++;
     }
   } else {
     DINGO_LOG(DEBUG) << "selection_columns empty()";
