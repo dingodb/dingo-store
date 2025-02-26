@@ -30,6 +30,7 @@
 #include "client_v2/helper.h"
 #include "client_v2/meta.h"
 #include "client_v2/pretty.h"
+#include "client_v2/restore.h"
 #include "client_v2/store.h"
 #include "common/constant.h"
 #include "common/helper.h"
@@ -168,6 +169,29 @@ class RocksDBOperator {
       if (--limit <= 0) {
         break;
       }
+    }
+
+    delete it;
+
+    return kvs;
+  }
+
+  std::vector<dingodb::pb::common::KeyValue> Scan(const std::string& cf_name, const std::string& begin_key,
+                                                  const std::string& end_key) {
+    rocksdb::ReadOptions read_option;
+    read_option.auto_prefix_mode = true;
+    rocksdb::Slice end_key_slice(end_key);
+    if (!end_key.empty()) {
+      read_option.iterate_upper_bound = &end_key_slice;
+    }
+
+    rocksdb::Iterator* it = db_->NewIterator(read_option, GetFamilyHandle(cf_name));
+    std::vector<dingodb::pb::common::KeyValue> kvs;
+    for (it->Seek(begin_key); it->Valid(); it->Next()) {
+      dingodb::pb::common::KeyValue kv;
+      kv.set_key(it->key().ToString());
+      kv.set_value(it->value().ToString());
+      kvs.push_back(kv);
     }
 
     delete it;
@@ -477,6 +501,41 @@ butil::Status DumpDb(DumpDbOptions const& opt) {
   dingodb::Helper::SplitString(opt.exclude_columns, ',', exclude_columns);
   Pretty::Show(data, table_definition, exclude_columns);
 
+  return butil::Status();
+}
+
+butil::Status DumpRegion(CheckRestoreRegionDataOptions const& opt, dingodb::pb::common::Region region, std::string cf,
+                         std::vector<dingodb::pb::common::KeyValue>& kvs) {
+  std::vector<std::string> cf_names;
+  auto index_type = region.definition().index_parameter().index_type();
+
+  if (dingodb::Helper::IsClientTxn(region.definition().range().start_key()) ||
+      dingodb::Helper::IsExecutorTxn(region.definition().range().start_key())) {
+    cf_names.push_back(dingodb::Constant::kStoreDataCF);
+    cf_names.push_back(dingodb::Constant::kTxnDataCF);
+    cf_names.push_back(dingodb::Constant::kTxnLockCF);
+    cf_names.push_back(dingodb::Constant::kTxnWriteCF);
+  } else {
+    if (index_type == dingodb::pb::common::INDEX_TYPE_NONE || index_type == dingodb::pb::common::INDEX_TYPE_SCALAR) {
+      cf_names.push_back(dingodb::Constant::kStoreDataCF);
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_VECTOR) {
+      cf_names.push_back(dingodb::Constant::kVectorDataCF);
+      cf_names.push_back(dingodb::Constant::kVectorScalarCF);
+      cf_names.push_back(dingodb::Constant::kVectorTableCF);
+      cf_names.push_back(dingodb::Constant::kVectorScalarKeySpeedUpCF);
+    } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
+      cf_names.push_back(dingodb::Constant::kStoreDataCF);
+    }
+  }
+
+  auto db = std::make_shared<RocksDBOperator>(opt.db_path, cf_names);
+  if (!db->Init()) {
+    return butil::Status(1, fmt::format("db init failed, db_path:{}, cf:{}", opt.db_path, cf));
+  }
+
+  auto range = dingodb::mvcc::Codec::EncodeRange(region.definition().range());
+  auto scan_kvs = db->Scan(cf, range.start_key(), range.end_key());
+  kvs.swap(scan_kvs);
   return butil::Status();
 }
 

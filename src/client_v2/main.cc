@@ -36,6 +36,7 @@
 #include "client_v2/interation.h"
 #include "client_v2/kv.h"
 #include "client_v2/meta.h"
+#include "client_v2/restore.h"
 #include "client_v2/store.h"
 #include "client_v2/tools.h"
 #include "client_v2/vector_index.h"
@@ -230,6 +231,8 @@ int main(int argc, char* argv[]) {
   client_v2::SetUpDocumentIndexSubCommands(app);
   client_v2::SetUpToolSubCommands(app);
   client_v2::SetUpVectorIndexSubCommands(app);
+  client_v2::SetUpRestoreSubCommands(app);
+
   if (argc > 1) {
     CLI11_PARSE(app, argc, argv);
 

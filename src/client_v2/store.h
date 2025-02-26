@@ -636,7 +636,7 @@ void SendSnapshotVectorIndex(SnapshotVectorIndexOptions const &opt);
 void SendCompact(const std::string &cf_name);
 void GetMemoryStats();
 void ReleaseFreeMemory(ReleaseFreeMemoryOptions const &opt);
-std::vector<dingodb::pb::coordinator::ScanRegionInfo> GetRegionsByRange(const dingodb::pb::common::Range& range); 
+std::vector<dingodb::pb::coordinator::ScanRegionInfo> GetRegionsByRange(const dingodb::pb::common::Range &range);
 
 dingodb::pb::store::TxnScanResponse SendTxnScanByStreamMode(dingodb::pb::common::Region region,
                                                             const dingodb::pb::common::Range &range, size_t limit,
