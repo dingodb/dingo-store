@@ -185,7 +185,7 @@ void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
   dingodb::pb::coordinator::GetRegionMapResponse response;
 
   request.set_epoch(1);
-  request.set_tenant_id(opt.tenant_id);
+  request.set_tenant_id(-1);
   auto status =
       CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetRegionMap", request, response);
 

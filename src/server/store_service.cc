@@ -3796,9 +3796,7 @@ void DoRestoreData(StoragePtr storage, google::protobuf::RpcController* controll
 void StoreServiceImpl::RestoreData(google::protobuf::RpcController* controller,
                                    const dingodb::pb::store::RestoreDataRequest* request,
                                    dingodb::pb::store::RestoreDataResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure<pb::store::RestoreDataRequest, pb::store::RestoreDataResponse, false>(
-      __func__, done, request, response);
-
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoRestoreData(storage_, controller, request, response, svr_done, true);

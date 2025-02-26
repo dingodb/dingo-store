@@ -15,11 +15,14 @@
 #ifndef DINGODB_CLIENT_DUMP_H_
 #define DINGODB_CLIENT_DUMP_H_
 
+#include "client_v2/restore.h"
 #include "client_v2/store.h"
 
 namespace client_v2 {
 
 butil::Status DumpDb(DumpDbOptions const& opt);
+butil::Status DumpRegion(CheckRestoreRegionDataOptions const& opt, dingodb::pb::common::Region region, std::string cf,
+                         std::vector<dingodb::pb::common::KeyValue>& kvs);
 
 }  // namespace client_v2
 
