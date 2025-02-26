@@ -80,9 +80,10 @@ butil::Status RestoreRegionMeta::CreateRegionToCoordinator() {
   // ignore store_ids
   // ignore split_from_region_id
   request.set_region_type(region_->region_type());
-  // if (region_->definition().has_index_parameter()) {
-  //   request.mutable_index_parameter()->CopyFrom(region_->definition().index_parameter());
-  // }
+  if (region_->definition().has_index_parameter() &&
+      region_->definition().index_parameter().index_type() != dingodb::pb::common::IndexType ::INDEX_TYPE_NONE) {
+    request.mutable_index_parameter()->CopyFrom(region_->definition().index_parameter());
+  }
 
   DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
 
