@@ -789,10 +789,10 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
 void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInternal& region_internal,
                                        pb::common::Region& region) {
   region.set_id(region_internal.id());
+  region.mutable_definition()->set_id(region_internal.id());
   region.mutable_definition()->set_name(region_internal.definition().name());
   region.mutable_definition()->mutable_epoch()->set_conf_version(region_internal.definition().epoch().conf_version());
   region.mutable_definition()->mutable_epoch()->set_version(region_internal.definition().epoch().version());
-  region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
   region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
   if (region_internal.definition().has_index_parameter()) {
@@ -801,6 +801,7 @@ void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInt
   region.mutable_definition()->set_tenant_id(region_internal.definition().tenant_id());
   region.mutable_definition()->set_table_id(region_internal.definition().table_id());
   region.mutable_definition()->set_index_id(region_internal.definition().index_id());
+  region.mutable_definition()->set_part_id(region_internal.definition().part_id());
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
   region.set_region_type(region_internal.region_type());
