@@ -31,6 +31,8 @@ class BrRestoreRegionMetaTest;
 
 static bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test,
                       std::shared_ptr<dingodb::pb::common::Region> region);
+
+static void TestCreateRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test, const std::string& file_name);
 class BrRestoreRegionMetaTest : public testing::Test {
  protected:
   static void SetUpTestSuite() {
@@ -50,14 +52,15 @@ class BrRestoreRegionMetaTest : public testing::Test {
 
   friend bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test,
                         std::shared_ptr<dingodb::pb::common::Region> region);
+  friend void TestCreateRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test,
+                               const std::string& file_name);
 
-  inline static std::shared_ptr<br::RestoreRegionMeta> restore_region_meta;
   inline static br::ServerInteractionPtr coordinator_interaction;
-  inline static std::shared_ptr<dingodb::pb::common::Region> region;
   inline static int64_t replica_num = 0;
   inline static std::string backup_meta_region_name;
   inline static int64_t create_region_timeout_s = 60;
-  inline static std::string base_dir = "/home/server/work/dingo-store/build/bin/backup2/";
+  inline static std::string base_dir = "./backup2/";
+  inline static std::string statics_regions;
 };
 
 static bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test,
@@ -83,8 +86,7 @@ static bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test
   EXPECT_EQ(region->id(), response.region().id());
   EXPECT_EQ(region->region_type(), response.region().region_type());
 
-  // coordinator bug. TODO fix.
-  // EXPECT_EQ(region->definition().id(), response.region().definition().id());
+  EXPECT_EQ(region->definition().id(), response.region().definition().id());
   EXPECT_EQ(region->definition().name(), response.region().definition().name());
   EXPECT_EQ(region->definition().range().start_key(), response.region().definition().range().start_key());
   EXPECT_EQ(region->definition().range().end_key(), response.region().definition().range().end_key());
@@ -95,27 +97,26 @@ static bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test
   EXPECT_EQ(region->definition().index_id(), response.region().definition().index_id());
   EXPECT_EQ(region->definition().part_id(), response.region().definition().part_id());
   EXPECT_EQ(region->definition().tenant_id(), response.region().definition().tenant_id());
-  if (region->definition().has_index_parameter() && response.region().definition().index_parameter().index_type() !=
-                                                        dingodb::pb::common::IndexType::INDEX_TYPE_NONE) {
+  if (region->definition().has_index_parameter()) {
     EXPECT_EQ(region->definition().index_parameter().index_type(),
               response.region().definition().index_parameter().index_type());
 
     if (region->definition().index_parameter().has_vector_index_parameter()) {
-      google::protobuf::util::MessageDifferencer::Equals(
+      EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
           region->definition().index_parameter().vector_index_parameter(),
-          response.region().definition().index_parameter().vector_index_parameter());
+          response.region().definition().index_parameter().vector_index_parameter()));
     }
 
     if (region->definition().index_parameter().has_scalar_index_parameter()) {
-      google::protobuf::util::MessageDifferencer::Equals(
+      EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
           region->definition().index_parameter().scalar_index_parameter(),
-          response.region().definition().index_parameter().scalar_index_parameter());
+          response.region().definition().index_parameter().scalar_index_parameter()));
     }
 
     if (region->definition().index_parameter().has_document_index_parameter()) {
-      google::protobuf::util::MessageDifferencer::Equals(
+      EXPECT_TRUE(google::protobuf::util::MessageDifferencer::Equals(
           region->definition().index_parameter().document_index_parameter(),
-          response.region().definition().index_parameter().document_index_parameter());
+          response.region().definition().index_parameter().document_index_parameter()));
     }
 
     EXPECT_EQ(region->definition().index_parameter().origin_keys_size(),
@@ -138,10 +139,9 @@ static bool GetRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test
   return true;
 }
 
-TEST_F(BrRestoreRegionMetaTest, TestIndexRegionSdkData) {
-  const std::string file_name = "index_region_sdk_data.sst";
-  const std::string file_path = base_dir + file_name;
-  backup_meta_region_name = file_name;
+static void TestCreateRegion(const BrRestoreRegionMetaTest& br_restore_region_meta_test, const std::string& file_name) {
+  const std::string file_path = br_restore_region_meta_test.base_dir + file_name;
+  br_restore_region_meta_test.backup_meta_region_name = file_name;
 
   std::shared_ptr<br::SstFileReader> reader_sst = std::make_shared<br::SstFileReader>();
 
@@ -149,15 +149,18 @@ TEST_F(BrRestoreRegionMetaTest, TestIndexRegionSdkData) {
   auto status = reader_sst->ReadFile(file_path, kvs);
   EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
 
+  br_restore_region_meta_test.statics_regions += "\n" + file_name + " : [";
+
+  int i = 0;
+
   for (const auto& [region_id, region_ptr] : kvs) {
-    region = std::make_shared<dingodb::pb::common::Region>();
+    auto region = std::make_shared<dingodb::pb::common::Region>();
     auto ret = region->ParseFromString(region_ptr);
     EXPECT_TRUE(ret);
 
-    LOG(INFO) << region->DebugString();
-
-    restore_region_meta = std::make_shared<br::RestoreRegionMeta>(coordinator_interaction, region, replica_num,
-                                                                  backup_meta_region_name, create_region_timeout_s);
+    auto restore_region_meta = std::make_shared<br::RestoreRegionMeta>(
+        br_restore_region_meta_test.coordinator_interaction, region, br_restore_region_meta_test.replica_num,
+        br_restore_region_meta_test.backup_meta_region_name, br_restore_region_meta_test.create_region_timeout_s);
 
     status = restore_region_meta->Init();
     EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
@@ -166,142 +169,58 @@ TEST_F(BrRestoreRegionMetaTest, TestIndexRegionSdkData) {
     status = restore_region_meta->Finish();
     EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
 
-    bool is_true = GetRegion(*this, region);
+    bool is_true = GetRegion(br_restore_region_meta_test, region);
     EXPECT_TRUE(is_true);
+    if (0 == i) {
+      br_restore_region_meta_test.statics_regions += fmt::format("{}", region->id());
+    } else {
+      if (i % 16 == 0) {
+        br_restore_region_meta_test.statics_regions += fmt::format("\n{}", region->id());
+      } else {
+        br_restore_region_meta_test.statics_regions += fmt::format(" {}", region->id());
+      }
+    }
+    i++;
   }
+  br_restore_region_meta_test.statics_regions += "]";
+}
+
+TEST_F(BrRestoreRegionMetaTest, TestDocumentRegionSdkData) {
+  const std::string& file_name = "document_region_sdk_data.sst";
+  TestCreateRegion(*this, file_name);
+}
+
+TEST_F(BrRestoreRegionMetaTest, TestDocumentRegionSqlData) {
+  const std::string& file_name = "document_region_sql_data.sst";
+  TestCreateRegion(*this, file_name);
+}
+
+TEST_F(BrRestoreRegionMetaTest, TestIndexRegionSdkData) {
+  const std::string& file_name = "index_region_sdk_data.sst";
+  TestCreateRegion(*this, file_name);
 }
 
 TEST_F(BrRestoreRegionMetaTest, TestIndexRegionSqlData) {
-  const std::string file_name = "index_region_sql_data.sst";
-  const std::string file_path = base_dir + file_name;
-  backup_meta_region_name = file_name;
-
-  std::shared_ptr<br::SstFileReader> reader_sst = std::make_shared<br::SstFileReader>();
-
-  std::map<std::string, std::string> kvs;
-  auto status = reader_sst->ReadFile(file_path, kvs);
-  EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-  for (const auto& [region_id, region_ptr] : kvs) {
-    region = std::make_shared<dingodb::pb::common::Region>();
-    auto ret = region->ParseFromString(region_ptr);
-    EXPECT_TRUE(ret);
-
-    LOG(INFO) << region->DebugString();
-
-    restore_region_meta = std::make_shared<br::RestoreRegionMeta>(coordinator_interaction, region, replica_num,
-                                                                  backup_meta_region_name, create_region_timeout_s);
-
-    status = restore_region_meta->Init();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Run();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Finish();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-    bool is_true = GetRegion(*this, region);
-    EXPECT_TRUE(is_true);
-  }
+  const std::string& file_name = "index_region_sql_data.sst";
+  TestCreateRegion(*this, file_name);
 }
 
 TEST_F(BrRestoreRegionMetaTest, TestStoreRegionSdkData) {
-  const std::string file_name = "store_region_sdk_data.sst";
-  const std::string file_path = base_dir + file_name;
-  backup_meta_region_name = file_name;
-
-  std::shared_ptr<br::SstFileReader> reader_sst = std::make_shared<br::SstFileReader>();
-
-  std::map<std::string, std::string> kvs;
-  auto status = reader_sst->ReadFile(file_path, kvs);
-  EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-  for (const auto& [region_id, region_ptr] : kvs) {
-    region = std::make_shared<dingodb::pb::common::Region>();
-    auto ret = region->ParseFromString(region_ptr);
-    EXPECT_TRUE(ret);
-
-    LOG(INFO) << region->DebugString();
-
-    restore_region_meta = std::make_shared<br::RestoreRegionMeta>(coordinator_interaction, region, replica_num,
-                                                                  backup_meta_region_name, create_region_timeout_s);
-
-    status = restore_region_meta->Init();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Run();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Finish();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-    bool is_true = GetRegion(*this, region);
-    EXPECT_TRUE(is_true);
-  }
+  const std::string& file_name = "store_region_sdk_data.sst";
+  TestCreateRegion(*this, file_name);
 }
 
 TEST_F(BrRestoreRegionMetaTest, TestStoreRegionSqlData) {
-  const std::string file_name = "store_region_sql_data.sst";
-  const std::string file_path = base_dir + file_name;
-  backup_meta_region_name = file_name;
-
-  std::shared_ptr<br::SstFileReader> reader_sst = std::make_shared<br::SstFileReader>();
-
-  std::map<std::string, std::string> kvs;
-  auto status = reader_sst->ReadFile(file_path, kvs);
-  EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-  for (const auto& [region_id, region_ptr] : kvs) {
-    region = std::make_shared<dingodb::pb::common::Region>();
-    auto ret = region->ParseFromString(region_ptr);
-    EXPECT_TRUE(ret);
-
-    LOG(INFO) << region->DebugString();
-
-    restore_region_meta = std::make_shared<br::RestoreRegionMeta>(coordinator_interaction, region, replica_num,
-                                                                  backup_meta_region_name, create_region_timeout_s);
-
-    status = restore_region_meta->Init();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Run();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Finish();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-    bool is_true = GetRegion(*this, region);
-    EXPECT_TRUE(is_true);
-  }
+  const std::string& file_name = "store_region_sql_data.sst";
+  TestCreateRegion(*this, file_name);
 }
 
 TEST_F(BrRestoreRegionMetaTest, TestStoreRegionSqlMeta) {
-  const std::string file_name = "store_region_sql_meta.sst";
-  const std::string file_path = base_dir + file_name;
-  backup_meta_region_name = file_name;
-
-  std::shared_ptr<br::SstFileReader> reader_sst = std::make_shared<br::SstFileReader>();
-
-  std::map<std::string, std::string> kvs;
-  auto status = reader_sst->ReadFile(file_path, kvs);
-  EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-  for (const auto& [region_id, region_ptr] : kvs) {
-    region = std::make_shared<dingodb::pb::common::Region>();
-    auto ret = region->ParseFromString(region_ptr);
-    EXPECT_TRUE(ret);
-
-    LOG(INFO) << region->DebugString();
-
-    restore_region_meta = std::make_shared<br::RestoreRegionMeta>(coordinator_interaction, region, replica_num,
-                                                                  backup_meta_region_name, create_region_timeout_s);
-
-    status = restore_region_meta->Init();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Run();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-    status = restore_region_meta->Finish();
-    EXPECT_EQ(status.error_code(), dingodb::pb::error::OK);
-
-    bool is_true = GetRegion(*this, region);
-    EXPECT_TRUE(is_true);
-  }
+  const std::string& file_name = "store_region_sql_meta.sst";
+  TestCreateRegion(*this, file_name);
 }
+
+TEST_F(BrRestoreRegionMetaTest, StaticsCreateRegion) { LOG(INFO) << statics_regions; }
 
 TEST_F(BrRestoreRegionMetaTest, TestHasValue) {
   dingodb::pb::common::Region region;
