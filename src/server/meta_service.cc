@@ -3617,6 +3617,7 @@ void DoExportMeta(google::protobuf::RpcController * /*controller*/, const pb::me
 
       // 3.1 get all table
       std::vector<pb::meta::TableDefinitionWithId> table_definition_with_ids;
+#if 0  // disable backup tables
       ret = coordinator_control->GetTables(schema.id().entity_id(), table_definition_with_ids);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "GetTables failed in meta_service, error code=" << ret;
@@ -3628,7 +3629,7 @@ void DoExportMeta(google::protobuf::RpcController * /*controller*/, const pb::me
       for (const auto &table_definition_with_id : table_definition_with_ids) {
         tables_and_indexes.add_tables()->CopyFrom(table_definition_with_id);
       }
-
+#endif
       table_definition_with_ids.clear();
 
       // 3.2 get all index

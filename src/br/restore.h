@@ -77,6 +77,7 @@ class Restore : public std::enable_shared_from_this<Restore> {
                                       const dingodb::pb::common::VersionInfo& version_info_remote,
                                       const dingodb::pb::common::VersionInfo& version_info_in_backup);
   butil::Status DoFinish();
+  std::pair<int64_t, int64_t> GetRegions();
 
   std::string coor_url_;
   std::string store_url_;
@@ -113,7 +114,7 @@ class Restore : public std::enable_shared_from_this<Restore> {
   bool is_already_register_restore_to_coordinator_;
 
   // is exit register restore to coordinator thread. default true.
-  bool is_exit_register_restore_to_coordinator_thread_;
+  std::atomic<bool> is_exit_register_restore_to_coordinator_thread_;
 
   bool region_auto_split_enable_after_finish_;
   bool region_auto_merge_enable_after_finish_;

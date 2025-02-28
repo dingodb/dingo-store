@@ -51,6 +51,8 @@ class RestoreData : public std::enable_shared_from_this<RestoreData> {
 
   butil::Status Finish();
 
+  std::pair<int64_t, int64_t> GetRegions();
+
  protected:
  private:
   butil::Status CheckBackupMeta();

@@ -14,12 +14,16 @@
 
 #include "br/restore_region_meta_manager.h"
 
+#include <butil/strings/string_split.h>
+
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <thread>
 
 #include "br/restore_region_meta.h"
+#include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -58,11 +62,36 @@ std::shared_ptr<RestoreRegionMetaManager> RestoreRegionMetaManager::GetSelf() { 
 butil::Status RestoreRegionMetaManager::Init() {
   butil::Status status;
 
-  auto iter = id_and_region_kvs_->begin();
-  while (iter != id_and_region_kvs_->end()) {
-    regions_.push_back(iter->second);
-    iter++;
-  }
+  if (id_and_region_kvs_) {
+    auto iter = id_and_region_kvs_->begin();
+    while (iter != id_and_region_kvs_->end()) {
+      regions_.push_back(iter->second);
+      iter++;
+    }
+
+    std::string s =
+        fmt::format("backup_meta_region_name : {} regions size : {}", backup_meta_region_name_, regions_.size());
+
+    s += " regions : [\n";
+
+    for (size_t i = 0; i < regions_.size(); i++) {
+      s += " " + std::to_string((regions_[i])->id());
+      if ((i + 1) % 10 == 0) {
+        s += "\n";
+      }
+    }
+    s += "]";
+
+    DINGO_LOG(INFO) << s;
+
+    if (regions_.size() > 1) {
+      std::reverse(regions_.begin(), regions_.end());
+    }
+
+    // std::mt19937 rng(std::random_device{}());
+    // std::shuffle(regions_.begin(), regions_.end(), rng);
+
+  }  // if (id_and_region_kvs_) {
 
   return butil::Status::OK();
 }
@@ -71,13 +100,17 @@ butil::Status RestoreRegionMetaManager::Run() {
   butil::Status status;
 
   uint32_t concurrency = std::min(concurrency_, static_cast<uint32_t>(regions_.size()));
+  int64_t regions_size = regions_.size();
 
   // init thread_exit_flags_ set already exit
   thread_exit_flags_.resize(concurrency, 1);
 
   for (uint32_t i = 0; i < concurrency; i++) {
     // set thread running
-    thread_exit_flags_[i] = 0;
+    {
+      BAIDU_SCOPED_LOCK(mutex_);
+      thread_exit_flags_[i] = 0;
+    }
 
     status = DoAsyncRestoreRegionMeta(i);
     if (!status.ok()) {
@@ -85,25 +118,40 @@ butil::Status RestoreRegionMetaManager::Run() {
       {
         BAIDU_SCOPED_LOCK(mutex_);
         last_error_ = status;
+
+        // set thread exit
+        thread_exit_flags_[i] = 1;
       }
-      // set thread exit
-      thread_exit_flags_[i] = 1;
       continue;
     }
   }
 
+  std::vector<std::string> backup_meta_region_names;
+  FormatBackupMetaRegionName(backup_meta_region_names);
+  PaddingBackupMetaRegionName(backup_meta_region_names);
+
+  std::cerr << "Full Restore " << backup_meta_region_names[0] << " " << backup_meta_region_names[1] << " "
+            << backup_meta_region_names[2] << " " << backup_meta_region_names[3] << " " << "<";
+  DINGO_LOG(INFO) << "Full Restore " << backup_meta_region_names[0] << " " << backup_meta_region_names[1] << " "
+                  << backup_meta_region_names[2] << " " << backup_meta_region_names[3] << " " << "<";
+
   while (true) {
+    std::cerr << "-";
+    DINGO_LOG(INFO) << "-";
     if (is_need_exit_) {
       break;
     }
 
-    if (already_restore_region_metas_ >= regions_.size()) {
+    if (already_restore_region_metas_ >= regions_size) {
       break;
     }
 
-    // check thread create failed
-    if (last_error_.error_code() != dingodb::pb::error::OK) {
-      break;
+    {
+      BAIDU_SCOPED_LOCK(mutex_);
+      // check thread create failed
+      if (last_error_.error_code() != dingodb::pb::error::OK) {
+        break;
+      }
     }
 
     sleep(1);
@@ -112,8 +160,8 @@ butil::Status RestoreRegionMetaManager::Run() {
   // check thread exit
   int64_t wait_all_thread_exit_timeout_s = create_region_timeout_s_ + 5;
   int64_t start_time_s = dingodb::Helper::Timestamp();
-  int64_t end_time_s = start_time_s;
   while (true) {
+    int64_t end_time_s = dingodb::Helper::Timestamp();
     if ((end_time_s - start_time_s) > wait_all_thread_exit_timeout_s) {
       DINGO_LOG(ERROR) << fmt::format("restore region meta timeout : {}s. force exit !!!", (end_time_s - start_time_s));
       break;
@@ -138,6 +186,13 @@ butil::Status RestoreRegionMetaManager::Run() {
     sleep(1);
   }
 
+  std::cerr << ">" << " 100.00%" << " [" << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_
+            << "]";
+  DINGO_LOG(INFO) << ">" << " 100.00%" << " [" << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_
+                  << "]";
+
+  std::cout << std::endl;
+
   return last_error_;
 }
 
@@ -149,14 +204,14 @@ butil::Status RestoreRegionMetaManager::DoAsyncRestoreRegionMeta(uint32_t thread
   ServerInteractionPtr internal_coordinator_interaction;
 
   butil::Status status =
-      ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), coordinator_interaction_);
+      ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
 
   auto lambda_call = [self, internal_coordinator_interaction, thread_no]() {
-    self->DoBackupRegionInternal(internal_coordinator_interaction, thread_no);
+    self->DoRestoreRegionInternal(internal_coordinator_interaction, thread_no);
   };
 
 #if defined(ENABLE_RESTORE_REGION_META_PTHREAD)
@@ -186,8 +241,8 @@ butil::Status RestoreRegionMetaManager::DoAsyncRestoreRegionMeta(uint32_t thread
   return butil::Status::OK();
 }
 
-butil::Status RestoreRegionMetaManager::DoBackupRegionInternal(ServerInteractionPtr coordinator_interaction,
-                                                               uint32_t thread_no) {
+butil::Status RestoreRegionMetaManager::DoRestoreRegionInternal(ServerInteractionPtr coordinator_interaction,
+                                                                uint32_t thread_no) {
   butil::Status status;
 
   while (true) {
@@ -199,8 +254,10 @@ butil::Status RestoreRegionMetaManager::DoBackupRegionInternal(ServerInteraction
     {
       BAIDU_SCOPED_LOCK(mutex_);
       if (!regions_.empty()) {
-        region = regions_.front();
-        regions_.erase(regions_.begin());
+        // region = regions_.front();
+        // regions_.erase(regions_.begin());
+        region = regions_.back();
+        regions_.pop_back();
       } else {
         // empty regions. thread exit
         break;
@@ -254,5 +311,104 @@ butil::Status RestoreRegionMetaManager::DoBackupRegionInternal(ServerInteraction
 
   return butil::Status::OK();
 }
+
+butil::Status RestoreRegionMetaManager::FormatBackupMetaRegionName(std::vector<std::string>& backup_meta_region_names) {
+  butil::Status status;
+
+  if (backup_meta_region_name_ != dingodb::Constant::kStoreRegionSqlMetaSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kStoreRegionSdkDataSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kIndexRegionSdkDataSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kDocumentRegionSdkDataSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kStoreRegionSqlDataSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kIndexRegionSqlDataSstName &&
+      backup_meta_region_name_ != dingodb::Constant::kDocumentRegionSqlDataSstName) {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  std::vector<std::string> parts1;
+  butil::SplitString(backup_meta_region_name_, '.', &parts1);
+
+  if (parts1.size() != 2) {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  std::vector<std::string> parts2;
+  butil::SplitString(parts1[0], '_', &parts2);
+
+  if (parts2.size() != 4) {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  // double check
+  if (parts2[0] != "store" && parts2[0] != "index" && parts2[0] != "document") {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  if (parts2[1] != "region") {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  if (parts2[2] != "sql" && parts2[2] != "sdk") {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  if (parts2[3] != "data" && parts2[3] != "meta") {
+    DINGO_LOG(WARNING) << "backup_meta_region_name_ is invalid : " << backup_meta_region_name_;
+    return butil::Status::OK();
+  }
+
+  backup_meta_region_names = parts2;
+
+  return butil::Status::OK();
+}
+
+butil::Status RestoreRegionMetaManager::PaddingBackupMetaRegionName(
+    std::vector<std::string>& backup_meta_region_names) {
+  if (backup_meta_region_names.empty()) {
+    backup_meta_region_names.resize(4, "Unknow");
+  } else {
+    if (backup_meta_region_names[0] == std::string("store")) {
+      backup_meta_region_names[0] = std::string("Store");
+    } else if (backup_meta_region_names[0] == std::string("index")) {
+      backup_meta_region_names[0] = std::string("Index");
+    } else if (backup_meta_region_names[0] == std::string("document")) {
+      backup_meta_region_names[0] = std::string("Document");
+    } else {
+      backup_meta_region_names[0] = std::string("Unknow");
+    }
+
+    if (backup_meta_region_names[1] == std::string("region")) {
+      backup_meta_region_names[1] = std::string("Region");
+    } else {
+      backup_meta_region_names[1] = std::string("Unknow");
+    }
+
+    if (backup_meta_region_names[2] == std::string("sql")) {
+      backup_meta_region_names[2] = std::string("Sql");
+    } else if (backup_meta_region_names[2] == std::string("sdk")) {
+      backup_meta_region_names[2] = std::string("Sdk");
+    } else {
+      backup_meta_region_names[2] = std::string("Unknow");
+    }
+
+    if (backup_meta_region_names[3] == std::string("meta")) {
+      backup_meta_region_names[3] = std::string("Meta");
+    } else if (backup_meta_region_names[3] == std::string("data")) {
+      backup_meta_region_names[3] = std::string("Data");
+    } else {
+      backup_meta_region_names[3] = std::string("Unknow");
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+int64_t RestoreRegionMetaManager::GetRegions() { return already_restore_region_metas_; }
 
 }  // namespace br

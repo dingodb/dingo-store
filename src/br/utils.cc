@@ -21,8 +21,6 @@
 
 #include "common/logging.h"
 #include "coordinator/tso_control.h"
-#include "fmt/core.h"
-#include "proto/error.pb.h"
 
 namespace br {
 
@@ -344,6 +342,13 @@ butil::Status Utils::CheckBackupMeta(std::shared_ptr<dingodb::pb::common::Backup
   }
 
   return butil::Status::OK();
+}
+
+std::string Utils::FormatStatusError(const butil::Status& status) {
+  std::string s =
+      fmt::format("error_code : {}({}) error_message : {}", dingodb::pb::error::Errno_Name(status.error_code()),
+                  status.error_code(), status.error_cstr());
+  return s;
 }
 
 }  // namespace br

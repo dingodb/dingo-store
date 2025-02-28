@@ -264,21 +264,22 @@ butil::Status AutoIncrementControl::CreateOrUpdateAutoIncrement(
   if (ret.ok()) {
     // update
     DINGO_LOG(INFO) << "[restore] update auto increment, table id: " << table_id << ", start id: " << start_id;
-    if (start_id <= source_start_id) {
+    if (start_id < source_start_id) {
       DINGO_LOG(ERROR) << "table id: " << table_id << " : " << start_id << " <= " << source_start_id;
-      return butil::Status(
-          pb::error::Errno::EILLEGAL_PARAMTETERS,
-          fmt::format("[restore] illegal parameters, start id :{}  equal or smaller than source start id :{}", start_id,
-                      source_start_id));
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
+                           fmt::format("[restore] illegal parameters, start id :{}  smaller than source start id :{}",
+                                       start_id, source_start_id));
+    } else if (start_id == source_start_id) {  // do nothing
+      return butil::Status::OK();
+    } else {  //  start_id > source_start_id. update
+      auto* auto_increment = meta_increment.add_auto_increment();
+      auto_increment->set_id(table_id);
+      auto* increment = auto_increment->mutable_increment();
+      increment->set_start_id(start_id);
+      increment->set_source_start_id(source_start_id);
+      increment->set_update_type(pb::coordinator_internal::AutoIncrementUpdateType::UPDATE_ONLY);
+      auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
     }
-    auto* auto_increment = meta_increment.add_auto_increment();
-    auto_increment->set_id(table_id);
-    auto* increment = auto_increment->mutable_increment();
-    increment->set_start_id(start_id);
-    increment->set_source_start_id(source_start_id);
-    increment->set_update_type(pb::coordinator_internal::AutoIncrementUpdateType::UPDATE_ONLY);
-    auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
-
   } else if (ret.error_code() == pb::error::Errno::EAUTO_INCREMENT_NOT_FOUND) {
     // create
     DINGO_LOG(INFO) << "[restore] create auto increment, table id: " << table_id << ", start id: " << start_id;

@@ -3225,9 +3225,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       if (force_sync_commit) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-            << "fallback is set, check_txn_status treats it as a non-async-commit txn"
-            << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
-            << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+            << "fallback is set, check_txn_status treats it as a non-async-commit txn" << "primary_key: " << primary_key
+            << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
+            << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
       } else {
         *txn_result->mutable_locked() = lock_info;
         // async-commit locks can't be resolved until they expire.
@@ -6152,9 +6152,9 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
       std::string data_value;
       auto status = GetDataValue(tmp_write_info, kv_puts_data_map, std::string(kv.key()), data_value);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] cannot get data value, write_info:{}",
-                                        region->Id(), pb::common::RegionType_Name(region->Type()),
-                                        tmp_write_info.DebugString());
+        DINGO_LOG(ERROR) << fmt::format(
+            "[restoredata][region({})][region_type({})] cannot get data value, write_info:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), tmp_write_info.DebugString());
         return butil::Status(pb::error::Errno::EINTERNAL, "cannot get data value");
       }
 
@@ -6164,9 +6164,9 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           pb::common::VectorWithId vector_with_id;
           auto ret = vector_with_id.ParseFromString(data_value);
           if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] parse vector_with_id failed, data_value:{}", region->Id(),
-                                            pb::common::RegionType_Name(region->Type()),
-                                            Helper::StringToHex(data_value));
+            DINGO_LOG(ERROR) << fmt::format(
+                "[restoredata][region({})][region_type({})] parse vector_with_id failed, data_value:{}", region->Id(),
+                pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
             return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
           }
 
@@ -6196,9 +6196,9 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           pb::common::DocumentWithId document_with_id;
           auto ret = document_with_id.ParseFromString(data_value);
           if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] parse document_with_id failed, data_value:{}", region->Id(),
-                                            pb::common::RegionType_Name(region->Type()),
-                                            Helper::StringToHex(data_value));
+            DINGO_LOG(ERROR) << fmt::format(
+                "[restoredata][region({})][region_type({})] parse document_with_id failed, data_value:{}", region->Id(),
+                pb::common::RegionType_Name(region->Type()), Helper::StringToHex(data_value));
             return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
           }
 
@@ -6317,10 +6317,10 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
       if (!document_with_id.mutable_document()->ParseFromArray(value.data(), value.size())) {
         DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
       }
+      documents.push_back(document_with_id);
     } else {
       delete_document_ids.push_back(document_id);
     }
-    documents.push_back(document_with_id);
   }
 
   if (kv_default.empty()) {
@@ -6330,8 +6330,8 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
     return butil::Status::OK();
   }
 
-  auto ret =
-      raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default,false));
+  auto ret = raft_engine->Write(
+      ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default, false));
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
                      << ", write raft engine failed, status: " << ret.error_str();

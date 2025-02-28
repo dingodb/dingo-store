@@ -43,10 +43,14 @@ std::shared_ptr<RestoreRegionMeta> RestoreRegionMeta::GetSelf() { return shared_
 butil::Status RestoreRegionMeta::Init() {
   butil::Status status;
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail) << region_->DebugString();
+  if (region_) {
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail) << region_->DebugString();
+  } else {
+    DINGO_LOG(WARNING) << "region_ = nullptr";
+  }
 
-  region_debug_info_ =
-      fmt::format("{} : {}({}):", backup_meta_region_name_, region_->definition().name(), region_->id());
+  region_debug_info_ = fmt::format("backup_meta_region_name:{} region name:{} region id:{} ", backup_meta_region_name_,
+                                   region_->definition().name(), region_->id());
 
   return butil::Status::OK();
 }
@@ -58,55 +62,58 @@ butil::Status RestoreRegionMeta::Finish() { return butil::Status::OK(); }
 butil::Status RestoreRegionMeta::CreateRegionToCoordinator() {
   butil::Status status;
 
-  dingodb::pb::coordinator::CreateRegionRequest request;
-  dingodb::pb::coordinator::CreateRegionResponse response;
+  if (region_) {
+    dingodb::pb::coordinator::CreateRegionRequest request;
+    dingodb::pb::coordinator::CreateRegionResponse response;
 
-  request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
-  request.set_region_name(region_->definition().name());
-  // ignore resource_tag
-  request.set_replica_num(replica_num_);
-  request.mutable_range()->CopyFrom(region_->definition().range());
-  request.set_raw_engine(region_->definition().raw_engine());
-  request.set_store_engine(region_->definition().store_engine());
-  request.set_region_id(region_->id());
-  request.set_use_region_name_direct(true);
+    request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+    request.set_region_name(region_->definition().name());
+    // ignore resource_tag
+    request.set_replica_num(replica_num_);
+    request.mutable_range()->CopyFrom(region_->definition().range());
+    request.set_raw_engine(region_->definition().raw_engine());
+    request.set_store_engine(region_->definition().store_engine());
+    request.set_region_id(region_->id());
+    request.set_use_region_name_direct(true);
 
-  request.set_schema_id(region_->definition().schema_id());
-  request.set_table_id(region_->definition().table_id());
-  request.set_index_id(region_->definition().index_id());
-  request.set_part_id(region_->definition().part_id());
-  request.set_tenant_id(region_->definition().tenant_id());
+    request.set_schema_id(region_->definition().schema_id());
+    request.set_table_id(region_->definition().table_id());
+    request.set_index_id(region_->definition().index_id());
+    request.set_part_id(region_->definition().part_id());
+    request.set_tenant_id(region_->definition().tenant_id());
 
-  // ignore store_ids
-  // ignore split_from_region_id
-  request.set_region_type(region_->region_type());
-  if (region_->definition().has_index_parameter()) {
-    request.mutable_index_parameter()->CopyFrom(region_->definition().index_parameter());
-  }
+    // ignore store_ids
+    // ignore split_from_region_id
+    request.set_region_type(region_->region_type());
+    if (region_->definition().has_index_parameter()) {
+      request.mutable_index_parameter()->CopyFrom(region_->definition().index_parameter());
+    }
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
 
-  status = coordinator_interaction_->SendRequest("CoordinatorService", "CreateRegion", request, response,
-                                                 create_region_timeout_s_ * 1000);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
+    status = coordinator_interaction_->SendRequest("CoordinatorService", "CreateRegion", request, response,
+                                                   create_region_timeout_s_ * 1000);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
 
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << region_debug_info_ << " " << response.error().errmsg();
-    return butil::Status(response.error().errcode(), region_debug_info_ + " " + response.error().errmsg());
-  }
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << region_debug_info_ << " " << response.error().errmsg();
+      return butil::Status(response.error().errcode(), region_debug_info_ + " " + response.error().errmsg());
+    }
 
-  // double check
-  if (response.region_id() != region_->id()) {
-    std::string s =
-        fmt::format("response region id : {} not match request region id : {}", response.region_id(), region_->id());
-    DINGO_LOG(ERROR) << region_debug_info_ + " " + s;
-    return butil::Status(dingodb::pb::error::ERESTORE_REGION_ID_NOT_MATCH, region_debug_info_ + " " + s);
-  }
+    // double check
+    if (response.region_id() != region_->id()) {
+      std::string s =
+          fmt::format("response region id : {} not match request region id : {}", response.region_id(), region_->id());
+      DINGO_LOG(ERROR) << region_debug_info_ + " " + s;
+      return butil::Status(dingodb::pb::error::ERESTORE_REGION_ID_NOT_MATCH, region_debug_info_ + " " + s);
+    }
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
+
+  }  // if (region_) {
 
   return butil::Status::OK();
 }

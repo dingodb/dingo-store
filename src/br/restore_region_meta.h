@@ -50,8 +50,6 @@ class RestoreRegionMeta : public std::enable_shared_from_this<RestoreRegionMeta>
   ServerInteractionPtr coordinator_interaction_;
   std::shared_ptr<dingodb::pb::common::Region> region_;
   int64_t replica_num_;
-  // region_belongs_to_whom_ = dingodb::Constant::kStoreRegionName or dingodb::Constant::kIndexRegionName or
-  // dingodb::Constant::kDocumentRegionName
   std::string backup_meta_region_name_;
   std::string region_debug_info_;
   int64_t create_region_timeout_s_;

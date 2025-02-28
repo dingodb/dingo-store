@@ -55,6 +55,8 @@ class RestoreSdkData : public RestoreDataBase, public std::enable_shared_from_th
 
   butil::Status Finish();
 
+  std::pair<int64_t, int64_t> GetRegions();
+
  protected:
  private:
 };

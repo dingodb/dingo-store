@@ -88,8 +88,13 @@ butil::Status Backup::Init() {
   dingodb::pb::common::VersionInfo version_info_local = dingodb::GetVersionInfo();
   status = CompareVersion(version_info_local, version_info_remote);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
+    if (FLAGS_backup_strict_version_comparison) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    } else {
+      std::cout << "ignore version compare" << std::endl;
+      DINGO_LOG(INFO) << "ignore version compare";
+    }
   }
 
   std::cout << "version compare ok" << std::endl;
@@ -1198,8 +1203,13 @@ butil::Status Backup::CompareVersion(const dingodb::pb::common::VersionInfo& ver
   if (version_info_local.git_commit_hash() != version_info_remote.git_commit_hash()) {
     std::string s = fmt::format("git_commit_hash is different. local : {} remote : {}",
                                 version_info_local.git_commit_hash(), version_info_remote.git_commit_hash());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    if (FLAGS_backup_strict_version_comparison) {
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    } else {
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    }
   }
 
   return butil::Status::OK();
