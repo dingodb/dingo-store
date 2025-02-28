@@ -450,12 +450,19 @@ int main(int argc, char* argv[]) {
   if (dingodb::FLAGS_show_version || argc == 1) {
     dingodb::DingoShowVerion();
     printf(
-        "Usage: --br_coor_url=[ip:port] --br_type=[backup|restore]  --br_backup_type=[full] --backupts='[YYYY-MM-DD "
+        "Usage: --br_coor_url=[ip:port] --br_type=[backup]  --br_backup_type=[full] --backupts='[YYYY-MM-DD "
         "HH:MM:SS ]' --storage=local://[path_dir]\n");
     printf(
-        "Usage: --br_coor_url=[file://./conf/coor_list] --br_type=[backup|restore]  --br_backup_type=[full] "
+        "Usage: --br_coor_url=[file://./conf/coor_list] --br_type=[backup]  --br_backup_type=[full] "
         "--backupts='[YYYY-MM-DD "
         "HH:MM:SS ]' --storage=local://[path_dir]\n");
+
+    printf(
+        "Usage: --br_coor_url=[ip:port] --br_type=[restore]  --br_restore_type=[full]   "
+        "--storage=local://[path_dir]\n");
+    printf(
+        "Usage: --br_coor_url=[file://./conf/coor_list] --br_type=[restore]  --br_restore_type=[full] "
+        "--storage=local://[path_dir]\n");
     printf("Example: \n");
     printf(
         "./dingodb_br --br_coor_url=127.0.0.1:22001 --br_type=backup --br_backup_type=full --backupts='2020-01-01 "
@@ -463,9 +470,16 @@ int main(int argc, char* argv[]) {
         "--storage=local:///opt/backup-2020-01-01\n");
 
     printf(
-        "./dingodb_br --br_coor_url=[file://./conf/coor_list] --br_type=backup --br_backup_type=full "
+        "./dingodb_br --br_coor_url=file://./conf/coor_list --br_type=backup --br_backup_type=full "
         "--backupts='2020-01-01 "
         "00:00:00 +08:00' "
+        "--storage=local:///opt/backup-2020-01-01\n");
+    printf(
+        "./dingodb_br --br_coor_url=127.0.0.1:22001 --br_type=restore --br_restore_type=full "
+        "--storage=local:///opt/backup-2020-01-01\n");
+
+    printf(
+        "./dingodb_br --br_coor_url=file://./conf/coor_list --br_type=restore --br_restore_type=full "
         "--storage=local:///opt/backup-2020-01-01\n");
     exit(-1);
   }
@@ -485,8 +499,8 @@ int main(int argc, char* argv[]) {
   butil::Status status;
   std::shared_ptr<br::ServerInteraction> coordinator_interaction = std::make_shared<br::ServerInteraction>();
   if (br::FLAGS_br_coor_url.empty()) {
-    DINGO_LOG(WARNING) << "coordinator url is empty, try to use file://./coor_list";
-    br::FLAGS_br_coor_url = "file://./coor_list";
+    DINGO_LOG(WARNING) << "coordinator url is empty, try to use file://.conf/coor_list";
+    br::FLAGS_br_coor_url = "file://./conf/coor_list";
 
     std::string path = br::FLAGS_br_coor_url;
     path = path.replace(path.find("file://"), 7, "");

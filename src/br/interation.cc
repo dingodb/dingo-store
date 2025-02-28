@@ -40,7 +40,11 @@ bool ServerInteraction::Init(std::vector<std::string> addrs) {
   }
 
   for (auto& endpoint : endpoints_) {
-    DINGO_LOG(INFO) << fmt::format("Init channel {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
+    if (FLAGS_br_log_switch_restore_detail || FLAGS_br_log_switch_restore_detail_detail ||
+        FLAGS_br_log_switch_backup_detail || FLAGS_br_log_switch_backup_detail_detail) {
+      DINGO_LOG(INFO) << fmt::format("Init channel {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
+    }
+
     std::unique_ptr<brpc::Channel> channel = std::make_unique<brpc::Channel>();
     if (channel->Init(endpoint, nullptr) != 0) {
       DINGO_LOG(ERROR) << fmt::format("Init channel failed, {}:{}", butil::ip2str(endpoint.ip).c_str(), endpoint.port);
@@ -117,6 +121,23 @@ std::string ServerInteraction::GetAddrsAsString() {
 
 butil::Status ServerInteraction::CreateInteraction(const std::vector<std::string>& addrs,
                                                    ServerInteractionPtr& interaction) {
+  butil::Status status;
+  interaction = std::make_shared<br::ServerInteraction>();
+  if (!interaction->Init(addrs)) {
+    std::string s = fmt::format("Fail to init interaction, addrs");
+    for (const auto& addr : addrs) {
+      s += fmt::format(" {}", addr);
+    }
+    DINGO_LOG(ERROR) << s;
+    status = butil::Status(dingodb::pb::error::EINTERNAL, s);
+    return status;
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status ServerInteraction::CreateInteraction(const std::string& addrs,
+                                                   std::shared_ptr<ServerInteraction>& interaction) {
   butil::Status status;
   interaction = std::make_shared<br::ServerInteraction>();
   if (!interaction->Init(addrs)) {

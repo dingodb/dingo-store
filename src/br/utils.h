@@ -15,12 +15,15 @@
 #ifndef DINGODB_BR_UTILS_H_
 #define DINGODB_BR_UTILS_H_
 
+#include <fmt/format.h>
+
 #include <fstream>
 #include <memory>
 #include <string>
 
 #include "butil/status.h"
 #include "proto/common.pb.h"
+#include "proto/error.pb.h"
 
 namespace br {
 
@@ -43,6 +46,16 @@ class Utils {
   static butil::Status CheckBackupMeta(std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta,
                                        const std::string& storage_internal, const std::string& file_name,
                                        const std::string& dir_name, const std::string& exec_node);
+
+  static std::string FormatStatusError(const butil::Status& status);
+
+  template <typename Response>
+  static std::string FormatResponseError(const Response& response) {
+    std::string s = fmt::format("error_code : {}({}) error_message : {}",
+                                dingodb::pb::error::Errno_Name(response.error().errcode()),
+                                static_cast<int64_t>(response.error().errcode()), response.error().errmsg());
+    return s;
+  }
 
  private:
   Utils() = default;

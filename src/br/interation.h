@@ -51,6 +51,8 @@ class ServerInteraction {
   static butil::Status CreateInteraction(const std::vector<std::string>& addrs,
                                          std::shared_ptr<ServerInteraction>& interaction);
 
+  static butil::Status CreateInteraction(const std::string& addrs, std::shared_ptr<ServerInteraction>& interaction);
+
   bool Init(const std::string& addrs);
   bool Init(std::vector<std::string> addrs);
 
@@ -157,8 +159,12 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
 
   } while (retry_count < FLAGS_br_server_interaction_max_retry);
 
-  DINGO_LOG(ERROR) << fmt::format("{} response failed, error: {} {}", api_name,
-                                  dingodb::pb::error::Errno_Name(status.error_code()), status.error_cstr());
+  DINGO_LOG(ERROR) << fmt::format(
+      "{} response failed, retry_count:{} status.error_code:{}({}) status.error_cstr:{} response.error.errcode:{}({}) "
+      "response.error.errmsg:{}",
+      api_name, retry_count, dingodb::pb::error::Errno_Name(status.error_code()), status.error_code(),
+      status.error_cstr(), dingodb::pb::error::Errno_Name(response.error().errcode()),
+      static_cast<int64_t>(response.error().errcode()), response.error().errmsg());
 
   return status;
 }

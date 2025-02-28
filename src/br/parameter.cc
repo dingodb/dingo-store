@@ -81,4 +81,12 @@ DEFINE_int64(create_region_timeout_s, 60, "restore create region to coordinator 
 // restore region timeout s (second)
 DEFINE_int64(restore_region_timeout_s, 600, "restore region timeout s. default 600s");
 
+// br backup  version comparison dingo-store version comparison
+DEFINE_bool(backup_strict_version_comparison, true,
+            "br backup version vs dingo-store version must be consistent. default true.");
+
+// br restore  version comparison dingo-store version comparison
+DEFINE_bool(restore_strict_version_comparison, true,
+            "br restore version vs dingo-store version must be consistent. default true.");
+
 }  // namespace br

@@ -51,6 +51,8 @@ class RestoreSqlMeta : public std::enable_shared_from_this<RestoreSqlMeta> {
 
   butil::Status Finish();
 
+  std::pair<int64_t, int64_t> GetRegions();
+
  protected:
  private:
   butil::Status CheckStoreRegionSqlMetaSst();

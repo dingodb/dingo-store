@@ -48,10 +48,14 @@ class RestoreRegionMetaManager : public std::enable_shared_from_this<RestoreRegi
 
   butil::Status Finish();
 
+  int64_t GetRegions();
+
  protected:
  private:
   butil::Status DoAsyncRestoreRegionMeta(uint32_t thread_no);
-  butil::Status DoBackupRegionInternal(ServerInteractionPtr coordinator_interaction, uint32_t thread_no);
+  butil::Status DoRestoreRegionInternal(ServerInteractionPtr coordinator_interaction, uint32_t thread_no);
+  butil::Status FormatBackupMetaRegionName(std::vector<std::string>& backup_meta_region_names);
+  static butil::Status PaddingBackupMetaRegionName(std::vector<std::string>& backup_meta_region_names);
   ServerInteractionPtr coordinator_interaction_;
   uint32_t concurrency_;
   int64_t replica_num_;

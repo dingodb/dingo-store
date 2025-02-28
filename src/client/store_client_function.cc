@@ -470,7 +470,7 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
       vector->mutable_vector()->add_float_values(v);
     }
   }
-
+  vector->mutable_vector()->set_dimension(dimension);
   request.mutable_parameter()->set_top_n(topn);
 
   if (FLAGS_without_vector) {

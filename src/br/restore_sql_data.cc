@@ -53,4 +53,8 @@ butil::Status RestoreSqlData::Run() { return RestoreDataBase::Run(); }
 
 butil::Status RestoreSqlData::Finish() { return RestoreDataBase::Finish(); }
 
+std::pair<int64_t, int64_t> RestoreSqlData::GetRegions() {
+  return RestoreDataBase::GetRegions();
+}
+
 }  // namespace br

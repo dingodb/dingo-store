@@ -53,4 +53,6 @@ butil::Status RestoreSdkData::Run() { return RestoreDataBase::Run(); }
 
 butil::Status RestoreSdkData::Finish() { return RestoreDataBase::Finish(); }
 
+std::pair<int64_t, int64_t> RestoreSdkData::GetRegions() { return RestoreDataBase::GetRegions(); }
+
 }  // namespace br

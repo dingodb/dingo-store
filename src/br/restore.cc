@@ -44,7 +44,15 @@ namespace br {
 
 Restore::Restore(const RestoreParams& params, uint32_t create_region_concurrency, uint32_t restore_region_concurrency,
                  int64_t create_region_timeout_s, int64_t restore_region_timeout_s, int32_t replica_num)
-    : create_region_concurrency_(create_region_concurrency),
+    : coor_url_(br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrsAsString()),
+      store_url_(br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrsAsString()),
+      index_url_(br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString()),
+      document_url_(br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString()),
+      br_type_(params.br_type),
+      br_restore_type_(params.br_restore_type),
+      storage_(params.storage),
+      storage_internal_(params.storage_internal),
+      create_region_concurrency_(create_region_concurrency),
       restore_region_concurrency_(restore_region_concurrency),
       create_region_timeout_s_(create_region_timeout_s),
       restore_region_timeout_s_(restore_region_timeout_s),
@@ -60,15 +68,6 @@ Restore::Restore(const RestoreParams& params, uint32_t create_region_concurrency
       balance_region_enable_after_finish_(false),
       start_time_ms_(dingodb::Helper::TimestampMs()),
       end_time_ms_(0) {
-  coor_url_ = params.coor_url;
-  store_url_ = br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrsAsString();
-  index_url_ = br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString();
-  document_url_ = br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString();
-  br_type_ = params.br_type;
-  br_restore_type_ = params.br_restore_type;
-  storage_ = params.storage;
-  storage_internal_ = params.storage_internal;
-
   bthread_mutex_init(&mutex_, nullptr);
 }
 
@@ -112,6 +111,14 @@ butil::Status Restore::Init() {
     return butil::Status(dingodb::pb::error::ERESTORE_NOT_FOUND_KEY_IN_FILE, s);
   }
 
+  ServerInteractionPtr internal_coordinator_interaction;
+
+  status = ServerInteraction::CreateInteraction(coor_url_, internal_coordinator_interaction);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
   dingodb::pb::common::VersionInfo version_info_in_backup;
   ret = version_info_in_backup.ParseFromString(iter->second);
   if (!ret) {
@@ -123,8 +130,7 @@ butil::Status Restore::Init() {
   dingodb::pb::common::VersionInfo version_info_local = dingodb::GetVersionInfo();
 
   dingodb::pb::common::VersionInfo version_info_remote;
-  status =
-      GetVersionFromCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction(), version_info_remote);
+  status = GetVersionFromCoordinator(internal_coordinator_interaction, version_info_remote);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -132,8 +138,13 @@ butil::Status Restore::Init() {
 
   status = CompareVersion(version_info_local, version_info_remote, version_info_in_backup);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
+    if (FLAGS_restore_strict_version_comparison) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    } else {
+      std::cout << "ignore version compare" << std::endl;
+      DINGO_LOG(INFO) << "ignore version compare";
+    }
   }
 
   std::cout << "version compare ok" << std::endl;
@@ -148,7 +159,7 @@ butil::Status Restore::Init() {
   std::cout << "safe point ts check ok" << std::endl;
   DINGO_LOG(INFO) << "safe point ts check ok";
 
-  status = Restore::GetAllRegionMapFromCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
+  status = Restore::GetAllRegionMapFromCoordinator(internal_coordinator_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -172,7 +183,7 @@ butil::Status Restore::Init() {
   dingodb::ON_SCOPE_EXIT(lambda_exit_function);
 
   // is backup
-  status = RegisterBackupStatusToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
+  status = RegisterBackupStatusToCoordinator(internal_coordinator_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -183,7 +194,7 @@ butil::Status Restore::Init() {
 
   // try to register restore task
   bool is_first = true;
-  status = RegisterRestoreToCoordinator(is_first, br::InteractionManager::GetInstance().GetCoordinatorInteraction());
+  status = RegisterRestoreToCoordinator(is_first, internal_coordinator_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -208,7 +219,7 @@ butil::Status Restore::Init() {
     DINGO_LOG(INFO) << "gc already stopped. ignore";
   }
 
-  status = DisableBalanceToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
+  status = DisableBalanceToCoordinator(internal_coordinator_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -230,8 +241,23 @@ butil::Status Restore::Init() {
     DINGO_LOG(INFO) << "balance region already stopped. ignore";
   }
 
-  status = DisableSplitAndMergeToStoreAndIndex(br::InteractionManager::GetInstance().GetStoreInteraction(),
-                                               br::InteractionManager::GetInstance().GetIndexInteraction());
+  ServerInteractionPtr internal_store_interaction;
+
+  status = ServerInteraction::CreateInteraction(store_url_, internal_store_interaction);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  ServerInteractionPtr internal_index_interaction;
+
+  status = ServerInteraction::CreateInteraction(index_url_, internal_index_interaction);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+
+  status = DisableSplitAndMergeToStoreAndIndex(internal_store_interaction, internal_index_interaction);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -270,20 +296,17 @@ butil::Status Restore::Run() {
 
   dingodb::ON_SCOPE_EXIT(lambda_exit_function);
 
-  std::vector<std::string> coordinator_addrs =
-      br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrs();
-
   // create register restore task to coordinator
   {
-    std::shared_ptr<br::ServerInteraction> coordinator_interaction;
-    status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
+    std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
+    status = ServerInteraction::CreateInteraction(coor_url_, internal_coordinator_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
 
     // register restore task to coordinator
-    status = DoAsyncRegisterRestoreToCoordinator(coordinator_interaction);
+    status = DoAsyncRegisterRestoreToCoordinator(internal_coordinator_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
@@ -306,38 +329,31 @@ butil::Status Restore::Finish() {
 
   end_time_ms_ = dingodb::Helper::TimestampMs();
 
-  // std::string s =
-  //     fmt::format("[Full Restore success summary][restore-total-ranges={}]
-  //     [backup-sql-meta-ranges={}][total-take={}s]",
-  //                 backup_data_->GetRegionMap()->regions_size(), backup_meta_->GetSqlMetaRegionList().size(),
-  //                 (end_time_ms_ - start_time_ms_) / 1000.0);
-  // std::cout << s << std::endl;
-  // DINGO_LOG(INFO) << s;
+  const auto& [region_metas, region_datas] = GetRegions();
+
+  std::string s = fmt::format(
+      "[Full Restore success summary][total-range-metas={}]"
+      "[total-range-datas={}][total-take={} s] ",
+      region_metas, region_datas, (end_time_ms_ - start_time_ms_) / 1000.0);
+  std::cout << s << std::endl;
+  DINGO_LOG(INFO) << s;
   return butil::Status::OK();
 }
 
 butil::Status Restore::DoRun() {
   butil::Status status;
-  std::vector<std::string> coordinator_addrs =
-      br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrs();
-
-  std::vector<std::string> store_addrs = br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrs();
-
-  std::vector<std::string> index_addrs = br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrs();
-
-  std::vector<std::string> document_addrs = br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrs();
 
   // create restore meta
   {
-    std::shared_ptr<br::ServerInteraction> coordinator_interaction;
-    status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
+    std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
+    status = ServerInteraction::CreateInteraction(coor_url_, internal_coordinator_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
 
-    std::shared_ptr<br::ServerInteraction> store_interaction;
-    status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+    std::shared_ptr<br::ServerInteraction> internal_store_interaction;
+    status = ServerInteraction::CreateInteraction(store_url_, internal_store_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
@@ -346,84 +362,62 @@ butil::Status Restore::DoRun() {
     // find meta meta
     std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta_meta;
     auto iter = backupmeta_file_kvs_.find(dingodb::Constant::kBackupMetaSchemaName);
-    if (iter == backupmeta_file_kvs_.end()) {
+    if (iter != backupmeta_file_kvs_.end()) {
+      dingodb::pb::common::BackupMeta internal_backup_meta_meta;
+      auto ret = internal_backup_meta_meta.ParseFromString(iter->second);
+      if (!ret) {
+        std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
+        return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+      }
+      backup_meta_meta = std::make_shared<dingodb::pb::common::BackupMeta>(std::move(internal_backup_meta_meta));
+    } else {
       std::string s = fmt::format("not found {} in backupmeta file.", dingodb::Constant::kBackupMetaSchemaName);
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(dingodb::pb::error::ERESTORE_NOT_FOUND_KEY_IN_FILE, s);
+      DINGO_LOG(WARNING) << s;
     }
-
-    dingodb::pb::common::BackupMeta internal_backup_meta_meta;
-    auto ret = internal_backup_meta_meta.ParseFromString(iter->second);
-    if (!ret) {
-      std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
-      return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
-    }
-
-    backup_meta_meta = std::make_shared<dingodb::pb::common::BackupMeta>(std::move(internal_backup_meta_meta));
 
     // find IdEpochTypeAndValueKey
     std::shared_ptr<dingodb::pb::meta::IdEpochTypeAndValue> id_epoch_type_and_value;
     iter = backupmeta_file_kvs_.find(dingodb::Constant::kIdEpochTypeAndValueKey);
-    if (iter == backupmeta_file_kvs_.end()) {
+    if (iter != backupmeta_file_kvs_.end()) {
+      dingodb::pb::meta::IdEpochTypeAndValue internal_id_epoch_type_and_value;
+      auto ret = internal_id_epoch_type_and_value.ParseFromString(iter->second);
+      if (!ret) {
+        std::string s = fmt::format("parse dingodb::pb::meta::IdEpochTypeAndValue failed");
+        return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+      }
+
+      id_epoch_type_and_value =
+          std::make_shared<dingodb::pb::meta::IdEpochTypeAndValue>(std::move(internal_id_epoch_type_and_value));
+    } else {
       std::string s = fmt::format("not found {} in backupmeta file.", dingodb::Constant::kIdEpochTypeAndValueKey);
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(dingodb::pb::error::ERESTORE_NOT_FOUND_KEY_IN_FILE, s);
+      DINGO_LOG(WARNING) << s;
     }
-
-    dingodb::pb::meta::IdEpochTypeAndValue internal_id_epoch_type_and_value;
-    ret = internal_id_epoch_type_and_value.ParseFromString(iter->second);
-    if (!ret) {
-      std::string s = fmt::format("parse dingodb::pb::meta::IdEpochTypeAndValue failed");
-      return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
-    }
-
-    id_epoch_type_and_value =
-        std::make_shared<dingodb::pb::meta::IdEpochTypeAndValue>(std::move(internal_id_epoch_type_and_value));
 
     // find TableIncrementKey
     std::shared_ptr<dingodb::pb::meta::TableIncrementGroup> table_increment_group;
     iter = backupmeta_file_kvs_.find(dingodb::Constant::kTableIncrementKey);
-    if (iter == backupmeta_file_kvs_.end()) {
+    if (iter != backupmeta_file_kvs_.end()) {
+      dingodb::pb::meta::TableIncrementGroup internal_table_increment_group;
+      auto ret = internal_table_increment_group.ParseFromString(iter->second);
+      if (!ret) {
+        std::string s = fmt::format("parse dingodb::pb::meta::TableIncrementGroup failed");
+        return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+      }
+
+      table_increment_group =
+          std::make_shared<dingodb::pb::meta::TableIncrementGroup>(std::move(internal_table_increment_group));
+    } else {
       std::string s = fmt::format("not found {} in backupmeta file.", dingodb::Constant::kTableIncrementKey);
-      DINGO_LOG(ERROR) << s;
-      return butil::Status(dingodb::pb::error::ERESTORE_NOT_FOUND_KEY_IN_FILE, s);
+      DINGO_LOG(WARNING) << s;
     }
 
-    dingodb::pb::meta::TableIncrementGroup internal_table_increment_group;
-    ret = internal_table_increment_group.ParseFromString(iter->second);
-    if (!ret) {
-      std::string s = fmt::format("parse dingodb::pb::meta::TableIncrementGroup failed");
-      return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+    if (backup_meta_meta || id_epoch_type_and_value || table_increment_group) {
+      restore_meta_ = std::make_shared<RestoreMeta>(internal_coordinator_interaction, internal_store_interaction,
+                                                    restorets_, restoretso_internal_, storage_, storage_internal_,
+                                                    backup_meta_meta, id_epoch_type_and_value, table_increment_group,
+                                                    create_region_concurrency_, restore_region_concurrency_,
+                                                    create_region_timeout_s_, restore_region_timeout_s_, replica_num_);
     }
-
-    table_increment_group =
-        std::make_shared<dingodb::pb::meta::TableIncrementGroup>(std::move(internal_table_increment_group));
-
-    restore_meta_ = std::make_shared<RestoreMeta>(
-        coordinator_interaction, store_interaction, restorets_, restoretso_internal_, storage_, storage_internal_,
-        backup_meta_meta, id_epoch_type_and_value, table_increment_group, create_region_concurrency_,
-        restore_region_concurrency_, create_region_timeout_s_, restore_region_timeout_s_, replica_num_);
-  }
-
-  status = restore_meta_->Init();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
-
-  std::cout << "Restore Meta Init ok" << std::endl;
-  DINGO_LOG(INFO) << "Restore Meta Init ok";
-
-  status = restore_meta_->Run();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
-  }
-
-  status = restore_meta_->Finish();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return status;
   }
 
   // create restore data
@@ -432,29 +426,29 @@ butil::Status Restore::DoRun() {
     std::shared_ptr<dingodb::pb::common::BackupMeta> backup_meta_data;
     auto iter = backupmeta_file_kvs_.find(dingodb::Constant::kBackupMetaDataFileName);
     if (iter != backupmeta_file_kvs_.end()) {
-      std::shared_ptr<br::ServerInteraction> coordinator_interaction;
-      status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
+      std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
+      status = ServerInteraction::CreateInteraction(coor_url_, internal_coordinator_interaction);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
       }
 
-      std::shared_ptr<br::ServerInteraction> store_interaction;
-      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+      std::shared_ptr<br::ServerInteraction> internal_store_interaction;
+      status = ServerInteraction::CreateInteraction(store_url_, internal_store_interaction);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
       }
 
-      std::shared_ptr<br::ServerInteraction> index_interaction;
-      status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
+      std::shared_ptr<br::ServerInteraction> internal_index_interaction;
+      status = ServerInteraction::CreateInteraction(index_url_, internal_index_interaction);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
       }
 
-      std::shared_ptr<br::ServerInteraction> document_interaction;
-      status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
+      std::shared_ptr<br::ServerInteraction> internal_document_interaction;
+      status = ServerInteraction::CreateInteraction(document_url_, internal_document_interaction);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
@@ -470,12 +464,33 @@ butil::Status Restore::DoRun() {
       backup_meta_data = std::make_shared<dingodb::pb::common::BackupMeta>(std::move(internal_backup_meta_data));
 
       restore_data_ = std::make_shared<RestoreData>(
-          coordinator_interaction, store_interaction, index_interaction, document_interaction, restorets_,
-          restoretso_internal_, storage_, storage_internal_, backup_meta_data, FLAGS_create_region_concurrency,
-          FLAGS_restore_region_concurrency, FLAGS_create_region_timeout_s, FLAGS_restore_region_timeout_s,
-          FLAGS_br_default_replica_num);
+          internal_coordinator_interaction, internal_store_interaction, internal_index_interaction,
+          internal_document_interaction, restorets_, restoretso_internal_, storage_, storage_internal_,
+          backup_meta_data, create_region_concurrency_, restore_region_concurrency_, create_region_timeout_s_,
+          restore_region_timeout_s_, replica_num_);
+    } else {
+      std::string s = fmt::format("not found {} in backupmeta file.", dingodb::Constant::kBackupMetaDataFileName);
+      DINGO_LOG(WARNING) << s;
     }  // if (iter != backupmeta_file_kvs_.end())
   }
+
+  // double check
+  if (!restore_meta_ && restore_data_) {
+    std::string s = fmt::format("restore_meta_ is nullptr, but restore_data_ is not nullptr");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::EINTERNAL, s);
+  }
+
+  if (restore_meta_) {
+    status = restore_meta_->Init();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+  }
+
+  std::cout << "Restore Meta Init ok" << std::endl;
+  DINGO_LOG(INFO) << "Restore Meta Init ok";
 
   if (restore_data_) {
     status = restore_data_->Init();
@@ -483,22 +498,42 @@ butil::Status Restore::DoRun() {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
+  }
 
-    std::cout << "Restore Data Init ok" << std::endl;
-    DINGO_LOG(INFO) << "Restore Data Init ok";
+  std::cout << "Restore Data Init ok" << std::endl;
+  DINGO_LOG(INFO) << "Restore Data Init ok";
 
+  if (restore_meta_) {
+    status = restore_meta_->Run();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+  }
+
+  if (restore_data_) {
     status = restore_data_->Run();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
+  }
 
+  if (restore_meta_) {
+    status = restore_meta_->Finish();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+  }
+
+  if (restore_data_) {
     status = restore_data_->Finish();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
-  }  // if (restore_data_) {
+  }
 
   // import id epoch type to meta
   status = restore_meta_->ImportIdEpochTypeToMeta();
@@ -508,7 +543,7 @@ butil::Status Restore::DoRun() {
   }
 
   // import table increment to meta
-  status = restore_meta_->CreateAutoIncrementsToMeta();
+  status = restore_meta_->CreateOrUpdateAutoIncrementsToMeta();
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
@@ -714,7 +749,7 @@ butil::Status Restore::SetGcStop() {
   is_gc_stop_ = true;
   is_gc_enable_after_finish_ = true;
 
-  DINGO_LOG(INFO) << "GC is stopped. Backup will enable GC.  if backup is finished.";
+  DINGO_LOG(INFO) << "GC is stopped. Restore will enable GC.  if restore is finished.";
 
   return butil::Status::OK();
 }
@@ -1213,15 +1248,25 @@ butil::Status Restore::CompareVersion(const dingodb::pb::common::VersionInfo& ve
   if (version_info_local.git_commit_hash() != version_info_in_backup.git_commit_hash()) {
     std::string s = fmt::format("git_commit_hash is different. local : {} backup : {}",
                                 version_info_local.git_commit_hash(), version_info_in_backup.git_commit_hash());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    if (FLAGS_restore_strict_version_comparison) {
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    } else {
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    }
   }
 
   if (version_info_local.git_commit_hash() != version_info_remote.git_commit_hash()) {
     std::string s = fmt::format("git_commit_hash is different. local : {} remote : {}",
                                 version_info_local.git_commit_hash(), version_info_remote.git_commit_hash());
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    if (FLAGS_restore_strict_version_comparison) {
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    } else {
+      DINGO_LOG(WARNING) << s;
+      return butil::Status(dingodb::pb::error::EBACKUP_VERSION_NOT_MATCH, s);
+    }
   }
 
   return butil::Status::OK();
@@ -1232,14 +1277,13 @@ butil::Status Restore::DoFinish() {
     if (!is_need_exit_) {
       is_need_exit_ = true;
     }
-    std::cerr << "Waiting for register backup thread exit. (Do not use kill -9 or Ctrl-C to exit.) <";
-    DINGO_LOG(INFO) << "Waiting for register backup thread exit. (Do not use kill -9 or Ctrl-C to exit.) <";
+    std::cerr << "Waiting for register restore thread exit. (Do not use kill -9 or Ctrl-C to exit.) <";
+    DINGO_LOG(INFO) << "Waiting for register restore thread exit. (Do not use kill -9 or Ctrl-C to exit.) <";
     std::string s;
     while (true) {
       if (is_exit_register_restore_to_coordinator_thread_) {
         break;
       }
-      // sleep(FLAGS_restore_watch_interval_s);
       sleep(1);
       std::cerr << "-";
       s += "-";
@@ -1252,6 +1296,8 @@ butil::Status Restore::DoFinish() {
   // forbidden gc start
   if (is_gc_enable_after_finish_) {
     // SetGcStart();
+    std::cout << "forbidden gc start ok" << std::endl;
+    DINGO_LOG(INFO) << "forbidden gc start ok";
   }
 
   butil::Status status = EnableBalanceToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
@@ -1282,6 +1328,22 @@ butil::Status Restore::DoFinish() {
   }
 
   return butil::Status::OK();
+}
+
+std::pair<int64_t, int64_t> Restore::GetRegions() {
+  std::pair<int64_t, int64_t> region_metas = std::pair<int64_t, int64_t>(0, 0);
+  std::pair<int64_t, int64_t> region_datas = std::pair<int64_t, int64_t>(0, 0);
+
+  if (restore_meta_) {
+    region_metas = restore_meta_->GetRegions();
+  }
+
+  if (restore_data_) {
+    region_datas = restore_data_->GetRegions();
+  }
+
+  return std::pair<int64_t, int64_t>(region_metas.first + region_datas.first,
+                                     region_metas.second + region_datas.second);
 }
 
 }  // namespace br

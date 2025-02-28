@@ -103,6 +103,12 @@ DECLARE_int64(create_region_timeout_s);
 // restore region timeout s (second)
 DECLARE_int64(restore_region_timeout_s);
 
+// br backup  version comparison dingo-store version comparison
+DECLARE_bool(backup_strict_version_comparison);
+
+// br restore  version comparison dingo-store version comparison
+DECLARE_bool(restore_strict_version_comparison);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_
