@@ -658,7 +658,7 @@ butil::Status RelExprHelper::TransFromOperandV2(
             expr::any_optional_data_adaptor::FromOperandV2<
                 std::shared_ptr<std::string>>((*operand_ptr)[index]);
         if (operand_value) {
-          columns.emplace_back(std::any(std::move(*operand_value)));
+          columns.emplace_back(std::any(*operand_value));
         } else {
           columns.emplace_back(std::any());
         }
