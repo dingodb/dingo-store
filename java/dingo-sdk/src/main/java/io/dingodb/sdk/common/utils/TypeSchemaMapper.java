@@ -20,7 +20,7 @@ public class TypeSchemaMapper {
       addScalaTypeSchemaMapping("FLOAT", FloatSchema::new);
       addScalaTypeSchemaMapping("DOUBLE", DoubleSchema::new);
       addScalaTypeSchemaMapping("REAL", DoubleSchema::new);
-      addScalaTypeSchemaMapping("DECIMAL", StringSchema::new);
+      addScalaTypeSchemaMapping("DECIMAL", DecimalSchema::new);
       addScalaTypeSchemaMapping("STRING", StringSchema::new);
       addScalaTypeSchemaMapping("CHAR", StringSchema::new);
       addScalaTypeSchemaMapping("VARCHAR", StringSchema::new);
