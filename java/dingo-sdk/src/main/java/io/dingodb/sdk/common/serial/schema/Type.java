@@ -20,7 +20,7 @@ import java.util.Locale;
 
 public enum Type {
     BOOLEAN, INTEGER, FLOAT, LONG, DOUBLE, BYTES, STRING, VECTOR, ARRAY,
-    BOOLEANLIST, INTEGERLIST, FLOATLIST, LONGLIST, DOUBLELIST, STRINGLIST;
+    BOOLEANLIST, INTEGERLIST, FLOATLIST, LONGLIST, DOUBLELIST, STRINGLIST, DECIMAL;
 
     private final String name;
 
@@ -32,3 +32,4 @@ public enum Type {
         return name;
     }
 }
+

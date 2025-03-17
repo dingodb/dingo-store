@@ -23,6 +23,20 @@ public interface DingoSchema<T> {
     byte NULL = 0;
     byte NOTNULL = 1;
 
+    default long getPrecision() {
+        throw new UnsupportedOperationException();
+    }
+    default long getScale(){
+        throw new UnsupportedOperationException();
+    }
+
+    default void setPrecision(long precision) {
+        throw new UnsupportedOperationException();
+    }
+    default void setScale(long scale){
+        throw new UnsupportedOperationException();
+    }
+
     //Common interfaces for both v1 and v2.
     Type getType();
 
