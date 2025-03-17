@@ -17,6 +17,7 @@
 package io.dingodb.sdk.common.codec;
 
 import io.dingodb.sdk.common.serial.BufImpl;
+import io.dingodb.sdk.common.serial.schema.DecimalSchema;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.table.Column;
 import io.dingodb.sdk.common.utils.Parameters;
@@ -76,6 +77,12 @@ public final class CodecUtils {
         schema.setAllowNull(column.isNullable());
         schema.setIsKey(column.isPrimary());
         schema.setIndex(index);
+
+        if(schema instanceof DecimalSchema) {
+            schema.setPrecision(column.getPrecision());
+            schema.setScale(column.getScale());
+        }
+
         return schema;
     }
 
