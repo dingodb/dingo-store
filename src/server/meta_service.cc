@@ -24,6 +24,7 @@
 #include "butil/containers/flat_map.h"
 #include "butil/status.h"
 #include "common/constant.h"
+#include "common/context.h"
 #include "common/logging.h"
 #include "coordinator/auto_increment_control.h"
 #include "coordinator/coordinator_control.h"
@@ -4021,6 +4022,73 @@ void MetaServiceImpl::ImportIdEpochType(google::protobuf::RpcController *control
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoImportEpochType(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoCreateOrUpdateAutoIncrements(google::protobuf::RpcController *controller,
+                                    const pb::meta::CreateOrUpdateAutoIncrementsRequest *request,
+                                    pb::meta::CreateOrUpdateAutoIncrementsResponse *response, TrackClosure *done,
+                                    std::shared_ptr<AutoIncrementControl> auto_increment_control,
+                                    std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+
+  for (const auto &table_increment : request->table_increment_group().table_increments()) {
+    if (!auto_increment_control->IsLeader()) {
+      return auto_increment_control->RedirectResponse(response);
+    }
+    auto table_id = table_increment.table_id();
+    auto start_id = table_increment.start_id();
+    auto ret = auto_increment_control->CreateOrUpdateAutoIncrement(table_id, start_id, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "failed, " << table_id << "|" << start_id << " , error_msg : " << ret.error_str();
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  }
+  std::shared_ptr<Context> ctx =
+      std::make_shared<Context>(static_cast<brpc::Controller *>(controller), nullptr, response);
+  ctx->SetRegionId(Constant::kAutoIncrementRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret2 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret2.ok()) {
+    DINGO_LOG(ERROR) << "failed, " << " | " << ret2.error_str();
+    ServiceHelper::SetError(response->mutable_error(), ret2.error_code(), ret2.error_str());
+
+    if (ret2.error_code() == pb::error::Errno::ERAFT_NOTLEADER) {
+      auto_increment_control->RedirectResponse(response);
+    }
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CreateOrUpdateAutoIncrements Success. ";
+}
+
+void MetaServiceImpl::CreateOrUpdateAutoIncrements(google::protobuf::RpcController *controller,
+                                                   const pb::meta::CreateOrUpdateAutoIncrementsRequest *request,
+                                                   pb::meta::CreateOrUpdateAutoIncrementsResponse *response,
+                                                   google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!auto_increment_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateOrUpdateAutoIncrements(controller, request, response, svr_done, auto_increment_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

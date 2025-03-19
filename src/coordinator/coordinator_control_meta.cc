@@ -1789,6 +1789,20 @@ butil::Status CoordinatorControl::RestoreIndexMeta(int64_t schema_id, int64_t in
     return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "[br] index_id is already used by other index");
   }
 
+  if (table_definition.auto_increment() > 0) {
+    auto status =
+        AutoIncrementControl::SyncSendCreateAutoIncrementInternal(index_id, table_definition.auto_increment());
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("send create auto increment internal error, code: {}, message: {} ",
+                                      status.error_code(), status.error_str())
+                       << ", table_definition=" << table_definition.ShortDebugString();
+      return butil::Status(pb::error::Errno::EAUTO_INCREMENT_WHILE_CREATING_TABLE,
+                           fmt::format("[restore] send create auto increment internal error, code: {}, message: {}",
+                                       status.error_code(), status.error_str()));
+    }
+    DINGO_LOG(INFO) << "Restore AutoIncrement send create auto increment internal success";
+  }
+
   // update index_name_map_safe_temp_
   if (index_name_map_safe_temp_.PutIfAbsent(new_index_check_name, index_id) < 0) {
     DINGO_LOG(INFO) << " [br] index_name" << table_definition.name() << " is exist, when insert index_id=" << index_id;
