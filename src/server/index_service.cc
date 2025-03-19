@@ -3742,32 +3742,6 @@ void IndexServiceImpl::ControlConfig(google::protobuf::RpcController* controller
   }
 }
 
-void DoRestoreMeta(StoragePtr storage, google::protobuf::RpcController* controller,
-                   const dingodb::pb::store::RestoreMetaRequest* request,
-                   dingodb::pb::store::RestoreMetaResponse* response, TrackClosure* done, bool is_sync);
-
-void IndexServiceImpl::RestoreMeta(google::protobuf::RpcController* controller,
-                                   const dingodb::pb::store::RestoreMetaRequest* request,
-                                   dingodb::pb::store::RestoreMetaResponse* response, google::protobuf::Closure* done) {
-  auto* svr_done = new ServiceClosure(__func__, done, request, response);
-
-  if (BAIDU_UNLIKELY(svr_done->GetRegion() == nullptr)) {
-    brpc::ClosureGuard done_guard(svr_done);
-    return;
-  }
-
-  // Run in queue.
-  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
-    DoRestoreMeta(storage_, controller, request, response, svr_done, true);
-  });
-  bool ret = write_worker_set_->ExecuteRR(task);
-  if (BAIDU_UNLIKELY(!ret)) {
-    brpc::ClosureGuard done_guard(svr_done);
-    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
-                            "WorkerSet queue is full, please wait and retry");
-  }
-}
-
 void DoRestoreData(StoragePtr storage, google::protobuf::RpcController* controller,
                    const dingodb::pb::store::RestoreDataRequest* request,
                    dingodb::pb::store::RestoreDataResponse* response, TrackClosure* done, bool is_sync);
