@@ -229,6 +229,11 @@ class MetaServiceImpl : public pb::meta::MetaService {
   void ImportIdEpochType(google::protobuf::RpcController* controller, const pb::meta::ImportIdEpochTypeRequest* request,
                          pb::meta::ImportIdEpochTypeResponse* response, google::protobuf::Closure* done) override;
 
+  void CreateOrUpdateAutoIncrements(google::protobuf::RpcController* controller,
+                                    const pb::meta::CreateOrUpdateAutoIncrementsRequest* request,
+                                    pb::meta::CreateOrUpdateAutoIncrementsResponse* response,
+                                    google::protobuf::Closure* done) override;
+
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
   // table and index definition convertor

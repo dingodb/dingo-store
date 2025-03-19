@@ -25,6 +25,7 @@
 #include "common/logging.h"
 #include "common/synchronization.h"
 #include "engine/snapshot.h"
+#include "fmt/format.h"
 #include "proto/error.pb.h"
 #include "server/server.h"
 
@@ -253,6 +254,45 @@ void AutoIncrementControl::GetLeaderLocation(pb::common::Location& leader_server
 
   // GetServerLocation
   GetServerLocation(leader_raft_location, leader_server_location);
+}
+
+butil::Status AutoIncrementControl::CreateOrUpdateAutoIncrement(
+    int64_t table_id, int64_t start_id, pb::coordinator_internal::MetaIncrement& meta_increment) {
+  DINGO_LOG(INFO) << table_id << " | " << start_id << " | ";
+  int64_t source_start_id = 0;
+  butil::Status ret = GetAutoIncrement(table_id, source_start_id);
+  if (ret.ok()) {
+    // update
+    DINGO_LOG(INFO) << "[restore] update auto increment, table id: " << table_id << ", start id: " << start_id;
+    if (start_id <= source_start_id) {
+      DINGO_LOG(ERROR) << "table id: " << table_id << " : " << start_id << " <= " << source_start_id;
+      return butil::Status(
+          pb::error::Errno::EILLEGAL_PARAMTETERS,
+          fmt::format("[restore] illegal parameters, start id :{}  equal or smaller than source start id :{}", start_id,
+                      source_start_id));
+    }
+    auto* auto_increment = meta_increment.add_auto_increment();
+    auto_increment->set_id(table_id);
+    auto* increment = auto_increment->mutable_increment();
+    increment->set_start_id(start_id);
+    increment->set_source_start_id(source_start_id);
+    increment->set_update_type(pb::coordinator_internal::AutoIncrementUpdateType::UPDATE_ONLY);
+    auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::UPDATE);
+
+  } else if (ret.error_code() == pb::error::Errno::EAUTO_INCREMENT_NOT_FOUND) {
+    // create
+    DINGO_LOG(INFO) << "[restore] create auto increment, table id: " << table_id << ", start id: " << start_id;
+    auto* auto_increment = meta_increment.add_auto_increment();
+    auto_increment->set_id(table_id);
+    auto* increment = auto_increment->mutable_increment();
+    increment->set_start_id(start_id);
+    auto_increment->set_op_type(pb::coordinator_internal::MetaIncrementOpType::CREATE);
+  } else {
+    DINGO_LOG(ERROR) << ret.error_cstr();
+    return ret;
+  }
+
+  return butil::Status::OK();
 }
 
 void AutoIncrementControl::GetServerLocation(pb::common::Location& raft_location,

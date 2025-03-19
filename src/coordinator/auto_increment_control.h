@@ -21,6 +21,7 @@
 #include <string>
 
 #include "butil/containers/flat_map.h"
+#include "butil/status.h"
 #include "common/meta_control.h"
 #include "engine/engine.h"
 #include "proto/coordinator_internal.pb.h"
@@ -72,6 +73,10 @@ class AutoIncrementControl : public MetaControl {
                                       uint32_t auto_increment_offset,
                                       pb::coordinator_internal::MetaIncrement &meta_increment);
   butil::Status DeleteAutoIncrement(int64_t table_id, pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  // restore auto_increment_map_
+  butil::Status CreateOrUpdateAutoIncrement(int64_t table_id, int64_t start_id,
+                                            pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // Get raft leader's server location
   void GetLeaderLocation(pb::common::Location &leader_server_location) override;
