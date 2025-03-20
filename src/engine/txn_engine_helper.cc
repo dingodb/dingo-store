@@ -3897,7 +3897,7 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
         }
       }
     }  // end while iter
-  }    // end scan lock
+  }  // end scan lock
 
   if (!lock_infos_to_commit.empty()) {
     auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
@@ -6083,6 +6083,46 @@ butil::Status TxnEngineHelper::BackupMeta(std::shared_ptr<Context> ctx, RawEngin
   return butil::Status();
 }
 
+butil::Status GetDataValue(const pb::store::WriteInfo &write_info,
+                           const std::map<std::string, pb::common::KeyValue> &kv_puts_data_map,
+                           const std::string &encode_key, std::string &data_value) {
+  if (!write_info.short_value().empty()) {
+    data_value = write_info.short_value();
+    return butil::Status();
+  }
+
+  std::string plain_key;
+  std::string decode_key;
+  int64_t commit_ts = 0;
+  int64_t klock_ver = 0;
+  dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
+  dingodb::mvcc::Codec::DecodeKey(plain_key, decode_key, klock_ver);
+  std::string data_key = mvcc::Codec::EncodeKey(decode_key, write_info.start_ts());
+  auto iter = kv_puts_data_map.find(data_key);
+  if (iter != kv_puts_data_map.end()) {
+    data_value = iter->second.value();
+  } else {
+    return butil::Status(pb::error::Errno::EINTERNAL, "cannot find data");
+  }
+  return butil::Status();
+}
+
+void GetWritePlainKey(const std::string encode_key, std::string &key) {
+  std::string plain_key;
+  int64_t commit_ts = 0;
+  int64_t klock_ver = 0;
+  dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
+  dingodb::mvcc::Codec::DecodeKey(plain_key, key, klock_ver);
+}
+
+std::map<std::string, pb::common::KeyValue> GenKvPutsDataMap(const std::vector<pb::common::KeyValue> &kv_puts_data) {
+  std::map<std::string, pb::common::KeyValue> kv_puts_data_map;
+  for (const auto &kv : kv_puts_data) {
+    kv_puts_data_map[std::string(kv.key())] = kv;
+  }
+  return kv_puts_data_map;
+}
+
 butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                           std::shared_ptr<Engine> raft_engine,
                                           const std::vector<pb::common::KeyValue> &kv_puts_data,
@@ -6091,44 +6131,15 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
   auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
   // for vector index region, commit to vector index
   auto *vector_add = cf_put_delete->mutable_vector_add();
-
+  auto *vector_del = cf_put_delete->mutable_vector_del();
   // for document index region, commit to document index
   auto *document_add = cf_put_delete->mutable_document_add();
+  auto *document_del = cf_put_delete->mutable_document_del();
 
-  bool need_data_value = false;
   if (region->Type() == pb::common::INDEX_REGION || region->Type() == pb::common::DOCUMENT_REGION) {
-    need_data_value = true;
-  }
+    auto kv_puts_data_map = GenKvPutsDataMap(kv_puts_data);
 
-  for (auto const &kv : kv_puts_data) {
-    if (region->Type() == pb::common::INDEX_REGION &&
-        region->Definition().index_parameter().has_vector_index_parameter()) {
-      pb::common::VectorWithId vector_with_id;
-      auto ret = vector_with_id.ParseFromString(kv.value());
-      if (!ret) {
-        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
-                                        pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
-        return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
-      }
-
-      *(vector_add->add_vectors()) = vector_with_id;
-    }
-    if (region->Type() == pb::common::DOCUMENT_REGION &&
-        region->Definition().index_parameter().has_document_index_parameter()) {
-      pb::common::DocumentWithId document_with_id;
-      auto ret = document_with_id.ParseFromString(kv.value());
-      if (!ret) {
-        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
-                                        pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
-        return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
-      }
-
-      *(document_add->add_documents()) = document_with_id;
-    }
-  }
-
-  if (need_data_value) {
-    for (auto &kv : kv_puts_write) {
+    for (const auto &kv : kv_puts_write) {
       pb::store::WriteInfo tmp_write_info;
       auto ret = tmp_write_info.ParseFromArray(kv.value().data(), kv.value().size());
       if (!ret) {
@@ -6137,35 +6148,79 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
             pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
         return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
       }
+
       std::string data_value;
-      if (tmp_write_info.short_value().empty()) {
-        continue;
+      auto status = GetDataValue(tmp_write_info, kv_puts_data_map, std::string(kv.key()), data_value);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] cannot find write_key:{}",
+                                        region->Id(), pb::common::RegionType_Name(region->Type()),
+                                        Helper::StringToHex(std::string(kv.key())));
+        return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
       }
 
-      data_value = tmp_write_info.short_value();
       if (region->Type() == pb::common::INDEX_REGION &&
           region->Definition().index_parameter().has_vector_index_parameter()) {
-        pb::common::VectorWithId vector_with_id;
-        auto ret = vector_with_id.ParseFromString(kv.value());
-        if (!ret) {
-          DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
-                                          pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
-          return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
-        }
+        if (tmp_write_info.op() == pb::store::Op::Put) {
+          pb::common::VectorWithId vector_with_id;
+          auto ret = vector_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
+                                            pb::common::RegionType_Name(region->Type()),
+                                            Helper::StringToHex(data_value));
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
+          }
 
-        *(vector_add->add_vectors()) = vector_with_id;
+          *(vector_add->add_vectors()) = vector_with_id;
+        } else if (tmp_write_info.op() == pb::store::Op::Delete) {
+          std::string origin_key;
+          GetWritePlainKey(std::string(kv.key()), origin_key);
+          auto vector_id = VectorCodec::UnPackageVectorId(origin_key);
+          if (vector_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format(
+                "[restoredata][region({})][region_type({})] decode vector_id failed, key:{}, write_info:{}",
+                region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
+                tmp_write_info.DebugString());
+          }
+          vector_del->add_ids(vector_id);
+        } else {
+          DINGO_LOG(FATAL) << fmt::format(
+              "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+              tmp_write_info.DebugString());
+        }
       }
+
       if (region->Type() == pb::common::DOCUMENT_REGION &&
           region->Definition().index_parameter().has_document_index_parameter()) {
-        pb::common::DocumentWithId document_with_id;
-        auto ret = document_with_id.ParseFromString(kv.value());
-        if (!ret) {
-          DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
-                                          pb::common::RegionType_Name(region->Type()), Helper::StringToHex(kv.value()));
-          return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
-        }
+        if (tmp_write_info.op() == pb::store::Op::Put) {
+          pb::common::DocumentWithId document_with_id;
+          auto ret = document_with_id.ParseFromString(data_value);
+          if (!ret) {
+            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
+                                            pb::common::RegionType_Name(region->Type()),
+                                            Helper::StringToHex(data_value));
+            return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
+          }
 
-        *(document_add->add_documents()) = document_with_id;
+          *(document_add->add_documents()) = document_with_id;
+        } else if (tmp_write_info.op() == pb::store::Op::Delete) {
+          std::string origin_key;
+          GetWritePlainKey(std::string(kv.key()), origin_key);
+
+          auto document_id = DocumentCodec::UnPackageDocumentId(origin_key);
+          if (document_id == 0) {
+            DINGO_LOG(FATAL) << fmt::format(
+                "[restoredata][region({})][region_type({})] decode document_id failed, key:{}, write_info:{}",
+                region->Id(), pb::common::RegionType_Name(region->Type()), Helper::StringToHex(origin_key),
+                tmp_write_info.DebugString());
+          }
+          document_del->add_ids(document_id);
+        } else {
+          DINGO_LOG(FATAL) << fmt::format(
+              "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), pb::store::Op_Name(tmp_write_info.op()),
+              tmp_write_info.DebugString());
+        }
       }
     }
   }
@@ -6284,13 +6339,35 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
   return ret;
 }
 
-butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(
-    const std::vector<pb::common::KeyValue> &kv_default, const std::vector<pb::common::KeyValue> &kv_scalar,
-    const std::vector<pb::common::KeyValue> &kv_table, const std::vector<pb::common::KeyValue> &kv_scalar_speed_up,
-    std::vector<pb::common::VectorWithId> &vector_with_ids) {
+std::vector<std::string> GenScalarSpeedUpKeys(char prefix,
+                                              const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
+  std::vector<std::string> scalar_speed_up_keys;
+
+  std::string prev_encode_key;
+  for (const auto &kv : kv_scalar_speed_up) {
+    const auto &encode_key = std::string(kv.key());
+    int64_t vector_id = 0;
+    int64_t partition_id = 0;
+    std::string scalar_key;
+    int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
+    VectorCodec::DecodeFromEncodeKeyWithTs(encode_key, partition_id, vector_id, scalar_key);
+    std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, partition_id, vector_id, ts);
+    if (prev_encode_key != encode_key) {
+      scalar_speed_up_keys.push_back(encode_key_with_ts);
+    }
+    prev_encode_key = encode_key;
+  }
+  return scalar_speed_up_keys;
+}
+
+butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
+                                                             const std::vector<pb::common::KeyValue> &kv_scalar,
+                                                             const std::vector<pb::common::KeyValue> &kv_table,
+                                                             const std::vector<std::string> &scalar_speed_up_keys,
+                                                             std::vector<pb::common::VectorWithId> &vector_with_ids) {
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
       << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
-                     kv_default.size(), kv_scalar.size(), kv_table.size(), kv_scalar_speed_up.size());
+                     kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
 
   std::vector<pb::common::VectorWithKey> part_vectors;
   // vecotr data
@@ -6353,9 +6430,9 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(
   {
     // only check scalar encode key
     uint32_t count = 0;
-    for (const auto &kv : kv_scalar_speed_up) {
+    for (const auto &key : scalar_speed_up_keys) {
       auto &vector = part_vectors.at(count++);
-      CHECK(kv.key() == vector.key()) << "Not match key.";
+      CHECK(key == vector.key()) << "Not match key.";
     }
   }
 
@@ -6368,19 +6445,18 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(
 butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
                                                      const std::vector<pb::common::KeyValue> &kv_scalar,
                                                      const std::vector<pb::common::KeyValue> &kv_table,
-                                                     const std::vector<pb::common::KeyValue> &kv_scalar_speed_up,
+                                                     const std::vector<std::string> &scalar_speed_up_keys,
                                                      std::vector<pb::common::VectorWithId> &vector_with_ids) {
-  std::vector<pb::common::VectorWithKey> part_vectors;
   // encodekey -> KeyValue
   std::unordered_map<std::string, std::string_view> scalar_map;
   std::unordered_map<std::string, std::string_view> table_map;
-  std::unordered_map<std::string, std::string_view> scalar_speed_up_map;
+  std::unordered_set<std::string> scalar_speed_up_set;
   scalar_map.reserve(kv_scalar.size());
   table_map.reserve(kv_table.size());
-  scalar_speed_up_map.reserve(kv_scalar_speed_up.size());
+  scalar_speed_up_set.reserve(scalar_speed_up_keys.size());
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
       << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
-                     kv_default.size(), kv_scalar.size(), kv_table.size(), kv_scalar_speed_up.size());
+                     kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
   // scalar data
   for (const auto &kv : kv_scalar) {
     dingodb::mvcc::ValueFlag flag;
@@ -6398,8 +6474,8 @@ butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::commo
   }
 
   // scalar_speed_up data
-  for (const auto &kv : kv_scalar_speed_up) {
-    scalar_speed_up_map[kv.key()] = kv.value();
+  for (const auto &key : scalar_speed_up_keys) {
+    scalar_speed_up_set.insert(key);
   }
 
   // vecotr data
@@ -6418,41 +6494,34 @@ butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::commo
     if (!vector_with_id.mutable_vector()->ParseFromArray(value.data(), value.size())) {
       DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
     }
-
-    if (scalar_map.find(encode_key) != scalar_map.end()) {
-      if (!vector_with_id.mutable_scalar_data()->ParseFromArray(scalar_map[encode_key].data(),
-                                                                scalar_map[encode_key].size())) {
-        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.",
-                                        scalar_map[encode_key].size());
+    auto iter = scalar_map.find(encode_key);
+    if (iter != scalar_map.end()) {
+      if (!vector_with_id.mutable_scalar_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
       }
       scalar_map.erase(encode_key);
     }
-
-    if (table_map.find(encode_key) != table_map.end()) {
-      if (!vector_with_id.mutable_table_data()->ParseFromArray(table_map[encode_key].data(),
-                                                               table_map[encode_key].size())) {
-        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.",
-                                        table_map[encode_key].size());
+    iter = table_map.find(encode_key);
+    if (iter != table_map.end()) {
+      if (!vector_with_id.mutable_table_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
       }
       table_map.erase(encode_key);
     }
 
-    if (scalar_speed_up_map.find(encode_key) != scalar_speed_up_map.end()) {
-      scalar_speed_up_map.erase(encode_key);
+    if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
+      scalar_speed_up_set.erase(encode_key);
     }
 
     vector_with_ids.push_back(vector_with_id);
   }
 
-  // check table_map && scalar_map && scalar_speed_up_map must be empty.
-  if (!scalar_map.empty() || !table_map.empty() || !scalar_speed_up_map.empty()) {
+  // check table_map && scalar_map && scalar_speed_up_set must be empty.
+  if (!scalar_map.empty() || !table_map.empty() || !scalar_speed_up_set.empty()) {
     DINGO_LOG(FATAL) << fmt::format("scalar_map.size:{}, table_map.size:{}, scalar_speed_up_map.size:{} must be zero",
-                                    scalar_map.size(), table_map.size(), scalar_speed_up_map.size());
+                                    scalar_map.size(), table_map.size(), scalar_speed_up_set.size());
   }
 
-  for (auto &vector : part_vectors) {
-    vector_with_ids.push_back(vector.vector_with_id());
-  }
   return butil::Status();
 }
 
@@ -6464,12 +6533,13 @@ butil::Status TxnEngineHelper::RestoreNonTxnIndex(std::shared_ptr<Context> ctx, 
                                                   const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
   butil::Status status;
   std::vector<pb::common::VectorWithId> vector_with_ids;
+  auto scalar_speed_up_keys = GenScalarSpeedUpKeys(region->GetKeyPrefix(), kv_scalar_speed_up);
 
   if (kv_default.size() == kv_scalar.size() && kv_default.size() == kv_table.size() &&
-      kv_default.size() == kv_scalar_speed_up.size()) {
-    status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, kv_scalar_speed_up, vector_with_ids);
+      (kv_default.size() == scalar_speed_up_keys.size() || scalar_speed_up_keys.size() == 0)) {
+    status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids);
   } else {
-    status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, kv_scalar_speed_up, vector_with_ids);
+    status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids);
   }
 
   if (!status.ok()) {
@@ -6520,6 +6590,8 @@ butil::Status TxnEngineHelper::DoReadSstFileForTxn(std::shared_ptr<Context> ctx,
   std::string file_path;
   rocksdb::Status status;
   butil::Status butil_status;
+  std::vector<pb::common::KeyValue> kv_puts_data;
+  std::vector<pb::common::KeyValue> kv_puts_write;
   for (const auto &sst_meta : sst_meta_group.backup_data_file_value_sst_metas()) {
     dir_path = fmt::format("{}/{}", storage_backend.local().path(), sst_meta.dir_name());
     file_path = fmt::format("{}/{}", dir_path, sst_meta.file_name());
@@ -6532,53 +6604,49 @@ butil::Status TxnEngineHelper::DoReadSstFileForTxn(std::shared_ptr<Context> ctx,
       return butil::Status(pb::error::EINTERNAL, "Internal open sst file failed.");
     }
 
-    std::vector<pb::common::KeyValue> kv_puts_data;
-    std::vector<pb::common::KeyValue> kv_puts_write;
     std::unique_ptr<rocksdb::Iterator> iter(reader.NewIterator(rocksdb::ReadOptions()));
     for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
       pb::common::KeyValue kv;
       kv.set_key(iter->key().data(), iter->key().size());
       kv.set_value(iter->value().data(), iter->value().size());
       if (sst_meta.cf() == Constant::kTxnDataCF) {
+        // kv_puts_data[std::string(kv.key())] = kv;
         kv_puts_data.emplace_back(kv);
       } else if (sst_meta.cf() == Constant::kTxnWriteCF) {
+        // kv_puts_write[std::string(kv.key())] = kv;
         kv_puts_write.emplace_back(kv);
       } else {
         DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
       }
+      // if (kv_puts_data.size() + kv_puts_write.size() >= FLAGS_restore_sst_file_batch_put_count) {
+      //   butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
+      //   if (BAIDU_UNLIKELY(!status.ok())) {
+      //     DINGO_LOG(ERROR) << fmt::format(
+      //         "[restoredata][region({})][region_type({})] RestoreTxn failed, cf_name: {}, sst file name: {}, status
+      //         " "code: {}, " "message: {}", region->Id(), pb::common::RegionType_Name(region->Type()),
+      //         sst_meta.cf(), file_path, butil_status.error_code(), butil_status.error_str());
+      //     return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
+      //   }
 
-      if (kv_puts_data.size() + kv_puts_write.size() >= FLAGS_restore_sst_file_batch_put_count) {
-        butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
-        if (BAIDU_UNLIKELY(!status.ok())) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[restoredata][region({})][region_type({})] RestoreTxn failed, cf_name: {}, sst file name: {}, status "
-              "code: {}, "
-              "message: {}",
-              region->Id(), pb::common::RegionType_Name(region->Type()), sst_meta.cf(), file_path,
-              butil_status.error_code(), butil_status.error_str());
-          return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-        }
-
-        kv_puts_data.clear();
-        kv_puts_write.clear();
-      }
+      //   kv_puts_data.clear();
+      //   kv_puts_write.clear();
+      // }
+    }
+  }
+  if (!kv_puts_data.empty() || !kv_puts_write.empty()) {
+    butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
+    if (BAIDU_UNLIKELY(!status.ok())) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[restoredata][region({})][region_type({})] RestoreTxn failed, status "
+          "code: {}, "
+          "message: {}",
+          region->Id(), pb::common::RegionType_Name(region->Type()), butil_status.error_code(),
+          butil_status.error_str());
+      return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
     }
 
-    if (!kv_puts_data.empty() || !kv_puts_write.empty()) {
-      butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata][region({})][region_type({})] RestoreTxn failed, cf_name: {}, sst file name: {}, status "
-            "code: {}, "
-            "message: {}",
-            region->Id(), pb::common::RegionType_Name(region->Type()), sst_meta.cf(), file_path,
-            butil_status.error_code(), butil_status.error_str());
-        return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-      }
-
-      kv_puts_data.clear();
-      kv_puts_write.clear();
-    }
+    kv_puts_data.clear();
+    kv_puts_write.clear();
   }
 
   DINGO_LOG(INFO) << fmt::format("[restoredata][region({})][region_type({})] rebuild sst done.", region->Id(),

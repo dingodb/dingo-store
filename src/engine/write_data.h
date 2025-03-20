@@ -524,10 +524,11 @@ class WriteDataBuilder {
 
   // VectorBatchAdd
   static std::shared_ptr<WriteData> BuildWrite(const std::vector<pb::common::VectorWithId>& vectors,
-                                               std::vector<pb::common::KeyValue> kvs_default,
-                                               std::vector<pb::common::KeyValue> kvs_scalar,
-                                               std::vector<pb::common::KeyValue> kvs_table,
-                                               std::vector<pb::common::KeyValue> kvs_scalar_speed_up, bool is_update) {
+                                               const std::vector<pb::common::KeyValue>& kvs_default,
+                                               const std::vector<pb::common::KeyValue>& kvs_scalar,
+                                               const std::vector<pb::common::KeyValue>& kvs_table,
+                                               const std::vector<pb::common::KeyValue>& kvs_scalar_speed_up,
+                                               bool is_update) {
     auto datum = std::make_shared<VectorBatchAddDatum>();
     datum->vectors = vectors;
     datum->kvs_default = kvs_default;
