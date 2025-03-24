@@ -1360,17 +1360,17 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   for (const auto &kv : request.kvs_scalar_speed_up()) {
     kvs_scalar_speed_up.push_back(kv);
   }
-  
-  if(!kvs_default.empty()){
+
+  if (!kvs_default.empty()) {
     kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
   }
-  if(!kvs_scalar.empty()){
-   kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
+  if (!kvs_scalar.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
   }
-  if(!kvs_table.empty()){
-   kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
+  if (!kvs_table.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
   }
-  if(!kvs_scalar_speed_up.empty()){
+  if (!kvs_scalar_speed_up.empty()) {
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kvs_scalar_speed_up);
   }
 
@@ -1433,6 +1433,30 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert vector exception, error: {}", vector_index_id,
                                         e.what());
       }
+
+      // delete vector id
+      try {
+        auto start_time = Helper::TimestampNs();
+        auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_vector_ids()));
+        if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+            vector_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          if (status.error_code() != pb::error::Errno::EVECTOR_INVALID) {
+            if (ctx) {
+              ctx->SetStatus(status);
+            }
+            DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
+                                              vector_index_id, request.delete_vector_ids().size(), Helper::PrintStatus(status));
+          }
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
+                                        e.what());
+      }
+
     }
   }
 
@@ -1716,6 +1740,30 @@ int DocumentBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionP
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert document exception, error: {}",
                                         document_index_id, e.what());
       }
+
+      //delete document
+      try {
+        auto start_time = Helper::TimestampNs();
+        auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_document_ids()));
+        if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+        DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
+                                        document_index_id, request.delete_document_ids().size(), Helper::TimestampNs() - start_time);
+        if (status.ok()) {
+          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+            document_index_wrapper->SetApplyLogId(log_id);
+          }
+        } else {
+          if (ctx) {
+            ctx->SetStatus(status);
+          }
+          DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document failed, count: {}, error: {}",
+                                            document_index_id, request.delete_document_ids().size(), Helper::PrintStatus(status));
+        }
+      } catch (const std::exception &e) {
+        DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete document exception, error: {}",
+                                        document_index_id, e.what());
+      }
+
     }
   }
 
