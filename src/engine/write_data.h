@@ -196,6 +196,10 @@ struct VectorBatchAddDatum : public DatumAble {
     for (auto& kv : kvs_scalar_speed_up) {
       vector_batch_add_request->add_kvs_scalar_speed_up()->Swap(&kv);
     }
+    for (const auto& id : delete_vector_ids) {
+      vector_batch_add_request->add_delete_vector_ids(id);
+    }
+
     vector_batch_add_request->set_is_update(is_update);
 
     return request;
@@ -208,6 +212,7 @@ struct VectorBatchAddDatum : public DatumAble {
   std::vector<pb::common::KeyValue> kvs_scalar;
   std::vector<pb::common::KeyValue> kvs_table;
   std::vector<pb::common::KeyValue> kvs_scalar_speed_up;
+  std::vector<int64_t> delete_vector_ids;
   bool is_update{false};
 };
 
@@ -274,9 +279,14 @@ struct DocumentBatchAddDatum : public DatumAble {
     for (auto& document : documents) {
       document_batch_add_request->add_documents()->Swap(&document);
     }
+    for (const auto& id : delete_document_ids) {
+      document_batch_add_request->add_delete_document_ids(id);
+    }
+
     for (auto& kv : kvs) {
       document_batch_add_request->add_kvs()->Swap(&kv);
     }
+
     document_batch_add_request->set_is_update(is_update);
 
     return request;
@@ -287,6 +297,7 @@ struct DocumentBatchAddDatum : public DatumAble {
   std::string cf_name;
   std::vector<pb::common::DocumentWithId> documents;
   std::vector<pb::common::KeyValue> kvs;
+  std::vector<int64_t> delete_document_ids;
   bool is_update{false};
 };
 
@@ -528,6 +539,7 @@ class WriteDataBuilder {
                                                const std::vector<pb::common::KeyValue>& kvs_scalar,
                                                const std::vector<pb::common::KeyValue>& kvs_table,
                                                const std::vector<pb::common::KeyValue>& kvs_scalar_speed_up,
+                                               const std::vector<int64_t>& delete_vector_ids,
                                                bool is_update) {
     auto datum = std::make_shared<VectorBatchAddDatum>();
     datum->vectors = vectors;
@@ -535,6 +547,7 @@ class WriteDataBuilder {
     datum->kvs_scalar = kvs_scalar;
     datum->kvs_table = kvs_table;
     datum->kvs_scalar_speed_up = kvs_scalar_speed_up;
+    datum->delete_vector_ids = delete_vector_ids;
     datum->is_update = is_update;
 
     auto write_data = std::make_shared<WriteData>();
@@ -575,11 +588,12 @@ class WriteDataBuilder {
 
   // DocumentBatchAddDatum
   static std::shared_ptr<WriteData> BuildWrite(const std::string& cf_name,
-                                               const std::vector<pb::common::DocumentWithId>& documents,
+                                               const std::vector<pb::common::DocumentWithId>& documents, const std::vector<int64_t>& delete_document_ids,
                                                const std::vector<pb::common::KeyValue>& kvs, bool is_update) {
     auto datum = std::make_shared<DocumentBatchAddDatum>();
     datum->cf_name = cf_name;
     datum->documents = documents;
+    datum->delete_document_ids = delete_document_ids;
     datum->kvs = kvs;
     datum->is_update = is_update;
 

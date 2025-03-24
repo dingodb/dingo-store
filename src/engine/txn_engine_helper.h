@@ -468,13 +468,15 @@ class TxnEngineHelper {
                                                      const std::vector<pb::common::KeyValue> &kv_scalar,
                                                      const std::vector<pb::common::KeyValue> &kv_table,
                                                      const std::vector<std::string> &scalar_speed_up_keys,
-                                                     std::vector<pb::common::VectorWithId> &vector_with_ids);
+                                                     std::vector<pb::common::VectorWithId> &vector_with_ids, 
+                                                     std::vector<int64_t>& vector_delete_ids);
 
   static butil::Status PreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
                                              const std::vector<pb::common::KeyValue> &kv_scalar,
                                              const std::vector<pb::common::KeyValue> &kv_table,
                                              const std::vector<std::string> &scalar_speed_up_keys,
-                                             std::vector<pb::common::VectorWithId> &vector_with_ids);
+                                             std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                             std::vector<int64_t>& vector_delete_ids);
 
   static butil::Status RestoreNonTxnIndex(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                           std::shared_ptr<Engine> raft_engine,

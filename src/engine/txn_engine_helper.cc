@@ -6152,10 +6152,10 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
       std::string data_value;
       auto status = GetDataValue(tmp_write_info, kv_puts_data_map, std::string(kv.key()), data_value);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] cannot find write_key:{}",
+        DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] cannot get data value, write_info:{}",
                                         region->Id(), pb::common::RegionType_Name(region->Type()),
-                                        Helper::StringToHex(std::string(kv.key())));
-        return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
+                                        tmp_write_info.DebugString());
+        return butil::Status(pb::error::Errno::EINTERNAL, "cannot get data value");
       }
 
       if (region->Type() == pb::common::INDEX_REGION &&
@@ -6164,7 +6164,7 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           pb::common::VectorWithId vector_with_id;
           auto ret = vector_with_id.ParseFromString(data_value);
           if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
+            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] parse vector_with_id failed, data_value:{}", region->Id(),
                                             pb::common::RegionType_Name(region->Type()),
                                             Helper::StringToHex(data_value));
             return butil::Status(pb::error::Errno::EINTERNAL, "parse vector_with_id failed");
@@ -6196,7 +6196,7 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           pb::common::DocumentWithId document_with_id;
           auto ret = document_with_id.ParseFromString(data_value);
           if (!ret) {
-            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] data_value:{}", region->Id(),
+            DINGO_LOG(ERROR) << fmt::format("[restoredata][region({})][region_type({})] parse document_with_id failed, data_value:{}", region->Id(),
                                             pb::common::RegionType_Name(region->Type()),
                                             Helper::StringToHex(data_value));
             return butil::Status(pb::error::Errno::EINTERNAL, "parse document_with_id failed");
@@ -6296,6 +6296,7 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
                                                      std::shared_ptr<Engine> raft_engine,
                                                      const std::vector<pb::common::KeyValue> &kv_default) {
   std::vector<pb::common::DocumentWithId> documents;
+  std::vector<int64_t> delete_document_ids;
 
   if (region->Type() != pb::common::DOCUMENT_REGION ||
       !region->Definition().index_parameter().has_document_index_parameter()) {
@@ -6317,7 +6318,7 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
         DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
       }
     } else {
-      DINGO_LOG(FATAL) << "invalid flag";
+      delete_document_ids.push_back(document_id);
     }
     documents.push_back(document_with_id);
   }
@@ -6330,7 +6331,7 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
   }
 
   auto ret =
-      raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, kv_default, false));
+      raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default,false));
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
                      << ", write raft engine failed, status: " << ret.error_str();
@@ -6364,7 +6365,8 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<p
                                                              const std::vector<pb::common::KeyValue> &kv_scalar,
                                                              const std::vector<pb::common::KeyValue> &kv_table,
                                                              const std::vector<std::string> &scalar_speed_up_keys,
-                                                             std::vector<pb::common::VectorWithId> &vector_with_ids) {
+                                                             std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                                             std::vector<int64_t> &vector_delete_ids) {
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
       << fmt::format("[restoredata] default_size:{}, scalar_size:{},table_size:{},scalar_speed_up:{}, ",
                      kv_default.size(), kv_scalar.size(), kv_table.size(), scalar_speed_up_keys.size());
@@ -6384,9 +6386,12 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<p
     dingodb::mvcc::ValueFlag flag;
     int64_t ttl;
     auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-
-    if (!vector_with_key.mutable_vector_with_id()->mutable_vector()->ParseFromArray(value.data(), value.size())) {
-      DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
+    if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+      if (!vector_with_key.mutable_vector_with_id()->mutable_vector()->ParseFromArray(value.data(), value.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
+      }
+    } else {
+      vector_with_key.set_is_delete(true);
     }
 
     part_vectors.push_back(vector_with_key);
@@ -6402,8 +6407,10 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<p
       dingodb::mvcc::ValueFlag flag;
       int64_t ttl;
       auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
-      if (!vector.mutable_vector_with_id()->mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
-        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
+      if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+        if (!vector.mutable_vector_with_id()->mutable_scalar_data()->ParseFromArray(value.data(), value.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", value.size());
+        }
       }
     }
   }
@@ -6437,7 +6444,11 @@ butil::Status TxnEngineHelper::OptimizePreProcessVectorIndex(const std::vector<p
   }
 
   for (auto &vector : part_vectors) {
-    vector_with_ids.push_back(vector.vector_with_id());
+    if (vector.is_delete()) {
+      vector_delete_ids.push_back(vector.vector_with_id().id());
+    } else {
+      vector_with_ids.push_back(vector.vector_with_id());
+    }
   }
   return butil::Status();
 }
@@ -6446,7 +6457,8 @@ butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::commo
                                                      const std::vector<pb::common::KeyValue> &kv_scalar,
                                                      const std::vector<pb::common::KeyValue> &kv_table,
                                                      const std::vector<std::string> &scalar_speed_up_keys,
-                                                     std::vector<pb::common::VectorWithId> &vector_with_ids) {
+                                                     std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                                     std::vector<int64_t> &vector_delete_ids) {
   // encodekey -> KeyValue
   std::unordered_map<std::string, std::string_view> scalar_map;
   std::unordered_map<std::string, std::string_view> table_map;
@@ -6485,35 +6497,57 @@ butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::commo
 
     int64_t ts = dingodb::VectorCodec::TruncateKeyForTs(encode_key);
     std::string encode_key_no_ts(dingodb::VectorCodec::TruncateTsForKey(encode_key));
-    vector_with_id.set_id(dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts));
+    int64_t vector_id = dingodb::VectorCodec::DecodeVectorIdFromEncodeKey(encode_key_no_ts);
 
     dingodb::mvcc::ValueFlag flag;
     int64_t ttl;
     auto value = dingodb::mvcc::Codec::UnPackageValue(kv.value(), flag, ttl);
+    if (flag == dingodb::mvcc::ValueFlag::kPut || flag == dingodb::mvcc::ValueFlag::kPutTTL) {
+      vector_with_id.set_id(vector_id);
 
-    if (!vector_with_id.mutable_vector()->ParseFromArray(value.data(), value.size())) {
-      DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
-    }
-    auto iter = scalar_map.find(encode_key);
-    if (iter != scalar_map.end()) {
-      if (!vector_with_id.mutable_scalar_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
-        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+      if (!vector_with_id.mutable_vector()->ParseFromArray(value.data(), value.size())) {
+        DINGO_LOG(FATAL) << fmt::format("Parse vector proto failed, value size: {}.", value.size());
       }
-      scalar_map.erase(encode_key);
-    }
-    iter = table_map.find(encode_key);
-    if (iter != table_map.end()) {
-      if (!vector_with_id.mutable_table_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
-        DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+
+      auto iter = scalar_map.find(encode_key);
+      if (iter != scalar_map.end()) {
+        if (!vector_with_id.mutable_scalar_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+        }
+        scalar_map.erase(encode_key);
       }
-      table_map.erase(encode_key);
-    }
 
-    if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
-      scalar_speed_up_set.erase(encode_key);
-    }
+      iter = table_map.find(encode_key);
+      if (iter != table_map.end()) {
+        if (!vector_with_id.mutable_table_data()->ParseFromArray(iter->second.data(), iter->second.size())) {
+          DINGO_LOG(FATAL) << fmt::format("Parse vector scalar proto failed, value size: {}.", iter->second.size());
+        }
+        table_map.erase(encode_key);
+      }
 
-    vector_with_ids.push_back(vector_with_id);
+      if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
+        scalar_speed_up_set.erase(encode_key);
+      }
+
+      vector_with_ids.push_back(vector_with_id);
+
+    } else {
+      auto iter = scalar_map.find(encode_key);
+      if (iter != scalar_map.end()) {
+        scalar_map.erase(encode_key);
+      }
+
+      iter = table_map.find(encode_key);
+      if (iter != table_map.end()) {
+        table_map.erase(encode_key);
+      }
+
+      if (scalar_speed_up_set.find(encode_key) != scalar_speed_up_set.end()) {
+        scalar_speed_up_set.erase(encode_key);
+      }
+
+      vector_delete_ids.push_back(vector_id);
+    }
   }
 
   // check table_map && scalar_map && scalar_speed_up_set must be empty.
@@ -6533,20 +6567,23 @@ butil::Status TxnEngineHelper::RestoreNonTxnIndex(std::shared_ptr<Context> ctx, 
                                                   const std::vector<pb::common::KeyValue> &kv_scalar_speed_up) {
   butil::Status status;
   std::vector<pb::common::VectorWithId> vector_with_ids;
+  std::vector<int64_t> vector_delete_ids;
   auto scalar_speed_up_keys = GenScalarSpeedUpKeys(region->GetKeyPrefix(), kv_scalar_speed_up);
 
   if (kv_default.size() == kv_scalar.size() && kv_default.size() == kv_table.size() &&
       (kv_default.size() == scalar_speed_up_keys.size() || scalar_speed_up_keys.size() == 0)) {
-    status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids);
+    status = OptimizePreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
+                                           vector_delete_ids);
   } else {
-    status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids);
+    status = PreProcessVectorIndex(kv_default, kv_scalar, kv_table, scalar_speed_up_keys, vector_with_ids,
+                                   vector_delete_ids);
   }
 
   if (!status.ok()) {
     return status;
   }
-  auto ret = raft_engine->Write(
-      ctx, WriteDataBuilder::BuildWrite(vector_with_ids, kv_default, kv_scalar, kv_table, kv_scalar_speed_up, false));
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(vector_with_ids, kv_default, kv_scalar, kv_table,
+                                                                  kv_scalar_speed_up, vector_delete_ids, false));
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
                                     region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
@@ -6610,27 +6647,12 @@ butil::Status TxnEngineHelper::DoReadSstFileForTxn(std::shared_ptr<Context> ctx,
       kv.set_key(iter->key().data(), iter->key().size());
       kv.set_value(iter->value().data(), iter->value().size());
       if (sst_meta.cf() == Constant::kTxnDataCF) {
-        // kv_puts_data[std::string(kv.key())] = kv;
         kv_puts_data.emplace_back(kv);
       } else if (sst_meta.cf() == Constant::kTxnWriteCF) {
-        // kv_puts_write[std::string(kv.key())] = kv;
         kv_puts_write.emplace_back(kv);
       } else {
         DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
       }
-      // if (kv_puts_data.size() + kv_puts_write.size() >= FLAGS_restore_sst_file_batch_put_count) {
-      //   butil_status = RestoreTxn(ctx, region, raft_engine, kv_puts_data, kv_puts_write);
-      //   if (BAIDU_UNLIKELY(!status.ok())) {
-      //     DINGO_LOG(ERROR) << fmt::format(
-      //         "[restoredata][region({})][region_type({})] RestoreTxn failed, cf_name: {}, sst file name: {}, status
-      //         " "code: {}, " "message: {}", region->Id(), pb::common::RegionType_Name(region->Type()),
-      //         sst_meta.cf(), file_path, butil_status.error_code(), butil_status.error_str());
-      //     return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-      //   }
-
-      //   kv_puts_data.clear();
-      //   kv_puts_write.clear();
-      // }
     }
   }
   if (!kv_puts_data.empty() || !kv_puts_write.empty()) {
@@ -6705,40 +6727,6 @@ butil::Status TxnEngineHelper::DoReadSstFileForNonTxn(
       } else {
         DINGO_LOG(FATAL) << "Unsupport cf: " << sst_meta.cf();
       }
-
-      if (region->Type() != pb::common::INDEX_REGION &&
-          (kv_default.size() + kv_scalar.size() + kv_table.size() + kv_scalar_speed_up.size() >=
-           FLAGS_restore_sst_file_batch_put_count)) {
-        butil_status = RestoreNonTxn(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
-        if (BAIDU_UNLIKELY(!status.ok())) {
-          DINGO_LOG(ERROR) << fmt::format(
-              "[restoredata] RestoreNonTxn failed, cf_name: {}, sst file name: {}, status code: {}, "
-              "message: {}",
-              sst_meta.cf(), file_path, butil_status.error_code(), butil_status.error_str());
-          return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-        }
-
-        kv_default.clear();
-        kv_scalar.clear();
-        kv_table.clear();
-        kv_scalar_speed_up.clear();
-      }
-    }
-
-    if (region->Type() != pb::common::INDEX_REGION &&
-        (!kv_default.empty() || !kv_scalar.empty() || !kv_table.empty() || !kv_scalar_speed_up.empty())) {
-      butil_status = RestoreNonTxn(ctx, region, raft_engine, kv_default, kv_scalar, kv_table, kv_scalar_speed_up);
-      if (BAIDU_UNLIKELY(!status.ok())) {
-        DINGO_LOG(ERROR) << fmt::format(
-            "[restoredata] RestoreNontxn failed, cf_name: {}, sst file name: {}, status code: {}, "
-            "message: {}",
-            sst_meta.cf(), file_path, butil_status.error_code(), butil_status.error_str());
-        return butil::Status(pb::error::EINTERNAL, "Internal restore sst file error.");
-      }
-      kv_default.clear();
-      kv_scalar.clear();
-      kv_table.clear();
-      kv_scalar_speed_up.clear();
     }
   }
 
