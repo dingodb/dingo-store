@@ -187,7 +187,7 @@ void MergeCheckTask::MergeCheck() {
     if (!need_merge) {
       break;
     }
-    if (CheckLeaderAndFollowerStatus(merge_from_region_->Id())) {
+    if (!CheckLeaderAndFollowerStatus(merge_from_region_->Id())) {
       need_merge = false;
       reason = "not leader or follower abnormal";
       break;
@@ -433,7 +433,7 @@ void PreMergeCheckTask::PreMergeCheck() {
         reason = "region approximate keys count too big";
         break;
       }
-      if (CheckLeaderAndFollowerStatus(merge_from->Id())) {
+      if (!CheckLeaderAndFollowerStatus(merge_from->Id())) {
         need_scan_check = false;
         reason = "not leader or follower abnormal";
         break;
