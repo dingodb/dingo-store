@@ -2175,7 +2175,7 @@ void SetUpGetJobList(CLI::App &app) {
   auto *cmd = app.add_subcommand("GetJobList", "Get job list")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
   cmd->add_option("--id", opt->id, "Request parameter task id");
-  cmd->add_option("--start_id", opt->start_id, "Request parameter start id");
+  cmd->add_option("--start_id", opt->start_id, "Only takes effect when enable inclure_archive");
   cmd->add_option("--include_archive", opt->include_archive, "Request parameter include history archive")
       ->default_val(false)
       ->default_str("false");
