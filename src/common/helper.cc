@@ -71,6 +71,10 @@ namespace dingodb {
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
 
+static const std::string Base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                                        "abcdefghijklmnopqrstuvwxyz"
+                                        "0123456789+/";
+
 int Helper::GetCoreNum() { return sysconf(_SC_NPROCESSORS_ONLN); }
 
 bool Helper::IsIp(const std::string& s) {
@@ -2396,45 +2400,45 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
   config.set_is_error_occurred(false);
 }
 
-bool Helper::IsBase64Encoded(const std::string& input) {
-  if (input.length() % 4 != 0) {
-    return false;
-  }
+size_t Helper::FindReEnd(const std::string &s, size_t start_pos){
+  // Only calculate the outermost 
+  int bracket_level = 0;
+  bool in_escape = false;
 
-  for (char c : input) {
-    if (!isalnum(c) && c != '+' && c != '/' && c != '=') {
-      return false;
+  for (size_t i = start_pos; i < s.size(); ++i) {
+    if (in_escape) {
+      in_escape = false;
+      continue;
+    }
+
+    if (s[i] == '\\') {
+      in_escape = true;
+    } else if (s[i] == ']') {
+      if (bracket_level == 0) {
+        return i;
+      }
+      bracket_level--;
+    } else if (s[i] == '[') {
+      bracket_level++;
     }
   }
+  return std::string::npos;
 
-  size_t padding_count = 0;
-  for (size_t i = input.length(); i > 0; --i) {
-    if (input[i - 1] == '=') {
-      padding_count++;
-    } else {
-      break;
-    }
-  }
-  return padding_count <= 2;
 }
 
 std::string Helper::Base64Encode(const std::string& input) {
-  static const char base64_chars[] =
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-      "abcdefghijklmnopqrstuvwxyz"
-      "0123456789+/";
   std::string encoded;
   int val = 0, valb = -6;
   for (unsigned char c : input) {
     val = (val << 8) + c;
     valb += 8;
     while (valb >= 0) {
-      encoded.push_back(base64_chars[(val >> valb) & 0x3F]);
+      encoded.push_back(Base64Chars[(val >> valb) & 0x3F]);
       valb -= 6;
     }
   }
   if (valb > -6) {
-    encoded.push_back(base64_chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    encoded.push_back(Base64Chars[((val << 8) >> (valb + 8)) & 0x3F]);
   }
   while (encoded.size() % 4) {
     encoded.push_back('=');
@@ -2443,22 +2447,36 @@ std::string Helper::Base64Encode(const std::string& input) {
 }
 
 std::string Helper::EncodeREContent(const std::string& input) {
-  std::regex re_pattern(R"(RE\s*\[((?:[^\[\]]|\[.*?\])*)\])");
-  std::smatch matches;
-  std::string result = input;
-  std::string::const_iterator search_start(input.cbegin());
+  std::string result;
+  size_t pos = 0;
 
-  while (std::regex_search(search_start, input.cend(), matches, re_pattern)) {
-    std::string matched_text = matches[0];
-    std::string content = matches[1];
-
-    if (!IsBase64Encoded(content)) {
-      std::string encoded_content = Base64Encode(content);
-      std::string replacement = "RE [" + encoded_content + "]";
-      result.replace(matches.position(0), matched_text.length(), replacement);
+  while (pos < input.size()) {
+    size_t start = input.find("RE [", pos);
+    if (start == std::string::npos) {
+      result += input.substr(pos);
+      break;
     }
 
-    search_start = matches.suffix().first;
+    // Add the content before "RE [".
+    result += input.substr(pos, start - pos);
+
+    // // "RE [" length 
+    size_t content_start = start + 4; 
+    size_t end = FindReEnd(input, content_start);
+
+    if (end == std::string::npos) {
+      result += input.substr(start);
+      break;
+    }
+
+    // Extract content and encode.
+    std::string content = input.substr(content_start, end - content_start);
+    std::string encoded = Base64Encode(content);
+
+    // Add the encoded RE block.
+    result += "RE [" + encoded + "]";
+
+    pos = end + 1;
   }
 
   return result;
