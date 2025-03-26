@@ -445,6 +445,23 @@ butil::Status SplitRegionTask::ValidateSplitRegion(std::shared_ptr<StoreRegionMe
   if (parent_region->State() != pb::common::NORMAL) {
     return butil::Status(pb::error::EREGION_STATE, "Parent region state is NORMAL, not allow split.");
   }
+
+  // check parent region peer state
+  auto parent_definition = parent_region->Definition();
+  for (const auto& peer : parent_definition.peers()) {
+    auto region_metas =
+        ServiceAccess::GetRegionInfo({parent_region->Id()}, Helper::LocationToEndPoint(peer.raft_location()));
+    if (region_metas.empty()) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND, fmt::format("Not found source peer({}) region meta.",
+                                                                     Helper::LocationToString(peer.raft_location())));
+    }
+    if (region_metas.front().state() != pb::common::NORMAL) {
+      return butil::Status(pb::error::EREGION_STATE,
+                           fmt::format("Source region peer state({}) is not NORMAL, not allow merge.",
+                                       pb::common::StoreRegionState_Name(region_metas.front().state())));
+    }
+  }
+
   if (parent_region->GetStoreEngineType() != pb::common::STORE_ENG_RAFT_STORE) {
     return butil::Status();
   }
