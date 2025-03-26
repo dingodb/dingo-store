@@ -57,6 +57,10 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   // br
   SetUpGetBackUpStatus(app);
   SetUpGetRestoreStatus(app);
+
+  // balance
+  SetUpEnableOrDisableBalance(app);
+
 }
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
@@ -2779,6 +2783,49 @@ void RunGetRestoreStatus(GetRestoreStatusOptions const &opt) {
       std::cout << "is restoring , restore name : " << response.restore_name() << std::endl;
     } else {
       std::cout << "is not restoring" << std::endl;
+    }
+  }
+}
+
+void SetUpEnableOrDisableBalance(CLI::App &app) {
+  auto opt = std::make_shared<EnableOrDisableBalanceOptions>();
+  auto *cmd = app.add_subcommand("DisableBalance", "DisableBalance ")->group("Coordinator Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--balance_leader", opt->enable_balance_leader, "Request parameter enable_balance_leader true or false")
+      ->required();
+  cmd->add_option("--balance_region", opt->enable_balance_region, "Request parameter enable_balance_region true or false")
+      ->required();
+  cmd->callback([opt]() { RunEnableOrDisableBalance(*opt); });
+}
+
+void RunEnableOrDisableBalance(EnableOrDisableBalanceOptions const &opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+  dingodb::pb::coordinator::ControlConfigRequest request;
+  dingodb::pb::coordinator::ControlConfigResponse response;
+
+  request.mutable_request_info()->set_request_id(0);
+
+  dingodb::pb::common::ControlConfigVariable config_balance_leader;
+  config_balance_leader.set_name("FLAGS_enable_balance_leader");
+  config_balance_leader.set_value(opt.enable_balance_leader);
+  request.mutable_control_config_variable()->Add(std::move(config_balance_leader));
+
+  dingodb::pb::common::ControlConfigVariable config_balance_region;
+  config_balance_region.set_name("FLAGS_enable_balance_region");
+  config_balance_region.set_value(opt.enable_balance_region);
+  request.mutable_control_config_variable()->Add(std::move(config_balance_region));
+
+  butil::Status status =
+      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ControlConfig", request, response);
+  if (!status.ok()) {
+    std::cout << status.error_cstr();
+  }
+
+  for (const auto &config : response.control_config_variable()) {
+    if (config.is_error_occurred()) {
+      std::cout << "ControlConfig not support variable: " << config.name() << " skip.";
     }
   }
 }
