@@ -53,6 +53,9 @@ DEFINE_int64(store_heartbeat_report_region_multiple, 3,
              "store heartbeat report region multiple, this defines how many times of heartbeat will report "
              "region_metrics once to coordinator");
 
+DECLARE_bool(enable_balance_leader);
+DECLARE_bool(enable_balance_region);
+
 std::atomic<uint64_t> HeartbeatTask::heartbeat_counter = 0;
 
 void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> coordinator_interaction,
@@ -687,12 +690,20 @@ void Heartbeat::TriggerScrubVectorIndex(void*) {
 }
 
 void Heartbeat::TriggerBalanceLeader(void*) {
+  if (!FLAGS_enable_balance_leader) {
+    DINGO_LOG(INFO) << "disable balance leader";
+    return;
+  }
   // Free at ExecuteRoutine()
   auto task = std::make_shared<BalanceLeaderTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
 
 void Heartbeat::TriggerBalanceRegion(void*) {
+  if (!FLAGS_enable_balance_region) {
+    DINGO_LOG(INFO) << "disable balance region";
+    return;
+  }
   auto task = std::make_shared<BalanceRegionTask>();
   Server::GetInstance().GetHeartbeat()->Execute(task);
 }
