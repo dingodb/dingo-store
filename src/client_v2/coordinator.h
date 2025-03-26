@@ -569,6 +569,14 @@ struct GetRestoreStatusOptions {
 void SetUpGetRestoreStatus(CLI::App &app);
 void RunGetRestoreStatus(GetRestoreStatusOptions const &opt);
 
+struct EnableOrDisableBalanceOptions {
+  std::string coor_url;
+  std::string enable_balance_leader;
+  std::string enable_balance_region;
+};
+void SetUpEnableOrDisableBalance(CLI::App &app);
+void RunEnableOrDisableBalance(EnableOrDisableBalanceOptions const &opt);
+
 }  // namespace client_v2
 
 #endif  // DINGODB_CLIENT_COORDINATOR_H_
