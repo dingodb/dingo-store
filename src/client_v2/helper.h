@@ -275,11 +275,19 @@ class Helper {
   // format and print
   static std::string FormatVectorData(const dingodb::pb::common::Vector& vector) {
     if (vector.float_values_size() > 0) {
-      return fmt::format("{}/[{} {}...]", vector.float_values_size(), vector.float_values().at(0),
-                         vector.float_values().at(1));
+      if (vector.float_values_size() > 1) {
+        return fmt::format("{}/[{} {}...]", vector.float_values_size(), vector.float_values().at(0),
+                           vector.float_values().at(1));
+      }
+      return fmt::format("{}/[{}]", vector.float_values_size(), vector.float_values().at(0));
+
     } else if (vector.binary_values_size() > 0) {
-      return fmt::format("{}/[{} {}...]", vector.binary_values_size(), vector.binary_values().at(0),
-                         vector.binary_values().at(1));
+      if (vector.binary_values_size() > 1) {
+        return fmt::format("{}/[{} {}...]", vector.binary_values_size(), vector.binary_values().at(0),
+                           vector.binary_values().at(1));
+      }
+      return fmt::format("{}/[{}]", vector.binary_values_size(), vector.binary_values().at(0));
+
     } else {
       return "no data";
     }
