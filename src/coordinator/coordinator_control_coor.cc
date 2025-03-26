@@ -6160,7 +6160,6 @@ bool CoordinatorControl::CheckStoreOperationResult(pb::coordinator::RegionCmdTyp
     case RegionCmdType::CMD_TRANSFER_LEADER:
       DINGO_LOG(ERROR) << fmt::format("[joblist] CheckStoreOperationResult transfer leader failed, errcode:{}",
                                       pb::error::Errno_Name(errcode));
-      return true;
       break;
     default:
       DINGO_LOG(ERROR) << fmt::format("[joblist] CheckStoreOperationResult unknown region cmd type:{}, errcode:{}",
