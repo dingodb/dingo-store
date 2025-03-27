@@ -20,10 +20,12 @@
 
 #include "br/helper.h"
 #include "br/parameter.h"
+#include "br/utils.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/error.pb.h"
 
 namespace br {
 
@@ -58,6 +60,56 @@ butil::Status RestoreRegionMeta::Init() {
 butil::Status RestoreRegionMeta::Run() { return CreateRegionToCoordinator(); }
 
 butil::Status RestoreRegionMeta::Finish() { return butil::Status::OK(); }
+
+butil::Status RestoreRegionMeta::QueryRegion(ServerInteractionPtr coordinator_interaction,
+                                             std::shared_ptr<dingodb::pb::common::Region> region) {
+  butil::Status status;
+  if (!region) {
+    return butil::Status::OK();
+  }
+
+  dingodb::pb::coordinator::QueryRegionRequest request;
+  dingodb::pb::coordinator::QueryRegionResponse response;
+
+  request.set_region_id(region->id());
+
+  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
+
+  status = coordinator_interaction->SendRequest("CoordinatorService", "QueryRegion", request, response);
+
+  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
+
+  if (status.ok()) {
+    if (response.error().errcode() == dingodb::pb::error::OK) {
+      if (response.region().state() == dingodb::pb::common::RegionState::REGION_NORMAL) {
+        return butil::Status::OK();
+      }
+    } else {  // response error
+      if (response.error().errcode() != dingodb::pb::error::ERAFT_NOTLEADER &&
+          response.error().errcode() != dingodb::pb::error::EREGION_NOT_FOUND) {
+        // Not leader or region not found
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
+    }
+  } else {  // if (status.ok())  status error
+    if (dingodb::pb::error::ERAFT_NOTLEADER != status.error_code() &&
+        dingodb::pb::error::EREGION_NOT_FOUND != status.error_code()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  }
+
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (response.error().errcode() == dingodb::pb::error::OK) {
+    return butil::Status(dingodb::pb::error::EREGION_NOT_FOUND, "not dingodb::pb::common::RegionState::REGION_NORMAL");
+  }
+
+  return butil::Status(response.error().errcode(), response.error().errmsg());
+}
 
 butil::Status RestoreRegionMeta::CreateRegionToCoordinator() {
   butil::Status status;
@@ -94,7 +146,7 @@ butil::Status RestoreRegionMeta::CreateRegionToCoordinator() {
     status = coordinator_interaction_->SendRequest("CoordinatorService", "CreateRegion", request, response,
                                                    create_region_timeout_s_ * 1000);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 

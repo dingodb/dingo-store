@@ -109,6 +109,12 @@ DECLARE_bool(backup_strict_version_comparison);
 // br restore  version comparison dingo-store version comparison
 DECLARE_bool(restore_strict_version_comparison);
 
+// br restore after create region wait for region normal max retry
+DECLARE_int32(restore_wait_for_region_normal_max_retry);
+
+// br restore after create region wait for region normal interval s (second)
+DECLARE_uint32(restore_wait_for_region_normal_interval_s);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_

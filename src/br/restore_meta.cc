@@ -77,13 +77,13 @@ butil::Status RestoreMeta::Init() {
 
   status = CheckBackupMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromBackupMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -101,14 +101,14 @@ butil::Status RestoreMeta::Init() {
     std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> internal_store_interaction;
     status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -119,7 +119,7 @@ butil::Status RestoreMeta::Init() {
 
     status = restore_sql_meta_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -130,7 +130,7 @@ butil::Status RestoreMeta::Init() {
     std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
     restore_sdk_meta_ =
@@ -139,7 +139,7 @@ butil::Status RestoreMeta::Init() {
 
     status = restore_sdk_meta_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -153,7 +153,7 @@ butil::Status RestoreMeta::Run() {
   if (restore_sql_meta_) {
     status = restore_sql_meta_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -163,7 +163,7 @@ butil::Status RestoreMeta::Run() {
   if (restore_sdk_meta_) {
     status = restore_sdk_meta_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -179,7 +179,7 @@ butil::Status RestoreMeta::Finish() {
   if (restore_sql_meta_) {
     status = restore_sql_meta_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -187,7 +187,7 @@ butil::Status RestoreMeta::Finish() {
   if (restore_sdk_meta_) {
     status = restore_sdk_meta_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -207,12 +207,12 @@ butil::Status RestoreMeta::ImportIdEpochTypeToMeta() {
 
     auto status = coordinator_interaction_->SendRequest("MetaService", "ImportIdEpochType", request, response);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << response.error().errmsg();
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
       return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
@@ -237,12 +237,12 @@ butil::Status RestoreMeta::CreateOrUpdateAutoIncrementsToMeta() {
     auto status =
         coordinator_interaction_->SendRequest("MetaService", "CreateOrUpdateAutoIncrements", request, response);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_code() << " " << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << response.error().errcode() << " " << response.error().errmsg();
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
       return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
@@ -280,14 +280,14 @@ butil::Status RestoreMeta::CheckBackupMeta() {
     std::string file_path = storage_internal_ + "/" + dingodb::Constant::kBackupMetaSchemaName;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = Utils::CheckBackupMeta(backup_meta_, storage_internal_, dingodb::Constant::kBackupMetaSchemaName, "",
                                     dingodb::Constant::kBackupRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  //   if (backup_meta_) {
@@ -304,7 +304,7 @@ butil::Status RestoreMeta::ExtractFromBackupMeta() {
     SstFileReader sst_file_reader;
     status = sst_file_reader.ReadFile(file_path, backupmeta_schema_kvs_);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 

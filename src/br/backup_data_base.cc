@@ -20,6 +20,7 @@
 
 #include "br/helper.h"
 #include "br/sst_file_writer.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -68,13 +69,13 @@ butil::Status BackupDataBase::Backup() {
   status = BackupRegion();
   if (!status.ok()) {
     is_need_exit_ = true;
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
   status = BackupCfSstMeta();
   if (!status.ok()) {
     is_need_exit_ = true;
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -96,7 +97,7 @@ butil::Status BackupDataBase::BackupRegion() {
   }
   status = DoBackupRegion(wait_for_handle_store_regions_, file_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -107,7 +108,7 @@ butil::Status BackupDataBase::BackupRegion() {
   }
   status = DoBackupRegion(wait_for_handle_index_regions_, file_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -118,7 +119,7 @@ butil::Status BackupDataBase::BackupRegion() {
   }
   status = DoBackupRegion(wait_for_handle_document_regions_, file_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -136,7 +137,7 @@ butil::Status BackupDataBase::BackupCfSstMeta() {
   }
   status = DoBackupCfSstMeta(save_store_region_map_, file_name, dingodb::Constant::kStoreRegionName);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -147,7 +148,7 @@ butil::Status BackupDataBase::BackupCfSstMeta() {
   }
   status = DoBackupCfSstMeta(save_index_region_map_, file_name, dingodb::Constant::kIndexRegionName);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -158,7 +159,7 @@ butil::Status BackupDataBase::BackupCfSstMeta() {
   }
   status = DoBackupCfSstMeta(save_document_region_map_, file_name, dingodb::Constant::kDocumentRegionName);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -182,7 +183,7 @@ butil::Status BackupDataBase::DoBackupRegion(
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -191,7 +192,7 @@ butil::Status BackupDataBase::DoBackupRegion(
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -234,7 +235,7 @@ butil::Status BackupDataBase::DoBackupCfSstMeta(
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -243,7 +244,7 @@ butil::Status BackupDataBase::DoBackupCfSstMeta(
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -304,7 +305,8 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
     status = interaction->SendRequest(service_name, "BackupData", request, response);
     if (!status.ok()) {
       is_need_exit_ = true;
-      std::string s = fmt::format("Fail to backup region, region_id={}, status={}", region.id(), status.error_cstr());
+      std::string s =
+          fmt::format("Fail to backup region, region_id={}, status={}", region.id(), Utils::FormatStatusError(status));
       DINGO_LOG(ERROR) << s;
       status = butil::Status(status.error_code(), s);
       break;
@@ -312,8 +314,8 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
       is_need_exit_ = true;
-      std::string s =
-          fmt::format("Fail to backup region, region_id={}, error={}", region.id(), response.error().errmsg());
+      std::string s = fmt::format("Fail to backup region, region_id={}, error={}", region.id(),
+                                  Utils::FormatResponseError(response));
       DINGO_LOG(ERROR) << s;
       status = butil::Status(response.error().errcode(), s);
       break;

@@ -331,7 +331,7 @@ butil::Status Utils::CheckBackupMeta(std::shared_ptr<dingodb::pb::common::Backup
   std::string calc_encryption;
   status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, calc_encryption);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << FormatStatusError(status);
     return status;
   }
 

@@ -23,6 +23,7 @@
 #include <thread>
 
 #include "br/restore_region_meta.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -114,7 +115,7 @@ butil::Status RestoreRegionMetaManager::Run() {
 
     status = DoAsyncRestoreRegionMeta(i);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       {
         BAIDU_SCOPED_LOCK(mutex_);
         last_error_ = status;
@@ -193,10 +194,71 @@ butil::Status RestoreRegionMetaManager::Run() {
 
   std::cout << std::endl;
 
+  if (last_error_.ok()) {
+    last_error_ = WaitForRegionFinish();
+    if (!last_error_.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(last_error_);
+    }
+  }
+
   return last_error_;
 }
 
 butil::Status RestoreRegionMetaManager::Finish() { return butil::Status::OK(); }
+
+butil::Status RestoreRegionMetaManager::WaitForRegionFinish() {
+  butil::Status status;
+  std::list<std::shared_ptr<dingodb::pb::common::Region>> regions_list;
+
+  for (const auto& [_, region] : *id_and_region_kvs_) {
+    if (region == nullptr) {
+      DINGO_LOG(WARNING) << "region is nullptr";
+      continue;
+    }
+    regions_list.push_back(region);
+  }
+
+  auto region_size = regions_list.size();
+  if (region_size == 0) {
+    return butil::Status::OK();
+  }
+
+  int32_t retry_count = 0;
+  for (; retry_count < FLAGS_restore_wait_for_region_normal_max_retry; retry_count++) {
+    for (auto iter = regions_list.begin(); iter != regions_list.end();) {
+      status = RestoreRegionMeta::QueryRegion(coordinator_interaction_, (*iter));
+      if (status.ok()) {
+        iter = regions_list.erase(iter);
+        continue;
+      } else {
+        if (dingodb::pb::error::ERAFT_NOTLEADER != status.error_code() &&
+            dingodb::pb::error::EREGION_NOT_FOUND != status.error_code()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
+        iter++;
+        continue;
+      }
+    }
+    if (regions_list.empty()) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::seconds(FLAGS_restore_wait_for_region_normal_interval_s));
+  }
+
+  if (!regions_list.empty()) {
+    std::string s =
+        fmt::format("Waiting for region to be in normal state,  retry_count:{}",
+                    retry_count < FLAGS_restore_wait_for_region_normal_max_retry ? retry_count + 1 : retry_count);
+    status = butil::Status(dingodb::pb::error::EINTERNAL, s);
+  }
+
+  std::string s =
+      fmt::format("{} region_size : {} retry_count : {}", backup_meta_region_name_, region_size,
+                  retry_count < FLAGS_restore_wait_for_region_normal_max_retry ? retry_count + 1 : retry_count);
+  DINGO_LOG(INFO) << s;
+  return butil::Status::OK();
+}
 
 butil::Status RestoreRegionMetaManager::DoAsyncRestoreRegionMeta(uint32_t thread_no) {
   std::shared_ptr<RestoreRegionMetaManager> self = GetSelf();
@@ -206,7 +268,7 @@ butil::Status RestoreRegionMetaManager::DoAsyncRestoreRegionMeta(uint32_t thread
   butil::Status status =
       ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -267,36 +329,48 @@ butil::Status RestoreRegionMetaManager::DoRestoreRegionInternal(ServerInteractio
     std::shared_ptr<RestoreRegionMeta> restore_region_meta = std::make_shared<RestoreRegionMeta>(
         coordinator_interaction, region, replica_num_, backup_meta_region_name_, create_region_timeout_s_);
 
-    status = restore_region_meta->Init();
-    if (!status.ok()) {
-      is_need_exit_ = true;
-      DINGO_LOG(ERROR) << status.error_cstr();
-      {
-        BAIDU_SCOPED_LOCK(mutex_);
-        last_error_ = status;
+    if (!is_need_exit_) {
+      status = restore_region_meta->Init();
+      if (!status.ok()) {
+        is_need_exit_ = true;
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        {
+          BAIDU_SCOPED_LOCK(mutex_);
+          last_error_ = status;
+        }
+        break;
       }
+    } else {
       break;
     }
 
-    status = restore_region_meta->Run();
-    if (!status.ok()) {
-      is_need_exit_ = true;
-      DINGO_LOG(ERROR) << status.error_cstr();
-      {
-        BAIDU_SCOPED_LOCK(mutex_);
-        last_error_ = status;
+    if (!is_need_exit_) {
+      status = restore_region_meta->Run();
+      if (!status.ok()) {
+        is_need_exit_ = true;
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        {
+          BAIDU_SCOPED_LOCK(mutex_);
+          last_error_ = status;
+        }
+        break;
       }
+    } else {
       break;
     }
 
-    status = restore_region_meta->Finish();
-    if (!status.ok()) {
-      is_need_exit_ = true;
-      DINGO_LOG(ERROR) << status.error_cstr();
-      {
-        BAIDU_SCOPED_LOCK(mutex_);
-        last_error_ = status;
+    if (!is_need_exit_) {
+      status = restore_region_meta->Finish();
+      if (!status.ok()) {
+        is_need_exit_ = true;
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        {
+          BAIDU_SCOPED_LOCK(mutex_);
+          last_error_ = status;
+        }
+        break;
       }
+    } else {
       break;
     }
 

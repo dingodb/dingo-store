@@ -69,25 +69,25 @@ butil::Status RestoreSqlMeta::Init() {
 
   status = CheckStoreRegionSqlMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckStoreCfSstMetaSqlMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromStoreRegionSqlMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromStoreCfSstMetaSqlMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -104,7 +104,7 @@ butil::Status RestoreSqlMeta::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -114,7 +114,7 @@ butil::Status RestoreSqlMeta::Init() {
 
     status = restore_region_meta_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -125,7 +125,7 @@ butil::Status RestoreSqlMeta::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -133,7 +133,7 @@ butil::Status RestoreSqlMeta::Init() {
 
     status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -145,7 +145,7 @@ butil::Status RestoreSqlMeta::Init() {
 
     status = restore_region_data_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -159,7 +159,7 @@ butil::Status RestoreSqlMeta::Run() {
   if (restore_region_meta_manager_) {
     status = restore_region_meta_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -169,7 +169,7 @@ butil::Status RestoreSqlMeta::Run() {
   if (restore_region_data_manager_) {
     status = restore_region_data_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -186,7 +186,7 @@ butil::Status RestoreSqlMeta::Finish() {
   if (restore_region_meta_manager_) {
     status = restore_region_meta_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (restore_region_meta_manager_)
@@ -194,7 +194,7 @@ butil::Status RestoreSqlMeta::Finish() {
   if (restore_region_data_manager_) {
     status = restore_region_data_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  //  if (restore_region_data_manager_) {
@@ -210,7 +210,7 @@ butil::Status RestoreSqlMeta::CheckStoreRegionSqlMetaSst() {
     std::string file_path = storage_internal_ + "/" + file_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -218,7 +218,7 @@ butil::Status RestoreSqlMeta::CheckStoreRegionSqlMetaSst() {
                                     dingodb::Constant::kStoreRegionSqlMetaSstName, "",
                                     dingodb::Constant::kCoordinatorRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (store_region_sql_meta_sst_)
@@ -234,7 +234,7 @@ butil::Status RestoreSqlMeta::CheckStoreCfSstMetaSqlMetaSst() {
     std::string file_path = storage_internal_ + "/" + file_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -242,7 +242,7 @@ butil::Status RestoreSqlMeta::CheckStoreCfSstMetaSqlMetaSst() {
                                     dingodb::Constant::kStoreCfSstMetaSqlMetaSstName, "",
                                     dingodb::Constant::kStoreRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (store_cf_sst_meta_sql_meta_sst_)
@@ -260,7 +260,7 @@ butil::Status RestoreSqlMeta::ExtractFromStoreRegionSqlMetaSst() {
     std::map<std::string, std::string> internal_id_and_region_kvs;
     status = sst_file_reader.ReadFile(file_path, internal_id_and_region_kvs);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -290,7 +290,7 @@ butil::Status RestoreSqlMeta::ExtractFromStoreCfSstMetaSqlMetaSst() {
     std::map<std::string, std::string> internal_id_and_sst_meta_group_kvs;
     status = sst_file_reader.ReadFile(file_path, internal_id_and_sst_meta_group_kvs);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 

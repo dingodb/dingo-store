@@ -40,7 +40,7 @@ DEFINE_uint32(backup_task_max_retry, 5, "backup task max retry times. default 5"
 DEFINE_bool(br_server_interaction_print_each_rpc_request, false,
             "br server interaction log switch rpc request. default is false");
 
-DEFINE_int32(br_server_interaction_max_retry, 5, "br server interaction  max retry. default 5");
+DEFINE_int32(br_server_interaction_max_retry, 10, "br server interaction  max retry. default 10");
 
 // DEFINE_int64(br_server_interaction_timeout_ms, 60000, "br server interaction connect timeout . default 60000 ms");
 DEFINE_int64(br_server_interaction_timeout_ms, 60000, "br server interaction connect timeout . default 60000 ms");
@@ -88,5 +88,11 @@ DEFINE_bool(backup_strict_version_comparison, true,
 // br restore  version comparison dingo-store version comparison
 DEFINE_bool(restore_strict_version_comparison, true,
             "br restore version vs dingo-store version must be consistent. default true.");
+
+// br restore after create region wait for region normal max retry
+DEFINE_int32(restore_wait_for_region_normal_max_retry, 30, "restore wait for region normal max retry. default 30");
+
+// br restore after create region wait for region normal interval s (second)
+DEFINE_uint32(restore_wait_for_region_normal_interval_s, 1, "restore wait for region normal interval s. default 1s");
 
 }  // namespace br

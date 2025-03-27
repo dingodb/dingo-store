@@ -22,6 +22,7 @@
 #include "br/helper.h"
 #include "br/parameter.h"
 #include "br/sst_file_writer.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -100,7 +101,7 @@ butil::Status BackupMetaBase::Run() {
     status = DoBackupRegionInternal(store_interaction_, "StoreService", wait_for_handle_store_regions_,
                                     already_handle_store_regions_, save_store_region_map_);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -126,13 +127,13 @@ butil::Status BackupMetaBase::Backup() {
   status = BackupRegion();
   if (!status.ok()) {
     is_need_exit_ = true;
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
   status = BackupCfSstMeta();
   if (!status.ok()) {
     is_need_exit_ = true;
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -150,7 +151,7 @@ butil::Status BackupMetaBase::BackupRegion() {
 
   status = DoBackupRegion(wait_for_handle_store_regions_, file_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -162,7 +163,7 @@ butil::Status BackupMetaBase::BackupCfSstMeta() {
   std::string file_name = dingodb::Constant::kStoreCfSstMetaSqlMetaSstName;
   status = DoBackupCfSstMeta(save_store_region_map_, file_name);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -186,7 +187,7 @@ butil::Status BackupMetaBase::DoBackupRegion(
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -195,7 +196,7 @@ butil::Status BackupMetaBase::DoBackupRegion(
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -236,7 +237,7 @@ butil::Status BackupMetaBase::DoBackupCfSstMeta(
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -245,7 +246,7 @@ butil::Status BackupMetaBase::DoBackupCfSstMeta(
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -298,7 +299,8 @@ butil::Status BackupMetaBase::DoBackupRegionInternal(
     butil::Status status = interaction->SendRequest(service_name, "BackupMeta", request, response);
     if (!status.ok()) {
       is_need_exit_ = true;
-      std::string s = fmt::format("Fail to backup region, region_id={}, status={}", region.id(), status.error_cstr());
+      std::string s =
+          fmt::format("Fail to backup region, region_id={}, status={}", region.id(), Utils::FormatStatusError(status));
       DINGO_LOG(ERROR) << s;
       last_error_ = status;
       return status;
@@ -306,8 +308,8 @@ butil::Status BackupMetaBase::DoBackupRegionInternal(
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
       is_need_exit_ = true;
-      std::string s =
-          fmt::format("Fail to backup region, region_id={}, error={}", region.id(), response.error().errmsg());
+      std::string s = fmt::format("Fail to backup region, region_id={}, error={}", region.id(),
+                                  Utils::FormatResponseError(response));
       DINGO_LOG(ERROR) << s;
       status = butil::Status(response.error().errcode(), s);
       last_error_ = status;

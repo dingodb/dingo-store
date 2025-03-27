@@ -22,6 +22,7 @@
 #include "br/interation.h"
 #include "br/parameter.h"
 #include "br/sst_file_writer.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -50,7 +51,7 @@ std::shared_ptr<BackupData> BackupData::GetSelf() { return shared_from_this(); }
 butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
   butil::Status status = GetAllRegionMapFromCoordinator();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -67,28 +68,28 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
       std::shared_ptr<br::ServerInteraction> coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> store_interaction;
       status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> index_interaction;
       status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> document_interaction;
       status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
       backup_sql_data_ = std::make_shared<BackupSqlData>(coordinator_interaction, store_interaction, index_interaction,
@@ -100,13 +101,13 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
 
     status = backup_sql_data_->RemoveSqlMeta(meta_region_list);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sql_data_->Filter();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -122,28 +123,28 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
       std::shared_ptr<br::ServerInteraction> coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> store_interaction;
       status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> index_interaction;
       status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> document_interaction;
       status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
@@ -156,7 +157,7 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
 
     status = backup_sdk_data_->Filter();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -171,13 +172,13 @@ butil::Status BackupData::Run() {
   {
     status = backup_sql_data_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sql_data_->Backup();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -186,13 +187,13 @@ butil::Status BackupData::Run() {
   {
     status = backup_sdk_data_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sdk_data_->Backup();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -228,14 +229,14 @@ butil::Status BackupData::Finish() {
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -272,12 +273,12 @@ butil::Status BackupData::GetAllRegionMapFromCoordinator() {
 
   auto status = coordinator_interaction_->SendRequest("CoordinatorService", "GetRegionMap", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 

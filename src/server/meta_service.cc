@@ -4083,7 +4083,7 @@ void MetaServiceImpl::CreateOrUpdateAutoIncrements(google::protobuf::RpcControll
                                                    google::protobuf::Closure *done) {
   brpc::ClosureGuard done_guard(done);
   if (!auto_increment_control_->IsLeader()) {
-    return RedirectResponse(response);
+    return RedirectAutoIncrementResponse(response);
   }
   DINGO_LOG(INFO) << request->ShortDebugString();
 
