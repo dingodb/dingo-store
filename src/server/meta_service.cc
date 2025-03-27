@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -4336,6 +4337,297 @@ void MetaServiceImpl::GetTenants(google::protobuf::RpcController *controller,
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoGetTenants(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoCreateTenants(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateTenantsRequest *request,
+                     pb::meta::CreateTenantsResponse *response, TrackClosure *done,
+                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  for (auto tenant : request->tenants()) {
+    auto ret = coordinator_control->CreateTenant(tenant, meta_increment);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "CreateTenants failed in meta_service, error code=" << ret;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+      response->mutable_error()->set_errmsg(ret.error_str());
+      return;
+    }
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret1 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "CreateTenants failed in meta_service, error code=" << ret1.error_code()
+                     << ", error str=" << ret1.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CreateTenants Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::CreateTenants(google::protobuf::RpcController *controller,
+                                    const pb::meta::CreateTenantsRequest *request,
+                                    pb::meta::CreateTenantsResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateTenants(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoCreateSchemas(google::protobuf::RpcController * /*controller*/, const pb::meta::CreateSchemasRequest *request,
+                     pb::meta::CreateSchemasResponse *response, TrackClosure *done,
+                     std::shared_ptr<CoordinatorControl> coordinator_control, std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  for (const auto &[id, schemas] : request->schemas()) {
+    for (const pb::meta::Schema &schema : schemas.schemas()) {
+      if (id == 0 && (schema.name() == "ROOT" || schema.name() == "META" || schema.name() == "DINGO" ||
+                      schema.name() == "MYSQL" || schema.name() == "INFORMATION_SCHEMA")) {
+        DINGO_LOG(INFO) << "Already auto creat, Skip create schema: " << schema.name();
+      } else {
+        int64_t schema_id = schema.id().entity_id();
+        auto ret = coordinator_control->CreateSchema(schema.tenant_id(), schema.name(), schema_id, meta_increment);
+        if (!ret.ok()) {
+          DINGO_LOG(ERROR) << "CreateSchema failed in meta_service, error code=" << ret;
+          response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret.error_code()));
+          response->mutable_error()->set_errmsg("restore schema : " + ret.error_str());
+          return;
+        }
+        if (schema.id().entity_id() != schema_id) {
+          DINGO_LOG(ERROR) << "schema_id is not equal to schema.id().entity_id()";
+          response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+          response->mutable_error()->set_errmsg("restore schema : schema_id is not equal to schema.id().entity_id()");
+          return;
+        }
+      }
+    }
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret1 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret1.ok()) {
+    DINGO_LOG(ERROR) << "CreateSchemas failed in meta_service, error code=" << ret1.error_code()
+                     << ", error str=" << ret1.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+    response->mutable_error()->set_errmsg(ret1.error_str());
+    return;
+  }
+
+  DINGO_LOG(INFO) << "CreateSchemas Success. response: " << response->ShortDebugString();
+}
+
+void MetaServiceImpl::CreateSchemas(google::protobuf::RpcController *controller,
+                                    const pb::meta::CreateSchemasRequest *request,
+                                    pb::meta::CreateSchemasResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateSchemas(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void DoCreateIndexMetas(google::protobuf::RpcController * /*controller*/,
+                        const pb::meta::CreateIndexMetasRequest *request, pb::meta::CreateIndexMetasResponse *response,
+                        TrackClosure *done, std::shared_ptr<CoordinatorControl> coordinator_control,
+                        std::shared_ptr<Engine> raft_engine) {
+  brpc::ClosureGuard done_guard(done);
+
+  if (!coordinator_control->IsLeader()) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  pb::coordinator_internal::MetaIncrement meta_increment;
+  std::vector<pb::meta::Tenant> tenants;
+
+  // get tenants
+  {
+    auto ret1 = coordinator_control->GetAllTenants(tenants);
+    if (!ret1.ok()) {
+      DINGO_LOG(ERROR) << "GetAllTenants failed in meta_service, error code=" << ret1;
+      response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret1.error_code()));
+      response->mutable_error()->set_errmsg(ret1.error_str());
+      return;
+    }
+  }
+
+  // get schema_dingo_common_id to schema
+  std::map<std::string, pb::meta::Schema> common_id_to_schema;
+  {
+    for (const auto &tenant : tenants) {
+      std::vector<pb::meta::Schema> sub_schemas;
+      auto ret2 = coordinator_control->GetSchemas(tenant.id(), sub_schemas);
+      if (!ret2.ok()) {
+        DINGO_LOG(ERROR) << "GetSchemas failed in meta_service, error code=" << ret2;
+        response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret2.error_code()));
+        response->mutable_error()->set_errmsg(ret2.error_str());
+        return;
+      }
+      for (const auto &schema : sub_schemas) {
+        std::string schema_dingo_common_id = fmt::format("{}|{}|{}", static_cast<int32_t>(schema.id().entity_type()),
+                                                         schema.id().parent_entity_id(), schema.id().entity_id());
+        if (common_id_to_schema.find(schema_dingo_common_id) != common_id_to_schema.end()) {
+          DINGO_LOG(ERROR) << "schema_dingo_common_id is duplicate : " << schema_dingo_common_id;
+          response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+          response->mutable_error()->set_errmsg("Restore indexes meta : schema_dingo_common_id is duplicate");
+          return;
+        } else {
+          common_id_to_schema[schema_dingo_common_id] = schema;
+        }
+      }
+    }
+  }
+
+  for (const auto &[schema_dingo_common_id, tables_and_indexes] : request->tables_and_indexes()) {
+    if (common_id_to_schema.find(schema_dingo_common_id) == common_id_to_schema.end()) {
+      DINGO_LOG(ERROR) << "schema_dingo_common_id is not exist : " << schema_dingo_common_id;
+      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("Restore indexes meta : schema_dingo_common_id is not exist");
+      return;
+    }
+
+    if (tables_and_indexes.tables_size() > FLAGS_max_table_definition_count_in_create_tables) {
+      DINGO_LOG(ERROR) << "table definition_with_ids_size  is too big, size=" << tables_and_indexes.tables_size()
+                       << ", max=" << FLAGS_max_table_definition_count_in_create_tables;
+      response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+      response->mutable_error()->set_errmsg("Restore indexes meta : tables size is too large.");
+      return;
+    }
+
+    int64_t schema_id;
+    // decode schema id
+    {
+      size_t pos = schema_dingo_common_id.rfind('|');
+      if (pos == std::string::npos) {
+        std::string err_msg = fmt::format("decode schema id error, common schema id {}", schema_dingo_common_id);
+        DINGO_LOG(ERROR) << err_msg;
+        response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+        response->mutable_error()->set_errmsg(err_msg);
+        return;
+      }
+
+      std::string entity_id_str = schema_dingo_common_id.substr(pos + 1);
+      schema_id = std::stoll(entity_id_str);
+      DINGO_LOG(INFO) << "decode schema id success, schema_id=" << schema_id
+                      << "  original schema_dingo_common_id=" << schema_dingo_common_id;
+    }
+
+    // restore index meta
+    for (const auto &index_with_id : tables_and_indexes.indexes()) {
+      const pb::meta::DingoCommonId &index_common_id = index_with_id.index_id();
+
+      pb::meta::TableDefinitionWithId table_definition_with_id;
+      MetaServiceImpl::IndexDefinitionToTableDefinition(index_with_id.index_definition(),
+                                                        *(table_definition_with_id.mutable_table_definition()));
+
+      const auto &definition = table_definition_with_id.table_definition();
+
+      if (index_common_id.entity_type() == pb::meta::EntityType::ENTITY_TYPE_INDEX) {
+        auto ret3 =
+            coordinator_control->RestoreIndexMeta(schema_id, index_common_id.entity_id(), definition, meta_increment);
+        if (!ret3.ok()) {
+          DINGO_LOG(ERROR) << "CreateIndex failed in meta_service, error code=" << ret3;
+          response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret3.error_code()));
+          response->mutable_error()->set_errmsg("Restore indexes meta : " + ret3.error_str());
+          return;
+        }
+        DINGO_LOG(INFO) << "type: " << index_common_id.entity_type() << ", index_id=" << index_common_id.entity_id();
+      } else {
+        DINGO_LOG(ERROR) << "entity type is illegal : " << index_common_id.entity_type();
+        response->mutable_error()->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+        response->mutable_error()->set_errmsg("Restore indexes meta : entity type is illegal");
+        return;
+      }
+    }
+  }
+
+  std::shared_ptr<Context> ctx = std::make_shared<Context>();
+  ctx->SetRegionId(Constant::kMetaRegionId);
+  ctx->SetTracker(done->Tracker());
+
+  // this is a async operation will be block by closure
+  auto ret4 = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(ctx->CfName(), meta_increment));
+  if (!ret4.ok()) {
+    DINGO_LOG(ERROR) << "CreateIndexMetas failed in meta_service, error code=" << ret4.error_code()
+                     << ", error str=" << ret4.error_str();
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(ret4.error_code()));
+    response->mutable_error()->set_errmsg(ret4.error_str());
+    return;
+  }
+}
+
+void MetaServiceImpl::CreateIndexMetas(google::protobuf::RpcController *controller,
+                                       const pb::meta::CreateIndexMetasRequest *request,
+                                       pb::meta::CreateIndexMetasResponse *response, google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!this->coordinator_control_->IsLeader()) {
+    return RedirectResponse(response);
+  }
+
+  DINGO_LOG(INFO) << request->ShortDebugString();
+
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoCreateIndexMetas(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {
