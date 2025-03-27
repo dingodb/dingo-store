@@ -44,6 +44,9 @@ class RestoreRegionMeta : public std::enable_shared_from_this<RestoreRegionMeta>
 
   butil::Status Finish();
 
+  static butil::Status QueryRegion(ServerInteractionPtr coordinator_interaction,
+                                   std::shared_ptr<dingodb::pb::common::Region> region);
+
  protected:
  private:
   butil::Status CreateRegionToCoordinator();

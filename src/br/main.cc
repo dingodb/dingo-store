@@ -75,7 +75,7 @@ static butil::Status SetStoreInteraction() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "GetStoreMap", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to get store map, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to get store map, status={}", br::Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -112,7 +112,7 @@ static butil::Status SetIndexInteraction() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "GetStoreMap", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to get index map, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to get index map, status={}", br::Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -149,7 +149,7 @@ static butil::Status SetDocumentInteraction() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "GetStoreMap", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to get document map, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to get document map, status={}", br::Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -527,19 +527,19 @@ int main(int argc, char* argv[]) {
 
   status = SetStoreInteraction();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
     return -1;
   }
 
   status = SetIndexInteraction();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
     return -1;
   }
 
   status = SetDocumentInteraction();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
     return -1;
   }
 
@@ -554,7 +554,7 @@ int main(int argc, char* argv[]) {
 
     status = br::Utils::ConvertBackupTsToTso(br::FLAGS_backupts, br::FLAGS_backuptso_internal);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       return -1;
     }
   } else if (br::FLAGS_br_type == "restore") {
@@ -662,14 +662,14 @@ int main(int argc, char* argv[]) {
 
     status = backup->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Backup failed" << std::endl;
       DINGO_LOG(INFO) << "Backup failed";
       return -1;
     }
     status = backup->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Backup failed" << std::endl;
       DINGO_LOG(INFO) << "Backup failed";
       return -1;
@@ -677,7 +677,7 @@ int main(int argc, char* argv[]) {
 
     status = backup->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Backup failed" << std::endl;
       DINGO_LOG(INFO) << "Backup failed";
       return -1;
@@ -739,14 +739,14 @@ int main(int argc, char* argv[]) {
 
     status = restore->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Restore failed" << std::endl;
       DINGO_LOG(INFO) << "Restore failed";
       return -1;
     }
     status = restore->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Restore failed" << std::endl;
       DINGO_LOG(INFO) << "Restore failed";
       return -1;
@@ -754,7 +754,7 @@ int main(int argc, char* argv[]) {
 
     status = restore->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       std::cout << "Restore failed" << std::endl;
       DINGO_LOG(INFO) << "Restore failed";
       return -1;

@@ -20,6 +20,7 @@
 
 #include "br/helper.h"
 #include "br/parameter.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "fmt/core.h"
 #include "fmt/format.h"
@@ -124,13 +125,13 @@ butil::Status RestoreRegionData::GetRegionEpoch() {
 
   status = coordinator_interaction_->SendRequest("CoordinatorService", "QueryRegion", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << group_debug_info_ << " " << response.error().errmsg();
-    return butil::Status(response.error().errcode(), group_debug_info_ + " " + response.error().errmsg());
+    DINGO_LOG(ERROR) << group_debug_info_ << " " << Utils::FormatResponseError(response);
+    return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
   region_epoch_ = response.region().definition().epoch();
@@ -180,15 +181,13 @@ butil::Status RestoreRegionData::SendRegionRequest(const std::string& service_na
         if (response.error().errcode() == dingodb::pb::error::OK) {
           break;
         } else if (response.error().errcode() != dingodb::pb::error::EREGION_VERSION) {
-          std::string s = group_debug_info_ + " " + dingodb::pb::error::Errno_Name(response.error().errcode()) + "(" +
-                          std::to_string(response.error().errcode()) + ") " + response.error().errmsg();
+          std::string s = group_debug_info_ + " " + Utils::FormatResponseError(response);
           DINGO_LOG(ERROR) << s;
           return butil::Status(response.error().errcode(), s);
         }
       } else {
         if (status.error_code() != dingodb::pb::error::EREGION_VERSION) {
-          std::string s = group_debug_info_ + " " + dingodb::pb::error::Errno_Name(status.error_code()) + "(" +
-                          std::to_string(status.error_code()) + ") " + status.error_cstr();
+          std::string s = group_debug_info_ + " " + Utils::FormatStatusError(status);
           DINGO_LOG(ERROR) << s;
           return butil::Status(status.error_code(), s);
         }
@@ -197,8 +196,7 @@ butil::Status RestoreRegionData::SendRegionRequest(const std::string& service_na
       // try get region epoch again
       status = GetRegionEpoch();
       if (!status.ok()) {
-        std::string s = group_debug_info_ + " " + dingodb::pb::error::Errno_Name(status.error_code()) + "(" +
-                        std::to_string(status.error_code()) + ") " + status.error_cstr();
+        std::string s = group_debug_info_ + " " + Utils::FormatStatusError(status);
         DINGO_LOG(ERROR) << s;
         return butil::Status(status.error_code(), s);
       }

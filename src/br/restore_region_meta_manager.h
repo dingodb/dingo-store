@@ -52,6 +52,7 @@ class RestoreRegionMetaManager : public std::enable_shared_from_this<RestoreRegi
 
  protected:
  private:
+  butil::Status WaitForRegionFinish();
   butil::Status DoAsyncRestoreRegionMeta(uint32_t thread_no);
   butil::Status DoRestoreRegionInternal(ServerInteractionPtr coordinator_interaction, uint32_t thread_no);
   butil::Status FormatBackupMetaRegionName(std::vector<std::string>& backup_meta_region_names);

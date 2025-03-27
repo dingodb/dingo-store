@@ -130,7 +130,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
                                       cntl.ErrorText());
       if (cntl.ErrorCode() == 112) {
         ++retry_count;
-        // NextLeader(leader_index);
+        NextLeader(leader_index);
         status.set_error(cntl.ErrorCode(), cntl.ErrorText());
         continue;
       }
@@ -143,6 +143,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
           response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
         ++retry_count;
         NextLeader(response.error().leader_location());
+        // bthread_usleep(1000 * 100);
 
       } else {
         DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,

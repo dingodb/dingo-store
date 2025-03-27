@@ -18,7 +18,9 @@
 #include <string>
 
 #include "br/utils.h"
+#include "common/logging.h"
 #include "fmt/core.h"
+#include "proto/meta.pb.h"
 
 class BrUtilsTest : public testing::Test {
  protected:
@@ -33,6 +35,31 @@ class BrUtilsTest : public testing::Test {
   inline static std::string dir_path = "./br_utils_test_dir";
   inline static std::string dir_recursion_path = "./br_utils_test_dir/a/b";
 };
+
+TEST_F(BrUtilsTest, FormatStatusError) {
+  butil::Status status;
+  auto s = br::Utils::FormatStatusError(status);
+  EXPECT_NE(s, "");
+  DINGO_LOG(INFO) << s;
+
+  status.set_error(dingodb::pb::error::EILLEGAL_PARAMTETERS, "invalid parameters");
+  s = br::Utils::FormatStatusError(status);
+  EXPECT_NE(s, "");
+  DINGO_LOG(INFO) << s;
+}
+
+TEST_F(BrUtilsTest, FormatResponseError) {
+  dingodb::pb::meta::ImportMetaResponse response;
+  auto s = br::Utils::FormatResponseError(response);
+  EXPECT_NE(s, "");
+  DINGO_LOG(INFO) << s;
+
+  response.mutable_error()->set_errcode(dingodb::pb::error::EILLEGAL_PARAMTETERS);
+  response.mutable_error()->set_errmsg("invalid parameters");
+  s = br::Utils::FormatResponseError(response);
+  EXPECT_NE(s, "");
+  DINGO_LOG(INFO) << s;
+}
 
 TEST_F(BrUtilsTest, CreateFile) {
   std::ofstream writer;

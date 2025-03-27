@@ -72,7 +72,7 @@ butil::Status Backup::Init() {
   butil::Status status;
   status = ParamsCheck();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -81,7 +81,7 @@ butil::Status Backup::Init() {
   status =
       GetVersionFromCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction(), version_info_remote);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -89,7 +89,7 @@ butil::Status Backup::Init() {
   status = CompareVersion(version_info_local, version_info_remote);
   if (!status.ok()) {
     if (FLAGS_backup_strict_version_comparison) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     } else {
       std::cout << "ignore version compare" << std::endl;
@@ -102,7 +102,7 @@ butil::Status Backup::Init() {
 
   status = GetGcSafePoint();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -127,7 +127,7 @@ butil::Status Backup::Init() {
   bool is_first = true;
   status = RegisterBackupToCoordinator(is_first, br::InteractionManager::GetInstance().GetCoordinatorInteraction());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -140,7 +140,7 @@ butil::Status Backup::Init() {
   if (!is_gc_stop_) {
     status = SetGcStop();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
     std::cout << "gc set stopped ok" << std::endl;
@@ -152,7 +152,7 @@ butil::Status Backup::Init() {
 
   status = DisableBalanceToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -175,7 +175,7 @@ butil::Status Backup::Init() {
   status = DisableSplitAndMergeToStoreAndIndex(br::InteractionManager::GetInstance().GetStoreInteraction(),
                                                br::InteractionManager::GetInstance().GetIndexInteraction());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -200,7 +200,7 @@ butil::Status Backup::Init() {
     // clean backup dir
     status = Utils::ClearDir(storage_internal_);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
     DINGO_LOG(INFO) << "backup dir : " << storage_internal_ << " already exist. clear dir.";
@@ -208,12 +208,12 @@ butil::Status Backup::Init() {
     // create backup dir
     status = Utils::CreateDirRecursion(storage_internal_);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
     DINGO_LOG(INFO) << "backup dir : " << storage_internal_ << " not exist. create recursion dir.";
   } else {  // error
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -225,7 +225,7 @@ butil::Status Backup::Init() {
     if (writer.is_open()) {
       writer.close();
     }
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -263,14 +263,14 @@ butil::Status Backup::Run() {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     // register backup task to coordinator
     status = DoAsyncRegisterBackupToCoordinator(coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -280,7 +280,7 @@ butil::Status Backup::Run() {
 
   status = DoRun();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
   return butil::Status::OK();
@@ -302,28 +302,28 @@ butil::Status Backup::DoRun() {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
     status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> index_interaction;
     status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> document_interaction;
     status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -334,7 +334,7 @@ butil::Status Backup::DoRun() {
 
   status = backup_meta_->Init();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -346,28 +346,28 @@ butil::Status Backup::DoRun() {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
     status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> index_interaction;
     status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> document_interaction;
     status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -385,7 +385,7 @@ butil::Status Backup::DoRun() {
   }
   status = backup_data_->Init(meta_region_list);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -394,25 +394,25 @@ butil::Status Backup::DoRun() {
 
   status = backup_data_->Run();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = backup_data_->Finish();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = backup_meta_->Run(backup_data_->GetRegionMap());
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = backup_meta_->Finish();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -422,13 +422,13 @@ butil::Status Backup::DoRun() {
 
   const auto& [status2, id_epoch_type_and_value] = backup_meta_->GetIdEpochTypeAndValue();
   if (!status2.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   const auto& [status3, table_increment_group] = backup_meta_->GetAllTableIncrement();
   if (!status3.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -477,14 +477,14 @@ butil::Status Backup::DoRun() {
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -496,7 +496,7 @@ butil::Status Backup::DoRun() {
       if (writer.is_open()) {
         writer.close();
       }
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -545,7 +545,7 @@ butil::Status Backup::DoRun() {
       if (writer.is_open()) {
         writer.close();
       }
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -589,7 +589,7 @@ butil::Status Backup::Finish() {
   butil::Status status;
   status = DoFinish();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -608,7 +608,7 @@ butil::Status Backup::ParamsCheck() {
   butil::Status status;
   status = ParamsCheckForStorage();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
   return butil::Status::OK();
@@ -625,14 +625,14 @@ butil::Status Backup::ParamsCheckForStorage() {
       DINGO_LOG(ERROR) << s;
       return butil::Status(dingodb::pb::error::EFILE_EXIST, s);
     } else if (status.error_code() != dingodb::pb::error::EFILE_NOT_EXIST) {
-      std::string s = fmt::format("Check lock file : {} failed: {}", lock_path, status.error_cstr());
+      std::string s = fmt::format("Check lock file : {} failed: {}", lock_path, Utils::FormatStatusError(status));
       DINGO_LOG(ERROR) << s;
       return butil::Status(dingodb::pb::error::EINTERNAL, s);
     }
 
   } else if (status.error_code() != dingodb::pb::error::EFILE_NOT_EXIST) {
     std::string s = fmt::format("Check storage : {} storage_internal_ : {} failed: {}", storage_, storage_internal_,
-                                status.error_cstr());
+                                Utils::FormatStatusError(status));
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
   return butil::Status::OK();
@@ -650,13 +650,13 @@ butil::Status Backup::GetGcSafePoint() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "GetGCSafePoint", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to get GC safe point, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to get GC safe point, status={}", Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    std::string s = fmt::format("Fail to get GC safe point, error={}", response.error().errmsg());
+    std::string s = fmt::format("Fail to get GC safe point, error={}", Utils::FormatResponseError(response));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -754,13 +754,13 @@ butil::Status Backup::SetGcStop() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "UpdateGCSafePoint", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to set GC stop, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to set GC stop, status={}", Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    std::string s = fmt::format("Fail to set GC stop, error={}", response.error().errmsg());
+    std::string s = fmt::format("Fail to set GC stop, error={}", Utils::FormatResponseError(response));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -792,13 +792,13 @@ butil::Status Backup::SetGcStart() {
   butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
       "CoordinatorService", "UpdateGCSafePoint", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to set GC stop, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to set GC stop, status={}", Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    std::string s = fmt::format("Fail to set GC stop, error={}", response.error().errmsg());
+    std::string s = fmt::format("Fail to set GC stop, error={}", Utils::FormatResponseError(response));
     DINGO_LOG(ERROR) << s;
     return butil::Status(dingodb::pb::error::EINTERNAL, s);
   }
@@ -830,13 +830,13 @@ butil::Status Backup::RegisterBackupToCoordinator(bool is_first, ServerInteracti
   butil::Status status =
       coordinator_interaction->AllSendRequest("CoordinatorService", "RegisterBackup", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to set RegisterBackup, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to set RegisterBackup, status={}", Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    std::string s = fmt::format("Fail to set RegisterBackup, error={}", response.error().errmsg());
+    std::string s = fmt::format("Fail to set RegisterBackup, error={}", Utils::FormatResponseError(response));
     DINGO_LOG(ERROR) << s;
     return butil::Status(response.error().errcode(), s);
   }
@@ -856,13 +856,13 @@ butil::Status Backup::UnregisterBackupToCoordinator(ServerInteractionPtr coordin
   butil::Status status =
       coordinator_interaction->AllSendRequest("CoordinatorService", "UnRegisterBackup", request, response);
   if (!status.ok()) {
-    std::string s = fmt::format("Fail to set UnRegisterBackup, status={}", status.error_cstr());
+    std::string s = fmt::format("Fail to set UnRegisterBackup, status={}", Utils::FormatStatusError(status));
     DINGO_LOG(ERROR) << s;
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    std::string s = fmt::format("Fail to set UnRegisterBackup, error={}", response.error().errmsg());
+    std::string s = fmt::format("Fail to set UnRegisterBackup, error={}", Utils::FormatResponseError(response));
     DINGO_LOG(ERROR) << s;
     return butil::Status(response.error().errcode(), s);
   }
@@ -915,7 +915,7 @@ butil::Status Backup::DoRegisterBackupToCoordinatorInternal(ServerInteractionPtr
     do {
       status = RegisterBackupToCoordinator(is_first, coordinator_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       } else {  // success
         is_error_occur = false;
         break;
@@ -964,13 +964,13 @@ butil::Status Backup::DisableBalanceToCoordinator(ServerInteractionPtr coordinat
   butil::Status status =
       coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
-  if (status.error_code() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return butil::Status(status.error_code(), "%s", status.error_cstr());
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+    return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
   DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
@@ -1020,13 +1020,13 @@ butil::Status Backup::EnableBalanceToCoordinator(ServerInteractionPtr coordinato
     butil::Status status =
         coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
-    if (status.error_code() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return butil::Status(status.error_code(), "%s", status.error_cstr());
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
@@ -1056,13 +1056,13 @@ butil::Status Backup::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
 
   butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
-  if (status.error_code() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return butil::Status(status.error_code(), "%s", status.error_cstr());
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+    return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
   for (const auto& config : response.control_config_variable()) {
@@ -1087,13 +1087,13 @@ butil::Status Backup::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
 
   status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
-  if (status.error_code() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return butil::Status(status.error_code(), "%s", status.error_cstr());
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+    return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
   DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
@@ -1142,24 +1142,23 @@ butil::Status Backup::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr st
 
     butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
-    if (status.error_code() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return butil::Status(status.error_code(), "%s", status.error_cstr());
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
     status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
-
-    if (status.error_code() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return butil::Status(status.error_code(), "%s", status.error_cstr());
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
@@ -1179,13 +1178,13 @@ butil::Status Backup::GetVersionFromCoordinator(ServerInteractionPtr coordinator
 
   butil::Status status = coordinator_interaction->SendRequest("CoordinatorService", "Hello", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
-  if (status.error_code() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << status.error_cstr();
-    return butil::Status(status.error_code(), "%s", status.error_cstr());
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+    return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
   version_info = response.version_info();

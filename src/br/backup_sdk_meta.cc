@@ -19,6 +19,7 @@
 
 #include "br/helper.h"
 #include "br/sst_file_writer.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -42,12 +43,12 @@ butil::Status BackupSdkMeta::GetSdkMetaFromCoordinator() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "ExportMeta", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
@@ -87,14 +88,14 @@ butil::Status BackupSdkMeta::Backup() {
 
   status = sst->SaveFile(kvs, file_path);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   std::string hash_code;
   status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 

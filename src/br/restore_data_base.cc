@@ -109,73 +109,73 @@ butil::Status RestoreDataBase::Init() {
 
   status = CheckStoreRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckStoreCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckIndexRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckIndexCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckDocumentRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = CheckDocumentCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromStoreRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromStoreCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromIndexRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromIndexCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromDocumentRegionDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromDocumentCfSstMetaDataSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -205,7 +205,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -223,7 +223,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = store_restore_region_meta_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -235,7 +235,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -243,7 +243,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -262,7 +262,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = store_restore_region_data_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -274,7 +274,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -292,7 +292,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = index_restore_region_meta_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -304,7 +304,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -312,7 +312,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = ServerInteraction::CreateInteraction(index_interaction_->GetAddrs(), internal_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -331,7 +331,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = index_restore_region_data_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -343,7 +343,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -361,7 +361,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = document_restore_region_meta_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -373,7 +373,7 @@ butil::Status RestoreDataBase::Init() {
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -381,7 +381,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = ServerInteraction::CreateInteraction(document_interaction_->GetAddrs(), internal_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -401,7 +401,7 @@ butil::Status RestoreDataBase::Init() {
 
     status = document_restore_region_data_manager_->Init();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -416,7 +416,7 @@ butil::Status RestoreDataBase::Run() {
   if (store_restore_region_meta_manager_) {
     status = store_restore_region_meta_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -427,7 +427,7 @@ butil::Status RestoreDataBase::Run() {
   if (store_restore_region_data_manager_) {
     status = store_restore_region_data_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -438,7 +438,7 @@ butil::Status RestoreDataBase::Run() {
   if (index_restore_region_meta_manager_) {
     status = index_restore_region_meta_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -449,7 +449,7 @@ butil::Status RestoreDataBase::Run() {
   if (index_restore_region_data_manager_) {
     status = index_restore_region_data_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -460,7 +460,7 @@ butil::Status RestoreDataBase::Run() {
   if (document_restore_region_meta_manager_) {
     status = document_restore_region_meta_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -471,7 +471,7 @@ butil::Status RestoreDataBase::Run() {
   if (document_restore_region_data_manager_) {
     status = document_restore_region_data_manager_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -488,7 +488,7 @@ butil::Status RestoreDataBase::Finish() {
   if (store_restore_region_meta_manager_) {
     status = store_restore_region_meta_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -497,7 +497,7 @@ butil::Status RestoreDataBase::Finish() {
   if (store_restore_region_data_manager_) {
     status = store_restore_region_data_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -506,7 +506,7 @@ butil::Status RestoreDataBase::Finish() {
   if (index_restore_region_meta_manager_) {
     status = index_restore_region_meta_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -515,7 +515,7 @@ butil::Status RestoreDataBase::Finish() {
   if (index_restore_region_data_manager_) {
     status = index_restore_region_data_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -524,7 +524,7 @@ butil::Status RestoreDataBase::Finish() {
   if (document_restore_region_meta_manager_) {
     status = document_restore_region_meta_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -533,7 +533,7 @@ butil::Status RestoreDataBase::Finish() {
   if (document_restore_region_data_manager_) {
     status = document_restore_region_data_manager_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -587,13 +587,13 @@ butil::Status RestoreDataBase::CheckStoreRegionDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckRegionDataSst(store_region_data_sst_, backup_meta_region_name);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (store_region_data_sst_)
@@ -615,14 +615,14 @@ butil::Status RestoreDataBase::CheckStoreCfSstMetaDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_cf_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckCfSstMetaDataSst(store_cf_sst_meta_data_sst_, backup_meta_region_cf_name,
                                    dingodb::Constant::kStoreRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -646,13 +646,13 @@ butil::Status RestoreDataBase::CheckIndexRegionDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckRegionDataSst(index_region_data_sst_, backup_meta_region_name);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -676,14 +676,14 @@ butil::Status RestoreDataBase::CheckIndexCfSstMetaDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_cf_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckCfSstMetaDataSst(index_cf_sst_meta_data_sst_, backup_meta_region_cf_name,
                                    dingodb::Constant::kIndexRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -707,13 +707,13 @@ butil::Status RestoreDataBase::CheckDocumentRegionDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckRegionDataSst(document_region_data_sst_, backup_meta_region_name);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -737,14 +737,14 @@ butil::Status RestoreDataBase::CheckDocumentCfSstMetaDataSst() {
     std::string file_path = storage_internal_ + "/" + backup_meta_region_cf_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckCfSstMetaDataSst(document_cf_sst_meta_data_sst_, backup_meta_region_cf_name,
                                    dingodb::Constant::kDocumentRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -760,7 +760,7 @@ butil::Status RestoreDataBase::CheckRegionDataSst(std::shared_ptr<dingodb::pb::c
   status = Utils::CheckBackupMeta(region_data_sst, storage_internal_, file_name, "",
                                   dingodb::Constant::kCoordinatorRegionName);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -774,7 +774,7 @@ butil::Status RestoreDataBase::CheckCfSstMetaDataSst(
 
   status = Utils::CheckBackupMeta(cf_sst_meta_data_sst, storage_internal_, file_name, "", exec_node);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -814,7 +814,7 @@ butil::Status RestoreDataBase::ExtractFromRegionDataSst(
     std::map<std::string, std::string> internal_id_and_region_kvs;
     status = sst_file_reader.ReadFile(file_path, internal_id_and_region_kvs);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -848,7 +848,7 @@ butil::Status RestoreDataBase::ExtractFromCfSstMetaDataSst(
     std::map<std::string, std::string> internal_id_and_sst_meta_group_kvs;
     status = sst_file_reader.ReadFile(file_path, internal_id_and_sst_meta_group_kvs);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 

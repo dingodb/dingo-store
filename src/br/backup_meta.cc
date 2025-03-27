@@ -19,6 +19,7 @@
 
 #include "br/helper.h"
 #include "br/sst_file_writer.h"
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -52,14 +53,14 @@ butil::Status BackupMeta::Init() {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
     status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -69,7 +70,7 @@ butil::Status BackupMeta::Init() {
 
   status = backup_sql_meta_->GetSqlMetaRegionFromCoordinator();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -81,7 +82,7 @@ butil::Status BackupMeta::Init() {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
     backup_sdk_meta_ = std::make_shared<BackupSdkMeta>(coordinator_interaction, storage_internal_);
@@ -89,7 +90,7 @@ butil::Status BackupMeta::Init() {
 
   status = backup_sdk_meta_->GetSdkMetaFromCoordinator();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -111,19 +112,19 @@ butil::Status BackupMeta::Run(std::shared_ptr<dingodb::pb::common::RegionMap> re
 
     status = backup_sql_meta_->Filter();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sql_meta_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sql_meta_->Backup();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -132,13 +133,13 @@ butil::Status BackupMeta::Run(std::shared_ptr<dingodb::pb::common::RegionMap> re
   {
     status = backup_sdk_meta_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = backup_sdk_meta_->Backup();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -172,14 +173,14 @@ butil::Status BackupMeta::Finish() {
 
     status = sst->SaveFile(kvs, file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     std::string hash_code;
     status = dingodb::Helper::CalSha1CodeWithFileEx(file_path, hash_code);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -214,7 +215,7 @@ std::pair<butil::Status, std::shared_ptr<dingodb::pb::meta::IdEpochTypeAndValue>
   butil::Status status;
   status = GetPresentIdsFromMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return {status, nullptr};
   }
   return {butil::Status::OK(), id_epoch_type_and_value_};
@@ -224,7 +225,7 @@ std::pair<butil::Status, std::shared_ptr<dingodb::pb::meta::TableIncrementGroup>
   butil::Status status;
   status = GetAllTableIncrementFromMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return {status, nullptr};
   }
   return {butil::Status::OK(), table_increment_group_};
@@ -240,12 +241,12 @@ butil::Status BackupMeta::GetPresentIdsFromMeta() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "SaveIdEpochType", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
@@ -267,12 +268,12 @@ butil::Status BackupMeta::GetAllTableIncrementFromMeta() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "GetAutoIncrements", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 

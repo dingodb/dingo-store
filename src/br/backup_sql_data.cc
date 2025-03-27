@@ -20,6 +20,7 @@
 #include <string>
 #include <thread>
 
+#include "br/utils.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "fmt/core.h"
@@ -172,7 +173,7 @@ butil::Status BackupSqlData::Run() {
   status = DoAsyncBackupRegion(store_interaction_, "StoreService", wait_for_handle_store_regions_,
                                already_handle_store_regions_, save_store_region_map_, store_is_thread_exit);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -180,7 +181,7 @@ butil::Status BackupSqlData::Run() {
   status = DoAsyncBackupRegion(index_interaction_, "IndexService", wait_for_handle_index_regions_,
                                already_handle_index_regions_, save_index_region_map_, index_is_thread_exit);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -188,7 +189,7 @@ butil::Status BackupSqlData::Run() {
   status = DoAsyncBackupRegion(document_interaction_, "DocumentService", wait_for_handle_document_regions_,
                                already_handle_document_regions_, save_document_region_map_, document_is_thread_exit);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 

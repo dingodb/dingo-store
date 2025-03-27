@@ -53,13 +53,13 @@ butil::Status RestoreSdkMeta::Init() {
 
   status = CheckCoordinatorSdkMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromCoordinatorSdkMetaSst();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -78,7 +78,7 @@ butil::Status RestoreSdkMeta::Run() {
   if (meta_all_) {
     status = ImportSdkMetaToCoordinator();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -105,7 +105,7 @@ butil::Status RestoreSdkMeta::CheckCoordinatorSdkMetaSst() {
     std::string file_path = storage_internal_ + "/" + file_name;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -113,7 +113,7 @@ butil::Status RestoreSdkMeta::CheckCoordinatorSdkMetaSst() {
                                     dingodb::Constant::kCoordinatorSdkMetaSstName, "",
                                     dingodb::Constant::kCoordinatorRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (coordinator_sdk_meta_sst_)
@@ -131,7 +131,7 @@ butil::Status RestoreSdkMeta::ExtractFromCoordinatorSdkMetaSst() {
     std::map<std::string, std::string> internal_coordinator_sdk_meta_kvs;
     status = sst_file_reader.ReadFile(file_path, internal_coordinator_sdk_meta_kvs);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
@@ -190,12 +190,12 @@ butil::Status RestoreSdkMeta::ImportSdkMetaToCoordinatorDeprecated() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "ImportMeta", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
@@ -239,12 +239,12 @@ butil::Status RestoreSdkMeta::CreateSchemasToCoordinator() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "CreateSchemas", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
@@ -265,12 +265,12 @@ butil::Status RestoreSdkMeta::CreateIndexMetasToCoordinator() {
 
   auto status = coordinator_interaction_->SendRequest("MetaService", "CreateIndexMetas", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 

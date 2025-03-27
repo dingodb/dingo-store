@@ -64,13 +64,13 @@ butil::Status RestoreData::Init() {
 
   status = CheckBackupMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   status = ExtractFromBackupMeta();
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
@@ -124,28 +124,28 @@ butil::Status RestoreData::Init() {
       std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_store_interaction;
       status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_index_interaction;
       status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_document_interaction;
       status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
@@ -159,7 +159,7 @@ butil::Status RestoreData::Init() {
 
       status = restore_sql_data_->Init();
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
     }
@@ -178,28 +178,28 @@ butil::Status RestoreData::Init() {
       std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_store_interaction;
       status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_index_interaction;
       status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
       std::shared_ptr<br::ServerInteraction> internal_document_interaction;
       status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
 
@@ -213,7 +213,7 @@ butil::Status RestoreData::Init() {
 
       status = restore_sdk_data_->Init();
       if (!status.ok()) {
-        DINGO_LOG(ERROR) << status.error_cstr();
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
       }
     }
@@ -228,7 +228,7 @@ butil::Status RestoreData::Run() {
   if (restore_sql_data_) {
     status = restore_sql_data_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -238,7 +238,7 @@ butil::Status RestoreData::Run() {
   if (restore_sdk_data_) {
     status = restore_sdk_data_->Run();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   } else {
@@ -254,7 +254,7 @@ butil::Status RestoreData::Finish() {
   if (restore_sql_data_) {
     status = restore_sql_data_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -262,7 +262,7 @@ butil::Status RestoreData::Finish() {
   if (restore_sdk_data_) {
     status = restore_sdk_data_->Finish();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }
@@ -293,14 +293,14 @@ butil::Status RestoreData::CheckBackupMeta() {
     std::string file_path = storage_internal_ + "/" + dingodb::Constant::kBackupMetaDataFileName;
     status = Utils::FileExistsAndRegular(file_path);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = Utils::CheckBackupMeta(backup_meta_, storage_internal_, dingodb::Constant::kBackupMetaDataFileName, "",
                                     dingodb::Constant::kBackupRegionName);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
   }  // if (backup_meta_)
@@ -407,13 +407,13 @@ butil::Status RestoreData::ExtractFromBackupMeta() {
     SstFileReader sst_file_reader;
     status = sst_file_reader.ReadFile(file_path, backupmeta_datafile_kvs_);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     status = CheckBackupMetaDatafileKvs();
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 

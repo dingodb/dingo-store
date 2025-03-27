@@ -19,6 +19,7 @@
 #include <string>
 
 #include "br/parameter.h"
+#include "br/utils.h"
 #include "common/helper.h"
 #include "fmt/core.h"
 
@@ -45,12 +46,12 @@ butil::Status BackupSqlMeta::GetSqlMetaRegionFromCoordinator() {  // get meta re
 
   auto status = coordinator_interaction_->SendRequest("CoordinatorService", "ScanRegions", request, response);
   if (!status.ok()) {
-    DINGO_LOG(ERROR) << status.error_cstr();
+    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
   }
 
   if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << response.error().errmsg();
+    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
