@@ -2842,8 +2842,6 @@ void RunImportMeta(const ImportMetaOptions &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
-  dingodb::pb::meta::ImportMetaRequest request;
-  dingodb::pb::meta::ImportMetaResponse response;
 
   std::map<std::string, std::string> internal_coordinator_sdk_meta_kvs;
 
@@ -2885,11 +2883,51 @@ void RunImportMeta(const ImportMetaOptions &opt) {
     DINGO_LOG(ERROR) << s;
     return;
   }
-  request.mutable_meta_all()->CopyFrom(meta_all);
-  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("ImportMeta", request,
-                                                                                                  response);
-  DINGO_LOG(INFO) << "SendRequest status=" << status;
-  DINGO_LOG(INFO) << response.DebugString();
+  
+  {
+    dingodb::pb::meta::CreateTenantsRequest request;
+    dingodb::pb::meta::CreateTenantsResponse response;
+    request.mutable_request_info()->set_request_id(1);
+    request.mutable_tenants()->CopyFrom(meta_all.tenants());
+
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateTenants",
+                                                                                                    request, response);
+    if (!status.ok()) {
+      std::cout << "CreateTenants failed , status :" << status.error_str() << std::endl;
+      return;
+    }
+    std::cout << "CreateTenants success" << std::endl;
+  }
+
+  {
+    dingodb::pb::meta::CreateSchemasRequest request;
+    dingodb::pb::meta::CreateSchemasResponse response;
+    request.mutable_request_info()->set_request_id(2);
+    request.mutable_schemas()->insert(meta_all.schemas().begin(), meta_all.schemas().end());
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateSchemas",
+                                                                                                    request, response);
+    if (!status.ok()) {
+      std::cout << "CreateSchemas failed , status :" << status.error_str() << std::endl;
+      return;
+    }
+    std::cout << "CreateSchemas success" << std::endl;
+  }
+  {
+    dingodb::pb::meta::CreateIndexMetasRequest request;
+    dingodb::pb::meta::CreateIndexMetasResponse response;
+
+    request.mutable_request_info()->set_request_id(3);
+    request.mutable_tables_and_indexes()->insert(meta_all.tables_and_indexes().begin(),
+                                                 meta_all.tables_and_indexes().end());
+
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteractionMeta()->SendRequest("CreateIndexMetas",
+                                                                                                    request, response);
+    if (!status.ok()) {
+      std::cout << "CreateIndexMetas failed , status :" << status.error_str() << std::endl;
+      return;
+    }
+    std::cout << "CreateIndexMetas success" << std::endl;
+  }
 }
 
 void SetUpExportMeta(CLI::App &app) {

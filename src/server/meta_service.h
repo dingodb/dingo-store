@@ -234,6 +234,15 @@ class MetaServiceImpl : public pb::meta::MetaService {
                                     pb::meta::CreateOrUpdateAutoIncrementsResponse* response,
                                     google::protobuf::Closure* done) override;
 
+  void CreateTenants(google::protobuf::RpcController* controller, const pb::meta::CreateTenantsRequest* request,
+                     pb::meta::CreateTenantsResponse* response, google::protobuf::Closure* done) override;
+
+  void CreateSchemas(google::protobuf::RpcController* controller, const pb::meta::CreateSchemasRequest* request,
+                     pb::meta::CreateSchemasResponse* response, google::protobuf::Closure* done) override;
+
+  void CreateIndexMetas(google::protobuf::RpcController* controller, const pb::meta::CreateIndexMetasRequest* request,
+                        pb::meta::CreateIndexMetasResponse* response, google::protobuf::Closure* done) override;
+
   void SetWorkSet(WorkerSetPtr worker_set) { worker_set_ = worker_set; }
 
   // table and index definition convertor
