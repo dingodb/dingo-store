@@ -6331,7 +6331,7 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
   }
 
   auto ret = raft_engine->Write(
-      ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default, false));
+      ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default, true));
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
                      << ", write raft engine failed, status: " << ret.error_str();
@@ -6583,7 +6583,7 @@ butil::Status TxnEngineHelper::RestoreNonTxnIndex(std::shared_ptr<Context> ctx, 
     return status;
   }
   auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(vector_with_ids, kv_default, kv_scalar, kv_table,
-                                                                  kv_scalar_speed_up, vector_delete_ids, false));
+                                                                  kv_scalar_speed_up, vector_delete_ids, true));
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
                                     region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
