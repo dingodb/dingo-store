@@ -438,19 +438,19 @@ void CoordinatorUpdateStateTask::CoordinatorUpdateState(std::shared_ptr<Coordina
   // here we only update store_state to offline if last_seen_timestamp is too old
   // we will not update store_state to online here
   // in on_apply of store_heartbeat, we will update store_state to online
-  // pb::common::StoreMap store_map_temp;
-  // coordinator_control->GetStoreMap(store_map_temp);
-  // for (const auto& it : store_map_temp.stores()) {
-  //   if (it.state() == pb::common::StoreState::STORE_NORMAL) {
-  //     if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
-  //       DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
-  //       coordinator_control->TrySetStoreToOffline(it.id());
-  //       continue;
-  //     }
-  //   } else {
-  //     continue;
-  //   }
-  // }
+  pb::common::StoreMap store_map_temp;
+  coordinator_control->GetStoreMap(store_map_temp);
+  for (const auto& it : store_map_temp.stores()) {
+    if (it.state() == pb::common::StoreState::STORE_NORMAL) {
+      if (it.last_seen_timestamp() + (60 * 1000) < butil::gettimeofday_ms()) {
+        DINGO_LOG(INFO) << "SendCoordinatorPushToStore... update store " << it.id() << " state to offline";
+        coordinator_control->TrySetStoreToOffline(it.id());
+        continue;
+      }
+    } else {
+      continue;
+    }
+  }
 
   // update cluster is_read_only
   coordinator_control->UpdateClusterReadOnlyFromStoreMetrics();
