@@ -774,8 +774,7 @@ int PrepareMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr sourc
         target_region = store_region_meta->GetRegion(request.target_region_id());
 
       } else if (comparison > 0) {
-        // Todo
-        DINGO_LOG(FATAL) << fmt::format(
+        DINGO_LOG(WARNING) << fmt::format(
             "[merge.merging][job_id({}).region({}/{})] epoch not match, source_region({}/{}) "
             "target_region({}/{}/{}) ",
             request.job_id(), source_region->Id(), target_region->Id(), source_region->EpochToString(),
@@ -1449,14 +1448,14 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
               ctx->SetStatus(status);
             }
             DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                              vector_index_id, request.delete_vector_ids().size(), Helper::PrintStatus(status));
+                                              vector_index_id, request.delete_vector_ids().size(),
+                                              Helper::PrintStatus(status));
           }
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete vector exception, error: {}", vector_index_id,
                                         e.what());
       }
-
     }
   }
 
@@ -1741,13 +1740,14 @@ int DocumentBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionP
                                         document_index_id, e.what());
       }
 
-      //delete document
+      // delete document
       try {
         auto start_time = Helper::TimestampNs();
         auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_document_ids()));
         if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
         DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
-                                        document_index_id, request.delete_document_ids().size(), Helper::TimestampNs() - start_time);
+                                        document_index_id, request.delete_document_ids().size(),
+                                        Helper::TimestampNs() - start_time);
         if (status.ok()) {
           if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
             document_index_wrapper->SetApplyLogId(log_id);
@@ -1757,13 +1757,13 @@ int DocumentBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionP
             ctx->SetStatus(status);
           }
           DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document failed, count: {}, error: {}",
-                                            document_index_id, request.delete_document_ids().size(), Helper::PrintStatus(status));
+                                            document_index_id, request.delete_document_ids().size(),
+                                            Helper::PrintStatus(status));
         }
       } catch (const std::exception &e) {
         DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete document exception, error: {}",
                                         document_index_id, e.what());
       }
-
     }
   }
 
