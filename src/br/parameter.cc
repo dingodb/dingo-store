@@ -95,4 +95,16 @@ DEFINE_int32(restore_wait_for_region_normal_max_retry, 30, "restore wait for reg
 // br restore after create region wait for region normal interval s (second)
 DEFINE_uint32(restore_wait_for_region_normal_interval_s, 1, "restore wait for region normal interval s. default 1s");
 
+// br tool type. dump or diff
+DEFINE_string(br_tool_type, "dump", "br tool type. default dump");
+
+// br dump file
+DEFINE_string(br_dump_file, "", "br dump file. default empty");
+
+// br diff file1
+DEFINE_string(br_diff_file1, "", "br diff file1. default empty");
+
+// br diff file2
+DEFINE_string(br_diff_file2, "", "br diff file2. default empty");
+
 }  // namespace br

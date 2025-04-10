@@ -33,6 +33,7 @@
 #include "br/interation.h"
 #include "br/parameter.h"
 #include "br/restore.h"
+#include "br/tool.h"
 #include "br/utils.h"
 #include "butil/status.h"
 #include "common/helper.h"
@@ -497,51 +498,54 @@ int main(int argc, char* argv[]) {
   std::cout << "Detail BR log in " << br::FLAGS_br_log_dir << std::endl;
 
   butil::Status status;
-  std::shared_ptr<br::ServerInteraction> coordinator_interaction = std::make_shared<br::ServerInteraction>();
-  if (br::FLAGS_br_coor_url.empty()) {
-    DINGO_LOG(WARNING) << "coordinator url is empty, try to use file://.conf/coor_list";
-    br::FLAGS_br_coor_url = "file://./conf/coor_list";
 
-    std::string path = br::FLAGS_br_coor_url;
-    path = path.replace(path.find("file://"), 7, "");
-    auto addrs = br::Helper::GetAddrsFromFile(path);
-    if (addrs.empty()) {
-      DINGO_LOG(ERROR) << "coor_url not find addr, path=" << path;
+  if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
+    std::shared_ptr<br::ServerInteraction> coordinator_interaction = std::make_shared<br::ServerInteraction>();
+    if (br::FLAGS_br_coor_url.empty()) {
+      DINGO_LOG(WARNING) << "coordinator url is empty, try to use file://.conf/coor_list";
+      br::FLAGS_br_coor_url = "file://./conf/coor_list";
+
+      std::string path = br::FLAGS_br_coor_url;
+      path = path.replace(path.find("file://"), 7, "");
+      auto addrs = br::Helper::GetAddrsFromFile(path);
+      if (addrs.empty()) {
+        DINGO_LOG(ERROR) << "coor_url not find addr, path=" << path;
+        return -1;
+      }
+      if (!coordinator_interaction->Init(addrs)) {
+        DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --br_coor_url="
+                         << br::FLAGS_br_coor_url;
+        return -1;
+      }
+    } else {
+      auto addrs = br::FLAGS_br_coor_url;
+      if (!coordinator_interaction->Init(addrs)) {
+        DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --br_coor_url="
+                         << br::FLAGS_br_coor_url;
+        return -1;
+      }
+    }
+
+    br::InteractionManager::GetInstance().SetCoordinatorInteraction(coordinator_interaction);
+
+    status = SetStoreInteraction();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       return -1;
     }
-    if (!coordinator_interaction->Init(addrs)) {
-      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --br_coor_url="
-                       << br::FLAGS_br_coor_url;
+
+    status = SetIndexInteraction();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       return -1;
     }
-  } else {
-    auto addrs = br::FLAGS_br_coor_url;
-    if (!coordinator_interaction->Init(addrs)) {
-      DINGO_LOG(ERROR) << "Fail to init coordinator_interaction, please check parameter --br_coor_url="
-                       << br::FLAGS_br_coor_url;
+
+    status = SetDocumentInteraction();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       return -1;
     }
-  }
-
-  br::InteractionManager::GetInstance().SetCoordinatorInteraction(coordinator_interaction);
-
-  status = SetStoreInteraction();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
-    return -1;
-  }
-
-  status = SetIndexInteraction();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
-    return -1;
-  }
-
-  status = SetDocumentInteraction();
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
-    return -1;
-  }
+  }  // if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
 
   // command parse
   if (br::FLAGS_br_type == "backup") {
@@ -564,41 +568,66 @@ int main(int argc, char* argv[]) {
                        << br::FLAGS_br_restore_type;
       return -1;
     }
+  } else if (br::FLAGS_br_type == "tool") {
+    if (br::FLAGS_br_tool_type != "dump" && br::FLAGS_br_tool_type != "diff") {
+      DINGO_LOG(ERROR) << "tool type not support, please check parameter --br_tool_type=" << br::FLAGS_br_tool_type;
+      return -1;
+    }
+
+    if (br::FLAGS_br_tool_type == "dump") {
+      if (br::FLAGS_br_dump_file.empty()) {
+        DINGO_LOG(ERROR) << "dump file is empty, please check parameter --br_dump_file=" << br::FLAGS_br_dump_file;
+        return -1;
+      }
+    } else {  // diff
+      if (br::FLAGS_br_diff_file1.empty()) {
+        DINGO_LOG(ERROR) << "diff file1 is empty, please check parameter --br_diff_file1=" << br::FLAGS_br_diff_file1;
+        return -1;
+      }
+
+      if (br::FLAGS_br_diff_file2.empty()) {
+        DINGO_LOG(ERROR) << "diff file2 is empty, please check parameter --br_diff_file2=" << br::FLAGS_br_diff_file2;
+        return -1;
+      }
+    }
+
   } else {
     DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
     return -1;
   }
 
-  if (br::FLAGS_storage.empty()) {
-    DINGO_LOG(ERROR) << "storage is empty, please check parameter --storage=" << br::FLAGS_storage;
-    return -1;
-  }
+  if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
+    if (br::FLAGS_storage.empty()) {
+      DINGO_LOG(ERROR) << "storage is empty, please check parameter --storage=" << br::FLAGS_storage;
+      return -1;
+    }
 
-  if (std::string(br::FLAGS_storage).find("local://") == 0) {
-    std::string path = br::FLAGS_storage;
-    path = path.replace(path.find("local://"), 8, "");
-    if (!path.empty()) {
-      if (path.back() == '/') {
-        path.pop_back();
+    if (std::string(br::FLAGS_storage).find("local://") == 0) {
+      std::string path = br::FLAGS_storage;
+      path = path.replace(path.find("local://"), 8, "");
+      if (!path.empty()) {
+        if (path.back() == '/') {
+          path.pop_back();
+        }
       }
-    }
 
-    if (path.empty()) {
-      DINGO_LOG(ERROR) << "path is empty, please check parameter --storage=" << br::FLAGS_storage;
+      if (path.empty()) {
+        DINGO_LOG(ERROR) << "path is empty, please check parameter --storage=" << br::FLAGS_storage;
+        return -1;
+      }
+
+      std::filesystem::path temp_path = path;
+      if (temp_path.is_relative()) {
+        DINGO_LOG(ERROR) << "storage not support relative path. use absolute path. " << br::FLAGS_storage;
+        return -1;
+      }
+
+      br::FLAGS_storage_internal = path;
+    } else {
+      DINGO_LOG(ERROR) << "storage not support, please check parameter --storage=" << br::FLAGS_storage;
       return -1;
     }
-
-    std::filesystem::path temp_path = path;
-    if (temp_path.is_relative()) {
-      DINGO_LOG(ERROR) << "storage not support relative path. use absolute path. " << br::FLAGS_storage;
-      return -1;
-    }
-
-    br::FLAGS_storage_internal = path;
-  } else {
-    DINGO_LOG(ERROR) << "storage not support, please check parameter --storage=" << br::FLAGS_storage;
-    return -1;
-  }
+  }  //   if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
 
   // backup
   if (br::FLAGS_br_type == "backup") {
@@ -761,6 +790,41 @@ int main(int argc, char* argv[]) {
     }
 
     DINGO_LOG(INFO) << "Restore finish";
+  } else if (br::FLAGS_br_type == "tool") {
+    std::shared_ptr<br::Tool> tool;
+    br::ToolParams params;
+    params.br_type = br::FLAGS_br_type;
+    params.br_tool_type = br::FLAGS_br_tool_type;
+
+    if (br::FLAGS_br_tool_type == "dump") {
+      params.br_dump_file = br::FLAGS_br_dump_file;
+      tool = std::make_shared<br::Tool>(params);
+
+    } else {  // diff
+      params.br_diff_file1 = br::FLAGS_br_diff_file1;
+      params.br_diff_file2 = br::FLAGS_br_diff_file2;
+      tool = std::make_shared<br::Tool>(params);
+    }
+
+    status = tool->Init();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
+      return -1;
+    }
+
+    status = tool->Run();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
+      return -1;
+    }
+
+    status = tool->Finish();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
+      return -1;
+    }
+    std::cout << "Tool finish" << std::endl;
+    DINGO_LOG(INFO) << "Tool finish";
   } else {
     DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
     return -1;
