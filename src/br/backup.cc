@@ -462,8 +462,8 @@ butil::Status Backup::DoRun() {
     dingodb::pb::common::BackupParam backup_param;
     backup_param.set_coor_addr(coor_url_);
     backup_param.set_store_addr(dingodb::Helper::VectorToString(store_addrs));
-    backup_param.set_store_addr(dingodb::Helper::VectorToString(index_addrs));
-    backup_param.set_store_addr(dingodb::Helper::VectorToString(document_addrs));
+    backup_param.set_index_addr(dingodb::Helper::VectorToString(index_addrs));
+    backup_param.set_document(dingodb::Helper::VectorToString(document_addrs));
     backup_param.set_br_type(br_type_);
     backup_param.set_br_backup_type(br_backup_type_);
     backup_param.set_backupts(backupts_);

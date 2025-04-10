@@ -115,6 +115,39 @@ DECLARE_int32(restore_wait_for_region_normal_max_retry);
 // br restore after create region wait for region normal interval s (second)
 DECLARE_uint32(restore_wait_for_region_normal_interval_s);
 
+struct ToolParams {
+  std::string br_type;
+  std::string br_tool_type;
+  std::string br_dump_file;
+  std::string br_diff_file1;
+  std::string br_diff_file2;
+};
+
+struct ToolDumpParams {
+  std::string br_type;
+  std::string br_tool_type;
+  std::string br_dump_file;
+};
+
+struct ToolDiffParams {
+  std::string br_type;
+  std::string br_tool_type;
+  std::string br_diff_file1;
+  std::string br_diff_file2;
+};
+
+// br tool type
+DECLARE_string(br_tool_type);
+
+// br dump file
+DECLARE_string(br_dump_file);
+
+// br diff file1
+DECLARE_string(br_diff_file1);
+
+// br diff file2
+DECLARE_string(br_diff_file2);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_
