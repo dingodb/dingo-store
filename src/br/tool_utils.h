@@ -15,10 +15,12 @@
 #ifndef DINGODB_BR_TOOL_UTILS_H_
 #define DINGODB_BR_TOOL_UTILS_H_
 
+#include <iostream>
 #include <string>
 #include <vector>
 
 #include "butil/status.h"
+#include "common/logging.h"
 
 namespace br {
 
@@ -30,6 +32,18 @@ class ToolUtils {
   static butil::Status CheckParameterAndHandle(const std::string& br_diff_file, const std::string& br_diff_file_name,
                                                std::string& path_internal, std::string& file_name);
   static std::vector<std::string_view> Split(std::string_view str, char delimiter);
+
+  template <typename Request>
+  static void PrintRequest(const std::string& name, const Request& request) {
+    std::cout << name << " : " << request.DebugString() << std::endl;
+    DINGO_LOG(INFO) << name << " : " << request.DebugString();
+  }
+
+  template <typename Response>
+  static void PrintResponse(const std::string& name, const Response& response) {
+    std::cout << name << " : " << response.DebugString() << std::endl;
+    DINGO_LOG(INFO) << name << " : " << response.DebugString();
+  }
 
  private:
   static void PrintDumpHeadOrTail();

@@ -480,8 +480,11 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
   dingodb::pb::common::BackupParam backup_param1;
   bool backup_param_exist1 = false;
 
-  dingodb::pb::common::BackupMeta backup_meta1;
-  bool backup_meta_exist1 = false;
+  dingodb::pb::common::BackupMeta backup_meta_schema1;
+  bool backup_meta_schema_exist1 = false;
+
+  dingodb::pb::common::BackupMeta backup_meta_data_file1;
+  bool backup_meta_data_file_exist1 = false;
 
   dingodb::pb::meta::IdEpochTypeAndValue id_epoch_type_and_value1;
   bool id_epoch_type_and_value_exist1 = false;
@@ -489,9 +492,10 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
   dingodb::pb::meta::TableIncrementGroup table_increment_group1;
   bool table_increment_group_exist1 = false;
 
-  status = ToolDiff::ReadSstForBackupMeta(path1, backup_param1, backup_param_exist1, backup_meta1, backup_meta_exist1,
-                                          id_epoch_type_and_value1, id_epoch_type_and_value_exist1,
-                                          table_increment_group1, table_increment_group_exist1);
+  status = ToolDiff::ReadSstForBackupMeta(
+      path1, backup_param1, backup_param_exist1, backup_meta_schema1, backup_meta_schema_exist1, backup_meta_data_file1,
+      backup_meta_data_file_exist1, id_epoch_type_and_value1, id_epoch_type_and_value_exist1, table_increment_group1,
+      table_increment_group_exist1);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
@@ -500,17 +504,21 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
   dingodb::pb::common::BackupParam backup_param2;
   bool backup_param_exist2 = false;
 
-  dingodb::pb::common::BackupMeta backup_meta2;
-  bool backup_meta_exist2 = false;
+  dingodb::pb::common::BackupMeta backup_meta_schema2;
+  bool backup_meta_schema_exist2 = false;
+
+  dingodb::pb::common::BackupMeta backup_meta_data_file2;
+  bool backup_meta_data_file_exist2 = false;
 
   dingodb::pb::meta::IdEpochTypeAndValue id_epoch_type_and_value2;
   bool id_epoch_type_and_value_exist2 = false;
 
   dingodb::pb::meta::TableIncrementGroup table_increment_group2;
   bool table_increment_group_exist2 = false;
-  status = ToolDiff::ReadSstForBackupMeta(path2, backup_param2, backup_param_exist2, backup_meta2, backup_meta_exist2,
-                                          id_epoch_type_and_value2, id_epoch_type_and_value_exist2,
-                                          table_increment_group2, table_increment_group_exist2);
+  status = ToolDiff::ReadSstForBackupMeta(
+      path2, backup_param2, backup_param_exist2, backup_meta_schema2, backup_meta_schema_exist2, backup_meta_data_file2,
+      backup_meta_data_file_exist2, id_epoch_type_and_value2, id_epoch_type_and_value_exist2, table_increment_group2,
+      table_increment_group_exist2);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
     return status;
@@ -523,9 +531,15 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
     i++;
   }
 
-  if (backup_meta_exist1) {
-    content1 +=
-        fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName, backup_meta1.DebugString());
+  if (backup_meta_schema_exist1) {
+    content1 += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName,
+                            backup_meta_schema1.DebugString());
+    i++;
+  }
+
+  if (backup_meta_data_file_exist1) {
+    content1 += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaDataFileName,
+                            backup_meta_data_file1.DebugString());
     i++;
   }
 
@@ -547,9 +561,15 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
     i++;
   }
 
-  if (backup_meta_exist2) {
-    content2 +=
-        fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName, backup_meta2.DebugString());
+  if (backup_meta_schema_exist2) {
+    content2 += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName,
+                            backup_meta_schema2.DebugString());
+    i++;
+  }
+
+  if (backup_meta_data_file_exist2) {
+    content1 += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaDataFileName,
+                            backup_meta_data_file2.DebugString());
     i++;
   }
 
@@ -668,71 +688,81 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
     compare_content += "\n";
   }
 
-  if (backup_meta_exist1 && !backup_meta_exist2) {
+  if (backup_meta_schema_exist1 && !backup_meta_schema_exist2) {
     is_same = false;
   }
 
-  if (!backup_meta_exist1 && backup_meta_exist2) {
+  if (!backup_meta_schema_exist1 && backup_meta_schema_exist2) {
     is_same = false;
   }
 
-  // compare backup_meta
-  if (backup_meta_exist1 && backup_meta_exist2) {
-    if (backup_meta1.remark() != backup_meta2.remark()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.remark L:{} | R:{}", backup_meta1.remark(),
-                                     backup_meta2.remark());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.remark L:{} | R:{}", backup_meta1.remark(),
-                                     backup_meta2.remark());
-    }
+  // compare backup_meta schema
+  ToolDiff::CompareBackupMetaPb(dingodb::Constant::kBackupMetaSchemaName, backup_meta_schema1, backup_meta_schema2,
+                                is_same, compare_content);
 
-    if (backup_meta1.exec_node() != backup_meta2.exec_node()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.exec_node L:{} | R:{}",
-                                     backup_meta1.exec_node(), backup_meta2.exec_node());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.backup_type L:{} | R:{}",
-                                     backup_meta1.exec_node(), backup_meta2.exec_node());
-    }
+  compare_content += "\n";
 
-    if (backup_meta1.dir_name() != backup_meta2.dir_name()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.dir_name L:{} | R:{}",
-                                     backup_meta1.dir_name(), backup_meta2.dir_name());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.dir_name L:{} | R:{}",
-                                     backup_meta1.dir_name(), backup_meta2.dir_name());
-    }
+  ToolDiff::CompareBackupMetaPb(dingodb::Constant::kBackupMetaDataFileName, backup_meta_data_file1,
+                                backup_meta_data_file2, is_same, compare_content);
 
-    if (backup_meta1.file_size() != backup_meta2.file_size()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.file_size L:{} | R:{}",
-                                     backup_meta1.file_size(), backup_meta2.file_size());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.file_size L:{} | R:{}",
-                                     backup_meta1.file_size(), backup_meta2.file_size());
-    }
+  compare_content += "\n";
 
-    if (backup_meta1.encryption() != backup_meta2.encryption()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.encryption L:{} | R:{}",
-                                     backup_meta1.encryption(), backup_meta2.encryption());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.encryption L:{} | R:{}",
-                                     backup_meta1.encryption(), backup_meta2.encryption());
-    }
+  //     if (backup_meta_schema_exist1 && backup_meta_schema_exist2) {
+  //   if (backup_meta_schema1.remark() != backup_meta_schema2.remark()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.remark L:{} | R:{}",
+  //                                    backup_meta_schema1.remark(), backup_meta_schema2.remark());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.remark L:{} | R:{}",
+  //                                    backup_meta_schema1.remark(), backup_meta_schema2.remark());
+  //   }
 
-    if (backup_meta1.file_name() != backup_meta2.file_name()) {
-      is_same = false;
-      compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.file_name L:{} | R:{}",
-                                     backup_meta1.file_name(), backup_meta2.file_name());
-    } else {
-      compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.file_name L:{} | R:{}",
-                                     backup_meta1.file_name(), backup_meta2.file_name());
-    }
-    compare_content += "\n";
-  }
+  //   if (backup_meta_schema1.exec_node() != backup_meta_schema2.exec_node()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.exec_node L:{} | R:{}",
+  //                                    backup_meta_schema1.exec_node(), backup_meta_schema2.exec_node());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.backup_type L:{} | R:{}",
+  //                                    backup_meta_schema1.exec_node(), backup_meta_schema2.exec_node());
+  //   }
+
+  //   if (backup_meta_schema1.dir_name() != backup_meta_schema2.dir_name()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.dir_name L:{} | R:{}",
+  //                                    backup_meta_schema1.dir_name(), backup_meta_schema2.dir_name());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.dir_name L:{} | R:{}",
+  //                                    backup_meta_schema1.dir_name(), backup_meta_schema2.dir_name());
+  //   }
+
+  //   if (backup_meta_schema1.file_size() != backup_meta_schema2.file_size()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.file_size L:{} | R:{}",
+  //                                    backup_meta_schema1.file_size(), backup_meta_schema2.file_size());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.file_size L:{} | R:{}",
+  //                                    backup_meta_schema1.file_size(), backup_meta_schema2.file_size());
+  //   }
+
+  //   if (backup_meta_schema1.encryption() != backup_meta_schema2.encryption()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.encryption L:{} | R:{}",
+  //                                    backup_meta_schema1.encryption(), backup_meta_schema2.encryption());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.encryption L:{} | R:{}",
+  //                                    backup_meta_schema1.encryption(), backup_meta_schema2.encryption());
+  //   }
+
+  //   if (backup_meta_schema1.file_name() != backup_meta_schema2.file_name()) {
+  //     is_same = false;
+  //     compare_content += fmt::format("\n ≠ dingodb::pb::common::BackupMeta.file_name L:{} | R:{}",
+  //                                    backup_meta_schema1.file_name(), backup_meta_schema2.file_name());
+  //   } else {
+  //     compare_content += fmt::format("\n = dingodb::pb::common::BackupMeta.file_name L:{} | R:{}",
+  //                                    backup_meta_schema1.file_name(), backup_meta_schema2.file_name());
+  //   }
+  //   compare_content += "\n";
+  // }
 
   if (id_epoch_type_and_value_exist1 && !id_epoch_type_and_value_exist2) {
     is_same = false;
@@ -843,13 +873,12 @@ butil::Status ToolDiff::CompareBackupMetaFunction(const std::string& path1, cons
   return butil::Status::OK();
 }
 
-butil::Status ToolDiff::ReadSstForBackupMeta(const std::string& path, dingodb::pb::common::BackupParam& backup_param,
-                                             bool& backup_param_exist, dingodb::pb::common::BackupMeta& backup_meta,
-                                             bool& backup_meta_exist,
-                                             dingodb::pb::meta::IdEpochTypeAndValue& id_epoch_type_and_value,
-                                             bool& id_epoch_type_and_value_exist,
-                                             dingodb::pb::meta::TableIncrementGroup& table_increment_group,
-                                             bool& table_increment_group_exist) {
+butil::Status ToolDiff::ReadSstForBackupMeta(
+    const std::string& path, dingodb::pb::common::BackupParam& backup_param, bool& backup_param_exist,
+    dingodb::pb::common::BackupMeta& backup_meta_schema, bool& backup_meta_schema_exist,
+    dingodb::pb::common::BackupMeta& backup_meta_data_file, bool& backup_meta_data_file_exist,
+    dingodb::pb::meta::IdEpochTypeAndValue& id_epoch_type_and_value, bool& id_epoch_type_and_value_exist,
+    dingodb::pb::meta::TableIncrementGroup& table_increment_group, bool& table_increment_group_exist) {
   butil::Status status;
 
   std::map<std::string, std::string> kvs;
@@ -875,16 +904,28 @@ butil::Status ToolDiff::ReadSstForBackupMeta(const std::string& path, dingodb::p
     backup_param_exist = true;
   }
 
-  backup_meta_exist = false;
+  backup_meta_schema_exist = false;
   iter = kvs.find(dingodb::Constant::kBackupMetaSchemaName);
   if (iter != kvs.end()) {
-    auto ret = backup_meta.ParseFromString(iter->second);
+    auto ret = backup_meta_schema.ParseFromString(iter->second);
     if (!ret) {
       std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
       DINGO_LOG(ERROR) << s;
       return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
     }
-    backup_meta_exist = true;
+    backup_meta_schema_exist = true;
+  }
+
+  backup_meta_data_file_exist = false;
+  iter = kvs.find(dingodb::Constant::kBackupMetaDataFileName);
+  if (iter != kvs.end()) {
+    auto ret = backup_meta_data_file.ParseFromString(iter->second);
+    if (!ret) {
+      std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+    }
+    backup_meta_data_file_exist = true;
   }
 
   // find IdEpochTypeAndValueKey
@@ -2937,13 +2978,6 @@ void ToolDiff::CompareBackupDataFileValueSstMetaPb(
   }
 }
 
-butil::Status ToolDiff::CompareRegionDefintionSst(const std::string& path1, const std::string& path2, bool& is_same,
-                                                  std::string& compare_content, std::string& content1,
-                                                  std::string& content2, std::string& same_content,
-                                                  std::string& diff_content) {
-  return butil::Status();
-}
-
 butil::Status ToolDiff::CompareRegionDefinitionFunction(const std::string& path1, const std::string& path2,
                                                         bool& is_same, std::string& compare_content,
                                                         std::string& content1, std::string& content2,
@@ -3148,7 +3182,7 @@ void ToolDiff::CompareRegionPb(const std::string& name, const std::string& name2
     } else {
       is_same_str = "=";
     }
-    compare_content += fmt::format("\n {} {} {}.Region.state L:{} | R:{}", is_same_str, name, name2, "...", "...");
+    compare_content += fmt::format("\n {} {} {}.Region.status L:{} | R:{}", is_same_str, name, name2, "...", "...");
 
     if (region_1->leader_store_id() != region_2->leader_store_id()) {
       is_same = false;

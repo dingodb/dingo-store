@@ -18,6 +18,7 @@
 #include <memory>
 
 #include "br/parameter.h"
+#include "br/tool_client.h"
 #include "br/tool_diff.h"
 #include "br/tool_dump.h"
 #include "butil/status.h"
@@ -48,6 +49,7 @@ class Tool : public std::enable_shared_from_this<Tool> {
   ToolParams tool_params_;
   std::shared_ptr<ToolDump> tool_dump_;
   std::shared_ptr<ToolDiff> tool_diff_;
+  std::shared_ptr<ToolClient> tool_client_;
 };
 
 }  // namespace br

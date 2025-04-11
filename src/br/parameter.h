@@ -121,6 +121,8 @@ struct ToolParams {
   std::string br_dump_file;
   std::string br_diff_file1;
   std::string br_diff_file2;
+  std::string br_client_method;
+  std::string br_client_method_param1;
 };
 
 struct ToolDumpParams {
@@ -136,6 +138,13 @@ struct ToolDiffParams {
   std::string br_diff_file2;
 };
 
+struct ToolClientParams {
+  std::string br_type;
+  std::string br_tool_type;
+  std::string br_client_method;
+  std::string br_client_method_param1;
+};
+
 // br tool type
 DECLARE_string(br_tool_type);
 
@@ -147,6 +156,12 @@ DECLARE_string(br_diff_file1);
 
 // br diff file2
 DECLARE_string(br_diff_file2);
+
+// br client method
+DECLARE_string(br_client_method);
+
+// br client method param1
+DECLARE_string(br_client_method_param1);
 
 }  // namespace br
 
