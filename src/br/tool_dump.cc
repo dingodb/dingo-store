@@ -535,17 +535,30 @@ butil::Status ToolDump::DumpBackupMetaFunction(const std::string& path, std::str
     backup_param_exist = true;
   }
 
-  dingodb::pb::common::BackupMeta backup_meta;
-  bool backup_meta_exist = false;
+  dingodb::pb::common::BackupMeta backup_meta_schema;
+  bool backup_meta_schema_exist = false;
   iter = kvs.find(dingodb::Constant::kBackupMetaSchemaName);
   if (iter != kvs.end()) {
-    auto ret = backup_meta.ParseFromString(iter->second);
+    auto ret = backup_meta_schema.ParseFromString(iter->second);
     if (!ret) {
       std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
       DINGO_LOG(ERROR) << s;
       return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
     }
-    backup_meta_exist = true;
+    backup_meta_schema_exist = true;
+  }
+
+  dingodb::pb::common::BackupMeta backup_meta_data_file;
+  bool backup_meta_data_file_exist = false;
+  iter = kvs.find(dingodb::Constant::kBackupMetaDataFileName);
+  if (iter != kvs.end()) {
+    auto ret = backup_meta_data_file.ParseFromString(iter->second);
+    if (!ret) {
+      std::string s = fmt::format("parse dingodb::pb::common::BackupMeta failed");
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::Errno::EINTERNAL, s);
+    }
+    backup_meta_data_file_exist = true;
   }
 
   // find IdEpochTypeAndValueKey
@@ -583,8 +596,15 @@ butil::Status ToolDump::DumpBackupMetaFunction(const std::string& path, std::str
     i++;
   }
 
-  if (backup_meta_exist) {
-    content += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName, backup_meta.DebugString());
+  if (backup_meta_schema_exist) {
+    content +=
+        fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaSchemaName, backup_meta_schema.DebugString());
+    i++;
+  }
+
+  if (backup_meta_data_file_exist) {
+    content += fmt::format("\n[{}] [{}] :\n{}", i, dingodb::Constant::kBackupMetaDataFileName,
+                           backup_meta_data_file.DebugString());
     i++;
   }
 

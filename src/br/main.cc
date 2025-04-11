@@ -499,7 +499,8 @@ int main(int argc, char* argv[]) {
 
   butil::Status status;
 
-  if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
+  if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore" ||
+      (br::FLAGS_br_type == "tool" && br::FLAGS_br_tool_type == "client")) {
     std::shared_ptr<br::ServerInteraction> coordinator_interaction = std::make_shared<br::ServerInteraction>();
     if (br::FLAGS_br_coor_url.empty()) {
       DINGO_LOG(WARNING) << "coordinator url is empty, try to use file://.conf/coor_list";
@@ -545,7 +546,8 @@ int main(int argc, char* argv[]) {
       DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
       return -1;
     }
-  }  // if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
+  }  // if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore" ||   (br::FLAGS_br_type == "tool") &&
+     // br::FLAGS_br_tool_type == "client")) {
 
   // command parse
   if (br::FLAGS_br_type == "backup") {
@@ -569,28 +571,32 @@ int main(int argc, char* argv[]) {
       return -1;
     }
   } else if (br::FLAGS_br_type == "tool") {
-    if (br::FLAGS_br_tool_type != "dump" && br::FLAGS_br_tool_type != "diff") {
+    if (br::FLAGS_br_tool_type != "dump" && br::FLAGS_br_tool_type != "diff" && br::FLAGS_br_tool_type != "client") {
       DINGO_LOG(ERROR) << "tool type not support, please check parameter --br_tool_type=" << br::FLAGS_br_tool_type;
       return -1;
     }
 
-    if (br::FLAGS_br_tool_type == "dump") {
+    if (br::FLAGS_br_tool_type == "dump") {  // dump
       if (br::FLAGS_br_dump_file.empty()) {
         DINGO_LOG(ERROR) << "dump file is empty, please check parameter --br_dump_file=" << br::FLAGS_br_dump_file;
         return -1;
       }
-    } else {  // diff
+    } else if (br::FLAGS_br_tool_type == "diff") {  // diff
       if (br::FLAGS_br_diff_file1.empty()) {
         DINGO_LOG(ERROR) << "diff file1 is empty, please check parameter --br_diff_file1=" << br::FLAGS_br_diff_file1;
         return -1;
       }
-
       if (br::FLAGS_br_diff_file2.empty()) {
         DINGO_LOG(ERROR) << "diff file2 is empty, please check parameter --br_diff_file2=" << br::FLAGS_br_diff_file2;
         return -1;
       }
+    } else {  // client
+      if (br::FLAGS_br_client_method.empty()) {
+        DINGO_LOG(ERROR) << "br client method is empty, please check parameter --br_client_method="
+                         << br::FLAGS_br_client_method;
+        return -1;
+      }
     }
-
   } else {
     DINGO_LOG(ERROR) << "br type not support, please check parameter --br_type=" << br::FLAGS_br_type;
     return -1;
@@ -627,7 +633,7 @@ int main(int argc, char* argv[]) {
       DINGO_LOG(ERROR) << "storage not support, please check parameter --storage=" << br::FLAGS_storage;
       return -1;
     }
-  }  //   if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore") {
+  }  //   if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore" ) {
 
   // backup
   if (br::FLAGS_br_type == "backup") {
@@ -800,9 +806,13 @@ int main(int argc, char* argv[]) {
       params.br_dump_file = br::FLAGS_br_dump_file;
       tool = std::make_shared<br::Tool>(params);
 
-    } else {  // diff
+    } else if (br::FLAGS_br_tool_type == "diff") {  // diff
       params.br_diff_file1 = br::FLAGS_br_diff_file1;
       params.br_diff_file2 = br::FLAGS_br_diff_file2;
+      tool = std::make_shared<br::Tool>(params);
+    } else {  // client
+      params.br_client_method = br::FLAGS_br_client_method;
+      params.br_client_method_param1 = br::FLAGS_br_client_method_param1;
       tool = std::make_shared<br::Tool>(params);
     }
 

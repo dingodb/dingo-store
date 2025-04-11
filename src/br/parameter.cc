@@ -107,4 +107,10 @@ DEFINE_string(br_diff_file1, "", "br diff file1. default empty");
 // br diff file2
 DEFINE_string(br_diff_file2, "", "br diff file2. default empty");
 
+// br client method
+DEFINE_string(br_client_method, "", "br client method. default empty");
+
+// br client method param1
+DEFINE_string(br_client_method_param1, "", "br client method param1. default empty");
+
 }  // namespace br

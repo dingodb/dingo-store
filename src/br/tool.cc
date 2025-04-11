@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "br/tool_client.h"
 #include "br/utils.h"
 #include "common/logging.h"
 #include "fmt/core.h"
@@ -44,6 +45,14 @@ butil::Status Tool::Init() {
     tool_diff_params.br_diff_file1 = tool_params_.br_diff_file1;
     tool_diff_params.br_diff_file2 = tool_params_.br_diff_file2;
     tool_diff_ = std::make_shared<ToolDiff>(tool_diff_params);
+  } else if ("client" == tool_params_.br_tool_type) {
+    ToolClientParams tool_client_params;
+    tool_client_params.br_type = tool_params_.br_type;
+    tool_client_params.br_tool_type = tool_params_.br_tool_type;
+    tool_client_params.br_client_method = tool_params_.br_client_method;
+    tool_client_params.br_client_method_param1 = tool_params_.br_client_method_param1;
+
+    tool_client_ = std::make_shared<ToolClient>(tool_client_params);
   } else {
     std::string s = fmt::format("tool type not support. use dump or diff. {}", tool_params_.br_tool_type);
     DINGO_LOG(ERROR) << s;
@@ -60,6 +69,14 @@ butil::Status Tool::Init() {
 
   if (tool_diff_) {
     status = tool_diff_->Init();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  }
+
+  if (tool_client_) {
+    status = tool_client_->Init();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -88,6 +105,14 @@ butil::Status Tool::Run() {
     }
   }
 
+  if (tool_client_) {
+    status = tool_client_->Run();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  }
+
   return butil::Status::OK();
 }
 
@@ -104,6 +129,14 @@ butil::Status Tool::Finish() {
 
   if (tool_diff_) {
     status = tool_diff_->Finish();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  }
+
+  if (tool_client_) {
+    status = tool_client_->Finish();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;

@@ -7066,7 +7066,7 @@ butil::Status BrWatchDogManager::GetBackupStatus(bool& is_backing_up, std::strin
     // get current timestamp
     int64_t current_timestamp = Helper::Timestamp();
     if (current_timestamp >
-        (br_restore_watch_dog_info_->restore_current_timestamp + br_restore_watch_dog_info_->restore_timeout_s)) {
+        (br_backup_watch_dog_info_->backup_current_timestamp + br_backup_watch_dog_info_->backup_timeout_s)) {
       // timeout
       is_backing_up = false;
     } else {

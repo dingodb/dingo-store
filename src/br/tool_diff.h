@@ -66,13 +66,12 @@ class ToolDiff : public std::enable_shared_from_this<ToolDiff> {
   static butil::Status CompareBackupMetaFunction(const std::string& path1, const std::string& path2, bool& is_same,
                                                  std::string& compare_content, std::string& content1,
                                                  std::string& content2);
-  static butil::Status ReadSstForBackupMeta(const std::string& path, dingodb::pb::common::BackupParam& backup_param,
-                                            bool& backup_param_exist, dingodb::pb::common::BackupMeta& backup_meta,
-                                            bool& backup_meta_exist,
-                                            dingodb::pb::meta::IdEpochTypeAndValue& id_epoch_type_and_value,
-                                            bool& id_epoch_type_and_value_exist,
-                                            dingodb::pb::meta::TableIncrementGroup& table_increment_group,
-                                            bool& table_increment_group_exist);
+  static butil::Status ReadSstForBackupMeta(
+      const std::string& path, dingodb::pb::common::BackupParam& backup_param, bool& backup_param_exist,
+      dingodb::pb::common::BackupMeta& backup_meta_schema, bool& backup_meta_schema_exist,
+      dingodb::pb::common::BackupMeta& backup_meta_data_file, bool& backup_meta_data_file_exist,
+      dingodb::pb::meta::IdEpochTypeAndValue& id_epoch_type_and_value, bool& id_epoch_type_and_value_exist,
+      dingodb::pb::meta::TableIncrementGroup& table_increment_group, bool& table_increment_group_exist);
 
   static butil::Status CompareBackupMetaDataFileFunction(const std::string& path1, const std::string& path2,
                                                          bool& is_same, std::string& compare_content,
@@ -191,11 +190,6 @@ class ToolDiff : public std::enable_shared_from_this<ToolDiff> {
       const std::optional<dingodb::pb::common::BackupDataFileValueSstMeta>& group_1,
       const std::optional<dingodb::pb::common::BackupDataFileValueSstMeta>& group_2, bool& is_same,
       std::string& compare_content, bool& is_same_content);
-
-  static butil::Status CompareRegionDefintionSst(const std::string& path1, const std::string& path2, bool& is_same,
-                                                 std::string& compare_content, std::string& content1,
-                                                 std::string& content2, std::string& same_content,
-                                                 std::string& diff_content);
 
   static butil::Status CompareRegionDefinitionFunction(const std::string& path1, const std::string& path2,
                                                        bool& is_same, std::string& compare_content,
