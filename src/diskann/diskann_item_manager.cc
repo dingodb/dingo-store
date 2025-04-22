@@ -32,6 +32,16 @@
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 
+#ifndef ENABLE_DISKANN_SIMD_HOOK
+#define ENABLE_DISKANN_SIMD_HOOK
+#endif
+
+// #undef ENABLE_DISKANN_SIMD_HOOK
+
+#if defined(ENABLE_DISKANN_SIMD_HOOK)
+#include "diskann_hook.h"
+#include "simd/hook.h"
+#endif
 namespace dingodb {
 
 DiskANNItemManager::DiskANNItemManager()
@@ -112,6 +122,8 @@ bool DiskANNItemManager::Init(std::shared_ptr<Config> config) {
   DiskANNItem::SetImportTimeout(import_timeout_s_);
   DiskANNItem::SetBaseDir(path_);
 
+  DiskANNItemManager::SetSimdHookForDiskANN();
+
   return true;
 }
 
@@ -160,6 +172,23 @@ std::vector<std::shared_ptr<DiskANNItem>> DiskANNItemManager::FindAll() {
   }
 
   return items;
+}
+
+void DiskANNItemManager::SetSimdHookForDiskANN() {
+#if defined(ENABLE_DISKANN_SIMD_HOOK)
+  std::string simd_type;
+  fvec_hook_info(simd_type);
+
+#if defined(__x86_64__)
+  DINGO_LOG(INFO) << fmt::format("cpu_support_avx512 : {} cpu_support_avx2 : {} cpu_support_sse4_2 : {}",
+                                 cpu_support_avx512() ? "true" : "false", cpu_support_avx2() ? "true" : "false",
+                                 cpu_support_sse4_2() ? "true" : "false");
+#endif
+  DINGO_LOG(INFO) << fmt::format("cpu simd_type : {}", simd_type);
+  diskann::set_fvec_L2sqr_hook(fvec_L2sqr);
+  diskann::set_fvec_inner_product_hook(fvec_inner_product);
+  DINGO_LOG(INFO) << fmt::format("set diskann hook : {} {}", "fvec_L2sqr", "fvec_inner_product");
+#endif
 }
 
 }  // namespace dingodb

@@ -64,6 +64,8 @@ class DiskANNItemManager : public DiskANNItemManagerSingleton<DiskANNItemManager
 
   std::vector<std::shared_ptr<DiskANNItem>> FindAll();
 
+  static void SetSimdHookForDiskANN();
+
  protected:
  private:
   std::string path_;
