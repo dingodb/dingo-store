@@ -412,6 +412,10 @@ class Helper {
 
   static std::string ConvertColumnValueToString(const pb::meta::ColumnDefinition& column_definition,
                                                 const std::any& value);
+
+  static std::string ConvertColumnValueToStringV2(const pb::meta::ColumnDefinition& column_definition,
+                                                const std::any& value);
+
   static pb::common::Schema::Type TransformSchemaType(const std::string& name);
 
   static bool IsSupportSplitAndMerge(const pb::common::RegionDefinition& definition);
@@ -425,10 +429,9 @@ class Helper {
   static void HandleBoolControlConfigVariable(const pb::common::ControlConfigVariable& variable,
                                               pb::common::ControlConfigVariable& config, bool& gflags_var);
 
-  static size_t FindReEnd(const std::string &s, size_t start_pos);
+  static size_t FindReEnd(const std::string& s, size_t start_pos);
   static std::string Base64Encode(const std::string& input);
   static std::string EncodeREContent(const std::string& input);
-
 };
 
 }  // namespace dingodb

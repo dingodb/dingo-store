@@ -71,9 +71,10 @@ namespace dingodb {
 using Errno = pb::error::Errno;
 using PbError = pb::error::Error;
 
-static const std::string Base64Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                                        "abcdefghijklmnopqrstuvwxyz"
-                                        "0123456789+/";
+static const std::string Base64Chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    "abcdefghijklmnopqrstuvwxyz"
+    "0123456789+/";
 
 int Helper::GetCoreNum() { return sysconf(_SC_NPROCESSORS_ONLN); }
 
@@ -2119,9 +2120,6 @@ std::string Helper::ConvertColumnValueToString(const pb::meta::ColumnDefinition&
   } else if (value.type() == typeid(std::optional<int64_t>)) {
     auto v = std::any_cast<std::optional<int64_t>>(value);
     ostr << v.value_or(0);
-  } else if (value.type() == typeid(std::optional<int64_t>)) {
-    auto v = std::any_cast<std::optional<int64_t>>(value);
-    ostr << v.value_or(0);
   } else if (value.type() == typeid(std::optional<double>)) {
     auto v = std::any_cast<std::optional<double>>(value);
     ostr << v.value_or(0.0);
@@ -2176,6 +2174,76 @@ std::string Helper::ConvertColumnValueToString(const pb::meta::ColumnDefinition&
 
   } else {
     ostr << fmt::format("unknown type({})", value.type().name());
+  }
+
+  return ostr.str();
+}
+
+std::string Helper::ConvertColumnValueToStringV2(const pb::meta::ColumnDefinition& column_definition,
+                                                 const std::any& value) {  // NOLINT
+  std::ostringstream ostr;
+
+  if (value.type() == typeid(std::string)) {
+    ostr << std::any_cast<std::string>(value);
+  } else if (value.type() == typeid(std::shared_ptr<std::string>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::string>>(value);
+    if (ptr != nullptr) {
+      if (column_definition.sql_type() == "BINARY" || column_definition.sql_type() == "ANY") {
+        ostr << Helper::StringToHex(*ptr);
+      } else {
+        ostr << *ptr;
+      }
+    }
+  } else if (value.type() == typeid(int32_t)) {
+    ostr << std::any_cast<int32_t>(value);
+  } else if (value.type() == typeid(uint32_t)) {
+    ostr << std::any_cast<uint32_t>(value);
+  } else if (value.type() == typeid(int64_t)) {
+    ostr << std::any_cast<int64_t>(value);
+  } else if (value.type() == typeid(double)) {
+    ostr << std::any_cast<double>(value);
+  } else if (value.type() == typeid(float)) {
+    ostr << std::any_cast<float>(value);
+  } else if (value.type() == typeid(bool)) {
+    ostr << std::any_cast<bool>(value);
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<bool>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<bool>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<std::string>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<std::string>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<double>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<double>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<float>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<float>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<int32_t>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<int32_t>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else if (value.type() == typeid(std::optional<std::shared_ptr<std::vector<int64_t>>>)) {
+    auto ptr = std::any_cast<std::shared_ptr<std::vector<int64_t>>>(value);
+    if (ptr != nullptr) {
+      ostr << Helper::VectorToString(*ptr);
+    }
+
+  } else {
+    return ConvertColumnValueToString(column_definition, value);
   }
 
   return ostr.str();
@@ -2400,8 +2468,8 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
   config.set_is_error_occurred(false);
 }
 
-size_t Helper::FindReEnd(const std::string &s, size_t start_pos){
-  // Only calculate the outermost 
+size_t Helper::FindReEnd(const std::string& s, size_t start_pos) {
+  // Only calculate the outermost
   int bracket_level = 0;
   bool in_escape = false;
 
@@ -2423,7 +2491,6 @@ size_t Helper::FindReEnd(const std::string &s, size_t start_pos){
     }
   }
   return std::string::npos;
-
 }
 
 std::string Helper::Base64Encode(const std::string& input) {
@@ -2460,8 +2527,8 @@ std::string Helper::EncodeREContent(const std::string& input) {
     // Add the content before "RE [".
     result += input.substr(pos, start - pos);
 
-    // // "RE [" length 
-    size_t content_start = start + 4; 
+    // // "RE [" length
+    size_t content_start = start + 4;
     size_t end = FindReEnd(input, content_start);
 
     if (end == std::string::npos) {

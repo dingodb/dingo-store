@@ -172,7 +172,7 @@ static std::string GetPrimaryString(const dingodb::pb::meta::TableDefinition& ta
     }
     const auto& column_definition = table_definition.columns().at(i);
 
-    result.push_back(Helper::ConvertColumnValueToString(column_definition, values[i]));
+    result.push_back(Helper::ConvertColumnValueToStringV2(column_definition, values[i]));
   }
 
   return dingodb::Helper::VectorToString(result);
