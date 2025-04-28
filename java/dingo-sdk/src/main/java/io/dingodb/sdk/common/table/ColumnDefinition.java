@@ -81,11 +81,6 @@ public class ColumnDefinition implements Column {
     }
 
     @Override
-    public String getName() {
-        return name.toUpperCase();
-    }
-
-    @Override
     public int getPrimary() {
         return primary < 0 ? -1 : primary;
     }
