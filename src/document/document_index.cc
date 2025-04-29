@@ -245,7 +245,12 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
     uint64_t document_id = document_with_id.id();
 
     const auto& document = document_with_id.document();
+
     for (const auto& [field_name, document_value] : document.document_data()) {
+      // skip the field which not set
+      if (document_value.field_value().data_case() == pb::common::ScalarField::DATA_NOT_SET) {
+        continue;
+      }
       switch (document_value.field_type()) {
         case pb::common::ScalarFieldType::STRING:
           text_column_names.push_back(field_name);
