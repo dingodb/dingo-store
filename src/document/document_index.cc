@@ -289,7 +289,13 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
           break;
       }
     }
-
+    if (text_column_names.empty() && i64_column_names.empty() && f64_column_names.empty() &&
+        bytes_column_names.empty() && date_column_names.empty() && bool_column_names.empty()) {
+      DINGO_LOG(INFO) << fmt::format(
+          "[document_index.raw][id({})] document_id: ({}) document_value not set so not create document index", id_,
+          document_id);
+      continue;
+    }
     auto bool_result = ffi_index_multi_type_column_docs(
         index_path_, document_id, text_column_names, text_column_docs, i64_column_names, i64_column_docs,
         f64_column_names, f64_column_docs, bytes_column_names, bytes_column_docs, date_column_names, date_column_docs,
