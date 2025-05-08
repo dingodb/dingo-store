@@ -171,9 +171,15 @@ VectorIndexHnsw::VectorIndexHnsw(int64_t id, const pb::common::VectorIndexParame
         hnsw_parameter.efconstruction(), pb::common::MetricType_Name(hnsw_parameter.metric_type()),
         hnsw_parameter.dimension());
 
-    hnsw_index_ =
-        new hnswlib::HierarchicalNSW<float>(hnsw_space_, FLAGS_hnsw_max_init_max_elements, hnsw_parameter.nlinks(),
-                                            hnsw_parameter.efconstruction(), 100, false);
+    uint32_t hnsw_init_max_elements = 0;
+    if (max_element_limit_ < FLAGS_hnsw_max_init_max_elements) {
+      hnsw_init_max_elements = max_element_limit_;
+    } else {
+      hnsw_init_max_elements = FLAGS_hnsw_max_init_max_elements;
+    }
+
+    hnsw_index_ = new hnswlib::HierarchicalNSW<float>(hnsw_space_, hnsw_init_max_elements, hnsw_parameter.nlinks(),
+                                                      hnsw_parameter.efconstruction(), 100, false);
   }
 }
 
@@ -623,13 +629,30 @@ butil::Status VectorIndexHnsw::CheckAndSetHnswParameter(pb::common::CreateHnswPa
     hnsw_parameter.set_nlinks(FLAGS_max_hnsw_nlinks_of_region);
   }
 
-  auto max_element_limit = CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(),
-                                                   hnsw_parameter.nlinks());
-  hnsw_parameter.set_max_elements(max_element_limit);
-  DINGO_LOG(INFO) << fmt::format(
-      "[vector_index.hnsw] calc max element limit is {}, paramiter max_hnsw_memory_size_of_region({}) dimension({}) "
-      "nlinks({}).",
-      max_element_limit, FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(), hnsw_parameter.nlinks());
+  if (hnsw_parameter.max_elements() == 0) {
+    auto max_element_limit = CalcHnswCountFromMemory(FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(),
+                                                     hnsw_parameter.nlinks());
+    if (max_element_limit == 0) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[vector_index.hnsw] calc max element limit is 0, max_hnsw_memory_size_of_region({}) "
+          "dimension({}) "
+          "nlinks({}).",
+          FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(), hnsw_parameter.nlinks());
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "hnsw max elements is too small");
+    }
+    hnsw_parameter.set_max_elements(max_element_limit);
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.hnsw] calc max element limit is {}, paramiter max_hnsw_memory_size_of_region({}) "
+        "dimension({}) "
+        "nlinks({}).",
+        max_element_limit, FLAGS_max_hnsw_memory_size_of_region, hnsw_parameter.dimension(), hnsw_parameter.nlinks());
+  } else {
+    DINGO_LOG(INFO) << fmt::format(
+        "[vector_index.hnsw] use user set max element {} "
+        "dimension({}) "
+        "nlinks({}).",
+        hnsw_parameter.max_elements(), hnsw_parameter.dimension(), hnsw_parameter.nlinks());
+  }
 
   return butil::Status::OK();
 }
