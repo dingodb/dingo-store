@@ -6,7 +6,7 @@
     <parent>
         <groupId>io.dingodb</groupId>
         <artifactId>Dingo-Java-SDK</artifactId>
-        <version>0.7.1-SNAPSHOT</version>
+        <version>0.7.1-bw-SNAPSHOT</version>
     </parent>
     <artifactId>dingo-sdk</artifactId>
     <modelVersion>4.0.0</modelVersion>
