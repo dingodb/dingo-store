@@ -118,13 +118,13 @@ public class EntityConversion {
                 .addAllColumns(columnDefinitions)
                 .setAutoIncrement(table.getAutoIncrement())
                 .putAllProperties(table.getProperties() == null ? new HashMap() : table.getProperties())
-                .setCreateSql(Parameters.cleanNull(table.getCreateSql(), ""))
+                .setCreateSql(cleanNull(table.getCreateSql(), ""))
                 .setIndexParameter(Optional.mapOrGet(table.getIndexParameter(), EntityConversion::mapping, () -> Common.IndexParameter.newBuilder().build()))
-                .setComment(Parameters.cleanNull(table.getComment(), ""))
-                .setCharset(Parameters.cleanNull(table.getCharset(), "utf8"))
-                .setCollate(Parameters.cleanNull(table.getCollate(), "utf8_bin"))
-                .setTableType(Parameters.cleanNull(table.getTableType(), "BASE TABLE"))
-                .setRowFormat(Parameters.cleanNull(table.getRowFormat(), "Dynamic"))
+                .setComment(cleanNull(table.getComment(), ""))
+                .setCharset(cleanNull(table.getCharset(), "utf8"))
+                .setCollate(cleanNull(table.getCollate(), "utf8_bin"))
+                .setTableType(cleanNull(table.getTableType(), "BASE TABLE"))
+                .setRowFormat(cleanNull(table.getRowFormat(), "Dynamic"))
                 .build();
     }
 
@@ -146,10 +146,10 @@ public class EntityConversion {
                 .createSql(tableDefinition.getCreateSql())
                 .indexParameter(Optional.mapOrNull(tableDefinition.getIndexParameter(), EntityConversion::mapping))
                 .comment(tableDefinition.getComment())
-                .charset(Parameters.cleanNull(tableDefinition.getCharset(), "utf8"))
-                .collate(Parameters.cleanNull(tableDefinition.getCollate(), "utf8_bin"))
-                .tableType(Parameters.cleanNull(tableDefinition.getTableType(), "BASE TABLE"))
-                .rowFormat(Parameters.cleanNull(tableDefinition.getRowFormat(), "Dynamic"))
+                .charset(cleanNull(tableDefinition.getCharset(), "utf8"))
+                .collate(cleanNull(tableDefinition.getCollate(), "utf8_bin"))
+                .tableType(cleanNull(tableDefinition.getTableType(), "BASE TABLE"))
+                .rowFormat(cleanNull(tableDefinition.getRowFormat(), "Dynamic"))
                 .createTime(tableDefinition.getCreateTimestamp())
                 .updateTime(tableDefinition.getUpdateTimestamp())
                 .build();
@@ -681,10 +681,33 @@ public class EntityConversion {
 
     public static Common.ScalarValue mapping(ScalarValue value) {
         return Common.ScalarValue.newBuilder()
-                .setFieldType(Common.ScalarFieldType.valueOf(value.getFieldType().name()))
+                .setFieldType(mapping(value.getFieldType()))
                 .addAllFields(value.getFields().stream().map(f -> mapping(f, value.getFieldType()))
                         .collect(Collectors.toList()))
                 .build();
+    }
+
+    public static Common.ScalarFieldType mapping(ScalarValue.ScalarFieldType type) {
+        switch (type) {
+            case BOOL:
+                return Common.ScalarFieldType.BOOL;
+            case INTEGER:
+            case INT32:
+                return Common.ScalarFieldType.INT32;
+            case INT64:
+            case LONG:
+                return Common.ScalarFieldType.INT64;
+            case FLOAT:
+                return Common.ScalarFieldType.FLOAT32;
+            case DOUBLE:
+                return Common.ScalarFieldType.DOUBLE;
+            case STRING:
+                return Common.ScalarFieldType.STRING;
+            case BYTES:
+                return Common.ScalarFieldType.BYTES;
+            default:
+                throw new IllegalStateException("Unexpected value: " + type);
+        }
     }
 
     public static Common.ScalarField mapping(ScalarField field, ScalarValue.ScalarFieldType type) {
@@ -692,9 +715,11 @@ public class EntityConversion {
             case BOOL:
                 return Common.ScalarField.newBuilder().setBoolData((Boolean) field.getData()).build();
             case INTEGER:
-                return Common.ScalarField.newBuilder().setIntData((Integer) field.getData()).build();
+            case INT32:
+                return Common.ScalarField.newBuilder().setIntData(Integer.parseInt(field.getData().toString())).build();
             case LONG:
-                return Common.ScalarField.newBuilder().setLongData((Long) field.getData()).build();
+            case INT64:
+                return Common.ScalarField.newBuilder().setLongData(Long.parseLong(field.getData().toString())).build();
             case FLOAT:
                 return Common.ScalarField.newBuilder().setFloatData((Float) field.getData()).build();
             case DOUBLE:
@@ -723,8 +748,8 @@ public class EntityConversion {
         return Common.VectorCoprocessor.newBuilder()
                 .setSchemaVersion(coprocessor.getSchemaVersion())
                 .setOriginalSchema(schemaWrapper)
-                .addAllSelectionColumns(Parameters.cleanNull(coprocessor.getSelection(), Collections.emptyList()))
-                .setExpression(ByteString.copyFrom(Parameters.cleanNull(coprocessor.getExpression(), ByteArrayUtils.EMPTY_BYTES)))
+                .addAllSelectionColumns(cleanNull(coprocessor.getSelection(), Collections.emptyList()))
+                .setExpression(ByteString.copyFrom(cleanNull(coprocessor.getExpression(), ByteArrayUtils.EMPTY_BYTES)))
                 .build();
     }
 
@@ -907,7 +932,7 @@ public class EntityConversion {
                 .setSqlType(column.getType())
                 .setIsAutoIncrement(column.isAutoIncrement())
                 .setState(column.getState() == 0 ? 1 : column.getState())
-                .setComment(Parameters.cleanNull(column.getComment(), ""))
+                .setComment(cleanNull(column.getComment(), ""))
                 .build();
     }
     

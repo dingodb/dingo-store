@@ -35,6 +35,8 @@ public class ScalarValue {
     public enum ScalarFieldType {
         NONE,
         BOOL,
+        INT32,
+        INT64,
         INTEGER,
         LONG,
         FLOAT,

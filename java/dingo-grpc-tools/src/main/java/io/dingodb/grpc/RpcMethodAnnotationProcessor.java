@@ -65,7 +65,7 @@ import static javax.lang.model.element.Modifier.FINAL;
 import static javax.lang.model.element.Modifier.PUBLIC;
 import static javax.lang.model.element.Modifier.STATIC;
 
-@SupportedSourceVersion(SourceVersion.RELEASE_8)
+@SupportedSourceVersion(SourceVersion.RELEASE_17)
 public class RpcMethodAnnotationProcessor extends AbstractProcessor {
 
     private static final String fullMethodName = "fullMethodName";
