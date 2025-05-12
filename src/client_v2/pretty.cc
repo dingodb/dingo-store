@@ -245,7 +245,7 @@ void ShowTxnTableData(const dingodb::pb::debug::DumpRegionResponse::Txn& txn,
     for (int i = 0; i < record.size(); ++i) {
       const auto& column_definition = table_definition.columns().at(i);
       if (!IsExcludeColumns(column_definition.name(), exclude_columns)) {
-        std::string column_value = dingodb::Helper::ConvertColumnValueToString(column_definition, record[i]);
+        std::string column_value = dingodb::Helper::ConvertColumnValueToStringV2(column_definition, record[i]);
         row.push_back(ftxui::paragraph(TruncateString(column_value)));
       }
     }
@@ -354,7 +354,7 @@ static std::vector<std::pair<std::string, std::string>> ParseRecord(
 
     result.push_back(
         std::make_pair(column_definition.name(),
-                       TruncateString(dingodb::Helper::ConvertColumnValueToString(column_definition, values[i]))));
+                       TruncateString(dingodb::Helper::ConvertColumnValueToStringV2(column_definition, values[i]))));
   }
 
   return result;
