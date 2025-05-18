@@ -811,6 +811,48 @@ void DoGetStoreMetrics(google::protobuf::RpcController * /*controller*/,
   }
 }
 
+void DoGetStoreOwnMetrics(google::protobuf::RpcController * /*controller*/,
+                          const pb::coordinator::GetStoreOwnMetricsRequest *request,
+                          pb::coordinator::GetStoreOwnMetricsResponse *response, TrackClosure *done,
+                          std::shared_ptr<CoordinatorControl> coordinator_control,
+                          std::shared_ptr<Engine> /*raft_engine*/) {
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto is_leader = coordinator_control->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreOwnMetrics Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
+
+  if (!is_leader) {
+    return coordinator_control->RedirectResponse(response);
+  }
+
+  // get store own metrics
+  std::vector<pb::common::StoreOwnMetrics> store_own_metrics_list;
+  std::vector<int64_t> store_ids;
+  if (request->store_ids_size() > 0) {
+    store_ids.reserve(request->store_ids_size());
+    for (const auto &store_id : request->store_ids()) {
+      store_ids.push_back(store_id);
+    }
+  }
+  coordinator_control->GetStoreOwnMetrics(store_ids, store_own_metrics_list);
+  if (store_own_metrics_list.size() != request->store_ids().size() && request->store_ids().size() > 0) {
+    DINGO_LOG(ERROR) << "GetStoreOwnMetrics size not match, store_ids_size=" << request->store_ids().size()
+                     << ", store_own_metrics_list_size=" << store_own_metrics_list.size();
+    auto *error = response->mutable_error();
+    error->set_errcode(pb::error::Errno::EILLEGAL_PARAMTETERS);
+    error->set_errmsg("invalid store id");
+    return;
+  }
+
+  for (auto &store_own_metrics : store_own_metrics_list) {
+    auto *new_store_own_metrics = response->add_store_own_metrics();
+    *new_store_own_metrics = store_own_metrics;
+  }
+}
+
 void DoDeleteStoreMetrics(google::protobuf::RpcController * /*controller*/,
                           const pb::coordinator::DeleteStoreMetricsRequest *request,
                           pb::coordinator::DeleteStoreMetricsResponse *response, TrackClosure *done,
@@ -2825,6 +2867,29 @@ void CoordinatorServiceImpl::GetStoreMetrics(google::protobuf::RpcController *co
   auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoGetStoreMetrics(controller, request, response, svr_done, coordinator_control_, engine_);
+  });
+  bool ret = worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL, "Commit execute queue failed");
+  }
+}
+
+void CoordinatorServiceImpl::GetStoreOwnMetrics(google::protobuf::RpcController *controller,
+                                                const pb::coordinator::GetStoreOwnMetricsRequest *request,
+                                                pb::coordinator::GetStoreOwnMetricsResponse *response,
+                                                google::protobuf::Closure *done) {
+  brpc::ClosureGuard done_guard(done);
+  auto is_leader = coordinator_control_->IsLeader();
+  DINGO_LOG(DEBUG) << "Receive Get StoreOwnMetrics Request, IsLeader:" << is_leader
+                   << ", Request:" << request->ShortDebugString();
+  if (!is_leader) {
+    return coordinator_control_->RedirectResponse(response);
+  }
+  // Run in queue.
+  auto *svr_done = new CoordinatorServiceClosure(__func__, done_guard.release(), request, response);
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoGetStoreOwnMetrics(controller, request, response, svr_done, coordinator_control_, engine_);
   });
   bool ret = worker_set_->ExecuteRR(task);
   if (!ret) {

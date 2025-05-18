@@ -530,6 +530,8 @@ class CoordinatorControl : public MetaControl {
   void GetStoreRegionMetrics(int64_t store_id, int64_t region_id, std::vector<pb::common::StoreMetrics> &store_metrics);
   void GetStoreMetrics(int64_t store_id, std::vector<pb::common::StoreMetrics> &store_metrics);
 
+  void GetStoreOwnMetrics(std::vector<int64_t> store_ids, std::vector<pb::common::StoreOwnMetrics> &store_own_metrics);
+
   // delete store metrics
   void DeleteStoreRegionMetrics(int64_t store_id);
 
