@@ -370,6 +370,26 @@ void CoordinatorControl::GetStoreMetrics(int64_t store_id, std::vector<pb::commo
   }
 }
 
+void CoordinatorControl::GetStoreOwnMetrics(std::vector<int64_t> store_ids,
+                                            std::vector<pb::common::StoreOwnMetrics>& store_own_metrics) {
+  // if store_ids is empty, we get all store_ids from store_map_
+  if (store_ids.empty()) {
+    store_map_.GetAllKeys(store_ids);
+  }
+  // we get store_own_metric from store_metrics_map
+  BAIDU_SCOPED_LOCK(store_metrics_map_mutex_);
+  for (const auto& id : store_ids) {
+    if (store_metrics_map_.find(id) != store_metrics_map_.end()) {
+      store_own_metrics.push_back(store_metrics_map_.at(id).store_own_metrics);
+
+      DINGO_LOG(INFO) << "GetStoreOwnMetrics...  OK store_id=" << id
+                      << " store_own_metrics=" << store_metrics_map_.at(id).store_own_metrics.ShortDebugString();
+    } else {
+      DINGO_LOG(ERROR) << "GetStoreOwnMetrics store_id=" << id << " not exist";
+    }
+  }
+}
+
 void CoordinatorControl::DeleteStoreRegionMetrics(int64_t store_id) {
   {
     BAIDU_SCOPED_LOCK(store_region_metrics_map_mutex_);
