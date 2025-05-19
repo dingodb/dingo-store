@@ -35,6 +35,7 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
   SetUpGetRegionMap(app);
   SetUpGetJobList(app);
   SetUpCleanJobList(app);
+  SetUpChangeLogLevel(app);
   // region commands
   SetUpAddPeerRegion(app);
   SetUpRemovePeerRegion(app);
@@ -60,7 +61,6 @@ void SetUpCoordinatorSubCommands(CLI::App &app) {
 
   // balance
   SetUpEnableOrDisableBalance(app);
-
 }
 
 bool GetBrpcChannel(const std::string &location, brpc::Channel &channel) {
@@ -612,9 +612,9 @@ void RunChangeLogLevel(GetChangeLogLevelOption const &opt) {
     DINGO_LOG(WARNING) << "Fail to send request to : " << cntl.ErrorText();
   }
 
-  DINGO_LOG(INFO) << request.DebugString();
-  DINGO_LOG(INFO) << ::dingodb::pb::node::LogLevel_descriptor()->FindValueByNumber(request.log_level())->name();
-  DINGO_LOG(INFO) << response.DebugString();
+  std::cout << request.DebugString() << std::endl;
+  std::cout << ::dingodb::pb::node::LogLevel_descriptor()->FindValueByNumber(request.log_level())->name() << std::endl;
+  std::cout << response.DebugString() << std::endl;
 }
 
 void SetUpHello(CLI::App &app) {
@@ -2791,9 +2791,11 @@ void SetUpEnableOrDisableBalance(CLI::App &app) {
   auto opt = std::make_shared<EnableOrDisableBalanceOptions>();
   auto *cmd = app.add_subcommand("DisableBalance", "DisableBalance ")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--balance_leader", opt->enable_balance_leader, "Request parameter enable_balance_leader true or false")
+  cmd->add_option("--balance_leader", opt->enable_balance_leader,
+                  "Request parameter enable_balance_leader true or false")
       ->required();
-  cmd->add_option("--balance_region", opt->enable_balance_region, "Request parameter enable_balance_region true or false")
+  cmd->add_option("--balance_region", opt->enable_balance_region,
+                  "Request parameter enable_balance_region true or false")
       ->required();
   cmd->callback([opt]() { RunEnableOrDisableBalance(*opt); });
 }
