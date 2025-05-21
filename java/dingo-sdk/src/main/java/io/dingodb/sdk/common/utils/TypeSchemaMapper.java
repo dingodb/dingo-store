@@ -15,6 +15,7 @@ public class TypeSchemaMapper {
       addScalaTypeSchemaMapping("TINYINT", IntegerSchema::new);
       addScalaTypeSchemaMapping("LONG", LongSchema::new);
       addScalaTypeSchemaMapping("BIGINT", LongSchema::new);
+      addScalaTypeSchemaMapping("BIT", BitSchema::new);
       addScalaTypeSchemaMapping("BOOL", BooleanSchema::new);
       addScalaTypeSchemaMapping("BOOLEAN", BooleanSchema::new);
       addScalaTypeSchemaMapping("FLOAT", FloatSchema::new);
