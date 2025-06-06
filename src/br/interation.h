@@ -142,7 +142,11 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
       if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER ||
           response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
         ++retry_count;
-        NextLeader(response.error().leader_location());
+        if (response.error().leader_location().port() != 0) {
+          NextLeader(response.error().leader_location());
+        } else {
+          NextLeader(GetLeader());
+        }
         // bthread_usleep(1000 * 100);
 
       } else {
