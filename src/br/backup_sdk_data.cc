@@ -256,7 +256,7 @@ butil::Status BackupSdkData::DoAsyncBackupRegion(
     std::shared_ptr<std::map<int64_t, dingodb::pb::common::BackupDataFileValueSstMetaGroup>> save_region_map,
     std::atomic<bool>& is_thread_exit) {
   std::shared_ptr<BackupSdkData> self = GetSelf();
-  auto lambda_call = [self, interaction, &service_name, wait_for_handle_regions, &already_handle_regions,
+  auto lambda_call = [self, interaction, service_name, wait_for_handle_regions, &already_handle_regions,
                       save_region_map, &is_thread_exit]() {
     self->DoBackupRegionInternal(interaction, service_name, wait_for_handle_regions, already_handle_regions,
                                  save_region_map, is_thread_exit);
