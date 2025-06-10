@@ -282,19 +282,6 @@ butil::Status BackupData::GetAllRegionMapFromCoordinator() {
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
 
-  for (const auto& region : response.regionmap().regions()) {
-    if (region.id() == 80081) {
-      if (region.definition().has_index_parameter()) {
-        DINGO_LOG(INFO) << "has_index_parameter ***************meta store region id : " << region.id()
-                        << ",  name : " << region.definition().name()
-                        << ", index_parameter : " << region.definition().index_parameter().DebugString();
-      } else {
-        DINGO_LOG(INFO) << "no_index_parameter ***************meta store region id : " << region.id()
-                        << ",  name : " << region.definition().name()
-                        << ", index_parameter : " << region.definition().index_parameter().DebugString();
-      }
-    }
-  }
 
   region_map_ = std::make_shared<dingodb::pb::common::RegionMap>(response.regionmap());
 
