@@ -434,6 +434,15 @@ public class MyDecimal {
             throw new IllegalArgumentException("Decimal type: No digits in string.");
         }
 
+        //To be compatible with MySQL rounding for decimal.
+        if(digitsFracLocal != 0 && scal < digitsFracLocal) {
+            int lastDigitPos = 1 - ((negative) ? 1 : 0);
+            int lastDigit = Integer.parseInt(String.valueOf(string.charAt(digitsIntLocal + digitsFracLocal - lastDigitPos)));
+            lastDigit = lastDigit < 5 ? lastDigit : lastDigit + 1;
+            string = string.substring(0, digitsIntLocal + digitsFracLocal - lastDigitPos) + lastDigit;
+            digitsFracLocal = scal;
+        }
+
         int wordsInt = digitsToWords(digitsIntLocal);
         int wordsFrac = digitsToWords(digitsFracLocal);
 
