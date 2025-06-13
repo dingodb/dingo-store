@@ -68,6 +68,96 @@ public class CodecTest {
     }
 
     @Test
+    public void testDecimal1_1() throws IOException {
+
+        ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(2).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("col2").type("INT").primary(-1).build();
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name("TEST_ENCODE")
+                .columns(Arrays.asList(c1, c2))
+                .version(1).codecVersion(2)
+                .build();
+
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
+        Object[] record = {"1.231234e2", 1};
+        Object[] expected = {"123.12", 1};
+        Assertions.assertArrayEquals(expected, codec.decode(codec.encode(record)));
+    }
+
+    @Test
+    public void testDecimal1_2() throws IOException {
+
+        ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(2).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("col2").type("INT").primary(-1).build();
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name("TEST_ENCODE")
+                .columns(Arrays.asList(c1, c2))
+                .version(1).codecVersion(2)
+                .build();
+
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
+        Object[] record = {"2345.678", 1};
+        Object[] expected = {"2345.68", 1};
+        Assertions.assertArrayEquals(expected, codec.decode(codec.encode(record)));
+    }
+
+    @Test
+    public void testDecimal1_3() throws IOException {
+
+        ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(2).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("col2").type("INT").primary(-1).build();
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name("TEST_ENCODE")
+                .columns(Arrays.asList(c1, c2))
+                .version(1).codecVersion(2)
+                .build();
+
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
+        Object[] record = {"2345.6", 1};
+        Object[] expected = {"2345.60", 1};
+        Assertions.assertArrayEquals(expected, codec.decode(codec.encode(record)));
+    }
+
+    @Test
+    public void testDecimal1_4() throws IOException {
+
+        ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(2).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("col2").type("INT").primary(-1).build();
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name("TEST_ENCODE")
+                .columns(Arrays.asList(c1, c2))
+                .version(1).codecVersion(2)
+                .build();
+
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
+        Object[] record = {"2345", 1};
+        Object[] expected = {"2345.00", 1};
+        Assertions.assertArrayEquals(expected, codec.decode(codec.encode(record)));
+    }
+
+    @Test
+    public void testDecimal1_5() throws IOException {
+
+        ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(2).build();
+        ColumnDefinition c2 = ColumnDefinition.builder().name("col2").type("INT").primary(-1).build();
+
+        TableDefinition tableDefinition = TableDefinition.builder()
+                .name("TEST_ENCODE")
+                .columns(Arrays.asList(c1, c2))
+                .version(1).codecVersion(2)
+                .build();
+
+        DingoKeyValueCodec codec = DingoKeyValueCodec.of(1, 1L, tableDefinition);
+        Object[] record = {"-2345.678", 1};
+        Object[] expected = {"-2345.68", 1};
+        Assertions.assertArrayEquals(expected, codec.decode(codec.encode(record)));
+    }
+
+    @Test
     public void testDecimal2() throws IOException {
 
         ColumnDefinition c1 = ColumnDefinition.builder().name("col1").type("DECIMAL").primary(0).precision(10).scale(3).build();
