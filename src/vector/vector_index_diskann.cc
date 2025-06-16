@@ -272,7 +272,7 @@ butil::Status VectorIndexDiskANN::Build(const pb::common::Range& region_range, m
   butil::Status status;
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
-  pb::common::DiskANNCoreState internal_state;
+  pb::common::DiskANNCoreState internal_state = pb::common::DiskANNCoreState::UNKNOWN;
 
   BvarLatencyGuard bvar_guard(&g_diskann_build_latency);
 
@@ -394,7 +394,7 @@ butil::Status VectorIndexDiskANN::Load(const pb::common::VectorLoadParameter& pa
   butil::Status status;
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
-  pb::common::DiskANNCoreState internal_state;
+  pb::common::DiskANNCoreState internal_state = pb::common::DiskANNCoreState::UNKNOWN;
   pb::common::VectorLoadParameter internal_parameter = parameter;
 
   BvarLatencyGuard bvar_guard(&g_diskann_load_latency);
@@ -547,7 +547,7 @@ butil::Status VectorIndexDiskANN::Status(pb::common::VectorStateParameter& vecto
   butil::Status status;
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
-  pb::common::DiskANNCoreState internal_state;
+  pb::common::DiskANNCoreState internal_state = pb::common::DiskANNCoreState::UNKNOWN;
 
   BvarLatencyGuard bvar_guard(&g_diskann_status_latency);
 
@@ -606,7 +606,7 @@ butil::Status VectorIndexDiskANN::Reset(bool delete_data_file,
   butil::Status status;
   pb::error::Error last_error;
   vector_state_parameter.mutable_diskann()->set_state(pb::common::DiskANNCoreState::UNKNOWN);
-  pb::common::DiskANNCoreState internal_state;
+  pb::common::DiskANNCoreState internal_state = pb::common::DiskANNCoreState::UNKNOWN;
 
   BvarLatencyGuard bvar_guard(&g_diskann_reset_latency);
 
@@ -742,7 +742,7 @@ butil::Status VectorIndexDiskANN::DoBuild(const pb::common::Range& region_range,
   butil::Status status;
   pb::error::Error last_error;
   state = pb::common::DiskANNCoreState::UNKNOWN;
-  pb::common::DiskANNCoreState internal_state;
+  pb::common::DiskANNCoreState internal_state = pb::common::DiskANNCoreState::UNKNOWN;
   pb::common::Range encode_range = mvcc::Codec::EncodeRange(region_range);
   IteratorOptions options;
   options.upper_bound = encode_range.end_key();
