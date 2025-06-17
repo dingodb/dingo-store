@@ -6092,12 +6092,9 @@ butil::Status GetDataValue(const pb::store::WriteInfo &write_info,
   }
 
   std::string plain_key;
-  std::string decode_key;
   int64_t commit_ts = 0;
-  int64_t klock_ver = 0;
   dingodb::mvcc::Codec::DecodeKey(encode_key, plain_key, commit_ts);
-  dingodb::mvcc::Codec::DecodeKey(plain_key, decode_key, klock_ver);
-  std::string data_key = mvcc::Codec::EncodeKey(decode_key, write_info.start_ts());
+  std::string data_key = mvcc::Codec::EncodeKey(plain_key, write_info.start_ts());
   auto iter = kv_puts_data_map.find(data_key);
   if (iter != kv_puts_data_map.end()) {
     data_value = iter->second.value();
