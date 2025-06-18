@@ -74,3 +74,7 @@ create_table.sh
 .devcontainer/
 local_scripts/
 contrib/xdprocks/
+
+# docker
+docker/dingo-store.tar.gz
+docker/rocky8/l_BaseKit_p_2024.1.0.596_offline.sh
