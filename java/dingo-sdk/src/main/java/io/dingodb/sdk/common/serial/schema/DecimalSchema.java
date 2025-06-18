@@ -374,14 +374,10 @@ public class DecimalSchema implements DingoSchema<String> {
                 buf.ensureRemainder(1);
                 buf.write(NOTNULL);
 
-                int size = internalEncodeKeyV2(buf, data);
-                buf.ensureRemainder(4);
-                buf.reverseWriteInt(size);
+                internalEncodeKeyV2(buf, data);
             }
         } else {
-            int size = internalEncodeKeyV2(buf, data);
-            buf.ensureRemainder(4);
-            buf.reverseWriteInt(size);
+            internalEncodeKeyV2(buf, data);
         }
     }
 
