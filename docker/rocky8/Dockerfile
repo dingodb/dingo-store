@@ -1,5 +1,5 @@
 # FROM rockylinux/rockylinux:8.9
-FROM dingodatabase/dingo-eureka:rocky8
+FROM dingodatabase/dingo-eureka:rocky8-store-v1.0
 
 ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
@@ -28,6 +28,14 @@ RUN dnf update -y  \
 # RUN wget https://sh.rustup.rs --content-disposition
 # RUN sh rustup-init.sh -y
 RUN wget https://static.rust-lang.org/dist/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && xz -d rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz && tar -xf rust-1.78.0-x86_64-unknown-linux-gnu.tar && cd rust-1.78.0-x86_64-unknown-linux-gnu && sh install.sh --prefix=/opt/rust/ && cd .. && rm -rf rust-1.78.0-x86_64-unknown-linux-gnu*
+
+# install mkl
+RUN wget https://registrationcenter-download.intel.com/akdlm/IRC_NAS/fdc7a2bc-b7a8-47eb-8876-de6201297144/l_BaseKit_p_2024.1.0.596_offline.sh && bash l_BaseKit_p_2024.1.0.596_offline.sh -a --silent --cli --eula accept && rm -rf l_BaseKit_p_2024.1.0.596_offline.sh
+#COPY ./l_BaseKit_p_2024.1.0.596_offline.sh ./
+RUN bash l_BaseKit_p_2024.1.0.596_offline.sh -a --silent --cli --eula accept && rm -rf l_BaseKit_p_2024.1.0.596_offline.sh
+
+# config aio (sysctl commands cannot be executed during Docker image build time)
+# RUN sysctl -w fs.aio-max-nr=1048576 && sysctl -w fs.aio-nr=524288
 
 # soure env
 RUN echo "source /opt/intel/oneapi/setvars.sh" >> /root/.bashrc

@@ -1,4 +1,4 @@
-FROM dingodatabase/dingo-eureka:rocky8
+FROM dingodatabase/dingo-base:rocky8
 
 ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
