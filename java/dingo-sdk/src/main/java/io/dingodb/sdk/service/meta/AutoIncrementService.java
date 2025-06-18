@@ -156,4 +156,8 @@ public class AutoIncrementService {
         }
     }
 
+    public boolean cacheAutoIncrement(DingoCommonId tableId) {
+        return innerCache.containsKey(tableId);
+    }
+
 }
