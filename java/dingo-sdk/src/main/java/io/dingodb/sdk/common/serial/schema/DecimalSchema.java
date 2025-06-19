@@ -282,10 +282,15 @@ public class DecimalSchema implements DingoSchema<String> {
     public String decodeKeyPrefix(Buf buf) {
         if (allowNull) {
             if (buf.read() == NULL) {
+                buf.reverseSkipInt();
                 return null;
             }
         }
-        return new String(internalReadKeyPrefixBytes(buf), StandardCharsets.UTF_8);
+
+        //Forward skip codec version field.
+        buf.reverseSkipInt();
+
+        return internalReadDecimal(buf);
     }
 
     private byte[] internalReadKeyPrefixBytes(Buf buf) {
