@@ -14,6 +14,8 @@
 
 #include "br/parameter.h"
 
+#include "gflags/gflags.h"
+
 namespace br {
 
 DEFINE_string(br_coor_url, "", "coordinator url");
@@ -112,5 +114,7 @@ DEFINE_string(br_client_method, "", "br client method. default empty");
 
 // br client method param1
 DEFINE_string(br_client_method_param1, "", "br client method param1. default empty");
+
+DEFINE_bool(just_store, false, "just store server");
 
 }  // namespace br

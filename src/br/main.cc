@@ -535,16 +535,18 @@ int main(int argc, char* argv[]) {
       return -1;
     }
 
-    status = SetIndexInteraction();
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
-      return -1;
-    }
+    if (!br::FLAGS_just_store) {
+      status = SetIndexInteraction();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
+        return -1;
+      }
 
-    status = SetDocumentInteraction();
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
-      return -1;
+      status = SetDocumentInteraction();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << br::Utils::FormatStatusError(status);
+        return -1;
+      }
     }
   }  // if (br::FLAGS_br_type == "backup" || br::FLAGS_br_type == "restore" ||   (br::FLAGS_br_type == "tool") &&
      // br::FLAGS_br_tool_type == "client")) {
