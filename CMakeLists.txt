@@ -517,7 +517,6 @@ file(GLOB STORE_SRCS ${PROJECT_SOURCE_DIR}/src/store/*.cc)
 file(GLOB SERVER_SRCS ${PROJECT_SOURCE_DIR}/src/server/*.cc)
 file(GLOB SCAN_SRCS ${PROJECT_SOURCE_DIR}/src/scan/*.cc)
 file(GLOB METRICS_SRCS ${PROJECT_SOURCE_DIR}/src/metrics/*.cc)
-file(GLOB VERSION_SRCS ${PROJECT_SOURCE_DIR}/src/common/version.cc)
 file(GLOB_RECURSE LIBEXPR_SRCS ${PROJECT_SOURCE_DIR}/src/libexpr/src/*.cc)
 file(GLOB COPROCESSOR_SRCS ${PROJECT_SOURCE_DIR}/src/coprocessor/*.cc)
 file(GLOB CLIENT_SRCS ${PROJECT_SOURCE_DIR}/src/client/*.cc)
@@ -591,7 +590,12 @@ set(DEPEND_LIBS ${DEPEND_LIBS} simd_utils)
 
 set(DYNAMIC_LIB ${DYNAMIC_LIB} ${SIMD_LIBRARIES})
 
-# object file
+# library file
+
+add_library(
+  serial ${SERIAL_SRCS}
+)
+
 add_library(
   DINGODB_OBJS OBJECT
   ${COMMON_SRCS}
@@ -613,7 +617,6 @@ add_library(
   ${SERVER_SRCS}
   ${SCAN_SRCS}
   ${METRICS_SRCS}
-  ${SERIAL_SRCS}
   ${COPROCESSOR_SRCS}
   ${LIBEXPR_SRCS}
   ${DISKANN_SRCS}
@@ -668,7 +671,7 @@ message(STATUS "Git commit user: ${GIT_COMMIT_USER}")
 message(STATUS "Git commit mail: ${GIT_COMMIT_MAIL}")
 message(STATUS "Git commit time: ${GIT_COMMIT_TIME}")
 
-add_definitions(-DGLOG_CUSTOM_PREFIX_SUPPORT=ON)
+target_compile_definitions(DINGODB_OBJS PUBLIC GLOG_CUSTOM_PREFIX_SUPPORT)
 add_definitions(-DGIT_VERSION="${GIT_VERSION}")
 add_definitions(-DGIT_TAG_NAME="${GIT_TAG_NAME}")
 add_definitions(-DGIT_COMMIT_USER="${GIT_COMMIT_USER}")
@@ -684,40 +687,8 @@ if(ENABLE_FAILPOINT)
 endif()
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(
-  dingodb_client
-  ${CLIENT_SRCS}
-  src/coordinator/coordinator_interaction.cc
-  src/common/role.cc
-  src/common/helper.cc
-  src/common/serial_helper.cc
-  src/common/service_access.cc
-  src/coprocessor/utils.cc
-  src/mvcc/codec.cc
-  src/vector/codec.cc
-  src/document/codec.cc
-  ${SERIAL_SRCS}
-  ${VERSION_SRCS}
-  $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(
-  dingodb_cli
-  ${CLIENT_V2_SRCS}
-  src/coordinator/coordinator_interaction.cc
-  src/common/role.cc
-  src/common/helper.cc
-  src/common/serial_helper.cc
-  src/common/service_access.cc
-  src/coprocessor/utils.cc
-  src/mvcc/codec.cc
-  src/vector/codec.cc
-  src/document/codec.cc
-  ${SERIAL_SRCS}
-  ${VERSION_SRCS}
-  $<TARGET_OBJECTS:PROTO_OBJS>)
-add_executable(
-  dingodb_br
-  src/br/main.cc
-  ${BR_SRCS}
+
+add_library(client_lib
   src/coordinator/coordinator_interaction.cc
   src/common/role.cc
   src/common/helper.cc
@@ -730,15 +701,40 @@ add_executable(
   src/common/synchronization.cc
   src/common/uuid.cc
   src/common/version.cc
-  ${SERIAL_SRCS}
-  ${VERSION_SRCS}
+)
+
+target_compile_definitions(client_lib PUBLIC GLOG_CUSTOM_PREFIX_SUPPORT)
+
+target_link_libraries(client_lib
+  PROTO_OBJS
+
+  ${DEPEND_LIBS}
+  ${DYNAMIC_LIB}
+
+  serial
+)
+
+add_executable(
+  dingodb_client
+  ${CLIENT_SRCS}
+  $<TARGET_OBJECTS:PROTO_OBJS>)
+
+add_executable(
+  dingodb_cli
+  ${CLIENT_V2_SRCS}
+  $<TARGET_OBJECTS:PROTO_OBJS>)
+
+add_executable(
+  dingodb_br
+  src/br/main.cc
+  ${BR_SRCS}
   $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
-add_dependencies(dingodb_server ${DEPEND_LIBS})
-add_dependencies(dingodb_client ${DEPEND_LIBS})
-add_dependencies(dingodb_cli ${DEPEND_LIBS})
-add_dependencies(dingodb_br ${DEPEND_LIBS})
+add_dependencies(dingodb_server serial ${DEPEND_LIBS})
+add_dependencies(dingodb_client serial client_lib ${DEPEND_LIBS})
+add_dependencies(dingodb_cli serial client_lib ${DEPEND_LIBS})
+add_dependencies(dingodb_br serial client_lib ${DEPEND_LIBS})
 
 if(DINGO_BUILD_STATIC)
   message(STATUS "Build DingoDB with static libraries linking")
@@ -758,13 +754,13 @@ else()
   endif()
 endif()
 add_subdirectory(contrib/cli11)
-target_link_libraries(dingodb_server ${DYNAMIC_LIB} ${VECTOR_LIB} "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
+target_link_libraries(dingodb_server serial ${DYNAMIC_LIB} ${VECTOR_LIB} "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
 
-target_link_libraries(dingodb_client ${DYNAMIC_LIB})
+target_link_libraries(dingodb_client serial client_lib ${DYNAMIC_LIB})
 
-target_link_libraries(dingodb_cli ${DYNAMIC_LIB} CLI11::CLI11)
+target_link_libraries(dingodb_cli serial client_lib ${DYNAMIC_LIB} CLI11::CLI11)
 
-target_link_libraries(dingodb_br ${DYNAMIC_LIB})
+target_link_libraries(dingodb_br serial client_lib ${DYNAMIC_LIB})
 
 if(BUILD_UNIT_TESTS)
   message(STATUS "Build unit test")
