@@ -163,6 +163,8 @@ DECLARE_string(br_client_method);
 // br client method param1
 DECLARE_string(br_client_method_param1);
 
+DECLARE_bool(just_store);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_
