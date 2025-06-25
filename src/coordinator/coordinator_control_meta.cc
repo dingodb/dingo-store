@@ -67,6 +67,8 @@ BRPC_VALIDATE_GFLAG(default_replica_num, brpc::NonNegativeInteger);
 DEFINE_bool(enable_lite, false, "enable lite");
 BRPC_VALIDATE_GFLAG(enable_lite, brpc::PassValidate);
 
+DEFINE_bool(use_same_store_for_a_table, true, "use same store for a table");
+
 butil::Status CoordinatorControl::GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count,
                                                             pb::meta::EntityType entity_type,
                                                             pb::coordinator_internal::MetaIncrement& meta_increment,
@@ -1393,12 +1395,15 @@ butil::Status CoordinatorControl::CreateIndex(int64_t schema_id, const pb::meta:
   }
 
   std::vector<int64_t> store_ids;
-  auto ret4 = GetCreateRegionStoreIds(region_type, region_raw_engine_type, "", replica,
-                                      table_definition.index_parameter(), store_ids);
-  if (!ret4.ok()) {
-    DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
-                     << ", table_definition:" << table_definition.ShortDebugString();
-    return ret4;
+
+  if (FLAGS_use_same_store_for_a_table) {
+    auto ret4 = GetCreateRegionStoreIds(region_type, region_raw_engine_type, "", replica,
+                                        table_definition.index_parameter(), store_ids);
+    if (!ret4.ok()) {
+      DINGO_LOG(ERROR) << "GetCreateRegionStoreIds error:" << ret4.error_str()
+                       << ", table_definition:" << table_definition.ShortDebugString();
+      return ret4;
+    }
   }
 
   for (int i = 0; i < new_part_ranges.size(); i++) {
