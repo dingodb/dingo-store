@@ -415,7 +415,7 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  if (vector_index_wrapper->IsExceedsMaxElements()) {
+  if (vector_index_wrapper->IsExceedsMaxElements(request->vectors_size())) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
   }
@@ -1217,7 +1217,7 @@ static butil::Status ValidateVectorImportRequestForAdd(StoragePtr storage,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  if (vector_index_wrapper->IsExceedsMaxElements()) {
+  if (vector_index_wrapper->IsExceedsMaxElements(request->vectors_size())) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
   }
@@ -2684,7 +2684,7 @@ static butil::Status ValidateIndexTxnPrewriteRequest(StoragePtr storage, const p
     // check if vector_id is legal
     const auto& vector = mutation.vector();
     if (mutation.op() == pb::store::Op::Put || mutation.op() == pb::store::PutIfAbsent) {
-      if (vector_index_wrapper->IsExceedsMaxElements()) {
+      if (vector_index_wrapper->IsExceedsMaxElements(request->mutations_size())) {
         return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                              fmt::format("Vector index {} exceeds max elements.", region->Id()));
       }
@@ -2926,7 +2926,7 @@ static butil::Status ValidateTxnCommitRequest(const pb::store::TxnCommitRequest*
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  if (region->VectorIndexWrapper()->IsExceedsMaxElements()) {
+  if (region->VectorIndexWrapper()->IsExceedsMaxElements(request->keys_size())) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
   }

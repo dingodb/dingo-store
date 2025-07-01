@@ -528,12 +528,20 @@ butil::Status VectorIndexHnsw::GetMaxElements(int64_t& max_elements) {
   return butil::Status::OK();
 }
 
-bool VectorIndexHnsw::IsExceedsMaxElements() {
+bool VectorIndexHnsw::IsExceedsMaxElements(int64_t vector_size) {
   if (hnsw_index_ == nullptr) {
     return true;
   }
+  bool is_exceeds = hnsw_index_->getCurrentElementCount() + vector_size > max_element_limit_;
+  if (is_exceeds) {
+    DINGO_LOG(ERROR) << fmt::format(
+        "[vector_index.hnsw][id({})] exceeds max elements, current_element_count({}) , delete_element_count({}) , "
+        "vector_size({}) , "
+        "max_element_limit({}).",
+        Id(), hnsw_index_->getCurrentElementCount(), hnsw_index_->getDeletedCount(), vector_size, max_element_limit_);
+  }
 
-  return hnsw_index_->getCurrentElementCount() >= max_element_limit_;
+  return is_exceeds;
 }
 
 hnswlib::HierarchicalNSW<float>* VectorIndexHnsw::GetHnswIndex() { return this->hnsw_index_; }

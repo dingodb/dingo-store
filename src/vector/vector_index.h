@@ -150,7 +150,7 @@ class VectorIndex {
   virtual butil::Status GetCount(int64_t& count);
   virtual butil::Status GetDeletedCount(int64_t& deleted_count);
   virtual butil::Status GetMemorySize(int64_t& memory_size);
-  virtual bool IsExceedsMaxElements() = 0;
+  virtual bool IsExceedsMaxElements(int64_t vector_size) = 0;
 
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids) = 0;
   virtual butil::Status Add(const std::vector<pb::common::VectorWithId>& vector_with_ids, bool is_priority);
@@ -192,7 +192,7 @@ class VectorIndex {
   virtual void LockWrite() = 0;
   virtual void UnlockWrite() = 0;
   virtual butil::Status Train(std::vector<float>& train_datas) = 0;
-  virtual butil::Status Train(std::vector<uint8_t>& ) { return butil::Status::OK(); }
+  virtual butil::Status Train(std::vector<uint8_t>&) { return butil::Status::OK(); }
   virtual butil::Status TrainByParallel(std::vector<float>& train_datas);
   virtual butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) = 0;
   virtual bool NeedToRebuild() = 0;
@@ -407,7 +407,7 @@ class VectorIndexWrapper : public std::enable_shared_from_this<VectorIndexWrappe
   butil::Status GetCount(int64_t& count);
   butil::Status GetDeletedCount(int64_t& deleted_count);
   butil::Status GetMemorySize(int64_t& memory_size);
-  bool IsExceedsMaxElements();
+  bool IsExceedsMaxElements(int64_t vector_size);
 
   bool NeedToRebuild();
   bool NeedToSave(std::string& reason);

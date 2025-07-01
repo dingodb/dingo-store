@@ -507,7 +507,7 @@ butil::Status VectorIndexFlat<T, U>::GetMemorySize(int64_t& memory_size) {
 }
 
 template <typename T, typename U>
-bool VectorIndexFlat<T, U>::IsExceedsMaxElements() {
+bool VectorIndexFlat<T, U>::IsExceedsMaxElements(int64_t /*vector_size*/) {
   return false;
 }
 

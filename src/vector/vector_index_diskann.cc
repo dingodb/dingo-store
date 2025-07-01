@@ -732,7 +732,7 @@ butil::Status VectorIndexDiskANN::GetMemorySize(int64_t& memory_size) {
   return butil::Status::OK();
 }
 
-bool VectorIndexDiskANN::IsExceedsMaxElements() { return false; }
+bool VectorIndexDiskANN::IsExceedsMaxElements(int64_t /*vector_size*/) { return false; }
 
 bool VectorIndexDiskANN::NeedToSave(int64_t /*last_save_log_behind*/) { return false; }
 
