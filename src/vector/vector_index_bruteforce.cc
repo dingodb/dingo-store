@@ -102,7 +102,7 @@ butil::Status VectorIndexBruteforce::GetMemorySize(int64_t& memory_size) {
   return butil::Status::OK();
 }
 
-bool VectorIndexBruteforce::IsExceedsMaxElements() { return false; }
+bool VectorIndexBruteforce::IsExceedsMaxElements(int64_t /*vector_size*/) { return false; }
 
 bool VectorIndexBruteforce::NeedToSave(int64_t last_save_log_behind) {
   return last_save_log_behind > FLAGS_bruteforce_need_save_count;

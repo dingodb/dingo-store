@@ -78,7 +78,7 @@ class VectorIndexHnsw : public VectorIndex {
   butil::Status ResizeMaxElements(int64_t new_max_elements);
   butil::Status GetMaxElements(int64_t& max_elements);
 
-  bool IsExceedsMaxElements() override;
+  bool IsExceedsMaxElements(int64_t vector_size) override;
 
   butil::Status Train([[maybe_unused]] std::vector<float>& train_datas) override { return butil::Status::OK(); }
   butil::Status Train([[maybe_unused]] const std::vector<pb::common::VectorWithId>& vectors) override {

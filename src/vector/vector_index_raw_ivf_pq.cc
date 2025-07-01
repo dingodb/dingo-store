@@ -452,7 +452,7 @@ butil::Status VectorIndexRawIvfPq::GetMemorySize(int64_t& memory_size) {
   return butil::Status::OK();
 }
 
-bool VectorIndexRawIvfPq::IsExceedsMaxElements() { return false; }
+bool VectorIndexRawIvfPq::IsExceedsMaxElements(int64_t /*vector_size*/) { return false; }
 
 butil::Status VectorIndexRawIvfPq::Train(std::vector<float>& train_datas) {
   size_t data_size = train_datas.size() / dimension_;

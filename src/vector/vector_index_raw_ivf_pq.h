@@ -99,7 +99,7 @@ class VectorIndexRawIvfPq : public VectorIndex {
   butil::Status GetCount([[maybe_unused]] int64_t& count) override;
   butil::Status GetDeletedCount([[maybe_unused]] int64_t& deleted_count) override;
   butil::Status GetMemorySize([[maybe_unused]] int64_t& memory_size) override;
-  bool IsExceedsMaxElements() override;
+  bool IsExceedsMaxElements(int64_t vector_size) override;
 
   butil::Status Train(std::vector<float>& train_datas) override;
   butil::Status Train(const std::vector<pb::common::VectorWithId>& vectors) override;

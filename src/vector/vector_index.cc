@@ -787,7 +787,7 @@ butil::Status VectorIndexWrapper::GetMemorySize(int64_t& memory_size) {
   return status;
 }
 
-bool VectorIndexWrapper::IsExceedsMaxElements() {
+bool VectorIndexWrapper::IsExceedsMaxElements(int64_t vector_size) {
   auto vector_index = GetVectorIndex();
   if (vector_index == nullptr) {
     return true;
@@ -795,12 +795,12 @@ bool VectorIndexWrapper::IsExceedsMaxElements() {
 
   auto sibling_vector_index = SiblingVectorIndex();
   if (sibling_vector_index != nullptr) {
-    if (!sibling_vector_index->IsExceedsMaxElements()) {
+    if (!sibling_vector_index->IsExceedsMaxElements(vector_size)) {
       return false;
     }
   }
 
-  return vector_index->IsExceedsMaxElements();
+  return vector_index->IsExceedsMaxElements(vector_size);
 }
 
 bool VectorIndexWrapper::NeedToRebuild() {
