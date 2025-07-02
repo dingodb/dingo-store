@@ -109,6 +109,21 @@ butil::Status Backup::Init() {
   std::cout << "safe point ts check ok" << std::endl;
   DINGO_LOG(INFO) << "safe point ts check ok";
 
+  // Get the job list to see whether there is a merge split being executed, etc.
+  if (FLAGS_br_backup_enable_get_job_list_check) {
+    status = GetJobListCheck();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+    std::cout << "br_backup_enable_get_job_list_check is true, get job list check ok" << std::endl;
+    DINGO_LOG(INFO) << "br_backup_enable_get_job_list_check is true, get job list check ok";
+
+  } else {
+    std::cout << "br_backup_enable_get_job_list_check is false, skip get job list check" << std::endl;
+    DINGO_LOG(INFO) << "br_backup_enable_get_job_list_check is false, skip get job list check";
+  }
+
   backup_task_id_ = dingodb::UUIDGenerator::GenerateUUID();
 
   auto lambda_exit_function = [this, &status]() {
@@ -1268,6 +1283,55 @@ butil::Status Backup::DoFinish() {
   }
 
   return butil::Status::OK();
+}
+
+butil::Status Backup::GetJobListCheck() {
+  dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse response;
+
+  request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+
+  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+
+  butil::Status status = br::InteractionManager::GetInstance().GetCoordinatorInteraction()->SendRequest(
+      "CoordinatorService", "GetJobList", request, response);
+  if (!status.ok()) {
+    std::string s = fmt::format("Fail to get job list, status={}", Utils::FormatStatusError(status));
+    DINGO_LOG(ERROR) << s;
+    return status;
+  }
+
+  if (response.error().errcode() != dingodb::pb::error::OK) {
+    std::string s = fmt::format("Fail to get job list, error={}", Utils::FormatResponseError(response));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(dingodb::pb::error::EINTERNAL, s);
+  }
+
+  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+
+  for (const auto& job : response.job_list()) {
+    for (const auto& task : job.tasks()) {
+      for (const auto& store_operation : task.store_operations()) {
+        for (const auto& region_cmd : store_operation.region_cmds()) {
+          if (region_cmd.region_cmd_type() == dingodb::pb::coordinator::RegionCmdType::CMD_SPLIT ||
+              region_cmd.region_cmd_type() == dingodb::pb::coordinator::RegionCmdType::CMD_MERGE ||
+              region_cmd.region_cmd_type() == dingodb::pb::coordinator::RegionCmdType::CMD_CHANGE_PEER ||
+              region_cmd.region_cmd_type() == dingodb::pb::coordinator::RegionCmdType::CMD_TRANSFER_LEADER) {
+            std::string s = fmt::format("exist job list, region_cmd_type={}({})",
+                                        dingodb::pb::coordinator::RegionCmdType_Name(region_cmd.region_cmd_type()),
+                                        static_cast<int>(region_cmd.region_cmd_type()));
+            DINGO_LOG(ERROR) << s;
+            status = butil::Status(dingodb::pb::error::EBACKUP_DINGO_STORE_JOB_LIST_EXIST, s);
+            goto _err;
+          }
+        }
+      }
+    }
+  }
+
+_err:
+
+  return status;
 }
 
 }  // namespace br

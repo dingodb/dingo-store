@@ -117,4 +117,6 @@ DEFINE_string(br_client_method_param1, "", "br client method param1. default emp
 
 DEFINE_bool(just_store, false, "just store server");
 
+DEFINE_bool(br_backup_enable_get_job_list_check, true, "br backup enable get job list check. default true");
+
 }  // namespace br

@@ -165,6 +165,8 @@ DECLARE_string(br_client_method_param1);
 
 DECLARE_bool(just_store);
 
+DECLARE_bool(br_backup_enable_get_job_list_check);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_

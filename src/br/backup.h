@@ -75,6 +75,7 @@ class Backup : public std::enable_shared_from_this<Backup> {
                                       const dingodb::pb::common::VersionInfo& version_info_remote);
 
   butil::Status DoFinish();
+  static butil::Status GetJobListCheck();
 
   std::string coor_url_;
   std::string br_type_;
