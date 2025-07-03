@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "common/version.h"
 #include "document/codec.h"
+#include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 
 namespace client_v2 {
@@ -210,9 +211,10 @@ void RunGetRegionMap(GetRegionMapCommandOptions const &opt) {
               << dingodb::pb::common::RegionHeartbeatState_Name(region.status().heartbeat_status()) << ","
               << dingodb::pb::common::ReplicaStatus_Name(region.status().replica_status()) << ","
               << dingodb::pb::common::RegionRaftStatus_Name(region.status().raft_status())
-              << " leader=" << region.leader_store_id() << " create=" << region.create_timestamp()
-              << " update=" << region.status().last_update_timestamp() << " range=[0x"
-              << dingodb::Helper::StringToHex(region.definition().range().start_key()) << ",0x"
+              << " engine=" << dingodb::pb::common::RawEngine_Name(region.definition().raw_engine())
+              << " schema_id=" << region.definition().schema_id() << " leader=" << region.leader_store_id()
+              << " create=" << region.create_timestamp() << " update=" << region.status().last_update_timestamp()
+              << " range=[0x" << dingodb::Helper::StringToHex(region.definition().range().start_key()) << ",0x"
               << dingodb::Helper::StringToHex(region.definition().range().end_key()) << "]\n";
 
     if (region.metrics().has_vector_index_status()) {
