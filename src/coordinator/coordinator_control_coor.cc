@@ -809,22 +809,11 @@ void CoordinatorControl::GenRegionFull(const pb::coordinator_internal::RegionInt
 void CoordinatorControl::GenRegionSlim(const pb::coordinator_internal::RegionInternal& region_internal,
                                        pb::common::Region& region) {
   region.set_id(region_internal.id());
-  region.mutable_definition()->set_id(region_internal.id());
-  region.mutable_definition()->set_name(region_internal.definition().name());
-  region.mutable_definition()->mutable_epoch()->set_conf_version(region_internal.definition().epoch().conf_version());
-  region.mutable_definition()->mutable_epoch()->set_version(region_internal.definition().epoch().version());
-  region.mutable_definition()->mutable_range()->set_start_key(region_internal.definition().range().start_key());
-  region.mutable_definition()->mutable_range()->set_end_key(region_internal.definition().range().end_key());
-  if (region_internal.definition().has_index_parameter()) {
-    *region.mutable_definition()->mutable_index_parameter() = region_internal.definition().index_parameter();
-  }
-  region.mutable_definition()->set_tenant_id(region_internal.definition().tenant_id());
-  region.mutable_definition()->set_table_id(region_internal.definition().table_id());
-  region.mutable_definition()->set_index_id(region_internal.definition().index_id());
-  region.mutable_definition()->set_part_id(region_internal.definition().part_id());
+  region.set_region_type(region_internal.region_type());
+  region.mutable_definition()->CopyFrom(region_internal.definition());
   region.set_state(region_internal.state());
   region.set_create_timestamp(region_internal.create_timestamp());
-  region.set_region_type(region_internal.region_type());
+  region.set_deleted_timestamp(region_internal.deleted_timestamp());
 
   pb::common::RegionMetrics region_metrics;
   auto ret = region_metrics_map_.Get(region_internal.id(), region_metrics);
@@ -2185,6 +2174,7 @@ butil::Status CoordinatorControl::CreateRegionFinal(
     pb::coordinator_internal::MetaIncrement& meta_increment) {
   DINGO_LOG(INFO) << "CreateRegion replica_num=" << replica_num << ", region_name=" << region_name
                   << ", store_engine=" << pb::common::StorageEngine_Name(store_engine)
+                  << ", raw_engine=" << pb::common::RawEngine_Name(raw_engine)
                   << ", region_type=" << pb::common::RegionType_Name(region_type) << ", resource_tag=" << resource_tag
                   << ", store_ids.size=" << store_ids.size() << ", region_range=" << region_range.ShortDebugString()
                   << ", schema_id=" << schema_id << ", table_id=" << table_id << ", index_id=" << index_id
