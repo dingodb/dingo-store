@@ -1410,7 +1410,9 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
           vector_with_id.set_id(vector.id());
           vector_with_ids.push_back(vector_with_id);
         }
-
+        if (vector_with_ids.empty()) {
+          return 0;
+        }
         auto start_time = Helper::TimestampNs();
         auto status = request.is_update() ? vector_index_wrapper->Upsert(vector_with_ids)
                                           : vector_index_wrapper->Add(vector_with_ids);
@@ -1716,6 +1718,9 @@ int DocumentBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionP
           *(document_with_id.mutable_document()) = document.document();
           document_with_id.set_id(document.id());
           document_with_ids.push_back(document_with_id);
+        }
+        if (document_with_ids.empty()) {
+          return 0;
         }
         auto start_time = Helper::TimestampNs();
         auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)

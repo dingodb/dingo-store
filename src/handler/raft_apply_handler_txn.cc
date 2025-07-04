@@ -92,12 +92,16 @@ void TxnHandler::HandleMultiCfPutAndDeleteRequest(std::shared_ptr<Context> ctx, 
   }
 
   auto writer = engine->Writer();
-  auto status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
-  if (!status.ok()) {
-    DINGO_LOG(FATAL) << fmt::format(
-        "[txn][region({})] HandleMultiCfPutAndDelete fail, term: {} apply_log_id: {}, error: {} request: {}.",
-        region->Id(), term_id, log_id, status.error_str(), request.ShortDebugString());
+  butil::Status status;
+  if (!kv_puts_with_cf.empty() || !kv_deletes_with_cf.empty()) {
+    status = writer->KvBatchPutAndDelete(kv_puts_with_cf, kv_deletes_with_cf);
+    if (!status.ok()) {
+      DINGO_LOG(FATAL) << fmt::format(
+          "[txn][region({})] HandleMultiCfPutAndDelete fail, term: {} apply_log_id: {}, error: {} request: {}.",
+          region->Id(), term_id, log_id, status.error_str(), request.ShortDebugString());
+    }
   }
+
   auto tracker = ctx ? ctx->Tracker() : nullptr;
 
   // check if need to commit to vector index
