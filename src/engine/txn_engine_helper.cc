@@ -69,6 +69,8 @@ DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
 
 DEFINE_int32(restore_sst_file_batch_put_count, 128, "restore sst file batch put cout");
+DEFINE_int64(max_restore_data_memory_size, 20 * 1024 * 1024, "max restore data memory size");
+DEFINE_int64(max_restore_count, 100000, "max restore count");
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
@@ -6133,6 +6135,16 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
   auto *document_add = cf_put_delete->mutable_document_add();
   auto *document_del = cf_put_delete->mutable_document_del();
 
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+
+  if (kv_puts_data.empty() && kv_puts_write.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+        << fmt::format("[restoredata][region({})][region_type({})] kv_puts_data is empty and kv_puts_write is empty",
+                       region->Id(), pb::common::RegionType_Name(region->Type()));
+    return butil::Status::OK();
+  }
+
   if (region->Type() == pb::common::INDEX_REGION || region->Type() == pb::common::DOCUMENT_REGION) {
     auto kv_puts_data_map = GenKvPutsDataMap(kv_puts_data);
 
@@ -6168,6 +6180,10 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           }
 
           *(vector_add->add_vectors()) = vector_with_id;
+
+          total_size += vector_with_id.ByteSizeLong();
+          total_count++;
+
         } else if (tmp_write_info.op() == pb::store::Op::Delete) {
           std::string origin_key;
           GetWritePlainKey(std::string(kv.key()), origin_key);
@@ -6179,6 +6195,7 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
                 tmp_write_info.DebugString());
           }
           vector_del->add_ids(vector_id);
+          total_count++;
         } else {
           DINGO_LOG(FATAL) << fmt::format(
               "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
@@ -6200,6 +6217,10 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
           }
 
           *(document_add->add_documents()) = document_with_id;
+
+          total_size += document_with_id.ByteSizeLong();
+          total_count++;
+
         } else if (tmp_write_info.op() == pb::store::Op::Delete) {
           std::string origin_key;
           GetWritePlainKey(std::string(kv.key()), origin_key);
@@ -6212,6 +6233,7 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
                 tmp_write_info.DebugString());
           }
           document_del->add_ids(document_id);
+          total_count++;
         } else {
           DINGO_LOG(FATAL) << fmt::format(
               "[restoredata][region({})][region_type({})] cannot support op:{}, write_info:{}", region->Id(),
@@ -6219,33 +6241,83 @@ butil::Status TxnEngineHelper::RestoreTxn(std::shared_ptr<Context> ctx, store::R
               tmp_write_info.DebugString());
         }
       }
-    }
-  }
 
-  if (kv_puts_data.empty() && kv_puts_write.empty()) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-        << fmt::format("[restoredata][region({})][region_type({})] kv_puts_data is empty and kv_puts_write is empty",
-                       region->Id(), pb::common::RegionType_Name(region->Type()));
-    return butil::Status::OK();
+      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+        if (ret.error_code() == EPERM) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), ret.error_str());
+          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+        }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        vector_add = cf_put_delete->mutable_vector_add();
+        vector_del = cf_put_delete->mutable_vector_del();
+        document_add = cf_put_delete->mutable_document_add();
+        document_del = cf_put_delete->mutable_document_del();
+        total_size = 0;
+        total_count = 0;
+      }
+    }
   }
 
   if (!kv_puts_data.empty()) {
     auto *data_puts = cf_put_delete->add_puts_with_cf();
     data_puts->set_cf_name(Constant::kTxnDataCF);
-    for (auto &kv_put : kv_puts_data) {
+
+    for (auto const &kv_put : kv_puts_data) {
       auto *kv = data_puts->add_kvs();
       kv->set_key(kv_put.key());
       kv->set_value(kv_put.value());
+      total_count++;
+      total_size += kv_put.key().size();
+      total_size += kv_put.value().size();
+
+      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+        if (ret.error_code() == EPERM) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), ret.error_str());
+          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+        }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        data_puts = cf_put_delete->add_puts_with_cf();
+        data_puts->set_cf_name(Constant::kTxnDataCF);
+        total_count = 0;
+        total_size = 0;
+      }
     }
   }
 
   if (!kv_puts_write.empty()) {
     auto *write_puts = cf_put_delete->add_puts_with_cf();
     write_puts->set_cf_name(Constant::kTxnWriteCF);
-    for (auto &kv_put : kv_puts_write) {
+    for (auto const &kv_put : kv_puts_write) {
       auto *kv = write_puts->add_kvs();
       kv->set_key(kv_put.key());
       kv->set_value(kv_put.value());
+      total_count++;
+      total_size += kv_put.key().size();
+      total_size += kv_put.value().size();
+
+      if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+        auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+        if (ret.error_code() == EPERM) {
+          DINGO_LOG(ERROR) << fmt::format(
+              "[backupdata][region({})][region_type({})] write raft engine failed, status:{}", region->Id(),
+              pb::common::RegionType_Name(region->Type()), ret.error_str());
+          return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+        }
+        txn_raft_request.Clear();
+        cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+        write_puts = cf_put_delete->add_puts_with_cf();
+        write_puts->set_cf_name(Constant::kTxnWriteCF);
+        total_count = 0;
+        total_size = 0;
+      }
     }
   }
 
@@ -6277,13 +6349,38 @@ butil::Status TxnEngineHelper::RestoreNonTxnStore(std::shared_ptr<Context> ctx, 
   }
 
   int64_t ts = 0;
-  auto ret = raft_engine->Write(
-      ctx,
-      WriteDataBuilder::BuildWrite(ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(kv_default), ts));
-  if (ret.error_code() == EPERM) {
-    DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
-                                    region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
-    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  std::vector<pb::common::KeyValue> send_kvs;
+  butil::Status ret;
+  for (auto const &kv_data : kv_default) {
+    send_kvs.push_back(kv_data);
+    total_count++;
+    total_size += kv_data.key().size();
+    total_size += kv_data.value().size();
+
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(
+                                        ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(send_kvs), ts));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
+                                        region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      total_size = 0;
+      total_count = 0;
+      send_kvs.clear();
+    }
+  }
+
+  if (!send_kvs.empty()) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(
+                                      ctx->CfName(), const_cast<std::vector<pb::common::KeyValue> &>(send_kvs), ts));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
   }
 
   return ret;
@@ -6294,12 +6391,24 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
                                                      const std::vector<pb::common::KeyValue> &kv_default) {
   std::vector<pb::common::DocumentWithId> documents;
   std::vector<int64_t> delete_document_ids;
+  std::vector<pb::common::KeyValue> send_kv_default;
 
   if (region->Type() != pb::common::DOCUMENT_REGION ||
       !region->Definition().index_parameter().has_document_index_parameter()) {
     DINGO_LOG(FATAL) << "invalid regon type";
   }
 
+  if (kv_default.empty()) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
+        << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
+                       pb::common::RegionType_Name(region->Type()));
+    return butil::Status::OK();
+  }
+
+  std::vector<pb::common::KeyValue> send_kvs;
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  butil::Status ret;
   for (auto const &kv : kv_default) {
     pb::common::DocumentWithId document_with_id;
     std::string plain_key;
@@ -6315,25 +6424,43 @@ butil::Status TxnEngineHelper::RestoreNonTxnDocument(std::shared_ptr<Context> ct
         DINGO_LOG(FATAL) << fmt::format("Parse document proto failed, value size: {}.", value.size());
       }
       documents.push_back(document_with_id);
+      total_count++;
+      total_size += document_with_id.ByteSizeLong();
     } else {
       delete_document_ids.push_back(document_id);
+      total_count++;
+    }
+    send_kv_default.push_back(kv);
+    total_count++;
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids,
+                                                                 send_kv_default, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
+                         << ", write raft engine failed, status: " << ret.error_str();
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      documents.clear();
+      delete_document_ids.clear();
+      send_kv_default.clear();
+      total_size = 0;
+      total_count = 0;
     }
   }
 
-  if (kv_default.empty()) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_backup_detail)
-        << fmt::format("[backupdata][region({})][region_type({})] kv_default is empty", region->Id(),
-                       pb::common::RegionType_Name(region->Type()));
-    return butil::Status::OK();
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids,
+                                                               send_kv_default, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
+                       << ", write raft engine failed, status: " << ret.error_str();
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
   }
 
-  auto ret = raft_engine->Write(
-      ctx, WriteDataBuilder::BuildWrite(Constant::kStoreDataCF, documents, delete_document_ids, kv_default, true));
-  if (ret.error_code() == EPERM) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] OnePCCommit", region->Id())
-                     << ", write raft engine failed, status: " << ret.error_str();
-    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
-  }
   return ret;
 }
 
@@ -6488,7 +6615,7 @@ butil::Status TxnEngineHelper::PreProcessVectorIndex(const std::vector<pb::commo
   }
 
   // vecotr data
-  for (const auto &kv : kv_default) {
+  for (auto const &kv : kv_default) {
     const auto &encode_key = std::string(kv.key());
     pb::common::VectorWithId vector_with_id;
 
@@ -6579,12 +6706,171 @@ butil::Status TxnEngineHelper::RestoreNonTxnIndex(std::shared_ptr<Context> ctx, 
   if (!status.ok()) {
     return status;
   }
-  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(vector_with_ids, kv_default, kv_scalar, kv_table,
-                                                                  kv_scalar_speed_up, vector_delete_ids, true));
-  if (ret.error_code() == EPERM) {
-    DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write raft engine failed, status:{}",
-                                    region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
-    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  std::vector<pb::common::KeyValue> send_kv_default;
+  std::vector<pb::common::KeyValue> send_kv_scalar;
+  std::vector<pb::common::KeyValue> send_kv_table;
+  std::vector<pb::common::KeyValue> send_kv_scalar_speed_up;
+  std::vector<pb::common::VectorWithId> send_vector_with_ids;
+
+  int64_t total_size = 0;
+  int64_t total_count = 0;
+  butil::Status ret;
+
+  for (auto const &vector : vector_with_ids) {
+    send_vector_with_ids.push_back(vector);
+    total_size += vector.ByteSizeLong();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(send_vector_with_ids, {}, {}, {}, {}, {}, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[backupdata][region({})][region_type({})] write vector_with_id failed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      send_vector_with_ids.clear();
+      total_size = 0;
+      total_count = 0;
+    }
+  }
+
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(send_vector_with_ids, {}, {}, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write vector_with_id failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
+    send_vector_with_ids.clear();
+    total_size = 0;
+    total_count = 0;
+  }
+
+  for (auto const &kv : kv_default) {
+    send_kv_default.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, send_kv_default, {}, {}, {}, {}, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[backupdata][region({})][region_type({})] write send_kv_defaultfailed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      send_kv_default.clear();
+      total_size = 0;
+      total_count = 0;
+    }
+  }
+
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, send_kv_default, {}, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_default failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
+    send_kv_default.clear();
+    total_size = 0;
+    total_count = 0;
+  }
+
+  for (auto const &kv : kv_scalar) {
+    send_kv_scalar.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, send_kv_scalar, {}, {}, {}, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[backupdata][region({})][region_type({})] write send_kv_scalar failed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      send_kv_scalar.clear();
+      total_size = 0;
+      total_count = 0;
+    }
+  }
+
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, send_kv_scalar, {}, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_scalar failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
+    send_kv_scalar.clear();
+    total_size = 0;
+    total_count = 0;
+  }
+
+  for (auto const &kv : kv_table) {
+    send_kv_table.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, send_kv_table, {}, {}, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[backupdata][region({})][region_type({})] write send_kv_table failed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      send_kv_table.clear();
+      total_size = 0;
+      total_count = 0;
+    }
+  }
+
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, send_kv_table, {}, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format("[backupdata][region({})][region_type({})] write send_kv_table failed, status:{}",
+                                      region->Id(), pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
+    send_kv_table.clear();
+    total_size = 0;
+    total_count = 0;
+  }
+
+  for (auto const &kv : kv_scalar_speed_up) {
+    send_kv_scalar_speed_up.push_back(kv);
+    total_size += kv.key().size();
+    total_size += kv.value().size();
+    total_count++;
+    if (total_size > FLAGS_max_restore_data_memory_size || total_count > FLAGS_max_restore_count) {
+      ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, {}, send_kv_scalar_speed_up, {}, true));
+      if (ret.error_code() == EPERM) {
+        DINGO_LOG(ERROR) << fmt::format(
+            "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up failed, status:{}", region->Id(),
+            pb::common::RegionType_Name(region->Type()), ret.error_str());
+        return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+      }
+      send_kv_scalar_speed_up.clear();
+      total_size = 0;
+      total_count = 0;
+    }
+  }
+  if (total_size > 0 || total_count > 0) {
+    ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite({}, {}, {}, {}, send_kv_scalar_speed_up, {}, true));
+    if (ret.error_code() == EPERM) {
+      DINGO_LOG(ERROR) << fmt::format(
+          "[backupdata][region({})][region_type({})] write send_kv_scalar_speed_up cf failed, status:{}", region->Id(),
+          pb::common::RegionType_Name(region->Type()), ret.error_str());
+      return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+    }
+    send_kv_scalar_speed_up.clear();
+    total_size = 0;
+    total_count = 0;
   }
   return ret;
 }
