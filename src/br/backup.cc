@@ -306,11 +306,18 @@ butil::Status Backup::DoRun() {
   std::vector<std::string> coordinator_addrs =
       br::InteractionManager::GetInstance().GetCoordinatorInteraction()->GetAddrs();
 
-  std::vector<std::string> store_addrs = br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrs();
+  std::vector<std::string> store_addrs = br::InteractionManager::GetInstance().GetStoreInteraction() != nullptr
+                                             ? br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrs()
+                                             : std::vector<std::string>();
 
-  std::vector<std::string> index_addrs = br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrs();
+  std::vector<std::string> index_addrs = br::InteractionManager::GetInstance().GetIndexInteraction() != nullptr
+                                             ? br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrs()
+                                             : std::vector<std::string>();
 
-  std::vector<std::string> document_addrs = br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrs();
+  std::vector<std::string> document_addrs =
+      br::InteractionManager::GetInstance().GetDocumentInteraction() != nullptr
+          ? br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrs()
+          : std::vector<std::string>();
 
   // create backup meta
   {
@@ -322,24 +329,30 @@ butil::Status Backup::DoRun() {
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
-    status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!store_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     std::shared_ptr<br::ServerInteraction> index_interaction;
-    status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!index_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     std::shared_ptr<br::ServerInteraction> document_interaction;
-    status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!document_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     backup_meta_ =
@@ -366,24 +379,30 @@ butil::Status Backup::DoRun() {
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
-    status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!store_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     std::shared_ptr<br::ServerInteraction> index_interaction;
-    status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!index_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     std::shared_ptr<br::ServerInteraction> document_interaction;
-    status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!document_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     backup_data_ =
@@ -1052,6 +1071,14 @@ butil::Status Backup::EnableBalanceToCoordinator(ServerInteractionPtr coordinato
 
 butil::Status Backup::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr store_interaction,
                                                           ServerInteractionPtr index_interaction) {
+  bool is_exist_store = (store_interaction != nullptr ? !store_interaction->IsEmpty() : false);
+  bool is_exist_index = (index_interaction != nullptr ? !index_interaction->IsEmpty() : false);
+
+  if (!is_exist_store && !is_exist_index) {
+    DINGO_LOG(INFO) << "Store and Index not exist, skip DisableSplitAndMergeToStoreAndIndex";
+    return butil::Status::OK();
+  }
+
   dingodb::pb::store::ControlConfigRequest request;
   dingodb::pb::store::ControlConfigResponse response;
 
@@ -1067,72 +1094,86 @@ butil::Status Backup::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
   config_auto_merge.set_value("false");
   request.mutable_control_config_variable()->Add(std::move(config_auto_merge));
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+  // store exist
+  if (is_exist_store) {
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
 
-  butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
-
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
-
-  for (const auto& config : response.control_config_variable()) {
-    if (config.is_error_occurred()) {
-      DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
-      return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
-                           config.name().c_str());
+    butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
-      region_auto_split_enable_after_finish_ = true;
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
-      region_auto_merge_enable_after_finish_ = true;
-    }
-  }
+    for (const auto& config : response.control_config_variable()) {
+      if (config.is_error_occurred()) {
+        DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
+        return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
+                             config.name().c_str());
+      }
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
+        region_auto_split_enable_after_finish_ = true;
+      }
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
-
-  status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
-
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
-
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
-
-  for (const auto& config : response.control_config_variable()) {
-    if (config.is_error_occurred()) {
-      DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
-      return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
-                           config.name().c_str());
+      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
+        region_auto_merge_enable_after_finish_ = true;
+      }
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
-      region_auto_split_enable_after_finish_ = true;
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+  }  //   if (is_exist_store) {
+
+  // index exist
+  if (is_exist_index) {
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+
+    butil::Status status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
-      region_auto_merge_enable_after_finish_ = true;
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
     }
-  }
+
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+
+    for (const auto& config : response.control_config_variable()) {
+      if (config.is_error_occurred()) {
+        DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
+        return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
+                             config.name().c_str());
+      }
+
+      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
+        region_auto_split_enable_after_finish_ = true;
+      }
+
+      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
+        region_auto_merge_enable_after_finish_ = true;
+      }
+    }
+  }  //   if (is_exist_index) {
 
   return butil::Status::OK();
 }
 butil::Status Backup::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr store_interaction,
                                                          ServerInteractionPtr index_interaction) const {
+  bool is_exist_store = (store_interaction != nullptr ? !store_interaction->IsEmpty() : false);
+  bool is_exist_index = (index_interaction != nullptr ? !index_interaction->IsEmpty() : false);
+
+  if (!is_exist_store && !is_exist_index) {
+    DINGO_LOG(INFO) << "Store and Index not exist, skip EnableSplitAndMergeToStoreAndIndex";
+    return butil::Status::OK();
+  }
+
   dingodb::pb::store::ControlConfigRequest request;
   dingodb::pb::store::ControlConfigResponse response;
 
@@ -1153,30 +1194,37 @@ butil::Status Backup::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr st
   if (!request.control_config_variable().empty()) {
     request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
 
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    if (is_exist_store) {
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
 
-    butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
+      butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
 
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+    }  // if (is_exist_store) {
 
-    status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
+    if (is_exist_index) {
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
 
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      butil::Status status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
+
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+    }
   }
   return butil::Status::OK();
 }

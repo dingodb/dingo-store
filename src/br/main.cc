@@ -127,17 +127,26 @@ static butil::Status SetIndexInteraction() {
     addrs.push_back(fmt::format("{}:{}", location.host(), location.port()));
   }
 
-  std::shared_ptr<br::ServerInteraction> index_interaction = std::make_shared<br::ServerInteraction>();
-  if (!index_interaction->Init(addrs)) {
-    std::string s = fmt::format("Fail to init index_interaction, addrs");
-    for (const auto& addr : addrs) {
-      s += fmt::format(" {}", addr);
+  if (addrs.empty()) {
+    if (br::FLAGS_br_backup_index_must_be_exist) {
+      std::string s = "Index store map is empty, but br_backup_index_must_be_exist is true";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EINTERNAL, s);
     }
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(dingodb::pb::error::EINTERNAL, s);
+  } else {  // normal
+    std::shared_ptr<br::ServerInteraction> index_interaction = std::make_shared<br::ServerInteraction>();
+    if (!index_interaction->Init(addrs)) {
+      std::string s = fmt::format("Fail to init index_interaction, addrs");
+      for (const auto& addr : addrs) {
+        s += fmt::format(" {}", addr);
+      }
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EINTERNAL, s);
+    }
+
+    br::InteractionManager::GetInstance().SetIndexInteraction(index_interaction);
   }
 
-  br::InteractionManager::GetInstance().SetIndexInteraction(index_interaction);
   return butil::Status();
 }
 
@@ -164,17 +173,26 @@ static butil::Status SetDocumentInteraction() {
     addrs.push_back(fmt::format("{}:{}", location.host(), location.port()));
   }
 
-  std::shared_ptr<br::ServerInteraction> document_interaction = std::make_shared<br::ServerInteraction>();
-  if (!document_interaction->Init(addrs)) {
-    std::string s = fmt::format("Fail to init document_interaction, addrs");
-    for (const auto& addr : addrs) {
-      s += fmt::format(" {}", addr);
+  if (addrs.empty()) {
+    if (br::FLAGS_br_backup_document_must_be_exist) {
+      std::string s = "Document store map is empty, but br_backup_document_must_be_exist is true";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EINTERNAL, s);
     }
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(dingodb::pb::error::EINTERNAL, s);
+  } else {  // normal
+    std::shared_ptr<br::ServerInteraction> document_interaction = std::make_shared<br::ServerInteraction>();
+    if (!document_interaction->Init(addrs)) {
+      std::string s = fmt::format("Fail to init document_interaction, addrs");
+      for (const auto& addr : addrs) {
+        s += fmt::format(" {}", addr);
+      }
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::EINTERNAL, s);
+    }
+
+    br::InteractionManager::GetInstance().SetDocumentInteraction(document_interaction);
   }
 
-  br::InteractionManager::GetInstance().SetDocumentInteraction(document_interaction);
   return butil::Status();
 }
 
@@ -662,16 +680,27 @@ int main(int argc, char* argv[]) {
                     << br::InteractionManager::GetInstance().GetStoreInteraction()->GetAddrsAsString();
 
     std::cout << "index       url    : "
-              << br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString() << std::endl;
+              << (br::InteractionManager::GetInstance().GetIndexInteraction() != nullptr
+                      ? br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString()
+                      : "empty")
+              << std::endl;
     DINGO_LOG(INFO) << "index       url    : "
-                    << br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString();
+                    << (br::InteractionManager::GetInstance().GetIndexInteraction() != nullptr
+                            ? br::InteractionManager::GetInstance().GetIndexInteraction()->GetAddrsAsString()
+                            : "empty");
 
     std::cout << "document    url    : "
-              << br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString() << std::endl;
+              << (br::InteractionManager::GetInstance().GetDocumentInteraction() != nullptr
+                      ? br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString()
+                      : "empty")
+              << std::endl;
     DINGO_LOG(INFO) << "document    url    : "
-                    << br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString();
+                    << (br::InteractionManager::GetInstance().GetDocumentInteraction() != nullptr
+                            ? br::InteractionManager::GetInstance().GetDocumentInteraction()->GetAddrsAsString()
+                            : "empty");
 
     std::cout << "br type            : " << params.br_type << std::endl;
+
     DINGO_LOG(INFO) << "br type            : " << params.br_type;
 
     std::cout << "br backup type     : " << params.br_backup_type << std::endl;

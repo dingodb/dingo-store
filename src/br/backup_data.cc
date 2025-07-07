@@ -61,9 +61,15 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
   {
     if (!backup_sql_data_) {
       std::vector<std::string> coordinator_addrs = coordinator_interaction_->GetAddrs();
-      std::vector<std::string> store_addrs = store_interaction_->GetAddrs();
-      std::vector<std::string> index_addrs = index_interaction_->GetAddrs();
-      std::vector<std::string> document_addrs = document_interaction_->GetAddrs();
+
+      std::vector<std::string> store_addrs =
+          (store_interaction_ != nullptr ? store_interaction_->GetAddrs() : std::vector<std::string>{});
+
+      std::vector<std::string> index_addrs =
+          (index_interaction_ != nullptr ? index_interaction_->GetAddrs() : std::vector<std::string>{});
+
+      std::vector<std::string> document_addrs =
+          (document_interaction_ != nullptr ? document_interaction_->GetAddrs() : std::vector<std::string>{});
 
       std::shared_ptr<br::ServerInteraction> coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
@@ -73,24 +79,30 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
       }
 
       std::shared_ptr<br::ServerInteraction> store_interaction;
-      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!store_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> index_interaction;
-      status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!index_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> document_interaction;
-      status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!document_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
       backup_sql_data_ = std::make_shared<BackupSqlData>(coordinator_interaction, store_interaction, index_interaction,
                                                          document_interaction, backupts_, backuptso_internal_, storage_,
@@ -116,9 +128,15 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
   {
     if (!backup_sdk_data_) {
       std::vector<std::string> coordinator_addrs = coordinator_interaction_->GetAddrs();
-      std::vector<std::string> store_addrs = store_interaction_->GetAddrs();
-      std::vector<std::string> index_addrs = index_interaction_->GetAddrs();
-      std::vector<std::string> document_addrs = document_interaction_->GetAddrs();
+
+      std::vector<std::string> store_addrs =
+          (store_interaction_ != nullptr ? store_interaction_->GetAddrs() : std::vector<std::string>{});
+
+      std::vector<std::string> index_addrs =
+          (index_interaction_ != nullptr ? index_interaction_->GetAddrs() : std::vector<std::string>{});
+
+      std::vector<std::string> document_addrs =
+          (document_interaction_ != nullptr ? document_interaction_->GetAddrs() : std::vector<std::string>{});
 
       std::shared_ptr<br::ServerInteraction> coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
@@ -128,24 +146,30 @@ butil::Status BackupData::Init(const std::vector<int64_t>& meta_region_list) {
       }
 
       std::shared_ptr<br::ServerInteraction> store_interaction;
-      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!store_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> index_interaction;
-      status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!index_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(index_addrs, index_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> document_interaction;
-      status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!document_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(document_addrs, document_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       backup_sdk_data_ = std::make_shared<BackupSdkData>(coordinator_interaction, store_interaction, index_interaction,
@@ -281,7 +305,6 @@ butil::Status BackupData::GetAllRegionMapFromCoordinator() {
     DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
     return butil::Status(response.error().errcode(), response.error().errmsg());
   }
-
 
   region_map_ = std::make_shared<dingodb::pb::common::RegionMap>(response.regionmap());
 

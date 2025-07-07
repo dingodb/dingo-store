@@ -119,6 +119,8 @@ std::string ServerInteraction::GetAddrsAsString() {
   return internal_addrs;
 }
 
+bool ServerInteraction::IsEmpty() const { return (endpoints_.empty() || addrs_.empty()); }
+
 butil::Status ServerInteraction::CreateInteraction(const std::vector<std::string>& addrs,
                                                    ServerInteractionPtr& interaction) {
   butil::Status status;

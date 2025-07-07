@@ -119,4 +119,12 @@ DEFINE_bool(just_store, false, "just store server");
 
 DEFINE_bool(br_backup_enable_get_job_list_check, true, "br backup enable get job list check. default true");
 
+// br backup index must be exist
+DEFINE_bool(br_backup_index_must_be_exist, true,
+            "br backup index must be exist. default true. if false, index region will not be backup.");
+
+// br backup document must be exist
+DEFINE_bool(br_backup_document_must_be_exist, true,
+            "br backup document must be exist. default true. if false, document region will not be backup.");
+
 }  // namespace br
