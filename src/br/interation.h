@@ -75,6 +75,8 @@ class ServerInteraction {
   std::vector<std::string> GetAddrs();
   std::string GetAddrsAsString();
 
+  bool IsEmpty() const;
+
  private:
   std::atomic<int> leader_index_;
   std::vector<butil::EndPoint> endpoints_;

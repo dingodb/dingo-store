@@ -48,7 +48,8 @@ butil::Status BackupMeta::Init() {
   butil::Status status;
   if (!backup_sql_meta_) {
     std::vector<std::string> coordinator_addrs = coordinator_interaction_->GetAddrs();
-    std::vector<std::string> store_addrs = store_interaction_->GetAddrs();
+    std::vector<std::string> store_addrs =
+        (store_interaction_ != nullptr ? store_interaction_->GetAddrs() : std::vector<std::string>{});
 
     std::shared_ptr<br::ServerInteraction> coordinator_interaction;
     status = ServerInteraction::CreateInteraction(coordinator_addrs, coordinator_interaction);
@@ -58,10 +59,12 @@ butil::Status BackupMeta::Init() {
     }
 
     std::shared_ptr<br::ServerInteraction> store_interaction;
-    status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    if (!store_addrs.empty()) {
+      status = ServerInteraction::CreateInteraction(store_addrs, store_interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
     }
 
     backup_sql_meta_ = std::make_shared<BackupSqlMeta>(coordinator_interaction, store_interaction, backupts_,

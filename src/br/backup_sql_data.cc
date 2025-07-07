@@ -170,27 +170,39 @@ butil::Status BackupSqlData::Run() {
   std::atomic<bool> document_is_thread_exit = false;
 
   // store
-  status = DoAsyncBackupRegion(store_interaction_, "StoreService", wait_for_handle_store_regions_,
-                               already_handle_store_regions_, save_store_region_map_, store_is_thread_exit);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
+  if (store_interaction_ && !store_interaction_->IsEmpty()) {
+    status = DoAsyncBackupRegion(store_interaction_, "StoreService", wait_for_handle_store_regions_,
+                                 already_handle_store_regions_, save_store_region_map_, store_is_thread_exit);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else {
+    store_is_thread_exit = true;
   }
 
   // index
-  status = DoAsyncBackupRegion(index_interaction_, "IndexService", wait_for_handle_index_regions_,
-                               already_handle_index_regions_, save_index_region_map_, index_is_thread_exit);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
+  if (index_interaction_ && !index_interaction_->IsEmpty()) {
+    status = DoAsyncBackupRegion(index_interaction_, "IndexService", wait_for_handle_index_regions_,
+                                 already_handle_index_regions_, save_index_region_map_, index_is_thread_exit);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else {
+    index_is_thread_exit = true;
   }
 
   // document
-  status = DoAsyncBackupRegion(document_interaction_, "DocumentService", wait_for_handle_document_regions_,
-                               already_handle_document_regions_, save_document_region_map_, document_is_thread_exit);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
+  if (document_interaction_ && !document_interaction_->IsEmpty()) {
+    status = DoAsyncBackupRegion(document_interaction_, "DocumentService", wait_for_handle_document_regions_,
+                                 already_handle_document_regions_, save_document_region_map_, document_is_thread_exit);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else {
+    document_is_thread_exit = true;
   }
 
   std::atomic<int64_t> last_already_handle_regions = 0;
