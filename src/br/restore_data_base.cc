@@ -200,6 +200,12 @@ butil::Status RestoreDataBase::Init() {
 
   // store region meta manager
   if (store_id_and_region_kvs_) {
+    if (store_interaction_ == nullptr || (store_interaction_ != nullptr && store_interaction_->IsEmpty())) {
+      std::string s = "store_id_and_region_kvs_ is not null, need store node, but store_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_STORE_NODE_NOT_EXIST, s);
+    }
+
     ServerInteractionPtr internal_coordinator_interaction;
 
     butil::Status status =
@@ -230,8 +236,15 @@ butil::Status RestoreDataBase::Init() {
 
   // store region data manager
   if (store_id_and_sst_meta_group_kvs_ && store_id_and_region_kvs_) {
-    ServerInteractionPtr internal_coordinator_interaction;
+    if (store_interaction_ == nullptr || (store_interaction_ != nullptr && store_interaction_->IsEmpty())) {
+      std::string s =
+          "store_id_and_sst_meta_group_kvs_ && store_id_and_region_kvs_ is not null, need store node, but "
+          "store_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_STORE_NODE_NOT_EXIST, s);
+    }
 
+    ServerInteractionPtr internal_coordinator_interaction;
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
@@ -239,9 +252,8 @@ butil::Status RestoreDataBase::Init() {
       return status;
     }
 
-    ServerInteractionPtr internal_interaction;
-
-    status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_interaction);
+    ServerInteractionPtr internal_store_interaction;
+    status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_store_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -256,9 +268,10 @@ butil::Status RestoreDataBase::Init() {
     }
 
     store_restore_region_data_manager_ = std::make_shared<RestoreRegionDataManager>(
-        internal_coordinator_interaction, internal_interaction, restore_region_concurrency_, replica_num_, restorets_,
-        restoretso_internal_, storage_, storage_internal_, store_id_and_sst_meta_group_kvs_, backup_meta_region_cf_name,
-        dingodb::Constant::kRestoreData, restore_region_timeout_s_, store_id_and_region_kvs_);
+        internal_coordinator_interaction, internal_store_interaction, restore_region_concurrency_, replica_num_,
+        restorets_, restoretso_internal_, storage_, storage_internal_, store_id_and_sst_meta_group_kvs_,
+        backup_meta_region_cf_name, dingodb::Constant::kRestoreData, restore_region_timeout_s_,
+        store_id_and_region_kvs_);
 
     status = store_restore_region_data_manager_->Init();
     if (!status.ok()) {
@@ -269,8 +282,12 @@ butil::Status RestoreDataBase::Init() {
 
   // index region meta manager
   if (index_id_and_region_kvs_) {
+    if (index_interaction_ == nullptr || (index_interaction_ != nullptr && index_interaction_->IsEmpty())) {
+      std::string s = "index_id_and_region_kvs_ is not null, need index node, but index_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_INDEX_NODE_NOT_EXIST, s);
+    }
     ServerInteractionPtr internal_coordinator_interaction;
-
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
@@ -299,8 +316,15 @@ butil::Status RestoreDataBase::Init() {
 
   // index region data manager
   if (index_id_and_sst_meta_group_kvs_ && index_id_and_region_kvs_) {
-    ServerInteractionPtr internal_coordinator_interaction;
+    if (index_interaction_ == nullptr || (index_interaction_ != nullptr && index_interaction_->IsEmpty())) {
+      std::string s =
+          "index_id_and_sst_meta_group_kvs_ && index_id_and_region_kvs_ is not null, need index node, but "
+          "index_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_INDEX_NODE_NOT_EXIST, s);
+    }
 
+    ServerInteractionPtr internal_coordinator_interaction;
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
@@ -308,9 +332,8 @@ butil::Status RestoreDataBase::Init() {
       return status;
     }
 
-    ServerInteractionPtr internal_interaction;
-
-    status = ServerInteraction::CreateInteraction(index_interaction_->GetAddrs(), internal_interaction);
+    ServerInteractionPtr internal_index_interaction;
+    status = ServerInteraction::CreateInteraction(index_interaction_->GetAddrs(), internal_index_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -325,9 +348,10 @@ butil::Status RestoreDataBase::Init() {
     }
 
     index_restore_region_data_manager_ = std::make_shared<RestoreRegionDataManager>(
-        internal_coordinator_interaction, internal_interaction, restore_region_concurrency_, replica_num_, restorets_,
-        restoretso_internal_, storage_, storage_internal_, index_id_and_sst_meta_group_kvs_, backup_meta_region_cf_name,
-        dingodb::Constant::kRestoreData, restore_region_timeout_s_, index_id_and_region_kvs_);
+        internal_coordinator_interaction, internal_index_interaction, restore_region_concurrency_, replica_num_,
+        restorets_, restoretso_internal_, storage_, storage_internal_, index_id_and_sst_meta_group_kvs_,
+        backup_meta_region_cf_name, dingodb::Constant::kRestoreData, restore_region_timeout_s_,
+        index_id_and_region_kvs_);
 
     status = index_restore_region_data_manager_->Init();
     if (!status.ok()) {
@@ -338,8 +362,14 @@ butil::Status RestoreDataBase::Init() {
 
   // document region meta manager
   if (document_id_and_region_kvs_) {
-    ServerInteractionPtr internal_coordinator_interaction;
+    if (document_interaction_ == nullptr || (document_interaction_ != nullptr && document_interaction_->IsEmpty())) {
+      std::string s =
+          "document_id_and_region_kvs_ is not null, need document node, but document_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_DOCUMENT_NODE_NOT_EXIST, s);
+    }
 
+    ServerInteractionPtr internal_coordinator_interaction;
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
@@ -368,8 +398,15 @@ butil::Status RestoreDataBase::Init() {
 
   // document region data manager
   if (document_id_and_sst_meta_group_kvs_ && document_id_and_region_kvs_) {
-    ServerInteractionPtr internal_coordinator_interaction;
+    if (document_interaction_ == nullptr || (document_interaction_ != nullptr && document_interaction_->IsEmpty())) {
+      std::string s =
+          "document_id_and_sst_meta_group_kvs_ && document_id_and_region_kvs_ is not null, need document node, but "
+          "document_interaction_ is null or empty";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(dingodb::pb::error::ERESTORE_DOCUMENT_NODE_NOT_EXIST, s);
+    }
 
+    ServerInteractionPtr internal_coordinator_interaction;
     butil::Status status =
         ServerInteraction::CreateInteraction(coordinator_interaction_->GetAddrs(), internal_coordinator_interaction);
     if (!status.ok()) {
@@ -377,9 +414,8 @@ butil::Status RestoreDataBase::Init() {
       return status;
     }
 
-    ServerInteractionPtr internal_interaction;
-
-    status = ServerInteraction::CreateInteraction(document_interaction_->GetAddrs(), internal_interaction);
+    ServerInteractionPtr internal_document_interaction;
+    status = ServerInteraction::CreateInteraction(document_interaction_->GetAddrs(), internal_document_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -394,8 +430,8 @@ butil::Status RestoreDataBase::Init() {
     }
 
     document_restore_region_data_manager_ = std::make_shared<RestoreRegionDataManager>(
-        internal_coordinator_interaction, internal_interaction, restore_region_concurrency_, replica_num_, restorets_,
-        restoretso_internal_, storage_, storage_internal_, document_id_and_sst_meta_group_kvs_,
+        internal_coordinator_interaction, internal_document_interaction, restore_region_concurrency_, replica_num_,
+        restorets_, restoretso_internal_, storage_, storage_internal_, document_id_and_sst_meta_group_kvs_,
         backup_meta_region_cf_name, dingodb::Constant::kRestoreData, restore_region_timeout_s_,
         document_id_and_region_kvs_);
 

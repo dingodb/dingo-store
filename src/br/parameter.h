@@ -163,8 +163,6 @@ DECLARE_string(br_client_method);
 // br client method param1
 DECLARE_string(br_client_method_param1);
 
-DECLARE_bool(just_store);
-
 DECLARE_bool(br_backup_enable_get_job_list_check);
 
 // br backup index must be exist
@@ -172,6 +170,12 @@ DECLARE_bool(br_backup_index_must_be_exist);
 
 // br backup document must be exist
 DECLARE_bool(br_backup_document_must_be_exist);
+
+// br restore index must be exist
+DECLARE_bool(br_restore_index_must_be_exist);
+
+// br restore document must be exist
+DECLARE_bool(br_restore_document_must_be_exist);
 
 }  // namespace br
 
