@@ -129,16 +129,16 @@ butil::Status RestoreSqlMeta::Init() {
       return status;
     }
 
-    ServerInteractionPtr internal_interaction;
+    ServerInteractionPtr internal_store_interaction;
 
-    status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_interaction);
+    status = ServerInteraction::CreateInteraction(store_interaction_->GetAddrs(), internal_store_interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
 
     restore_region_data_manager_ = std::make_shared<RestoreRegionDataManager>(
-        internal_coordinator_interaction, internal_interaction, restore_region_concurrency_, replica_num_, restorets_,
+        internal_coordinator_interaction, internal_store_interaction, restore_region_concurrency_, replica_num_, restorets_,
         restoretso_internal_, storage_, storage_internal_, id_and_sst_meta_group_kvs_,
         dingodb::Constant::kStoreCfSstMetaSqlMetaSstName, dingodb::Constant::kRestoreMeta, restore_region_timeout_s_,
         id_and_region_kvs_);

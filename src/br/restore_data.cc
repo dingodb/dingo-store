@@ -117,9 +117,15 @@ butil::Status RestoreData::Init() {
         (store_region_sql_data_sst_ || store_cf_sst_meta_sql_data_sst_ || index_region_sql_data_sst_ ||
          index_cf_sst_meta_sql_data_sst_ || document_region_sql_data_sst_ || document_cf_sst_meta_sql_data_sst_)) {
       std::vector<std::string> coordinator_addrs = coordinator_interaction_->GetAddrs();
-      std::vector<std::string> store_addrs = store_interaction_->GetAddrs();
-      std::vector<std::string> index_addrs = index_interaction_->GetAddrs();
-      std::vector<std::string> document_addrs = document_interaction_->GetAddrs();
+
+      std::vector<std::string> store_addrs =
+          (store_interaction_ != nullptr ? store_interaction_->GetAddrs() : std::vector<std::string>());
+
+      std::vector<std::string> index_addrs =
+          (index_interaction_ != nullptr ? index_interaction_->GetAddrs() : std::vector<std::string>());
+
+      std::vector<std::string> document_addrs =
+          (document_interaction_ != nullptr ? document_interaction_->GetAddrs() : std::vector<std::string>());
 
       std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
@@ -129,24 +135,30 @@ butil::Status RestoreData::Init() {
       }
 
       std::shared_ptr<br::ServerInteraction> internal_store_interaction;
-      status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!store_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> internal_index_interaction;
-      status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!index_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> internal_document_interaction;
-      status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!document_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       restore_sql_data_ = std::make_shared<RestoreSqlData>(
@@ -171,9 +183,15 @@ butil::Status RestoreData::Init() {
         (store_region_sdk_data_sst_ || store_cf_sst_meta_sdk_data_sst_ || index_region_sdk_data_sst_ ||
          index_cf_sst_meta_sdk_data_sst_ || document_region_sdk_data_sst_ || document_cf_sst_meta_sdk_data_sst_)) {
       std::vector<std::string> coordinator_addrs = coordinator_interaction_->GetAddrs();
-      std::vector<std::string> store_addrs = store_interaction_->GetAddrs();
-      std::vector<std::string> index_addrs = index_interaction_->GetAddrs();
-      std::vector<std::string> document_addrs = document_interaction_->GetAddrs();
+
+      std::vector<std::string> store_addrs =
+          (store_interaction_ != nullptr ? store_interaction_->GetAddrs() : std::vector<std::string>());
+
+      std::vector<std::string> index_addrs =
+          (index_interaction_ != nullptr ? index_interaction_->GetAddrs() : std::vector<std::string>());
+
+      std::vector<std::string> document_addrs =
+          (document_interaction_ != nullptr ? document_interaction_->GetAddrs() : std::vector<std::string>());
 
       std::shared_ptr<br::ServerInteraction> internal_coordinator_interaction;
       status = ServerInteraction::CreateInteraction(coordinator_addrs, internal_coordinator_interaction);
@@ -183,24 +201,30 @@ butil::Status RestoreData::Init() {
       }
 
       std::shared_ptr<br::ServerInteraction> internal_store_interaction;
-      status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!store_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(store_addrs, internal_store_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> internal_index_interaction;
-      status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!index_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(index_addrs, internal_index_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       std::shared_ptr<br::ServerInteraction> internal_document_interaction;
-      status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
+      if (!document_addrs.empty()) {
+        status = ServerInteraction::CreateInteraction(document_addrs, internal_document_interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
       }
 
       restore_sdk_data_ = std::make_shared<RestoreSdkData>(
