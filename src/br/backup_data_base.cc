@@ -302,7 +302,7 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << name_ << " " << request.DebugString();
 
-    status = interaction->SendRequest(service_name, "BackupData", request, response);
+    status = interaction->SendRequest(service_name, "BackupData", request, response, FLAGS_br_backup_region_timeout_ms);
     if (!status.ok()) {
       is_need_exit_ = true;
       std::string s =

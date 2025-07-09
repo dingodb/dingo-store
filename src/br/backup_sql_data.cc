@@ -232,7 +232,7 @@ butil::Status BackupSqlData::Run() {
   int64_t start_time_s = dingodb::Helper::Timestamp();
   int64_t end_time_s = start_time_s;
   while (true) {
-    if ((end_time_s - start_time_s) > (FLAGS_br_server_interaction_timeout_ms / 1000 + 5)) {
+    if ((end_time_s - start_time_s) > (FLAGS_br_backup_region_timeout_ms / 1000 + 5)) {
       DINGO_LOG(ERROR) << fmt::format("backup sql region data timeout : {}s", (end_time_s - start_time_s));
       break;
     }
