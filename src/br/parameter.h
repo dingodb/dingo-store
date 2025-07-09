@@ -177,6 +177,9 @@ DECLARE_bool(br_restore_index_must_be_exist);
 // br restore document must be exist
 DECLARE_bool(br_restore_document_must_be_exist);
 
+// backup region timeout ms (macro second)
+DECLARE_int64(br_backup_region_timeout_ms);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_

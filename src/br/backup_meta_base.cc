@@ -296,7 +296,8 @@ butil::Status BackupMetaBase::DoBackupRegionInternal(
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
 
-    butil::Status status = interaction->SendRequest(service_name, "BackupMeta", request, response);
+    butil::Status status =
+        interaction->SendRequest(service_name, "BackupMeta", request, response, FLAGS_br_backup_region_timeout_ms);
     if (!status.ok()) {
       is_need_exit_ = true;
       std::string s =

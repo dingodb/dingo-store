@@ -133,4 +133,7 @@ DEFINE_bool(br_restore_index_must_be_exist, false,
 DEFINE_bool(br_restore_document_must_be_exist, false,
             "br restore document must be exist. default false. if false, document region will not be restore.");
 
+// backup region timeout ms (macro second)
+DEFINE_int64(br_backup_region_timeout_ms, 600000, "backup region timeout ms. default 10m");
+
 }  // namespace br
