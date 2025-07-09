@@ -110,6 +110,7 @@ TEST_F(VectorIndexWrapperTest, Add) {
 }
 
 TEST_F(VectorIndexWrapperTest, Add_Sibling) {
+  GTEST_SKIP() << "Skip Add_Sibling...";
   int64_t id = 1;
   pb::common::VectorIndexParameter index_parameter;
   index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);

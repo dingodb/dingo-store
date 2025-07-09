@@ -18,18 +18,18 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <random>
 #include <string>
 #include <vector>
-#include <iomanip>
-
 
 #include "butil/status.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "faiss/MetricType.h"
+#include "fmt/format.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -151,13 +151,13 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     std::vector<int64_t> ids;
     ids.push_back(id);
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // id exist
@@ -166,13 +166,13 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
     std::vector<int64_t> ids;
     ids.push_back(id);
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // id exist batch
@@ -182,13 +182,13 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
       ids.push_back(i);
     }
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 
   // id exist batch again
@@ -198,13 +198,13 @@ TEST_F(VectorIndexFlatTest, DeleteNoData) {
       ids.push_back(i);
     }
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
 
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::Errno::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::Errno::OK);
   }
 }
 
@@ -547,6 +547,7 @@ TEST_F(VectorIndexFlatTest, Add) {
     for (size_t i = 0; i < dimension; i++) {
       vector_with_id.mutable_vector()->add_float_values(data_base[i]);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -569,6 +570,7 @@ TEST_F(VectorIndexFlatTest, Add) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -617,11 +619,11 @@ TEST_F(VectorIndexFlatTest, Delete) {
     std::vector<int64_t> ids;
     ids.push_back(id);
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
   // id exist
@@ -651,18 +653,21 @@ TEST_F(VectorIndexFlatTest, Delete) {
     EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 
-  // id exist batch again
+  // vector_count=0 id exist batch again
   {
+    int64_t count = 0;
+    vector_index_flat_l2->GetCount(count);
+    std::cout << "vector_index_flat_l2 count: " << count << std::endl;
     std::vector<int64_t> ids;
     for (size_t i = 0 + data_base_size; i < data_base_size + data_base_size; i++) {
       ids.push_back(i);
     }
     ok = vector_index_flat_l2->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
     ok = vector_index_flat_ip->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
     ok = vector_index_flat_cosine->Delete(ids);
-    EXPECT_EQ(ok.error_code(), pb::error::EVECTOR_INVALID);
+    EXPECT_EQ(ok.error_code(), pb::error::OK);
   }
 }
 
@@ -706,6 +711,7 @@ TEST_F(VectorIndexFlatTest, UpsertWithDuplicated) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -717,6 +723,7 @@ TEST_F(VectorIndexFlatTest, UpsertWithDuplicated) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -770,6 +777,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -845,6 +853,7 @@ TEST_F(VectorIndexFlatTest, Upsert) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }

@@ -144,6 +144,7 @@ class TxnPessimisticLockTest : public testing::Test {
     ASSERT_TRUE(store_meta_manager->Init());
 
     auto store_metrics_manager = std::make_shared<StoreMetricsManager>(meta_reader, meta_writer);
+    // assert because Server::GetInstance() , server_id = 0 
     ASSERT_TRUE(store_metrics_manager->Init());
 
     mono_engine = std::make_shared<MonoStoreEngine>(engine, raw_bdb_engine, listener_factory->Build(), ts_provider,

@@ -129,6 +129,7 @@ TEST_F(VectorIndexMemoryFlatTest, Add) {
         for (size_t i = 0; i < dimension; i++) {
           vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
         }
+        vector_with_id.mutable_vector()->set_dimension(dimension);
         vector_with_ids.push_back(vector_with_id);
       }
       auto start = std::chrono::steady_clock::now();
@@ -154,6 +155,7 @@ TEST_F(VectorIndexMemoryFlatTest, Add) {
         for (size_t i = 0; i < dimension; i++) {
           vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
         }
+        vector_with_id.mutable_vector()->set_dimension(dimension);
         vector_with_ids.push_back(vector_with_id);
       }
       auto start = std::chrono::steady_clock::now();
