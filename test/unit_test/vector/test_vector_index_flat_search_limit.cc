@@ -307,6 +307,7 @@ TEST_F(VectorIndexFlatSearchParamLimitTest, Upsert) {
       for (size_t i = 0; i < kDimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[j * kDimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(kDimension);
 
       vector_with_ids.push_back(vector_with_id);
     }

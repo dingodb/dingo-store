@@ -538,6 +538,7 @@ TEST_F(VectorIndexIvfPqTest, AddNotTrain) {
     for (size_t i = 0; i < dimension; i++) {
       vector_with_id.mutable_vector()->add_float_values(internal_data_base[i]);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -562,6 +563,7 @@ TEST_F(VectorIndexIvfPqTest, AddNotTrain) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(internal_data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -815,6 +817,7 @@ TEST_F(VectorIndexIvfPqTest, Add) {
   {
     std::vector<pb::common::VectorWithId> vector_with_ids;
     pb::common::VectorWithId vector_with_id;
+    vector_with_id.mutable_vector()->set_dimension(dimension);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -835,6 +838,7 @@ TEST_F(VectorIndexIvfPqTest, Add) {
     for (size_t i = 0; i < dimension; i++) {
       vector_with_id.mutable_vector()->add_float_values(data_base[i]);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -857,6 +861,7 @@ TEST_F(VectorIndexIvfPqTest, Add) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -944,6 +949,7 @@ TEST_F(VectorIndexIvfPqTest, Upsert) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -978,6 +984,7 @@ TEST_F(VectorIndexIvfPqTest, Upsert) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -1887,6 +1894,7 @@ TEST_F(VectorIndexIvfPqTest, AddForIvfPq) {
     for (size_t i = 0; i < dimension; i++) {
       vector_with_id.mutable_vector()->add_float_values(data_base[i]);
     }
+    vector_with_id.mutable_vector()->set_dimension(dimension);
 
     vector_with_ids.push_back(vector_with_id);
 
@@ -1909,6 +1917,7 @@ TEST_F(VectorIndexIvfPqTest, AddForIvfPq) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -1982,6 +1991,7 @@ TEST_F(VectorIndexIvfPqTest, UpsertForIvfPq) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
@@ -2016,6 +2026,7 @@ TEST_F(VectorIndexIvfPqTest, UpsertForIvfPq) {
       for (size_t i = 0; i < dimension; i++) {
         vector_with_id.mutable_vector()->add_float_values(data_base[id * dimension + i]);
       }
+      vector_with_id.mutable_vector()->set_dimension(dimension);
 
       vector_with_ids.push_back(vector_with_id);
     }
