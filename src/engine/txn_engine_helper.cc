@@ -893,6 +893,14 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
         << " is resolved, return false";
     return false;
   }
+  // Ignore lock when min_commit_ts > ts
+  if (lock_info.min_commit_ts() > start_ts) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+        << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
+        << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+        << ", min_commit_ts: " << lock_info.lock_ts() << " ignore lock when min_commit_ts > ts";
+    return false;
+  }
 
   if (lock_info.lock_ts() > 0) {
     if (isolation_level == pb::store::IsolationLevel::SnapshotIsolation) {
@@ -937,17 +945,6 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
                  "conflict, lock_info: "
               << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // for_update_ts < start_ts, return lock_info
-          *(txn_result_info.mutable_locked()) = lock_info;
-          return true;
-        }
-        return false;
-
-      } else {
-        if (lock_info.lock_ts() < start_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict RC lock_info.for_update_ts() == 0, it's conflict, lock_info: "
-              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
-          // lock_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
         }
