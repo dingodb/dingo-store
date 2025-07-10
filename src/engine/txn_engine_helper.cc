@@ -68,7 +68,6 @@ DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
 
-DEFINE_int32(restore_sst_file_batch_put_count, 128, "restore sst file batch put cout");
 DEFINE_int64(max_restore_data_memory_size, 20 * 1024 * 1024, "max restore data memory size");
 DEFINE_int64(max_restore_count, 100000, "max restore count");
 
