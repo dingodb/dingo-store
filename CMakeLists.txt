@@ -91,10 +91,7 @@ message("DINGO_EUREKA_INSTALL_PATH:${DINGO_EUREKA_INSTALL_PATH}")
 
 include_directories(${DINGO_EUREKA_INSTALL_PATH}/include)
 
-set(CMAKE_PREFIX_PATH
-  ${DINGO_EUREKA_INSTALL_PATH}
-  ${CMAKE_PREFIX_PATH}
-  )
+set(CMAKE_PREFIX_PATH ${DINGO_EUREKA_INSTALL_PATH} ${CMAKE_PREFIX_PATH})
 message("CMAKE_PREFIX_PATH:${CMAKE_PREFIX_PATH}")
 
 set(CMAKE_FIND_LIBRARY_SUFFIXES .a ${CMAKE_FIND_LIBRARY_SUFFIXES})
@@ -236,7 +233,7 @@ find_package(gflags REQUIRED)
 message("Using gflags ${gflags_VERSION}, include_dir:${gflags_INCLUDE_DIR}")
 
 # openssl
-if(NOT OPENSSL_ROOT_DIR) 
+if(NOT OPENSSL_ROOT_DIR)
   set(OPENSSL_ROOT_DIR ${DINGO_EUREKA_INSTALL_PATH})
 endif()
 find_package(OpenSSL REQUIRED)
@@ -252,7 +249,7 @@ set(ZLIB_USE_STATIC_LIBS "ON")
 find_package(ZLIB REQUIRED)
 message("Using zlib ${ZLIB_VERSION}, include_dir:${ZLIB_INCLUDE_DIR}")
 
-find_package (glog REQUIRED)
+find_package(glog REQUIRED)
 # used for glog 0.7.0
 add_compile_definitions(GLOG_USE_GLOG_EXPORT)
 message("Using glog ${glog_VERSION}")
@@ -262,7 +259,7 @@ message("Using GTest ${GTest_VERSION}")
 
 set(protobuf_MODULE_COMPATIBLE TRUE)
 find_package(Protobuf CONFIG REQUIRED)
-message("Using protobuf ${Protobuf_VERSION}" )
+message("Using protobuf ${Protobuf_VERSION}")
 
 find_program(PROTOC protoc REQUIRED)
 message("Using protoc ${PROTOC}")
@@ -289,6 +286,7 @@ include(ftxui)
 include(hnswlib)
 include(bdb)
 include(tantivy-search)
+include(libaio)
 
 set(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/dingo-store-proto/proto)
 set(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -366,7 +364,8 @@ set(DYNAMIC_LIB
     ${TANTIVY_SEARCH_LIBRARIES}
     ${FTXUI_COMPONENT_LIBRARY}
     ${FTXUI_DOM_LIBRARY}
-    ${FTXUI_SCREEN_LIBRARY})
+    ${FTXUI_SCREEN_LIBRARY}
+    ${LIBAIO_LIBRARIES})
 
 if(ENABLE_XDPROCKS)
   set(DYNAMIC_LIB ${DYNAMIC_LIB} "${XDPROCKS_PATH}/lib/libxdprocks.a" "${XDPROCKS_PATH}/lib/libstorelib.a"
@@ -383,12 +382,7 @@ if(WITH_LIBURING)
   set(DYNAMIC_LIB ${DYNAMIC_LIB} uring::uring)
 endif()
 
-set(DEPEND_LIBS
-    yamlcpp
-    faiss
-    bdb
-    tantivy-search
-    ftxui)
+set(DEPEND_LIBS yamlcpp faiss bdb tantivy-search ftxui)
 
 if(WITH_MKL)
   if(DEFINED ENV{MKLROOT})
@@ -476,7 +470,7 @@ if(WITH_DISKANN)
   include(diskann)
   include_directories(${DISKANN_INCLUDE_DIR})
   set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
-  set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} aio)
+  set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
 endif()
 
 if(LINK_TCMALLOC)
@@ -490,7 +484,6 @@ if(LINK_TCMALLOC)
     set(DYNAMIC_LIB ${DYNAMIC_LIB} gperftools::gperftools_minimal)
   endif()
 endif()
-
 
 # source file
 file(GLOB_RECURSE DINGO_SERIAL_SOURCES ${PROJECT_SOURCE_DIR}/src/serial/src/*.cc)
@@ -592,9 +585,7 @@ set(DYNAMIC_LIB ${DYNAMIC_LIB} ${SIMD_LIBRARIES})
 
 # library file
 
-add_library(
-  serial ${SERIAL_SRCS}
-)
+add_library(serial ${SERIAL_SRCS})
 
 add_library(
   DINGODB_OBJS OBJECT
@@ -688,7 +679,8 @@ endif()
 
 add_executable(dingodb_server src/server/main.cc $<TARGET_OBJECTS:DINGODB_OBJS> $<TARGET_OBJECTS:PROTO_OBJS>)
 
-add_library(client_lib
+add_library(
+  client_lib
   src/coordinator/coordinator_interaction.cc
   src/common/role.cc
   src/common/helper.cc
@@ -700,35 +692,17 @@ add_library(client_lib
   src/document/codec.cc
   src/common/synchronization.cc
   src/common/uuid.cc
-  src/common/version.cc
-)
+  src/common/version.cc)
 
 target_compile_definitions(client_lib PUBLIC GLOG_CUSTOM_PREFIX_SUPPORT)
 
-target_link_libraries(client_lib
-  PROTO_OBJS
+target_link_libraries(client_lib PROTO_OBJS ${DEPEND_LIBS} ${DYNAMIC_LIB} serial)
 
-  ${DEPEND_LIBS}
-  ${DYNAMIC_LIB}
+add_executable(dingodb_client ${CLIENT_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
-  serial
-)
+add_executable(dingodb_cli ${CLIENT_V2_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
-add_executable(
-  dingodb_client
-  ${CLIENT_SRCS}
-  $<TARGET_OBJECTS:PROTO_OBJS>)
-
-add_executable(
-  dingodb_cli
-  ${CLIENT_V2_SRCS}
-  $<TARGET_OBJECTS:PROTO_OBJS>)
-
-add_executable(
-  dingodb_br
-  src/br/main.cc
-  ${BR_SRCS}
-  $<TARGET_OBJECTS:PROTO_OBJS>)
+add_executable(dingodb_br src/br/main.cc ${BR_SRCS} $<TARGET_OBJECTS:PROTO_OBJS>)
 
 add_dependencies(DINGODB_OBJS ${DEPEND_LIBS} ${PROTO_OBJS})
 add_dependencies(dingodb_server serial ${DEPEND_LIBS})
@@ -754,7 +728,14 @@ else()
   endif()
 endif()
 add_subdirectory(contrib/cli11)
-target_link_libraries(dingodb_server serial ${DYNAMIC_LIB} ${VECTOR_LIB} "-Xlinker \"-(\"" ${BLAS_LIBRARIES} "-Xlinker \"-)\"")
+target_link_libraries(
+  dingodb_server
+  serial
+  ${DYNAMIC_LIB}
+  ${VECTOR_LIB}
+  "-Xlinker \"-(\""
+  ${BLAS_LIBRARIES}
+  "-Xlinker \"-)\"")
 
 target_link_libraries(dingodb_client serial client_lib ${DYNAMIC_LIB})
 
