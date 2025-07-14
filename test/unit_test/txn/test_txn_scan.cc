@@ -213,56 +213,56 @@ TEST_F(TxnScanTest, KvDeleteRangeBefore) { DeleteRange(); }
 
 TEST_F(TxnScanTest, Prepare) {
   int schema_version = 1;
-  std::shared_ptr<std::vector<std::shared_ptr<BaseSchema>>> schemas;
+  std::vector<dingodb::serialV2::BaseSchemaPtr> schemas =
+      std::vector<dingodb::serialV2::BaseSchemaPtr>();
   long common_id = 1;  // NOLINT
 
-  schemas = std::make_shared<std::vector<std::shared_ptr<BaseSchema>>>();
+  schemas.reserve(6);
 
-  schemas->reserve(6);
-
-  std::shared_ptr<DingoSchema<std::optional<bool>>> bool_schema = std::make_shared<DingoSchema<std::optional<bool>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<bool>> bool_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<bool>>();
   bool_schema->SetIsKey(true);
   bool_schema->SetAllowNull(true);
   bool_schema->SetIndex(0);
 
-  schemas->emplace_back(std::move(bool_schema));
+  schemas.emplace_back(std::move(bool_schema));
 
-  std::shared_ptr<DingoSchema<std::optional<int32_t>>> int_schema =
-      std::make_shared<DingoSchema<std::optional<int32_t>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<int32_t>> int_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<int32_t>>();
   int_schema->SetIsKey(false);
   int_schema->SetAllowNull(true);
   int_schema->SetIndex(1);
-  schemas->emplace_back(std::move(int_schema));
+  schemas.emplace_back(std::move(int_schema));
 
-  std::shared_ptr<DingoSchema<std::optional<float>>> float_schema =
-      std::make_shared<DingoSchema<std::optional<float>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<float>> float_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<float>>();
   float_schema->SetIsKey(false);
   float_schema->SetAllowNull(true);
   float_schema->SetIndex(2);
-  schemas->emplace_back(std::move(float_schema));
+  schemas.emplace_back(std::move(float_schema));
 
-  std::shared_ptr<DingoSchema<std::optional<int64_t>>> long_schema =
-      std::make_shared<DingoSchema<std::optional<int64_t>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<int64_t>> long_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<int64_t>>();
   long_schema->SetIsKey(false);
   long_schema->SetAllowNull(true);
   long_schema->SetIndex(3);
-  schemas->emplace_back(std::move(long_schema));
+  schemas.emplace_back(std::move(long_schema));
 
-  std::shared_ptr<DingoSchema<std::optional<double>>> double_schema =
-      std::make_shared<DingoSchema<std::optional<double>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<double>> double_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<double>>();
   double_schema->SetIsKey(true);
   double_schema->SetAllowNull(true);
   double_schema->SetIndex(4);
-  schemas->emplace_back(std::move(double_schema));
+  schemas.emplace_back(std::move(double_schema));
 
-  std::shared_ptr<DingoSchema<std::optional<std::shared_ptr<std::string>>>> string_schema =
-      std::make_shared<DingoSchema<std::optional<std::shared_ptr<std::string>>>>();
+  std::shared_ptr<dingodb::serialV2::DingoSchema<std::string>> string_schema =
+      std::make_shared<dingodb::serialV2::DingoSchema<std::string>>();
   string_schema->SetIsKey(true);
   string_schema->SetAllowNull(true);
   string_schema->SetIndex(5);
-  schemas->emplace_back(std::move(string_schema));
+  schemas.emplace_back(std::move(string_schema));
 
-  RecordEncoder record_encoder(schema_version, schemas, common_id);
+  dingodb::RecordEncoder record_encoder(schema_version, schemas, common_id);
 
   int64_t physical = 1702966356362 /*Helper::TimestampMs()*/;
   int64_t logical = 0;
@@ -308,22 +308,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(std::nullopt);
+    std::any any_bool = std::any();
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(std::nullopt);
+    std::any any_int = std::any();
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(std::nullopt);
+    std::any any_float = std::any();
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(std::nullopt);
+    std::any any_long = std::any();
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(std::nullopt);
+    std::any any_double = std::any();
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
+    std::any any_string = std::any();
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -345,22 +345,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(false);
+    std::any any_bool = std::make_any<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(2);
+    std::any any_int = std::make_any<int>(2);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(2.23);
+    std::any any_float = std::make_any<float>(2.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(200);
+    std::any any_long = std::make_any<long>(200);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(2.4545);
+    std::any any_double = std::make_any<double>(2.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_22222"));
+    std::any any_string = std::make_any<std::string>(std::string("string_22222"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -381,22 +381,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(true);
+    std::any any_bool = std::make_any<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(3);
+    std::any any_int = std::make_any<int>(3);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(3.23);
+    std::any any_float = std::make_any<float>(3.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(300);
+    std::any any_long = std::make_any<long>(300);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(3.4545);
+    std::any any_double = std::make_any<double>(3.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_33333"));
+    std::any any_string = std::make_any<std::string>(std::string("string_33333"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -418,22 +418,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(4);
+    std::any any_bool = std::make_any<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(std::nullopt);
+    std::any any_int = std::any();
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(4.23);
+    std::any any_float = std::make_any<float>(4.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(400);
+    std::any any_long = std::make_any<long>(400);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(4.4545);
+    std::any any_double = std::make_any<double>(4.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_44444"));
+    std::any any_string = std::make_any<std::string>(std::string("string_44444"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -455,22 +455,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(true);
+    std::any any_bool = std::make_any<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(5);
+    std::any any_int = std::make_any<int>(5);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(5.23);
+    std::any any_float = std::make_any<float>(5.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(std::nullopt);
+    std::any any_long = std::any();
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(std::nullopt);
+    std::any any_double = std::any();
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_55555"));
+    std::any any_string = std::make_any<std::string>(std::string("string_55555"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -492,22 +492,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(6);
+    std::any any_bool = std::make_any<bool>(6);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(std::nullopt);
+    std::any any_int = std::any();
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(6.23);
+    std::any any_float = std::make_any<float>(6.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(600);
+    std::any any_long = std::make_any<long>(600);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(6.4545);
+    std::any any_double = std::make_any<double>(6.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
+    std::any any_string = std::any();
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -529,22 +529,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(false);
+    std::any any_bool = std::make_any<bool>(false);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(7);
+    std::any any_int = std::make_any<int>(7);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(7.23);
+    std::any any_float = std::make_any<float>(7.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(700);
+    std::any any_long = std::make_any<long>(700);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(7.4545);
+    std::any any_double = std::make_any<double>(7.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::make_shared<std::string>("string_77777"));
+    std::any any_string = std::make_any<std::string>(std::string("string_77777"));
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
@@ -566,22 +566,22 @@ TEST_F(TxnScanTest, Prepare) {
     pb::common::KeyValue key_value;
     std::vector<std::any> record;
     record.reserve(6);
-    std::any any_bool = std::optional<bool>(true);
+    std::any any_bool = std::make_any<bool>(true);
     record.emplace_back(std::move(any_bool));
 
-    std::any any_int = std::optional<int32_t>(8);
+    std::any any_int = std::make_any<int>(8);
     record.emplace_back(std::move(any_int));
 
-    std::any any_float = std::optional<float>(8.23);
+    std::any any_float = std::make_any<float>(8.23);
     record.emplace_back(std::move(any_float));
 
-    std::any any_long = std::optional<int64_t>(800);
+    std::any any_long = std::make_any<long>(800);
     record.emplace_back(std::move(any_long));
 
-    std::any any_double = std::optional<double>(8.4545);
+    std::any any_double = std::make_any<double>(8.4545);
     record.emplace_back(std::move(any_double));
 
-    std::any any_string = std::optional<std::shared_ptr<std::string>>(std::nullopt);
+    std::any any_string = std::any();
     record.emplace_back(std::move(any_string));
 
     int ret = record_encoder.Encode('r', record, *key_value.mutable_key(), *key_value.mutable_value());
