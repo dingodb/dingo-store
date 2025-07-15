@@ -1263,6 +1263,8 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
           continue;
         }
 
+        int64_t old_safe_point_ts = tenant_internal.safe_point_ts();
+
         // if safe_point_ts > 0, update safe_point_ts only
         // else do not update safe_point_ts
         if (tenant_increment->tenant().safe_point_ts() > 0) {
@@ -1286,11 +1288,24 @@ void CoordinatorControl::ApplyMetaIncrement(pb::coordinator_internal::MetaIncrem
         // else do not update resolve_lock
         if (tenant_increment->tenant().resolve_lock_safe_point() > 0) {
           if (tenant_increment->tenant().resolve_lock_safe_point() <= tenant_internal.resolve_lock_safe_point()) {
-            DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but resolve_lock_safe_point <= old, [id="
-                            << tenant_increment->id()
-                            << "], old_resolve_lock_safe_point=" << tenant_internal.resolve_lock_safe_point()
-                            << ", new_resolve_lock_safe_point=" << tenant_increment->tenant().resolve_lock_safe_point();
-            continue;
+            if (tenant_increment->tenant().resolve_lock_safe_point() < tenant_internal.resolve_lock_safe_point()) {
+              DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, but resolve_lock_safe_point < old, [id="
+                              << tenant_increment->id()
+                              << "], old_resolve_lock_safe_point=" << tenant_internal.resolve_lock_safe_point()
+                              << ", new_resolve_lock_safe_point="
+                              << tenant_increment->tenant().resolve_lock_safe_point();
+              continue;
+            } else {  // tenant_increment->tenant().resolve_lock_safe_point() ==
+                      // tenant_internal.resolve_lock_safe_point()
+              if (tenant_internal.safe_point_ts() <= old_safe_point_ts) {
+                DINGO_LOG(INFO) << "ApplyMetaIncrement tenant_mem UPDATE, although resolve_lock_safe_point == old = "
+                                << tenant_increment->tenant().resolve_lock_safe_point()
+                                << " but safe_point_ts <= old, [id=" << tenant_increment->id()
+                                << "], old_safe_point_ts=" << old_safe_point_ts
+                                << ", new_safe_point_ts=" << tenant_internal.safe_point_ts();
+                continue;
+              }
+            }
           }
 
           tenant_internal.set_resolve_lock_safe_point(tenant_increment->tenant().resolve_lock_safe_point());
