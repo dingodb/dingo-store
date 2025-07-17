@@ -19,6 +19,30 @@
 
 namespace dingodb {
 
+#if defined(ENABLE_DISKANN_MODULE)
+#if ENABLE_DISKANN_MODULE == 1
+#define USE_DISKANN true
+#else
+#define USE_DISKANN false
+#endif
+#else  // #if defined(ENABLE_DISKANN_MODULE)
+#define USE_DISKANN false
+#endif
+
+#if defined(DISKANN_DEPEND_ON_SYSTEM)
+#if DISKANN_DEPEND_ON_SYSTEM == 1
+#define ENABLE_DISKANN_DEPEND_ON_SYSTEM true
+#else
+#define ENABLE_DISKANN_DEPEND_ON_SYSTEM false
+#endif
+#else  // #if defined(DISKANN_DEPEND_ON_SYSTEM)
+#define ENABLE_DISKANN_DEPEND_ON_SYSTEM false
+#endif
+
+#if !defined(BOOST_SUMMARY)
+#define BOOST_SUMMARY ""
+#endif
+
 DEFINE_string(git_commit_hash, GIT_VERSION, "current git commit version");
 DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo git tag version");
 DEFINE_string(git_commit_user, GIT_COMMIT_USER, "current dingo git commit user");
@@ -33,6 +57,10 @@ DEFINE_bool(use_openblas, false, "use openblas");
 DEFINE_bool(use_tcmalloc, false, "use tcmalloc");
 DEFINE_bool(use_profiler, false, "use profiler");
 DEFINE_bool(use_sanitizer, false, "use sanitizer");
+DEFINE_bool(use_diskann, USE_DISKANN, "use diskann");
+DEFINE_bool(diskann_depend_on_system, ENABLE_DISKANN_DEPEND_ON_SYSTEM,
+            "if true, diskann depend on system, else use third_party.");
+DEFINE_string(boost_summary, BOOST_SUMMARY, "boost summary");
 
 std::string GetBuildFlag() {
 #ifdef USE_MKL
@@ -67,9 +95,11 @@ std::string GetBuildFlag() {
 
   return butil::string_printf(
       "DINGO_STORE USE_MKL:[%s] USE_OPENBLAS:[%s] LINK_TCMALLOC:[%s] BRPC_ENABLE_CPU_PROFILER:[%s] "
-      "USE_SANITIZE:[%s]\n",
+      "USE_SANITIZE:[%s]\nDINGO_STORE USE_DISKANN:[%s]  DISKANN_DEPEND_ON_SYSTEM:[%s]\nDINGO_STORE "
+      "BOOST_SUMMARY:[%s]\n",
       FLAGS_use_mkl ? "ON" : "OFF", FLAGS_use_openblas ? "ON" : "OFF", FLAGS_use_tcmalloc ? "ON" : "OFF",
-      FLAGS_use_profiler ? "ON" : "OFF", FLAGS_use_sanitizer ? "ON" : "OFF");
+      FLAGS_use_profiler ? "ON" : "OFF", FLAGS_use_sanitizer ? "ON" : "OFF", FLAGS_use_diskann ? "ON" : "OFF",
+      FLAGS_diskann_depend_on_system ? "ON" : "OFF", FLAGS_boost_summary.c_str());
 }
 
 void DingoShowVerion() {
@@ -107,6 +137,9 @@ pb::common::VersionInfo GetVersionInfo() {
   version_info.set_use_tcmalloc(FLAGS_use_tcmalloc);
   version_info.set_use_profiler(FLAGS_use_profiler);
   version_info.set_use_sanitizer(FLAGS_use_sanitizer);
+  version_info.set_use_diskann(FLAGS_use_diskann);
+  version_info.set_diskann_depend_on_system(FLAGS_diskann_depend_on_system);
+  version_info.set_boost_summary(FLAGS_boost_summary);
   return version_info;
 }
 

@@ -35,12 +35,13 @@ option(DINGO_BUILD_STATIC "Link libraries statically to generate the dingodb bin
 option(ENABLE_FAILPOINT "Enable failpoint" OFF)
 option(WITH_DISKANN "Build with diskann index" OFF)
 option(WITH_MKL "Build with intel mkl" OFF)
-option(BOOST_SEARCH_PATH "")
+option(BOOST_SEARCH_PATH "" OFF)
 option(BUILD_GOOGLE_SANITIZE "Enable google sanitize" OFF)
 option(BRPC_ENABLE_CPU_PROFILER "Enable brpc cpu profiler" OFF)
 option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
 option(WITH_LIBURING "Build with liburing" ON)
+option(DISKANN_DEPEND_ON_SYSTEM "diskann require system dependencies for boost and aio " OFF)
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -286,7 +287,11 @@ include(ftxui)
 include(hnswlib)
 include(bdb)
 include(tantivy-search)
-include(libaio)
+if(WITH_DISKANN)
+  if(NOT DISKANN_DEPEND_ON_SYSTEM)
+    include(libaio)
+  endif()
+endif()
 
 set(MESSAGE_SOURCE_DIR ${CMAKE_SOURCE_DIR}/dingo-store-proto/proto)
 set(MESSAGE_DIR ${CMAKE_CURRENT_BINARY_DIR}/proto)
@@ -364,8 +369,13 @@ set(DYNAMIC_LIB
     ${TANTIVY_SEARCH_LIBRARIES}
     ${FTXUI_COMPONENT_LIBRARY}
     ${FTXUI_DOM_LIBRARY}
-    ${FTXUI_SCREEN_LIBRARY}
-    ${LIBAIO_LIBRARIES})
+    ${FTXUI_SCREEN_LIBRARY})
+
+if(WITH_DISKANN)
+  if(NOT DISKANN_DEPEND_ON_SYSTEM)
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${LIBAIO_LIBRARIES})
+  endif()
+endif()
 
 if(ENABLE_XDPROCKS)
   set(DYNAMIC_LIB ${DYNAMIC_LIB} "${XDPROCKS_PATH}/lib/libxdprocks.a" "${XDPROCKS_PATH}/lib/libstorelib.a"
@@ -452,7 +462,13 @@ include_directories(${FAISS_INCLUDE_DIR})
 set(VECTOR_LIB ${FAISS_LIBRARIES} ${OPENMP_LIBRARY})
 
 if(WITH_DISKANN)
-  add_definitions(-DENABLE_DISKANN_MODULE=ON)
+  add_definitions(-DENABLE_DISKANN_MODULE=1)
+  if(DISKANN_DEPEND_ON_SYSTEM)
+    add_definitions(-DDISKANN_DEPEND_ON_SYSTEM=1)
+  else()
+    add_definitions(-DDISKANN_DEPEND_ON_SYSTEM=0)
+  endif()
+
   if(NOT WITH_MKL)
     message(FATAL_ERROR "The WITH_MKL is not ON, please install enable WITH_MKL to build diskann.")
   endif()
@@ -462,7 +478,19 @@ if(WITH_DISKANN)
   find_package(MKL CONFIG REQUIRED)
 
   if(NOT BOOST_SEARCH_PATH)
+    # cmake_policy(SET CMP0167 OLD)
     find_package(Boost REQUIRED COMPONENTS program_options)
+    if(Boost_FOUND)
+      set(BOOST_SUMMARY "")
+      string(APPEND BOOST_SUMMARY "Boost version: ${Boost_VERSION} ")
+      string(APPEND BOOST_SUMMARY "Boost include dirs: ${Boost_INCLUDE_DIRS} ")
+      string(APPEND BOOST_SUMMARY "Boost libraries: ${Boost_LIBRARIES}")
+
+      message(STATUS "${BOOST_SUMMARY}")
+      add_definitions(-DBOOST_SUMMARY="${BOOST_SUMMARY}")
+    else()
+      message(FATAL_ERROR "Boost not found!")
+    endif()
   else()
     message(STATUS "BOOST_SEARCH_PATH=${BOOST_SEARCH_PATH}, use user-defined boost version")
   endif()
@@ -470,7 +498,14 @@ if(WITH_DISKANN)
   include(diskann)
   include_directories(${DISKANN_INCLUDE_DIR})
   set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
-  set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
+  if(DISKANN_DEPEND_ON_SYSTEM)
+    set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} aio)
+    message(STATUS "libaio use system")
+  else()
+    set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
+    message(STATUS "libaio use third-party")
+  endif()
+
 endif()
 
 if(LINK_TCMALLOC)
@@ -670,6 +705,15 @@ add_definitions(-DGIT_COMMIT_MAIL="${GIT_COMMIT_MAIL}")
 add_definitions(-DGIT_COMMIT_TIME="${GIT_COMMIT_TIME}")
 add_definitions(-DDINGO_BUILD_TYPE="${CMAKE_BUILD_TYPE}")
 add_definitions(-DDINGO_CONTRIB_BUILD_TYPE="${THIRD_PARTY_BUILD_TYPE}")
+
+if(WITH_DISKANN)
+  execute_process(
+    COMMAND make -C ${CMAKE_SOURCE_DIR}/contrib/libaio clean
+    OUTPUT_VARIABLE output
+    ERROR_VARIABLE error
+    RESULT_VARIABLE result
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+endif()
 
 if(ENABLE_FAILPOINT)
   message(STATUS "Enable failpoint")
