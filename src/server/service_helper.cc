@@ -93,22 +93,22 @@ butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
     return butil::Status(pb::error::EREGION_NOT_FOUND, "Not found region");
   }
   if (region->State() == pb::common::StoreRegionState::NEW) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is new, waiting later", region->Id());
+    return butil::Status(pb::error::EREGION_NEW, "Region(%lu) is new, waiting later", region->Id());
   }
   if (region->State() == pb::common::StoreRegionState::STANDBY) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is standby, waiting later", region->Id());
+    return butil::Status(pb::error::EREGION_STANDBY, "Region(%lu) is standby, waiting later", region->Id());
   }
   if (region->State() == pb::common::StoreRegionState::DELETING) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is deleting", region->Id());
+    return butil::Status(pb::error::EREGION_DELETING, "Region(%lu) is deleting", region->Id());
   }
   if (region->State() == pb::common::StoreRegionState::DELETED) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is deleted", region->Id());
+    return butil::Status(pb::error::EREGION_DELETED, "Region(%lu) is deleted", region->Id());
   }
   if (region->State() == pb::common::StoreRegionState::ORPHAN) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is orphan", region->Id());
+    return butil::Status(pb::error::EREGION_ORPHAN, "Region(%lu) is orphan", region->Id());
   }
   if (region->State() == pb::common::StoreRegionState::TOMBSTONE) {
-    return butil::Status(pb::error::EREGION_UNAVAILABLE, "Region(%lu) is tombstone", region->Id());
+    return butil::Status(pb::error::EREGION_TOMBSTONE, "Region(%lu) is tombstone", region->Id());
   }
 
   return butil::Status();
