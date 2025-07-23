@@ -1075,6 +1075,20 @@ void DoTxnGetDocument(StoragePtr storage, google::protobuf::RpcController* contr
     return;
   }
 
+  std::vector<std::string> keys;
+  auto* mut_request = const_cast<pb::store::TxnGetRequest*>(request);
+  keys.emplace_back(std::move(*mut_request->release_key()));
+
+  // read key check
+  for (auto const& key : keys) {
+    auto result = region->CheckKey(key);
+    if (!result.empty()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                              fmt::format("{} has meet memory lock, please try later", key));
+      return;
+    }
+  }
+
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -1083,10 +1097,6 @@ void DoTxnGetDocument(StoragePtr storage, google::protobuf::RpcController* contr
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-
-  std::vector<std::string> keys;
-  auto* mut_request = const_cast<pb::store::TxnGetRequest*>(request);
-  keys.emplace_back(std::move(*mut_request->release_key()));
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1210,6 +1220,15 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
     return;
   }
 
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
+  // read key check
+  auto result = region->CheckRange(correction_range.start_key(), correction_range.end_key());
+  if (!result.empty()) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                            fmt::format("{} has meet memory lock, please try later", result));
+    return;
+  }
+
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -1229,7 +1248,6 @@ void DoTxnScanDocument(StoragePtr storage, google::protobuf::RpcController* cont
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
                             request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
                             end_key, !request->has_coprocessor(), request->coprocessor());
@@ -2082,6 +2100,21 @@ void DoTxnBatchGetDocument(StoragePtr storage, google::protobuf::RpcController* 
     return;
   }
 
+  std::vector<std::string> keys;
+  for (const auto& key : request->keys()) {
+    keys.emplace_back(key);
+  }
+
+  // read key check
+  for (auto const& key : keys) {
+    auto result = region->CheckKey(key);
+    if (!result.empty()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                              fmt::format("{} has meet memory lock, please try later", key));
+      return;
+    }
+  }
+
   auto ctx = std::make_shared<Context>();
   ctx->SetRegionId(request->context().region_id());
   ctx->SetTracker(tracker);
@@ -2090,11 +2123,6 @@ void DoTxnBatchGetDocument(StoragePtr storage, google::protobuf::RpcController* 
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-
-  std::vector<std::string> keys;
-  for (const auto& key : request->keys()) {
-    keys.emplace_back(key);
-  }
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {

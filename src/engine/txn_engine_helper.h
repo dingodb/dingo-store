@@ -304,7 +304,7 @@ class TxnEngineHelper {
   static void RegularUpdateSafePointTsHandler(void *arg);
   static void RegularDoGcHandler(void *arg);
 
-  static void GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t region_max_ts, int64_t start_ts,
+  static void GenFinalMinCommitTs(store::RegionPtr region, std::string key, int64_t start_ts,
                                   int64_t for_update_ts, int64_t lock_min_commit_ts, int64_t max_commit_ts,
                                   int64_t &final_min_commit_ts);
 

@@ -1866,9 +1866,13 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
 bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
 
-void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t region_max_ts, int64_t start_ts,
+void TxnEngineHelper::GenFinalMinCommitTs(store::RegionPtr region, std::string key, int64_t start_ts,
                                           int64_t for_update_ts, int64_t lock_min_commit_ts, int64_t max_commit_ts,
                                           int64_t &final_min_commit_ts) {
+  int64_t region_id = region->Id();
+  region->LockKey(key);
+
+  int64_t region_max_ts = region->TxnAppliedMaxTs();
   int64_t min_commit_ts = std::max(std::max(region_max_ts, start_ts), for_update_ts) + 1;
   final_min_commit_ts = std::max(min_commit_ts, lock_min_commit_ts);
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -1895,7 +1899,6 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
     std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
     int64_t &final_min_commit_ts) {
   int64_t region_id = region->Id();
-  int64_t region_max_ts = region->TxnAppliedMaxTs();
 
   // do Put/Delete/PutIfAbsent
   if (mutation.op() == pb::store::Op::Put) {
@@ -1937,8 +1940,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
       }
       if (try_one_pc || use_async_commit) {
-        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+        GenFinalMinCommitTs(region, mutation.key(), start_ts, for_update_ts, lock_info.min_commit_ts(), max_commit_ts,
+                            final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
@@ -1986,8 +1989,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
 
         if (try_one_pc || use_async_commit) {
-          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+          GenFinalMinCommitTs(region, mutation.key(), start_ts, for_update_ts, lock_info.min_commit_ts(), max_commit_ts,
+                              final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -2047,8 +2050,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
 
         if (try_one_pc || use_async_commit) {
-          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+          GenFinalMinCommitTs(region, mutation.key(), start_ts, for_update_ts, lock_info.min_commit_ts(), max_commit_ts,
+                              final_min_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -2103,8 +2106,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       }
 
       if (try_one_pc || use_async_commit) {
-        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+        GenFinalMinCommitTs(region, mutation.key(), start_ts, for_update_ts, lock_info.min_commit_ts(), max_commit_ts,
+                            final_min_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
