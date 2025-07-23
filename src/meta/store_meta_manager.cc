@@ -366,6 +366,25 @@ pb::common::ScalarSchema Region::ScalarSchema() {
   return inner_region_.definition().index_parameter().vector_index_parameter().scalar_schema();
 }
 
+void Region::LockKey(const std::string& key, ConcurrencyManager::LockEntryPtr lock_entry) {
+  this->concurrency_manager_.LockKey(key, lock_entry);
+}
+
+void Region::UnlockKeys(const std::vector<std::string>& keys) { this->concurrency_manager_.UnlockKeys(keys); }
+
+bool Region::CheckKeys(const std::vector<std::string>& keys, pb::store::IsolationLevel isolation_level,
+                       int64_t start_ts, const std::set<int64_t>& resolved_locks,
+                       pb::store::TxnResultInfo& txn_result_info) {
+  return this->concurrency_manager_.CheckKeys(keys, isolation_level, start_ts, resolved_locks, txn_result_info);
+}
+
+bool Region::CheckRange(const std::string& start_key, const std::string& end_key,
+                        pb::store::IsolationLevel isolation_level, int64_t start_ts,
+                        const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info) {
+  return this->concurrency_manager_.CheckRange(start_key, end_key, isolation_level, start_ts, resolved_locks,
+                                               txn_result_info);
+}
+
 RaftMeta::RaftMeta(int64_t region_id) {
   raft_meta_.set_region_id(region_id);
   raft_meta_.set_term(0);

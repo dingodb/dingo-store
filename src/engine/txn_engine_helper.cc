@@ -814,7 +814,8 @@ butil::Status TxnIterator::GetCurrentValue() {
     if (is_lock_conflict) {
       DINGO_LOG(WARNING) << "[txn]Scan CheckLockConflict return conflict, key: " << Helper::StringToHex(lock_info.key())
                          << ", isolation_level: " << isolation_level_ << ", start_ts: " << start_ts_
-                         << ", seek_ts: " << seek_ts_ << ", lock_info: " << lock_info.ShortDebugString();
+                         << ", seek_ts: " << seek_ts_ << ", lock_info: " << lock_info.ShortDebugString()
+                         << ", txn_result_info: " << txn_result_info_.ShortDebugString();
       key_.clear();
       value_.clear();
       return butil::Status(pb::error::Errno::ETXN_LOCK_CONFLICT, "lock conflict");
@@ -878,26 +879,18 @@ std::string TxnIterator::Value() { return value_; }
 bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb::store::IsolationLevel isolation_level,
                                         int64_t start_ts, const std::set<int64_t> &resolved_locks,
                                         pb::store::TxnResultInfo &txn_result_info) {
-  DINGO_LOG(DEBUG) << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
-                   << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
-                   << ", resolved_locks size: " << resolved_locks.size();
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
+      << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
+      << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
+      << ", resolved_locks size: " << resolved_locks.size();
 
   // if lock_info is resolved, return false, means the executor has used CheckTxnStatus to check the lock_info and
   // updated the min_commit_ts of the primary lock.
   if (!resolved_locks.empty() && resolved_locks.find(lock_info.lock_ts()) != resolved_locks.end()) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
-        << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
-        << ", resolved_locks size: " << resolved_locks.size() << ", lock_ts: " << lock_info.lock_ts()
-        << " is resolved, return false";
     return false;
   }
   // Ignore lock when min_commit_ts > ts
   if (lock_info.min_commit_ts() > start_ts) {
-    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-        << "[txn]CheckLockConflict lock_info: " << lock_info.ShortDebugString()
-        << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
-        << ", min_commit_ts: " << lock_info.lock_ts() << " ignore lock when min_commit_ts > ts";
     return false;
   }
 
@@ -906,18 +899,12 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
       // for pessimistic, check for_update_ts
       if (lock_info.for_update_ts() > 0) {
         if (lock_info.for_update_ts() < start_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict SI lock_info.for_update_ts() > 0, it's conflict, lock_info: "
-              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // for_update_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
         }
       } else {
         if (lock_info.lock_ts() < start_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict SI lock_info.for_update_ts() == 0, it's conflict, lock_info: "
-              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // lock_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
@@ -931,18 +918,10 @@ bool TxnEngineHelper::CheckLockConflict(const pb::store::LockInfo &lock_info, pb
       // for optimistic lock, need to check the lock_ts
       if (lock_info.for_update_ts() > 0) {
         if (lock_info.lock_type() == pb::store::Lock) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, but only on LOCK stage, it's ok, "
-                 "lock_info: "
-              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           return false;
         }
 
         if (lock_info.for_update_ts() < start_ts) {
-          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
-              << "[txn]CheckLockConflict RC lock_info.for_update_ts() > 0, on PREWRITE stage, it's "
-                 "conflict, lock_info: "
-              << lock_info.ShortDebugString() << ", start_ts: " << start_ts;
           // for_update_ts < start_ts, return lock_info
           *(txn_result_info.mutable_locked()) = lock_info;
           return true;
@@ -1129,7 +1108,8 @@ butil::Status TxnEngineHelper::BatchGet(RawEnginePtr engine, const pb::store::Is
     if (is_lock_conflict) {
       DINGO_LOG(WARNING) << "[txn]BatchGet CheckLockConflict return conflict, key: " << Helper::StringToHex(key)
                          << ", isolation_level: " << isolation_level << ", start_ts: " << start_ts
-                         << ", lock_info: " << lock_info.ShortDebugString();
+                         << ", lock_info: " << lock_info.ShortDebugString()
+                         << ", txn_result_info: " << txn_result_info.ShortDebugString();
       return butil::Status::OK();
     }
 
@@ -1866,23 +1846,30 @@ butil::Status TxnEngineHelper::PessimisticRollback(RawEnginePtr raw_engine, std:
 
 bvar::LatencyRecorder g_txn_prewrite_latency("dingo_txn_prewrite");
 
-void TxnEngineHelper::GenFinalMinCommitTs(int64_t region_id, std::string key, int64_t region_max_ts, int64_t start_ts,
-                                          int64_t for_update_ts, int64_t lock_min_commit_ts, int64_t max_commit_ts,
-                                          int64_t &final_min_commit_ts) {
-  int64_t min_commit_ts = std::max(std::max(region_max_ts, start_ts), for_update_ts) + 1;
-  final_min_commit_ts = std::max(min_commit_ts, lock_min_commit_ts);
+int64_t TxnEngineHelper::GenFinalMinCommitTs(store::RegionPtr region, pb::store::LockInfo &lock_info, std::string key,
+                                             int64_t start_ts, int64_t for_update_ts, int64_t max_commit_ts) {
+  int64_t region_id = region->Id();
+  auto new_entry = std::make_shared<ConcurrencyManager::LockEntry>();
+  RWLockWriteGuard guard(&new_entry->rw_lock);
+  new_entry->lock_info = lock_info;
+  region->LockKey(key, new_entry);
+
+  int64_t region_max_ts = region->TxnAccessMaxTs();
+  int64_t min_commit_ts = std::max({region_max_ts, start_ts, for_update_ts}) + 1;
+  int64_t final_min_commit_ts = std::max(min_commit_ts, lock_info.min_commit_ts());
+  final_min_commit_ts = (max_commit_ts != 0 && min_commit_ts > max_commit_ts) ? 0 : final_min_commit_ts;
+
+  if (final_min_commit_ts > 0) {
+    lock_info.set_min_commit_ts(final_min_commit_ts);
+    new_entry->lock_info.set_min_commit_ts(final_min_commit_ts);
+  }
+
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << fmt::format("[txn][region({})]", region_id) << " GenFinalMinCommitTs, region_max_ts:" << region_max_ts
       << " , start_ts:" << start_ts << " , for_update_ts:" << for_update_ts
-      << ", lock_min_commit_ts:" << lock_min_commit_ts << ", final_min_commit_ts:" << final_min_commit_ts;
-  if (max_commit_ts != 0 && min_commit_ts > max_commit_ts) {
-    DINGO_LOG(WARNING) << fmt::format(
-                              "[txn][region({})] Prewrite 1pc commit_ts({}) is too large, fallback to normal 2PC",
-                              region_id, min_commit_ts)
-                       << ", key: " << key << ", start_ts: " << start_ts << " , for_update_ts: " << for_update_ts
-                       << " , lock_min_commit_ts: " << lock_min_commit_ts << " , max_commit_ts: " << max_commit_ts;
-    final_min_commit_ts = 0;
-  }
+      << ", lock_min_commit_ts:" << lock_info.min_commit_ts() << ", final_min_commit_ts:" << final_min_commit_ts;
+
+  return final_min_commit_ts;
 }
 
 butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
@@ -1895,7 +1882,6 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
     std::vector<std::tuple<std::string, std::string, pb::store::LockInfo, bool>> &locks_for_1pc,
     int64_t &final_min_commit_ts) {
   int64_t region_id = region->Id();
-  int64_t region_max_ts = region->TxnAppliedMaxTs();
 
   // do Put/Delete/PutIfAbsent
   if (mutation.op() == pb::store::Op::Put) {
@@ -1937,8 +1923,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
       }
       if (try_one_pc || use_async_commit) {
-        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+        final_min_commit_ts =
+            GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;
@@ -1986,8 +1972,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
 
         if (try_one_pc || use_async_commit) {
-          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+          final_min_commit_ts =
+              GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -2047,8 +2033,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
         }
 
         if (try_one_pc || use_async_commit) {
-          GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                              lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+          final_min_commit_ts =
+              GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
           if (final_min_commit_ts == 0) {
             // fallback_to_2PC
             try_one_pc = false;
@@ -2103,8 +2089,8 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
       }
 
       if (try_one_pc || use_async_commit) {
-        GenFinalMinCommitTs(region_id, mutation.key(), region_max_ts, start_ts, for_update_ts,
-                            lock_info.min_commit_ts(), max_commit_ts, final_min_commit_ts);
+        final_min_commit_ts =
+            GenFinalMinCommitTs(region, lock_info, mutation.key(), start_ts, for_update_ts, max_commit_ts);
         if (final_min_commit_ts == 0) {
           // fallback_to_2PC
           try_one_pc = false;

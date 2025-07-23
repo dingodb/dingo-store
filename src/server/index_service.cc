@@ -2161,22 +2161,13 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  region->SetTxnAppliedMaxTs(request->start_ts());
+  region->SetTxnAccessMaxTs(request->start_ts());
   butil::Status status = ValidateTxnGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
-
-  auto ctx = std::make_shared<Context>();
-  ctx->SetRegionId(request->context().region_id());
-  ctx->SetTracker(tracker);
-  ctx->SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  ctx->SetRawEngineType(region->GetRawEngineType());
-  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   auto* mut_request = const_cast<pb::store::TxnGetRequest*>(request);
@@ -2188,6 +2179,25 @@ void DoTxnGetVector(StoragePtr storage, google::protobuf::RpcController* control
   }
 
   pb::store::TxnResultInfo txn_result_info;
+
+  // read key check
+  if (request->context().isolation_level() == pb::store::IsolationLevel::SnapshotIsolation &&
+      region->CheckKeys(keys, request->context().isolation_level(), request->start_ts(), resolved_locks,
+                        txn_result_info)) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                            fmt::format("Meet memory lock, please try later"));
+    *response->mutable_txn_result() = txn_result_info;
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>();
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
@@ -2295,7 +2305,7 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  region->SetTxnAppliedMaxTs(request->start_ts());
+  region->SetTxnAccessMaxTs(request->start_ts());
   auto uniform_range = Helper::TransformRangeWithOptions(request->range());
   butil::Status status = ValidateTxnScanRequestIndex(request, region, uniform_range);
   if (!status.ok()) {
@@ -2304,6 +2314,24 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
     }
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  std::set<int64_t> resolved_locks;
+  for (const auto& lock : request->context().resolved_locks()) {
+    resolved_locks.insert(lock);
+  }
+
+  pb::store::TxnResultInfo txn_result_info;
+
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
+  // read key check
+  if (request->context().isolation_level() == pb::store::IsolationLevel::SnapshotIsolation &&
+      region->CheckRange(correction_range.start_key(), correction_range.end_key(), request->context().isolation_level(),
+                         request->start_ts(), resolved_locks, txn_result_info)) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                            "Meet memory lock, please try later");
+    *response->mutable_txn_result() = txn_result_info;
     return;
   }
 
@@ -2316,17 +2344,10 @@ void DoTxnScanVector(StoragePtr storage, google::protobuf::RpcController* contro
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  std::set<int64_t> resolved_locks;
-  for (const auto& lock : request->context().resolved_locks()) {
-    resolved_locks.insert(lock);
-  }
-
-  pb::store::TxnResultInfo txn_result_info;
   std::vector<pb::common::KeyValue> kvs;
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
   status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
                             request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
                             end_key, !request->has_coprocessor(), request->coprocessor());
@@ -3222,22 +3243,13 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
 
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
-  region->SetTxnAppliedMaxTs(request->start_ts());
+  region->SetTxnAccessMaxTs(request->start_ts());
   butil::Status status = ValidateTxnBatchGetRequest(request, region);
   if (!status.ok()) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
-
-  auto ctx = std::make_shared<Context>();
-  ctx->SetRegionId(request->context().region_id());
-  ctx->SetTracker(tracker);
-  ctx->SetCfName(Constant::kStoreDataCF);
-  ctx->SetRegionEpoch(request->context().region_epoch());
-  ctx->SetIsolationLevel(request->context().isolation_level());
-  ctx->SetRawEngineType(region->GetRawEngineType());
-  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<std::string> keys;
   for (const auto& key : request->keys()) {
@@ -3250,6 +3262,25 @@ void DoTxnBatchGetVector(StoragePtr storage, google::protobuf::RpcController* co
   }
 
   pb::store::TxnResultInfo txn_result_info;
+
+  // read key check
+  if (request->context().isolation_level() == pb::store::IsolationLevel::SnapshotIsolation &&
+      region->CheckKeys(keys, request->context().isolation_level(), request->start_ts(), resolved_locks,
+                        txn_result_info)) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                            fmt::format("Meet memory lock, please try later"));
+    *response->mutable_txn_result() = txn_result_info;
+    return;
+  }
+
+  auto ctx = std::make_shared<Context>();
+  ctx->SetRegionId(request->context().region_id());
+  ctx->SetTracker(tracker);
+  ctx->SetCfName(Constant::kStoreDataCF);
+  ctx->SetRegionEpoch(request->context().region_epoch());
+  ctx->SetIsolationLevel(request->context().isolation_level());
+  ctx->SetRawEngineType(region->GetRawEngineType());
+  ctx->SetStoreEngineType(region->GetStoreEngineType());
 
   std::vector<pb::common::KeyValue> kvs;
   status = storage->TxnBatchGet(ctx, request->start_ts(), keys, resolved_locks, txn_result_info, kvs);
