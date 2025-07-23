@@ -1690,6 +1690,19 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
     ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
     return;
   }
+  std::vector<std::string> keys;
+  auto* mut_request = const_cast<dingodb::pb::store::TxnGetRequest*>(request);
+  keys.emplace_back(std::move(*mut_request->release_key()));
+
+  // read key check
+  for (auto const& key : keys) {
+    auto result = region->CheckKey(key);
+    if (!result.empty()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                              fmt::format("{} has meet memory lock, please try later", key));
+      return;
+    }
+  }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
@@ -1699,10 +1712,6 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
   ctx->SetIsolationLevel(request->context().isolation_level());
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
-
-  std::vector<std::string> keys;
-  auto* mut_request = const_cast<dingodb::pb::store::TxnGetRequest*>(request);
-  keys.emplace_back(std::move(*mut_request->release_key()));
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {
@@ -1804,6 +1813,15 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
+  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
+    // read key check
+  auto result = region->CheckRange(correction_range.start_key(), correction_range.end_key());
+  if (!result.empty()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                              fmt::format("{} has meet memory lock, please try later", result));
+      return;
+  }
+
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -1823,7 +1841,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
   bool has_more = false;
   std::string end_key{};
 
-  auto correction_range = Helper::IntersectRange(region->Range(false), uniform_range);
+ 
   status = storage->TxnScan(ctx, request->stream_meta(), request->start_ts(), correction_range, request->limit(),
                             request->key_only(), request->is_reverse(), resolved_locks, txn_result_info, kvs, has_more,
                             end_key, !request->has_coprocessor(), request->coprocessor());
@@ -2209,6 +2227,7 @@ void DoTxnPrewrite(StoragePtr storage, google::protobuf::RpcController* controll
   ServiceHelper::LatchesAcquire(latch_ctx, true);
   DEFER(ServiceHelper::LatchesRelease(latch_ctx));
 
+  DEFER(for (const auto& mutation : request->mutations()) { region->UnlockKey(mutation.key()); });
   auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -2782,6 +2801,21 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
     return;
   }
 
+  std::vector<std::string> keys;
+  for (const auto& key : request->keys()) {
+    keys.emplace_back(key);
+  }
+
+  // read key check
+  for (auto const& key : keys) {
+    auto result = region->CheckKey(key);
+    if (!result.empty()) {
+      ServiceHelper::SetError(response->mutable_error(), pb::error::Errno::ETXN_MEMORY_LOCK_CONFLICT,
+                              fmt::format("{} has meet memory lock, please try later", key));
+      return;
+    }
+  }
+
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -2791,10 +2825,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   ctx->SetRawEngineType(region->GetRawEngineType());
   ctx->SetStoreEngineType(region->GetStoreEngineType());
 
-  std::vector<std::string> keys;
-  for (const auto& key : request->keys()) {
-    keys.emplace_back(key);
-  }
+
 
   std::set<int64_t> resolved_locks;
   for (const auto& lock : request->context().resolved_locks()) {

@@ -31,6 +31,7 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/latch.h"
+#include "common/memory_lock_manager.h"
 #include "common/safe_map.h"
 #include "document/document_index.h"
 #include "engine/gc_safe_point.h"
@@ -185,6 +186,12 @@ class Region {
   }
   int64_t TxnAppliedMaxTs() { return txn_applied_max_ts_.load(std::memory_order_acquire); }
 
+  //memory_lock_manager
+  void LockKey(const std::string& key);
+  void UnlockKey(const std::string& key);
+  std::string CheckKey(const std::string& key);
+  std::string CheckRange(const std::string& start_key, const std::string& end_key);
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;
@@ -203,6 +210,7 @@ class Region {
   Latches latches_;
 
   Statistics statistics_;
+  MemoryLockManager memory_lock_manager_;
 };
 
 class RaftMeta {
