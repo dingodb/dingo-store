@@ -33,6 +33,7 @@
 #include "common/latch.h"
 #include "common/safe_map.h"
 #include "document/document_index.h"
+#include "engine/concurrency_manager.h"
 #include "engine/gc_safe_point.h"
 #include "meta/meta_reader.h"
 #include "meta/meta_writer.h"
@@ -178,12 +179,21 @@ class Region {
   }
   int64_t RawAppliedMaxTs() { return raw_applied_max_ts_.load(std::memory_order_acquire); }
 
-  void SetTxnAppliedMaxTs(int64_t ts) {
-    if (ts > txn_applied_max_ts_.load(std::memory_order_acquire)) {
-      txn_applied_max_ts_.store(ts, std::memory_order_release);
+  void SetTxnAccessMaxTs(int64_t ts) {
+    if (ts > txn_access_max_ts_.load(std::memory_order_acquire)) {
+      txn_access_max_ts_.store(ts, std::memory_order_release);
     }
   }
-  int64_t TxnAppliedMaxTs() { return txn_applied_max_ts_.load(std::memory_order_acquire); }
+  int64_t TxnAccessMaxTs() { return txn_access_max_ts_.load(std::memory_order_acquire); }
+
+  // memory_lock_manager
+  void LockKey(const std::string& key, ConcurrencyManager::LockEntryPtr lock_entry);
+  void UnlockKeys(const std::vector<std::string>& keys);
+
+  bool CheckKeys(const std::vector<std::string>& keys, pb::store::IsolationLevel isolation_level, int64_t start_ts,
+                 const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info);
+  bool CheckRange(const std::string& start_key, const std::string& end_key, pb::store::IsolationLevel isolation_level,
+                  int64_t start_ts, const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info);
 
  private:
   bthread_mutex_t mutex_;
@@ -192,7 +202,7 @@ class Region {
 
   std::atomic<int64_t> raw_applied_max_ts_{0};
 
-  std::atomic<int64_t> txn_applied_max_ts_{0};
+  std::atomic<int64_t> txn_access_max_ts_{0};
 
   pb::raft::SplitStrategy split_strategy_{};
 
@@ -203,6 +213,7 @@ class Region {
   Latches latches_;
 
   Statistics statistics_;
+  ConcurrencyManager concurrency_manager_;
 };
 
 class RaftMeta {

@@ -291,7 +291,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   to_region->SetRawAppliedMaxTs(from_region->RawAppliedMaxTs());
 
   // Set txn apply max ts
-  to_region->SetTxnAppliedMaxTs(from_region->TxnAppliedMaxTs());
+  to_region->SetTxnAccessMaxTs(from_region->TxnAccessMaxTs());
 
   // Note: full heartbeat do not report region metrics when the region is in SPLITTING or MERGING
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::SPLITTING);
@@ -532,7 +532,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   child_region->SetRawAppliedMaxTs(parent_region->RawAppliedMaxTs());
 
   // Set txn apply max ts
-  child_region->SetTxnAppliedMaxTs(parent_region->TxnAppliedMaxTs());
+  child_region->SetTxnAccessMaxTs(parent_region->TxnAccessMaxTs());
 
   // Set parent/child range/epoch
   pb::common::Range parent_range;
@@ -920,8 +920,8 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   target_region->SetRawAppliedMaxTs(raw_max_ts);
 
   // Set apply max ts
-  int64_t txn_max_ts = std::max(target_region->TxnAppliedMaxTs(), source_region->TxnAppliedMaxTs());
-  target_region->SetTxnAppliedMaxTs(txn_max_ts);
+  int64_t txn_max_ts = std::max(target_region->TxnAccessMaxTs(), source_region->TxnAccessMaxTs());
+  target_region->SetTxnAccessMaxTs(txn_max_ts);
 
   // Set source region TOMBSTONE state
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
