@@ -48,6 +48,10 @@ namespace dingodb {
 #define GIT_COMMIT_TIME "unknown"
 #endif
 
+#ifndef GIT_SUBMODULE
+#define GIT_SUBMODULE "unknown"
+#endif
+
 #ifndef DINGO_BUILD_TYPE
 #define DINGO_BUILD_TYPE "unknown"
 #endif
