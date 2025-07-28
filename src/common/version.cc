@@ -17,6 +17,13 @@
 #include "butil/string_printf.h"
 #include "common/logging.h"
 
+#if __has_include("dingo_eureka_version.h")
+#include "dingo_eureka_version.h"
+#define DINGO_EUREKA_VERSION_EXIST 1
+#else
+#define DINGO_EUREKA_VERSION_EXIST 0
+#endif
+
 namespace dingodb {
 
 #if defined(ENABLE_DISKANN_MODULE)
@@ -48,6 +55,7 @@ DEFINE_string(git_tag_name, GIT_TAG_NAME, "current dingo git tag version");
 DEFINE_string(git_commit_user, GIT_COMMIT_USER, "current dingo git commit user");
 DEFINE_string(git_commit_mail, GIT_COMMIT_MAIL, "current dingo git commit mail");
 DEFINE_string(git_commit_time, GIT_COMMIT_TIME, "current dingo git commit time");
+DEFINE_string(git_submodule, GIT_SUBMODULE, "current dingo git submodule");
 DEFINE_string(major_version, MAJOR_VERSION, "current dingo major version");
 DEFINE_string(minor_version, MINOR_VERSION, "current dingo mino version");
 DEFINE_string(dingo_build_type, DINGO_BUILD_TYPE, "current dingo build type");
@@ -102,6 +110,22 @@ std::string GetBuildFlag() {
       FLAGS_diskann_depend_on_system ? "ON" : "OFF", FLAGS_boost_summary.c_str());
 }
 
+static void ReplaceAll(std::string& str, const std::string& from, const std::string& to) {
+  if (from.empty()) return;
+
+  size_t start_pos = 0;
+  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    str.replace(start_pos, from.length(), to);
+    start_pos += to.length();
+  }
+}
+
+void DingoEurekaShowVerion() {
+#if DINGO_EUREKA_VERSION_EXIST
+  std::cout << FormatDingoEurekaVersion() << std::endl;
+#endif
+}
+
 void DingoShowVerion() {
   printf("DINGO_STORE VERSION:[%s-%s]\n", FLAGS_major_version.c_str(), FLAGS_minor_version.c_str());
   printf("DINGO_STORE GIT_TAG_VERSION:[%s]\n", FLAGS_git_tag_name.c_str());
@@ -109,6 +133,16 @@ void DingoShowVerion() {
   printf("DINGO_STORE BUILD_TYPE:[%s] CONTRIB_BUILD_TYPE:[%s]\n", FLAGS_dingo_build_type.c_str(),
          FLAGS_dingo_contrib_build_type.c_str());
   printf("%s", GetBuildFlag().c_str());
+  std::string git_submodule = FLAGS_git_submodule;
+  ReplaceAll(git_submodule, "\t", "\n");
+  printf("DINGO_STORE GIT_SUBMODULE:[\n%s]\n", git_submodule.c_str());
+  DingoEurekaShowVerion();
+}
+
+void DingoEurekaLogVerion() {
+#if DINGO_EUREKA_VERSION_EXIST
+  DINGO_LOG(INFO) << FormatDingoEurekaVersion();
+#endif
 }
 
 void DingoLogVerion() {
@@ -118,7 +152,11 @@ void DingoLogVerion() {
   DINGO_LOG(INFO) << "DINGO_STORE BUILD_TYPE:[" << FLAGS_dingo_build_type << "] CONTRIB_BUILD_TYPE:["
                   << FLAGS_dingo_contrib_build_type << "]";
   DINGO_LOG(INFO) << GetBuildFlag();
+  std::string git_submodule = FLAGS_git_submodule;
+  ReplaceAll(git_submodule, "\t", "\n");
+  DINGO_LOG(INFO) << "DINGO_STORE GIT_SUBMODULE:[\n" << git_submodule << "]";
   DINGO_LOG(INFO) << "PID: " << getpid();
+  DingoEurekaLogVerion();
 }
 
 pb::common::VersionInfo GetVersionInfo() {

@@ -506,6 +506,7 @@ int main(int argc, char* argv[]) {
   }
 
   InitLog(br::FLAGS_br_log_dir);
+  dingodb::DingoLogVerion();
 
   std::cout << "Number of command line arguments : " << argc << std::endl;
   DINGO_LOG(INFO) << "Number of command line arguments : " << argc;
