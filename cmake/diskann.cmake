@@ -33,6 +33,10 @@ if(THIRD_PARTY_BUILD_TYPE MATCHES "Debug")
   # "RelWithDebInfo")
 endif()
 
+if (CUSTOM_LIBAIO_INCLUDE_DIR)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${CUSTOM_LIBAIO_INCLUDE_DIR}")
+endif()
+
 ExternalProject_Add(
   extern_diskann
   ${EXTERNAL_PROJECT_LOG_ARGS}
