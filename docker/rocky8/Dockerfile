@@ -1,5 +1,5 @@
 # FROM rockylinux/rockylinux:8.9
-FROM dingodatabase/dingo-eureka:rocky8-store-v1.0
+FROM dingodatabase/dingo-eureka:rocky8-store
 
 ENV TZ=Asia/Shanghai
 SHELL ["/bin/bash", "-c"]
@@ -15,7 +15,7 @@ RUN echo "gpgkey=https://yum.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW
 RUN mv /tmp/oneAPI.repo /etc/yum.repos.d
 
 RUN dnf update -y  \
-    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel gcc-toolset-13* libtool perl-IPC-Cmd intel-oneapi-mkl-devel-2024.1.x86_64 patch libaio-devel boost-devel \
+    && dnf install -y  java-1.8.0-openjdk-devel vim unzip net-tools tzdata wget git gcc gcc-c++ make automake maven openssl openssl-devel gcc-toolset-13* libtool perl-IPC-Cmd intel-oneapi-mkl-devel-2024.1.x86_64 patch \
     && dnf clean all \
     && ln -fs /usr/share/zoneinfo/${TZ} /etc/localtime \
     && echo ${TZ} > /etc/timezone \
