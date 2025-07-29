@@ -92,6 +92,7 @@ message("DINGO_EUREKA_INSTALL_PATH:${DINGO_EUREKA_INSTALL_PATH}")
 include_directories(${DINGO_EUREKA_INSTALL_PATH}/include)
 
 set(BOOST_SEARCH_PATH ${DINGO_EUREKA_INSTALL_PATH})
+set(CUSTOM_LIBAIO_INCLUDE_DIR "")
 
 set(CMAKE_PREFIX_PATH ${DINGO_EUREKA_INSTALL_PATH} ${CMAKE_PREFIX_PATH})
 message("CMAKE_PREFIX_PATH:${CMAKE_PREFIX_PATH}")
@@ -500,18 +501,31 @@ if(WITH_DISKANN)
     message(STATUS "boost use system")
   endif()
 
-  include(diskann)
-  include_directories(${DISKANN_INCLUDE_DIR})
-  set(DEPEND_LIBS ${DEPEND_LIBS} diskann)
   if(DISKANN_DEPEND_ON_SYSTEM)
     set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} aio)
     message(STATUS "libaio use system")
   else()
     set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
     message(STATUS "libaio use third-party")
-  endif()
 
-endif()
+    set(CUSTOM_LIBAIO_INCLUDE_DIR ${LIBAIO_INCLUDE_DIR})
+    message(STATUS "LIBAIO_INCLUDE_DIR : " ${LIBAIO_INCLUDE_DIR})
+    message(STATUS "CUSTOM_LIBAIO_INCLUDE_DIR : " ${CUSTOM_LIBAIO_INCLUDE_DIR})
+
+
+  endif() # if(DISKANN_DEPEND_ON_SYSTEM)
+
+
+  include(diskann)
+  include_directories(${DISKANN_INCLUDE_DIR})
+  set(DYNAMIC_LIB ${DYNAMIC_LIB} ${DISKANN_LIBRARIES})
+  if(DISKANN_DEPEND_ON_SYSTEM)
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} aio)
+  else()
+    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${LIBAIO_LIBRARIES})
+  endif() # if(DISKANN_DEPEND_ON_SYSTEM)
+
+endif() # if(WITH_DISKANN)
 
 if(LINK_TCMALLOC)
   add_definitions(-DLINK_TCMALLOC=ON)
