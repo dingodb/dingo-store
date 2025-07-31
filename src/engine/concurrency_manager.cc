@@ -22,11 +22,13 @@ namespace dingodb {
 // lock_entry.rw_lock has already write locked
 void ConcurrencyManager::LockKey(const std::string& key, LockEntryPtr lock_entry) {
   RWLockWriteGuard guard(&rw_lock_);
+
   lock_table_[key] = lock_entry;
 }
 
 void ConcurrencyManager::UnlockKeys(const std::vector<std::string>& keys) {
   RWLockWriteGuard guard(&rw_lock_);
+
   for (auto const& key : keys) {
     auto it = lock_table_.find(key);
     if (it != lock_table_.end()) {
@@ -42,6 +44,7 @@ bool ConcurrencyManager::CheckKeys(const std::vector<std::string>& keys, pb::sto
   std::vector<LockEntryPtr> lock_entrys;
   {
     RWLockReadGuard guard(&rw_lock_);
+
     for (auto const& key : keys) {
       auto it = lock_table_.find(key);
       if (it != lock_table_.end()) {
@@ -55,6 +58,7 @@ bool ConcurrencyManager::CheckKeys(const std::vector<std::string>& keys, pb::sto
       continue;
     }
     RWLockReadGuard guard(&lock_entry->rw_lock);
+
     if (TxnEngineHelper::CheckLockConflict(lock_entry->lock_info, isolation_level, start_ts, resolved_locks,
                                            txn_result_info)) {
       return true;
@@ -71,9 +75,11 @@ bool ConcurrencyManager::CheckRange(const std::string& start_key, const std::str
   std::vector<LockEntryPtr> lock_entrys;
   {
     RWLockReadGuard guard(&rw_lock_);
+
     auto it = lock_table_.lower_bound(start_key);
-    while (it != lock_table_.end() && it->first <= end_key) {
+    while (it != lock_table_.end() && it->first < end_key) {
       lock_entrys.push_back(it->second);
+      ++it;
     }
   }
 

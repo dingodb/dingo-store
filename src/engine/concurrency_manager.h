@@ -24,6 +24,7 @@
 #include "proto/store.pb.h"
 
 namespace dingodb {
+
 class ConcurrencyManager {
  public:
   ConcurrencyManager() = default;
@@ -43,7 +44,7 @@ class ConcurrencyManager {
     RWLock rw_lock;
     std::atomic<bool> is_deleted{false};  // Whether the marker has been is_deleted (i.e., removed from the map)
   };
-  
+
   using LockEntryPtr = std::shared_ptr<LockEntry>;
 
   void LockKey(const std::string& key, LockEntryPtr lock_entry);
@@ -58,9 +59,8 @@ class ConcurrencyManager {
                   int64_t start_ts, const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info);
 
  private:
-  // key->lock_info  pb::store::LockInfo
-  std::map<std::string, LockEntryPtr>
-      lock_table_;  // Ordered storage of locked keys (supporting range queries)
+  // key->lock_info  Ordered storage of locked keys (supporting range queries)
+  std::map<std::string, LockEntryPtr> lock_table_;
   RWLock rw_lock_;
 };
 
