@@ -932,7 +932,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
   // final_commit_ts = max(region_max_ts, start_ts)+1
   {
     int64_t region_max_ts = 20;
-    region->SetTxnAppliedMaxTs(region_max_ts);
+    region->SetTxnAccessMaxTs(region_max_ts);
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
@@ -976,7 +976,7 @@ TEST_F(TxnPreWriteTest, PreWriteWithOnePC) {
   // final_commit = max(region_max_ts+1, min_commit_ts)
   {
     int64_t region_max_ts = 20;
-    region->SetTxnAppliedMaxTs(region_max_ts);
+    region->SetTxnAccessMaxTs(region_max_ts);
     butil::Status ok;
     pb::store::TxnPrewriteResponse response;
     auto ctx = std::make_shared<Context>();
