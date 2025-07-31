@@ -37,7 +37,7 @@ namespace dingodb {
 
 DEFINE_double(min_system_disk_capacity_free_ratio, 0.05, "Min system disk capacity free ratio");
 DEFINE_double(min_system_memory_capacity_free_ratio, 0.10, "Min system memory capacity free ratio");
-DEFINE_bool(enable_region_metrics_collect_key_count, false, "Enable region metrics collect key count");
+DEFINE_bool(enable_region_metrics_collect_key_count, true, "Enable region metrics collect key count");
 DEFINE_bool(enable_region_metrics_collect_key_max, false, "Enable region metrics collect key max");
 DEFINE_bool(enable_region_metrics_collect_key_min, false, "Enable region metrics collect key min");
 
