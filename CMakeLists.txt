@@ -502,27 +502,18 @@ if(WITH_DISKANN)
   endif()
 
   if(DISKANN_DEPEND_ON_SYSTEM)
+    include(diskann)
+    include_directories(${DISKANN_INCLUDE_DIR})
     set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} aio)
     message(STATUS "libaio use system")
   else()
-    set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
     message(STATUS "libaio use third-party")
-
     set(CUSTOM_LIBAIO_INCLUDE_DIR ${LIBAIO_INCLUDE_DIR})
     message(STATUS "LIBAIO_INCLUDE_DIR : " ${LIBAIO_INCLUDE_DIR})
     message(STATUS "CUSTOM_LIBAIO_INCLUDE_DIR : " ${CUSTOM_LIBAIO_INCLUDE_DIR})
-
-
-  endif() # if(DISKANN_DEPEND_ON_SYSTEM)
-
-
-  include(diskann)
-  include_directories(${DISKANN_INCLUDE_DIR})
-  set(DYNAMIC_LIB ${DYNAMIC_LIB} ${DISKANN_LIBRARIES})
-  if(DISKANN_DEPEND_ON_SYSTEM)
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} aio)
-  else()
-    set(DYNAMIC_LIB ${DYNAMIC_LIB} ${LIBAIO_LIBRARIES})
+    include(diskann)
+    include_directories(${DISKANN_INCLUDE_DIR})
+    set(VECTOR_LIB ${VECTOR_LIB} ${DISKANN_LIBRARIES} ${LIBAIO_LIBRARIES})
   endif() # if(DISKANN_DEPEND_ON_SYSTEM)
 
 endif() # if(WITH_DISKANN)
