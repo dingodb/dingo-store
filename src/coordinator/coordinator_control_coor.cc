@@ -5720,12 +5720,16 @@ butil::Status CoordinatorControl::ProcessJobList() {
   }
 
   // process store_operation_map
-  for (const auto& [store_id, store_operation] : store_operation_map) {
-    auto status = SendStoreOperation(store_id, store_operation, meta_increment);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[joblist] SendStoreOperation failed, error:{}, store_id:{}, store_operation:{}",
-                                      Helper::PrintStatus(status), store_id, store_operation.ShortDebugString());
-    }
+  auto status = GetStoreOperationOfCreateForSend(store_operation_map, meta_increment);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[joblist] GetStoreOperationOfCreateForSend failed, error:{}",
+                                    Helper::PrintStatus(status));
+  }
+
+  status = GetStoreOperationOfNotCreateForSend(store_operation_map, meta_increment);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("[joblist] GetStoreOperationOfNotCreateForSend failed, error:{}",
+                                    Helper::PrintStatus(status));
   }
 
   if (meta_increment.ByteSizeLong() == 0) {
@@ -6460,6 +6464,66 @@ butil::Status CoordinatorControl::UpdateJobProcess(const pb::coordinator_interna
   if (!ret1.ok()) {
     DINGO_LOG(FATAL) << fmt::format("[joblist] job MODIFY, but Put job_id:{} failed, errcode:{}, errmsg:{}, job:{}",
                                     job.job_id(), ret1.error_code(), ret1.error_str(), temp_job.ShortDebugString());
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetStoreOperationOfCreateForSend(
+    std::map<int64_t, pb::coordinator::StoreOperation>& store_operation_map,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  for (const auto& [store_id, store_operation] : store_operation_map) {
+    pb::coordinator::StoreOperation create_store_operation;
+    create_store_operation.set_store_id(store_id);
+    for (auto const& region_cmd : store_operation.region_cmds()) {
+      if (region_cmd.region_cmd_type() != pb::coordinator::RegionCmdType::CMD_CREATE) {
+        continue;
+      }
+      *(create_store_operation.add_region_cmds()) = region_cmd;
+    }
+
+    auto status = SendStoreOperation(store_id, store_operation, meta_increment);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[joblist] SendStoreOperation failed, error:{}, store_id:{}, store_operation:{}",
+                                      Helper::PrintStatus(status), store_id, store_operation.ShortDebugString());
+    }
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status CoordinatorControl::GetStoreOperationOfNotCreateForSend(
+    std::map<int64_t, pb::coordinator::StoreOperation>& store_operation_map,
+    pb::coordinator_internal::MetaIncrement& meta_increment) {
+  for (const auto& [store_id, store_operation] : store_operation_map) {
+    pb::coordinator::StoreOperation not_create_store_operation;
+    not_create_store_operation.set_store_id(store_id);
+    for (auto const& region_cmd : store_operation.region_cmds()) {
+      if (region_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_DELETE) {
+        DINGO_LOG(DEBUG) << "first round skip CMD_DELETE region_cmd_id = " << region_cmd.id()
+                         << " region_id = " << region_cmd.region_id() << " store_id = " << store_id
+                         << " region_cmd_type = " << pb::coordinator::RegionCmdType_Name(region_cmd.region_cmd_type());
+        continue;
+      }
+
+      if (region_cmd.region_cmd_type() == pb::coordinator::RegionCmdType::CMD_CREATE) {
+        continue;
+      }
+      *(not_create_store_operation.add_region_cmds()) = region_cmd;
+    }
+
+    for (auto const& region_cmd : store_operation.region_cmds()) {
+      if (region_cmd.region_cmd_type() != pb::coordinator::RegionCmdType::CMD_DELETE) {
+        continue;
+      }
+      *(not_create_store_operation.add_region_cmds()) = region_cmd;
+    }
+
+    auto status = SendStoreOperation(store_id, not_create_store_operation, meta_increment);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << fmt::format("[joblist] SendStoreOperation failed, error:{}, store_id:{}, store_operation:{}",
+                                      Helper::PrintStatus(status), store_id, store_operation.ShortDebugString());
+    }
   }
 
   return butil::Status::OK();

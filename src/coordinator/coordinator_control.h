@@ -417,8 +417,8 @@ class CoordinatorControl : public MetaControl {
 
   // br restore index meta
   butil::Status RestoreIndexMeta(int64_t schema_id, int64_t index_id,
-                            const pb::meta::TableDefinition &new_table_definition_in,
-                            pb::coordinator_internal::MetaIncrement &meta_increment);
+                                 const pb::meta::TableDefinition &new_table_definition_in,
+                                 pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // generate table with part ids
   butil::Status GenerateTableWithPartIds(int64_t schema_id, const pb::meta::TableWithPartCount &count,
@@ -887,6 +887,14 @@ class CoordinatorControl : public MetaControl {
 
   butil::Status SendStoreOperation(int64_t store_id, const pb::coordinator::StoreOperation &store_operation,
                                    pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status GetStoreOperationOfCreateForSend(
+      std::map<int64_t, pb::coordinator::StoreOperation> &store_operation_map,
+      pb::coordinator_internal::MetaIncrement &meta_increment);
+
+  butil::Status GetStoreOperationOfNotCreateForSend(
+      std::map<int64_t, pb::coordinator::StoreOperation> &store_operation_map,
+      pb::coordinator_internal::MetaIncrement &meta_increment);
 
   // move region_cmd from one store to another store
   butil::Status MoveTaskRegionCmd(int64_t job_id, int64_t old_store_id, int64_t new_store_id, int64_t region_cmd_id,
