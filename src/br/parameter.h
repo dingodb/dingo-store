@@ -88,7 +88,7 @@ DECLARE_uint32(restore_task_timeout_s);
 // restore task max retry times. default 5
 DECLARE_uint32(restore_task_max_retry);
 
-// default replica number. default 0.
+// default replica number. default -1. Automatically select the number of copies based on backup information
 DECLARE_int32(br_default_replica_num);
 
 // create region concurrency

@@ -69,7 +69,9 @@ DEFINE_uint32(restore_task_timeout_s, 100, "restore task timeout in seconds. def
 DEFINE_uint32(restore_task_max_retry, 5, "restore task max retry times. default 5");
 
 // default replica number
-DEFINE_int32(br_default_replica_num, 0, "default replica number. default 0");
+DEFINE_int32(
+    br_default_replica_num, -1,
+    "default replica number. default -1. Automatically select the number of copies based on backup information");
 
 // create region concurrency
 DEFINE_uint32(create_region_concurrency, 10, "restore create region to coordinator concurrency. default 10");

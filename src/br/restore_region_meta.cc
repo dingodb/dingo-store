@@ -121,7 +121,18 @@ butil::Status RestoreRegionMeta::CreateRegionToCoordinator() {
     request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
     request.set_region_name(region_->definition().name());
     // ignore resource_tag
-    request.set_replica_num(replica_num_);
+    if (replica_num_ >= 0) {
+      request.set_replica_num(replica_num_);
+      DINGO_LOG(INFO) << "region id : " << region_->id() << " replica_num : " << replica_num_;
+    } else {
+      // This takes into account the case where the peers size is 0. Note that restore may fail if the number of nodes
+      // is insufficient.
+      int64_t guess_replica_num = static_cast<int64_t>(region_->definition().peers().size());
+      request.set_replica_num(guess_replica_num);
+      DINGO_LOG(INFO) << "region id : " << region_->id() << " replica_num : " << replica_num_
+                      << " guess from peers size : " << guess_replica_num;
+    }
+
     request.mutable_range()->CopyFrom(region_->definition().range());
     request.set_raw_engine(region_->definition().raw_engine());
     request.set_store_engine(region_->definition().store_engine());
