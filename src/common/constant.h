@@ -109,7 +109,7 @@ class Constant {
   inline static const std::string kBlockSize = "block_size";
   inline static const std::string kBlockSizeDefaultValue = "131072";  // 128KB
   inline static const std::string kBlockCache = "block_cache";
-  inline static const std::string kBlockCacheDefaultValue = "1073741824";  // 1GB
+  inline static const std::string kBlockCacheDefaultValue = "2147483648";  // 2GB
   inline static const std::string kArenaBlockSize = "arena_block_size";
   inline static const std::string kArenaBlockSizeDefaultValue = "67108864";  // 64MB
   inline static const std::string kMinWriteBufferNumberToMerge = "min_write_buffer_number_to_merge";
