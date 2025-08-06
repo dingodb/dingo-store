@@ -1110,11 +1110,6 @@ static butil::Status ValidateVectorCountMemoryRequest(StoragePtr storage,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
-  if (region->VectorIndexWrapper()->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
-    std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support count memory.", region->Id());
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
-  }
-
   return ServiceHelper::ValidateIndexRegion(region, {});
 }
 
