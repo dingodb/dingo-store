@@ -41,6 +41,7 @@ vector:
   enable_follower_hold_index: false
 store:
   path: $BASE_PATH$/data/db
+  block_cache_size: 2147483648 # 2GB
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   fast_background_thread_num: 8 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio

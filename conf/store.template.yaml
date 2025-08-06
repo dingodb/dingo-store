@@ -20,7 +20,7 @@ region:
   merge_check_interval_s: 120
   max_merge_region_size: 1048576 # 1MB
   max_merge_region_keys: 10000
-  split_merge_interval: 3600  #1h
+  split_merge_interval: 3600 #1h
   merge_size_ratio: 0.2
   merge_keys_ratio: 0.2
   merge_check_concurrency: 3
@@ -38,6 +38,7 @@ log:
   path: $BASE_PATH$/log
 store:
   path: $BASE_PATH$/data/db
+  block_cache_size: 2147483648 # 2GB
   background_thread_num: 16 # background_thread_num priority background_thread_ratio
   # background_thread_ratio: 0.5 # cpu core * ratio
   stats_dump_period_s: 120
