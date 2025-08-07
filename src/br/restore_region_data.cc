@@ -172,7 +172,18 @@ butil::Status RestoreRegionData::SendRegionRequest(const std::string& service_na
       DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail) << request.DebugString();
       // DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
 
+      auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+      auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+        return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+      };
+
+      auto restore_region_data_start_ms = lambda_time_now_function();
       status = interaction_->SendRequest(service_name, api_name, request, response, restore_region_timeout_s_ * 1000);
+      auto restore_region_data_end_ms = lambda_time_now_function();
+      auto restore_region_data_diff_ms =
+          lambda_time_diff_microseconds_function(restore_region_data_start_ms, restore_region_data_end_ms);
+      DINGO_LOG(INFO) << fmt::format("{}::{} region id:{} cost time:{} ", service_name, api_name, region_->id(),
+                                     Utils::FormatTimeMs(restore_region_data_diff_ms));
 
       DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail) << response.DebugString();
       // DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
