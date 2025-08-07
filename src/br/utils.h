@@ -17,6 +17,7 @@
 
 #include <fmt/format.h>
 
+#include <cstdint>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -56,6 +57,8 @@ class Utils {
                                 static_cast<int64_t>(response.error().errcode()), response.error().errmsg());
     return s;
   }
+
+  static std::string FormatTimeMs(int64_t time_ms);
 
  private:
   Utils() = default;

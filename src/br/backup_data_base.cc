@@ -14,6 +14,7 @@
 
 #include "br/backup_data_base.h"
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -302,7 +303,17 @@ butil::Status BackupDataBase::DoBackupRegionInternal(
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << name_ << " " << request.DebugString();
 
+    auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+    auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    };
+
+    auto backup_data_start_ms = lambda_time_now_function();
     status = interaction->SendRequest(service_name, "BackupData", request, response, FLAGS_br_backup_region_timeout_ms);
+    auto backup_data_end_ms = lambda_time_now_function();
+    auto backup_data_diff_ms = lambda_time_diff_microseconds_function(backup_data_start_ms, backup_data_end_ms);
+    DINGO_LOG(INFO) << fmt::format("{}::BackupData region id:{} cost time:{} ", service_name, region.id(),
+                                   Utils::FormatTimeMs(backup_data_diff_ms));
     if (!status.ok()) {
       is_need_exit_ = true;
       std::string s =

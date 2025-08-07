@@ -36,6 +36,32 @@ class BrUtilsTest : public testing::Test {
   inline static std::string dir_recursion_path = "./br_utils_test_dir/a/b";
 };
 
+TEST_F(BrUtilsTest, FormatTimeMs) {
+  int64_t time_ms = 0;
+  auto s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+
+  time_ms = 1000;  // 1 second
+  s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+
+  time_ms = 60000;  // 1 minute
+  s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+
+  time_ms = 3600000;  // 1 hour
+  s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+
+  time_ms = 86400000;  // 1 day
+  s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+
+  time_ms = 123456789;  // 1 day, 10 hours, 17 minutes, 36 seconds, and 789 milliseconds
+  s = br::Utils::FormatTimeMs(time_ms);
+  DINGO_LOG(INFO) << s;
+}
+
 TEST_F(BrUtilsTest, FormatStatusError) {
   butil::Status status;
   auto s = br::Utils::FormatStatusError(status);

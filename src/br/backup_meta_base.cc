@@ -296,8 +296,18 @@ butil::Status BackupMetaBase::DoBackupRegionInternal(
 
     DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
 
+    auto lambda_time_now_function = []() { return std::chrono::steady_clock::now(); };
+    auto lambda_time_diff_microseconds_function = [](auto start, auto end) {
+      return std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    };
+
+    auto backup_meta_start_ms = lambda_time_now_function();
     butil::Status status =
         interaction->SendRequest(service_name, "BackupMeta", request, response, FLAGS_br_backup_region_timeout_ms);
+    auto backup_meta_end_ms = lambda_time_now_function();
+    auto backup_meta_diff_ms = lambda_time_diff_microseconds_function(backup_meta_start_ms, backup_meta_end_ms);
+    DINGO_LOG(INFO) << fmt::format("{}::BackupMeta region id:{} cost time:{} ", service_name, region.id(),
+                                   Utils::FormatTimeMs(backup_meta_diff_ms));
     if (!status.ok()) {
       is_need_exit_ = true;
       std::string s =
