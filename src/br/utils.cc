@@ -351,4 +351,26 @@ std::string Utils::FormatStatusError(const butil::Status& status) {
   return s;
 }
 
+std::string Utils::FormatTimeMs(int64_t time_ms) {
+  int64_t hours = time_ms / 3600000;
+  int64_t minutes = (time_ms % 3600000) / 60000;
+  int64_t seconds = (time_ms % 60000) / 1000;
+  int64_t milliseconds = time_ms % 1000;
+
+  if (0 == hours) {
+    if (0 == minutes) {
+      if (0 == seconds) {
+        return fmt::format("{} ms", milliseconds);
+      }
+      // seconds > 0
+      return fmt::format("{} s {} ms", seconds, milliseconds);
+    }  // if (0 == minutes) {
+    // minutes > 0
+    return fmt::format("{} m {} s {} ms", minutes, seconds, milliseconds);
+  }  // if (0 == hours) {
+
+  // hours > 0
+  return fmt::format("{} h {} m {} s {} ms", hours, minutes, seconds, milliseconds);
+}
+
 }  // namespace br
