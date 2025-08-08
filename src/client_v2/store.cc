@@ -84,6 +84,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpQueryRegionStatusMetrics(app);
   SetUpModifyRegionMeta(app);
   SetUpCompact(app);
+  SetUpQueryMemoryLocks(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -2117,6 +2118,35 @@ void RunModifyRegionMeta(ModifyRegionMetaOptions const& opt) {
   }
   std::cout << "modify region: " << opt.region_id
             << ", state: " << ::dingodb::pb::common::StoreRegionState_Name(opt.state) << " success.\n";
+}
+
+void SetUpQueryMemoryLocks(CLI::App& app) {
+  auto opt = std::make_shared<QueryMemoryLocksOptions>();
+  auto* cmd = app.add_subcommand("QueryMemoryLocks", "Query region memory locks ")->group("Region Command");
+  cmd->add_option("--region_id", opt->region_id, "Request parameter, empty means query all regions")->required();
+  cmd->add_option("--store_addrs", opt->store_addrs, "server addrs")->required();
+  cmd->callback([opt]() { RunQueryMemoryLocks(*opt); });
+}
+
+void RunQueryMemoryLocks(QueryMemoryLocksOptions const& opt) {
+  if (!SetUpStore("", {opt.store_addrs}, 0)) {
+    exit(-1);
+  }
+
+  dingodb::pb::debug::DumpMemoryLockRequest request;
+  dingodb::pb::debug::DumpMemoryLockResponse response;
+
+  request.set_region_id(opt.region_id);
+
+  auto status = InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "DumpRegionMemoryLock",
+                                                                            request, response);
+  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    std::cout << "Query region memory locks , error:"
+              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+              << response.error().errmsg();
+    return;
+  }
+  std::cout << "region memory locks: " << response.DebugString() << std::endl;
 }
 
 void SendKvGet(KvGetOptions const& opt, std::string& value) {

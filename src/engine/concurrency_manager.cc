@@ -97,4 +97,13 @@ bool ConcurrencyManager::CheckRange(const std::string& start_key, const std::str
   return false;
 }
 
+void ConcurrencyManager::GetKeys(std::map<std::string, pb::store::LockInfo>& lock_table) {
+  RWLockReadGuard guard(&rw_lock_);
+
+  for (auto const& kv : lock_table_) {
+    RWLockReadGuard guard(&kv.second->rw_lock);
+    lock_table[kv.first] = kv.second->lock_info;
+  }
+}
+
 }  // namespace dingodb

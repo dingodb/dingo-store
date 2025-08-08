@@ -572,6 +572,13 @@ struct ModifyRegionMetaOptions {
 void SetUpModifyRegionMeta(CLI::App &app);
 void RunModifyRegionMeta(ModifyRegionMetaOptions const &opt);
 
+struct QueryMemoryLocksOptions {
+  std::string store_addrs;
+  int64_t region_id;
+};
+void SetUpQueryMemoryLocks(CLI::App &app);
+void RunQueryMemoryLocks(QueryMemoryLocksOptions const &opt);
+
 // raw kv
 void SendKvGet(KvGetOptions const &opt, std::string &value);
 void SendKvBatchGet(KvBatchGetOptions const &opt);

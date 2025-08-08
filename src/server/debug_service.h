@@ -101,6 +101,9 @@ class DebugServiceImpl : public pb::debug::DebugService {
 
   void DumpRegion(google::protobuf::RpcController* controller, const ::dingodb::pb::debug::DumpRegionRequest* request,
                   ::dingodb::pb::debug::DumpRegionResponse* response, ::google::protobuf::Closure* done) override;
+
+  void DumpRegionMemoryLock(google::protobuf::RpcController* controller, const ::dingodb::pb::debug::DumpMemoryLockRequest* request,
+                  ::dingodb::pb::debug::DumpMemoryLockResponse* response, ::google::protobuf::Closure* done) override;
 };
 
 }  // namespace dingodb
