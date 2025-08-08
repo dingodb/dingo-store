@@ -502,6 +502,114 @@ int main(int argc, char* argv[]) {
     printf(
         "./dingodb_br --br_coor_url=file://./conf/coor_list --br_type=restore --br_restore_type=full "
         "--storage=local:///opt/backup-2020-01-01\n");
+
+    printf("tool dump commands:\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump --br_dump_file=local:///mnt/nfs_shared/backup/backup.lock\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/backupmeta.encryption\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/backupmeta.debug\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump --br_dump_file=local:///mnt/nfs_shared/backup/backupmeta\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/backupmeta.datafile\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/backupmeta.schema\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/coordinator_sdk_meta.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/store_cf_sst_meta_sql_meta.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/store_cf_sst_meta_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/index_cf_sst_meta_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/store_region_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=dump "
+        "--br_dump_file=local:///mnt/nfs_shared/backup/document-33001/"
+        "80049_1-1_d7afb3ab102cfe5e7a8a66d3ec4800efb33ab2fc_1742800412_write.sst\n");
+
+    printf("tool diff commands:\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff --br_diff_file1=local:///mnt/nfs_shared/backup1/backup.lock "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backup.lock\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/backupmeta.encryption "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backupmeta.encryption\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/backupmeta.encryption "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backupmeta.encryption\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff --br_diff_file1=local:///mnt/nfs_shared/backup1/backupmeta "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backupmeta\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/backupmeta.datafile "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backupmeta.datafile\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/backupmeta.schema "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/backupmeta.schema\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/coordinator_sdk_meta.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup/coordinator_sdk_meta.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/store_cf_sst_meta_sql_meta.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/store_cf_sst_meta_sql_meta.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/store_cf_sst_meta_sdk_data.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/store_cf_sst_meta_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/index_cf_sst_meta_sdk_data.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/index_cf_sst_meta_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/store_region_sdk_data.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/store_region_sdk_data.sst\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=diff "
+        "--br_diff_file1=local:///mnt/nfs_shared/backup1/index-31002/"
+        "80116_1-1_461afe869c916d720ba2e704f3b1cf5b2dab31f3_1742800413_vector_table.sst "
+        "--br_diff_file2=local:///mnt/nfs_shared/backup2/index-31002/"
+        "80116_1-1_461afe869c916d720ba2e704f3b1cf5b2dab31f3_1744017930_vector_table.sst\n");
+
+    printf("tool client commands:\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RemoteVersion\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=LocalVersion\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=GetGCSafePoint\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=GcStart\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=GcStop\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableBalance\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableBalance\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableSplitAndMerge\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableSplitAndMerge\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterBackup\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=UnregisterBackup "
+        "--br_client_method-param1=e77c78d4-4dba-a375-22bf-094e8040f7d5\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterRestore\n");
+    printf(
+        "./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=UnregisterRestore "
+        "--br_client_method-param1=90f84eab-1f19-a41b-91d8-a32e5a31a913\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterRestoreStatus\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterBackupStatus\n");
     exit(-1);
   }
 
