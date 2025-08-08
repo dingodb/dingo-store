@@ -1293,4 +1293,28 @@ void DebugServiceImpl::DumpRegion(google::protobuf::RpcController* controller,
   }
 }
 
+void DebugServiceImpl::DumpRegionMemoryLock(google::protobuf::RpcController* controller,
+                                            const ::dingodb::pb::debug::DumpMemoryLockRequest* request,
+                                            ::dingodb::pb::debug::DumpMemoryLockResponse* response,
+                                            ::google::protobuf::Closure* done) {
+  auto* svr_done = new NoContextServiceClosure(__func__, done, request, response);
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(svr_done);
+
+  auto region = Server::GetInstance().GetRegion(request->region_id());
+  if (region == nullptr) {
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREGION_NOT_FOUND, "Not found region");
+    return;
+  }
+  std::map<std::string, pb::store::LockInfo> lock_table;
+  region->GetMemoryLocks(lock_table);
+  for (auto const& kv : lock_table) {
+    pb::debug::DumpMemoryLockResponse::Lock lock;
+    lock.set_key(kv.first);
+    *lock.mutable_lock_info() = kv.second;
+    // lock.
+    *response->add_locks() = lock;
+  }
+}
+
 }  // namespace dingodb

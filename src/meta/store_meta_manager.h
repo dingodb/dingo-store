@@ -195,6 +195,8 @@ class Region {
   bool CheckRange(const std::string& start_key, const std::string& end_key, pb::store::IsolationLevel isolation_level,
                   int64_t start_ts, const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info);
 
+  void GetMemoryLocks(std::map<std::string, pb::store::LockInfo>& lock_table);
+
  private:
   bthread_mutex_t mutex_;
   pb::store_internal::Region inner_region_;

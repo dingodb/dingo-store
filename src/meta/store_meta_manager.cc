@@ -385,6 +385,10 @@ bool Region::CheckRange(const std::string& start_key, const std::string& end_key
                                                txn_result_info);
 }
 
+void Region::GetMemoryLocks(std::map<std::string, pb::store::LockInfo>& lock_table) {
+  return this->concurrency_manager_.GetKeys(lock_table);
+}
+
 RaftMeta::RaftMeta(int64_t region_id) {
   raft_meta_.set_region_id(region_id);
   raft_meta_.set_term(0);

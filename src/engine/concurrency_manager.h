@@ -57,6 +57,8 @@ class ConcurrencyManager {
   // Range read operation: Check whether the keys within the range are locked
   bool CheckRange(const std::string& start_key, const std::string& end_key, pb::store::IsolationLevel isolation_level,
                   int64_t start_ts, const std::set<int64_t>& resolved_locks, pb::store::TxnResultInfo& txn_result_info);
+  
+  void GetKeys(std::map<std::string, pb::store::LockInfo>& lock_table);                
 
  private:
   // key->lock_info  Ordered storage of locked keys (supporting range queries)
