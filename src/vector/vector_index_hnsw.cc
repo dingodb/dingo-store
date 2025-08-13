@@ -217,10 +217,10 @@ butil::Status VectorIndexHnsw::Upsert(const std::vector<pb::common::VectorWithId
   try {
     // check if we need to expand the max_elements
     auto batch_count = std::max(FLAGS_vector_max_batch_count, static_cast<int64_t>(vector_with_ids.size()));
-    if (hnsw_index_->cur_element_count + batch_count * 2 > hnsw_index_->max_elements_) {
-      auto new_max_elements = hnsw_index_->max_elements_ * 2;
+    if (hnsw_index_->getCurrentElementCount() + batch_count * 2 > hnsw_index_->getMaxElements()) {
+      auto new_max_elements = hnsw_index_->getMaxElements() * 2;
       DINGO_LOG(INFO) << fmt::format("[vector_index.hnsw][id({})] expand max element, {} -> {}.", Id(),
-                                     hnsw_index_->max_elements_, new_max_elements);
+                                     hnsw_index_->getMaxElements(), new_max_elements);
 
       hnsw_index_->resizeIndex(new_max_elements);
     }
@@ -532,6 +532,7 @@ bool VectorIndexHnsw::IsExceedsMaxElements(int64_t vector_size) {
   if (hnsw_index_ == nullptr) {
     return true;
   }
+  RWLockReadGuard guard(&rw_lock_);
   bool is_exceeds = hnsw_index_->getCurrentElementCount() + vector_size > max_element_limit_;
   if (is_exceeds) {
     DINGO_LOG(ERROR) << fmt::format(
@@ -555,6 +556,7 @@ pb::common::MetricType VectorIndexHnsw::GetMetricType() {
 butil::Status VectorIndexHnsw::GetCount(int64_t& count) {
   // std::unique_lock<std::mutex> lock_table(this->hnsw_index_->label_lookup_lock);
   // count = this->hnsw_index_->label_lookup_.size();
+  RWLockReadGuard guard(&rw_lock_);
   count = this->hnsw_index_->getCurrentElementCount();
   return butil::Status::OK();
 }
@@ -562,6 +564,7 @@ butil::Status VectorIndexHnsw::GetCount(int64_t& count) {
 butil::Status VectorIndexHnsw::GetDeletedCount(int64_t& deleted_count) {
   // std::unique_lock<std::mutex> lock_deleted_elements(this->hnsw_index_->deleted_elements_lock);
   // deleted_count = this->hnsw_index_->deleted_elements.size();
+  RWLockReadGuard guard(&rw_lock_);
   deleted_count = this->hnsw_index_->getDeletedCount();
   return butil::Status::OK();
 }
@@ -573,6 +576,7 @@ butil::Status VectorIndexHnsw::GetMemorySize(int64_t& memory_size) {
 
 bool VectorIndexHnsw::NeedToRebuild() {
   int64_t element_count = 0, deleted_count = 0;
+  RWLockReadGuard guard(&rw_lock_);
 
   element_count = this->hnsw_index_->getCurrentElementCount();
 
