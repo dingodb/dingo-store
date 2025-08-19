@@ -5842,6 +5842,11 @@ butil::Status CoordinatorControl::ScanRegions(const std::string& start_key, cons
         continue;
       }
     }
+    CHECK(upper_bound > region_internal.definition().range().start_key())
+        << fmt::format("end_key should greater than region_start_key, range: [{}, {}], region_range: [{}, {}]",
+                       Helper::StringToHex(lower_bound), Helper::StringToHex(upper_bound),
+                       Helper::StringToHex(region_internal.definition().range().start_key()),
+                       Helper::StringToHex(region_internal.definition().range().end_key()));
 
     regions.push_back(region_internal);
 
