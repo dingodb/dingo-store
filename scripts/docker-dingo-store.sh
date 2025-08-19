@@ -59,7 +59,7 @@ start() {
   i=1
   program_dir=$BASE_DIR/dist/${FLAGS_role}${i}
   # clean log
-  rm -f ${program_dir}/log/*
+  # rm -f ${program_dir}/log/*
   start_program_docker "${FLAGS_role}" "${program_dir}"
 }
 
@@ -77,7 +77,7 @@ stop()
 
 usage()
 {
-  echo "Usage: $0 [deploy|start|stop|restart|cleanstart]"
+  echo "Usage: $0 [deploy|start|stop|restart|cleanstart|deploystart]"
 }
 
 if [ $# -lt 1 ];then
@@ -97,6 +97,9 @@ elif [ "$1" = "restart" ];then
 elif [ "$1" = "cleanstart" ];then
   stop
   clean
+  deploy
+  start
+elif [ "$1" = "deploystart" ];then
   deploy
   start
 else
