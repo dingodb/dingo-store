@@ -13,6 +13,7 @@ public class TypeSchemaMapper {
       addScalaTypeSchemaMapping("INT", IntegerSchema::new);
       addScalaTypeSchemaMapping("INTEGER", IntegerSchema::new);
       addScalaTypeSchemaMapping("TINYINT", IntegerSchema::new);
+      addScalaTypeSchemaMapping("SMALLINT", IntegerSchema::new);
       addScalaTypeSchemaMapping("LONG", LongSchema::new);
       addScalaTypeSchemaMapping("BIGINT", LongSchema::new);
       addScalaTypeSchemaMapping("BIT", BitSchema::new);
