@@ -6254,7 +6254,7 @@ bool CoordinatorControl::NeedAutoCleanJob(const pb::coordinator::Job& job,
     return false;
   }
 
-  for (int i = 0; i <= job.next_step(); i++) {
+  for (int i = 0; i < job.next_step(); i++) {
     const auto& task = job.tasks(i);
     for (const auto& store_operation : task.store_operations()) {
       for (const auto& region_cmd : store_operation.region_cmds()) {
