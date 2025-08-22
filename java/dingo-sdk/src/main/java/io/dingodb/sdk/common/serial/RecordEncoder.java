@@ -18,6 +18,7 @@ package io.dingodb.sdk.common.serial;
 
 import io.dingodb.sdk.common.KeyValue;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
+import io.dingodb.sdk.common.serial.schema.LongSchema;
 import lombok.Setter;
 
 import java.util.Arrays;
@@ -257,7 +258,13 @@ public class RecordEncoder {
         for (DingoSchema schema : schemas) {
             if (schema.isKey()) {
                 if (columnCount-- > 0) {
-                    schema.encodeKeyPrefix(keyBuf, record[schema.getIndex()]);
+                    Object valItem = record[schema.getIndex()];
+                    if (schema instanceof LongSchema && valItem instanceof Integer) {
+                        Integer valItemInt = (Integer) valItem;
+                        schema.encodeKeyPrefix(keyBuf, valItemInt.longValue());
+                    } else {
+                        schema.encodeKeyPrefix(keyBuf, record[schema.getIndex()]);
+                    }
                 } else {
                     break;
                 }
