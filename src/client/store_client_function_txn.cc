@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 #include "client/client_interation.h"
@@ -30,6 +31,7 @@
 #include "proto/common.pb.h"
 #include "proto/store.pb.h"
 #include "serial/buf.h"
+#include "serial/record_decoder.h"
 #include "vector/codec.h"
 
 const int kBatchSize = 1000;
@@ -1574,6 +1576,158 @@ void SendTxnDump(int64_t region_id) {
                     << response.write_keys(i).ShortDebugString() << "], value: ["
                     << response.write_values(i).ShortDebugString() << "]";
   }
+}
+
+void SendTxnCount(int64_t region_id) {
+  auto time_start = std::chrono::steady_clock::now();
+  dingodb::pb::common::Region region;
+  if (!TxnGetRegion(region_id, region)) {
+    DINGO_LOG(ERROR) << "TxnGetRegion failed";
+    return;
+  }
+
+  std::string service_name = GetServiceName(region);
+
+  dingodb::pb::store::TxnScanRequest request;
+  dingodb::pb::store::TxnScanResponse response;
+
+  request.mutable_context()->set_region_id(region_id);
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  if (FLAGS_rc) {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::ReadCommitted);
+  } else {
+    request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  }
+
+  dingodb::pb::common::RangeWithOptions range;
+  if (FLAGS_start_key.empty()) {
+    range.mutable_range()->set_start_key(region.definition().range().start_key());
+  } else {
+    std::string key = FLAGS_start_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_start_key);
+    }
+    range.mutable_range()->set_start_key(key);
+  }
+
+  if (FLAGS_end_key.empty()) {
+    range.mutable_range()->set_end_key(region.definition().range().end_key());
+  } else {
+    std::string key = FLAGS_end_key;
+    if (FLAGS_key_is_hex) {
+      key = HexToString(FLAGS_end_key);
+    }
+    range.mutable_range()->set_end_key(key);
+  }
+
+  range.set_with_start(FLAGS_with_start);
+  range.set_with_end(FLAGS_with_end);
+  *request.mutable_range() = range;
+
+  if (FLAGS_start_ts == 0) {
+    FLAGS_start_ts = INT64_MAX;
+  }
+  request.set_start_ts(FLAGS_start_ts);
+
+  if (FLAGS_resolve_locks > 0) {
+    request.mutable_context()->add_resolved_locks(FLAGS_resolve_locks);
+  }
+
+  request.set_limit(1);
+
+  // do not modify coprocessor . call me first.
+  dingodb::pb::common::CoprocessorV2 coprocessor;
+  std::string rel_expr;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmultichar"
+  rel_expr.push_back(static_cast<char>(0x74));
+  rel_expr.push_back(static_cast<char>(0x01));
+  rel_expr.push_back(static_cast<char>(0x10));
+  // std::string rel_expr_str = dingodb::Helper::HexToString(rel_expr);
+  std::string rel_expr_str = rel_expr;
+#pragma GCC diagnostic pop
+  coprocessor.set_schema_version(1);
+
+  coprocessor.mutable_original_schema()->set_common_id(60059);
+  dingodb::pb::common::Schema original_schema;
+  original_schema.set_type(dingodb::pb::common::Schema::Type::Schema_Type_INTEGER);
+  original_schema.set_is_key(true);
+  original_schema.set_is_nullable(false);
+  original_schema.set_index(0);
+  original_schema.set_name("");
+  coprocessor.mutable_original_schema()->mutable_schema()->Add()->CopyFrom(original_schema);
+
+  coprocessor.mutable_result_schema()->set_common_id(60059);
+  dingodb::pb::common::Schema result_schema;
+  result_schema.set_type(dingodb::pb::common::Schema::Type::Schema_Type_LONG);
+  result_schema.set_is_key(false);
+  result_schema.set_is_nullable(false);
+  result_schema.set_index(0);
+  result_schema.set_name("");
+  coprocessor.mutable_result_schema()->mutable_schema()->Add()->CopyFrom(result_schema);
+
+  coprocessor.add_selection_columns(0);
+
+  coprocessor.set_rel_expr(rel_expr_str);
+  coprocessor.set_codec_version(2);
+  coprocessor.set_for_agg_count(true);
+
+  *request.mutable_coprocessor() = coprocessor;
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  InteractionManager::GetInstance().SendRequestWithContext(service_name, "TxnScan", request, response);
+
+  if (response.error().errcode() != dingodb::pb::error::Errno::OK) {
+    DINGO_LOG(ERROR) << "Response ERROR: " << response.error().ShortDebugString();
+    return;
+  }
+
+  std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> result_serial_schemas =
+      std::make_shared<std::vector<std::shared_ptr<dingodb::BaseSchema>>>();
+
+  std::shared_ptr<dingodb::DingoSchema<std::optional<int64_t>>> serial_schema =
+      std::make_shared<dingodb::DingoSchema<std::optional<int64_t>>>();
+
+  serial_schema->SetIsKey(false);
+  serial_schema->SetAllowNull(false);
+  serial_schema->SetIndex(0);
+  serial_schema->SetName("");
+
+  result_serial_schemas->push_back(serial_schema);
+
+  std::shared_ptr<dingodb::RecordDecoder> result_record_decoder = std::make_shared<dingodb::RecordDecoder>(
+      coprocessor.schema_version(), result_serial_schemas, coprocessor.result_schema().common_id());
+
+  std::vector<std::any> record;
+
+  if (response.kvs().size() > 1) {
+    DINGO_LOG(ERROR) << "response.kvs size  > 0. error. size : " << response.kvs().size();
+    return;
+  }
+
+  dingodb::pb::common::KeyValue kv = response.kvs(0);
+
+  int ret = result_record_decoder->Decode(kv.key(), kv.value(), record);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << "Decode failed, ret: " << ret;
+    return;
+  }
+  if (record.size() != 1) {
+    DINGO_LOG(ERROR) << "record size invalid, size: " << record.size();
+    return;
+  }
+
+  if (record[0].type() == typeid(int64_t)) {
+    int64_t result = std::any_cast<int64_t>(record[0]);
+    DINGO_LOG(INFO) << "count : " << result << std::endl;
+  } else {
+    DINGO_LOG(INFO) << "type not match ，expect int64_t，actual: " << record[0].type().name() << std::endl;
+  }
+
+  auto time_end = std::chrono::steady_clock::now();
+  DINGO_LOG(INFO) << "Execution time: "
+                  << (std::chrono::duration_cast<std::chrono::microseconds>(time_end - time_start).count()) << " ms";
 }
 
 }  // namespace client

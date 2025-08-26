@@ -416,6 +416,19 @@ struct TxnGCOptions {
 void SetUpTxnGC(CLI::App &app);
 void RunTxnGC(TxnGCOptions const &opt);
 
+struct TxnCountOptions {
+  std::string coor_url;
+  int64_t id;
+  bool rc;
+  std::string start_key;
+  std::string end_key;
+  int64_t start_ts;
+  int64_t resolve_locks;
+  bool is_hex;
+};
+void SetUpTxnCount(CLI::App &app);
+void RunTxnCount(TxnCountOptions const &opt);
+
 struct TxnDeleteRangeOptions {
   std::string coor_url;
   int64_t region_id;
@@ -623,6 +636,9 @@ void SendTxnBatchRollback(TxnBatchRollbackOptions const &opt);
 void SendTxnScanLock(TxnScanLockOptions const &opt);
 void SendTxnHeartBeat(TxnHeartBeatOptions const &opt);
 void SendTxnGc(TxnGCOptions const &opt);
+dingodb::pb::store::TxnScanResponse SendTxnCount(dingodb::pb::common::Region region,
+                                                 const dingodb::pb::common::Range &range, int64_t start_ts,
+                                                 int64_t resolve_locks = 0);
 void SendTxnDeleteRange(TxnDeleteRangeOptions const &opt);
 void SendTxnDump(TxnDumpOptions const &opt);
 

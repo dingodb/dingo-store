@@ -1803,8 +1803,7 @@ void Utils::DebugPrintAny(const std::any& record, size_t index) {
         }
       }
 
-      COPROCESSOR_LOG_FOR_LAMBDA << type_name << " "
-                                 << "index : " << index << " value  : " << value_string;
+      COPROCESSOR_LOG_FOR_LAMBDA << type_name << " " << "index : " << index << " value  : " << value_string;
       return true;
     }
     return false;
@@ -1818,8 +1817,7 @@ void Utils::DebugPrintAny(const std::any& record, size_t index) {
     }
   }
   if (!is_match) {
-    COPROCESSOR_LOG << type_name << " "
-                    << "index : " << index << " value  : not match";
+    COPROCESSOR_LOG << type_name << " " << "index : " << index << " value  : not match";
   }
 }
 

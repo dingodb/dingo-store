@@ -196,6 +196,7 @@ void SendTxnHeartBeat(int64_t region_id);
 void SendTxnGc(int64_t region_id);
 void SendTxnDeleteRange(int64_t region_id);
 void SendTxnDump(int64_t region_id);
+void SendTxnCount(int64_t region_id);
 
 void StoreSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
 void IndexSendTxnPrewrite(int64_t region_id, const dingodb::pb::common::Region& region);
