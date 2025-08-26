@@ -52,7 +52,8 @@ class TxnReader {
   std::shared_ptr<Iterator> GetWriteIter() { return write_iter_; }
   SnapshotPtr GetSnapshot() { return snapshot_; }
 
-  butil::Status CheckCommittedRecord(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info, int64_t &commit_ts, bool &find_record);
+  butil::Status CheckCommittedRecord(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info,
+                                     int64_t &commit_ts, bool &find_record);
 
  private:
   bool is_initialized_{false};

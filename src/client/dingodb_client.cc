@@ -446,6 +446,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendTxnDeleteRange(FLAGS_region_id);
     } else if (method == "TxnDump") {
       client::SendTxnDump(FLAGS_region_id);
+    } else if (method == "TxnCount") {
+      client::SendTxnCount(FLAGS_region_id);
     }
 
     // document operation

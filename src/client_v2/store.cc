@@ -79,6 +79,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpTxnBatchGet(app);
   SetUpTxnDump(app);
   SetUpTxnGC(app);
+  SetUpTxnCount(app);
 
   SetUpWhichRegion(app);
   SetUpQueryRegionStatusMetrics(app);
@@ -1125,6 +1126,45 @@ void RunTxnGC(TxnGCOptions const& opt) {
   client_v2::SendTxnGc(opt);
 }
 
+void SetUpTxnCount(CLI::App& app) {
+  auto opt = std::make_shared<TxnCountOptions>();
+  auto* cmd = app.add_subcommand("TxnCount", "Txn count")->group("Store Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+  cmd->add_option("--id", opt->id, "Request parameter region id")->required();
+  cmd->add_option("--start_key", opt->start_key, "Request parameter start_key");
+  cmd->add_option("--end_key", opt->end_key, "Request parameter end_key");
+  cmd->add_option("--start_ts", opt->start_ts, "Request parameter start_ts")->default_val(INT64_MAX);
+  cmd->add_option("--rc", opt->rc, "read commit")->default_val(false)->default_str("false");
+  cmd->add_option("--resolve_locks", opt->resolve_locks, "Request parameter resolve_locks");
+  cmd->add_option("--is_hex", opt->is_hex, "Request parameter is_hex")->default_val(true)->default_str("true");
+
+  cmd->callback([opt]() { RunTxnCount(*opt); });
+}
+void RunTxnCount(TxnCountOptions const& opt) {
+  if (!SetUpStore(opt.coor_url, {}, opt.id)) {
+    exit(-1);
+  }
+
+  dingodb::pb::common::Region region = SendQueryRegion(opt.id);
+  if (region.id() == 0) {
+    std::cout << "Get region failed." << '\n';
+    return;
+  }
+
+  dingodb::pb::common::Range range;
+  if (opt.start_key.empty() || opt.end_key.empty()) {
+    range.set_start_key(region.definition().range().start_key());
+    range.set_end_key(region.definition().range().end_key());
+  } else {
+    range.set_start_key(opt.is_hex ? HexToString(opt.start_key) : opt.start_key);
+    range.set_end_key(opt.is_hex ? HexToString(opt.end_key) : opt.end_key);
+  }
+
+  auto response = SendTxnCount(region, range, opt.start_ts, opt.resolve_locks);
+
+  Pretty::Show(response, true);
+}
+
 void SetUpTxnDeleteRange(CLI::App& app) {
   auto opt = std::make_shared<TxnDeleteRangeOptions>();
   auto* cmd = app.add_subcommand("TxnDeleteRange", "Txn delete range ")->group("Store Command");
@@ -1977,6 +2017,7 @@ void SendDumpRegion(int64_t region_id, int64_t offset, int64_t limit, std::vecto
   dingodb::pb::meta::TableDefinition table_definition;
   auto status = GetTableOrIndexDefinition(response.table_id(), table_definition);
   if (!status.ok()) {
+    Pretty::Show(response.data());
     Pretty::ShowError(status);
     return;
   }
@@ -3171,6 +3212,92 @@ void SendTxnGc(TxnGCOptions const& opt) {
   } else {
     std::cout << "txn gc success." << std::endl;
   }
+}
+
+dingodb::pb::store::TxnScanResponse SendTxnCount(dingodb::pb::common::Region region,
+                                                 const dingodb::pb::common::Range& range, int64_t start_ts,
+                                                 int64_t resolve_locks) {
+  dingodb::pb::store::TxnScanResponse response;
+  dingodb::pb::store::TxnScanRequest request;
+  request.mutable_context()->set_region_id(region.id());
+  *request.mutable_context()->mutable_region_epoch() = region.definition().epoch();
+  request.mutable_context()->set_isolation_level(dingodb::pb::store::IsolationLevel::SnapshotIsolation);
+  request.mutable_context()->add_resolved_locks(resolve_locks);
+  request.mutable_request_info()->set_request_id(1111111111);
+
+  dingodb::pb::common::RangeWithOptions range_with_option;
+  range_with_option.mutable_range()->CopyFrom(range);
+  range_with_option.set_with_start(true);
+  range_with_option.set_with_end(false);
+
+  request.mutable_range()->Swap(&range_with_option);
+
+  request.set_start_ts(start_ts);
+
+  request.set_limit(1);
+
+  // do not modify coprocessor . call me first.
+  dingodb::pb::common::CoprocessorV2 coprocessor;
+  std::string rel_expr;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmultichar"
+  rel_expr.push_back(static_cast<char>(0x74));
+  rel_expr.push_back(static_cast<char>(0x01));
+  rel_expr.push_back(static_cast<char>(0x10));
+  // std::string rel_expr_str = dingodb::Helper::HexToString(rel_expr);
+  std::string rel_expr_str = rel_expr;
+#pragma GCC diagnostic pop
+  coprocessor.set_schema_version(1);
+
+  coprocessor.mutable_original_schema()->set_common_id(60059);
+  dingodb::pb::common::Schema original_schema;
+  original_schema.set_type(dingodb::pb::common::Schema::Type::Schema_Type_INTEGER);
+  original_schema.set_is_key(true);
+  original_schema.set_is_nullable(false);
+  original_schema.set_index(0);
+  original_schema.set_name("");
+  coprocessor.mutable_original_schema()->mutable_schema()->Add()->CopyFrom(original_schema);
+
+  coprocessor.mutable_result_schema()->set_common_id(60059);
+  dingodb::pb::common::Schema result_schema;
+  result_schema.set_type(dingodb::pb::common::Schema::Type::Schema_Type_LONG);
+  result_schema.set_is_key(false);
+  result_schema.set_is_nullable(false);
+  result_schema.set_index(0);
+  result_schema.set_name("");
+  coprocessor.mutable_result_schema()->mutable_schema()->Add()->CopyFrom(result_schema);
+
+  coprocessor.add_selection_columns(0);
+
+  coprocessor.set_rel_expr(rel_expr_str);
+  coprocessor.set_codec_version(2);
+  coprocessor.set_for_agg_count(true);
+
+  *request.mutable_coprocessor() = coprocessor;
+
+  for (;;) {
+    dingodb::pb::store::TxnScanResponse sub_response;
+
+    // maybe current store interaction is not store node, so need reset.
+    InteractionManager::GetInstance().ResetStoreInteraction();
+    auto status = InteractionManager::GetInstance().SendRequestWithContext(GetServiceName(region), "TxnScan", request,
+                                                                           sub_response);
+    if (!status.ok()) {
+      response.mutable_error()->set_errcode(dingodb::pb::error::Errno(status.error_code()));
+      response.mutable_error()->set_errmsg(status.error_str());
+      break;
+    }
+
+    if (sub_response.error().errcode() != dingodb::pb::error::OK) {
+      *response.mutable_error() = sub_response.error();
+      break;
+    }
+
+    response = sub_response;
+    break;
+  }
+
+  return response;
 }
 
 void SendTxnDeleteRange(TxnDeleteRangeOptions const& opt) {

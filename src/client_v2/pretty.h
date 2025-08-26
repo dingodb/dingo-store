@@ -86,6 +86,7 @@ class Pretty {
   static void Show(dingodb::pb::index::VectorGetRegionMetricsResponse &response);
   static void Show(dingodb::pb::meta::GetTenantsResponse &response);
   static void Show(dingodb::pb::coordinator::CreateIdsResponse &response);
+  static void Show(dingodb::pb::store::TxnScanResponse &response, bool calc_count);
 };
 
 }  // namespace client_v2

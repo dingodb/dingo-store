@@ -1589,4 +1589,56 @@ void Pretty::Show(dingodb::pb::coordinator::CreateIdsResponse& response) {
   PrintTable(rows);
 }
 
+void Pretty::Show(dingodb::pb::store::TxnScanResponse& response, bool /*calc_count*/) {
+  if (ShowError(response.error())) {
+    return;
+  }
+
+  std::shared_ptr<std::vector<std::shared_ptr<dingodb::BaseSchema>>> result_serial_schemas =
+      std::make_shared<std::vector<std::shared_ptr<dingodb::BaseSchema>>>();
+
+  std::shared_ptr<dingodb::DingoSchema<std::optional<int64_t>>> serial_schema =
+      std::make_shared<dingodb::DingoSchema<std::optional<int64_t>>>();
+
+  serial_schema->SetIsKey(false);
+  serial_schema->SetAllowNull(false);
+  serial_schema->SetIndex(0);
+  serial_schema->SetName("");
+
+  result_serial_schemas->push_back(serial_schema);
+
+  std::shared_ptr<dingodb::RecordDecoder> result_record_decoder =
+      std::make_shared<dingodb::RecordDecoder>(1, result_serial_schemas, 60059);
+
+  std::vector<std::any> record;
+
+  if (response.kvs().size() > 1) {
+    DINGO_LOG(ERROR) << "response.kvs size  > 0. error. size : " << response.kvs().size();
+    return;
+  }
+
+  const dingodb::pb::common::KeyValue& kv = response.kvs(0);
+
+  int ret = result_record_decoder->Decode(kv.key(), kv.value(), record);
+  if (ret != 0) {
+    DINGO_LOG(ERROR) << "Decode failed, ret: " << ret;
+    return;
+  }
+  if (record.size() != 1) {
+    DINGO_LOG(ERROR) << "record size invalid, size: " << record.size();
+    return;
+  }
+
+  int64_t result = 0;
+  if (record[0].type() == typeid(int64_t)) {
+    result = std::any_cast<int64_t>(record[0]);
+    DINGO_LOG(INFO) << "count : " << result << std::endl;
+  } else {
+    DINGO_LOG(INFO) << "type not match ，expect int64_t，actual: " << record[0].type().name() << std::endl;
+    return;
+  }
+
+  ShowTotalCount(result);
+}
+
 }  // namespace client_v2
