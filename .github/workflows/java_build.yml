@@ -26,7 +26,7 @@ jobs:
       run: git submodule update --init --recursive
 
     - name: Build with Maven
-      run:  cd java && mvn clean package -Dmaven.test.skip=true  #-DiskipTests
+      run:  cd java && mvn clean compile -Dmaven.test.skip=true  #-DiskipTests
       # run: cd java && mvn -B package --file pom.xml
 
 
