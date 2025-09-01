@@ -3989,6 +3989,7 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
         << ", lock_info.lock_ttl greater than advise_lock_ttl, no need to update lock_ttl, lock_info.lock_ttl: "
         << lock_info.lock_ttl() << ", advise_lock_ttl: " << advise_lock_ttl
         << ", lock_info: " << lock_info.ShortDebugString();
+    response->set_lock_ttl(lock_info.lock_ttl());
     return butil::Status::OK();
   }
 
@@ -4015,6 +4016,9 @@ butil::Status TxnEngineHelper::HeartBeat(RawEnginePtr raw_engine, std::shared_pt
                      << ", write failed, start_ts: " << start_ts << ", status: " << ret.error_str();
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
   }
+
+  // return new lock_ttl
+  response->set_lock_ttl(advise_lock_ttl);
 
   return ret;
 }
