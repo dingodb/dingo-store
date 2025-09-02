@@ -78,3 +78,4 @@ contrib/xdprocks/
 # docker
 docker/dingo-store.tar.gz
 docker/rocky8/l_BaseKit_p_2024.1.0.596_offline.sh
+docker/rocky8/rust-1.78.0-x86_64-unknown-linux-gnu.tar.xz
