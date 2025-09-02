@@ -8,7 +8,7 @@ on:
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
-  BUILD_TYPE: Release
+  BUILD_TYPE: RelWithDebInfo
 
 jobs:
   build:
@@ -56,8 +56,8 @@ jobs:
         git config --global --add safe.directory /opt/dingo-store
         git submodule sync --recursive && git submodule update --init --recursive --progress
         source /opt/intel/oneapi/setvars.sh
-        cmake -B ./build -DCMAKE_BUILD_TYPE=Release -DTHIRD_PARTY_BUILD_TYPE=Release -DWITH_DISKANN=ON -DWITH_MKL=ON -DDISKANN_DEPEND_ON_SYSTEM=OFF -DBUILD_UNIT_TESTS=OFF -DBRPC_ENABLE_CPU_PROFILER=OFF -DDINGO_BUILD_STATIC=OFF -DLINK_TCMALLOC=ON -DCMAKE_CXX_STANDARD=23 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-        cmake --build ./build --config Release
+        cmake -B ./build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DTHIRD_PARTY_BUILD_TYPE=RelWithDebInfo -DWITH_DISKANN=ON -DWITH_MKL=ON -DDISKANN_DEPEND_ON_SYSTEM=OFF -DBUILD_UNIT_TESTS=OFF -DBRPC_ENABLE_CPU_PROFILER=OFF -DDINGO_BUILD_STATIC=OFF -DLINK_TCMALLOC=ON -DCMAKE_CXX_STANDARD=23 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+        cmake --build ./build 
 
         # check if the build is successful
         if [ $? -ne 0 ]
