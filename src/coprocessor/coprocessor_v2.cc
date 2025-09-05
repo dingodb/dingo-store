@@ -241,7 +241,7 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
   butil::Status status;
   has_more = false;
 
-  if(forAggCount_) {
+  if (forAggCount_) {
     long count = 0;
     while (iter->Valid()) {
       count++;
@@ -254,7 +254,7 @@ butil::Status CoprocessorV2::Execute(IteratorPtr iter, bool key_only, size_t max
 
     result_record.push_back(std::make_any<long>(count));
     status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
-    if(has_result_kv) {
+    if (has_result_kv) {
       kvs->emplace_back(std::move(result_kv));
     }
   } else {
@@ -348,11 +348,31 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
 
   size_t bytes = 0;
 
-  if(forAggCount_) {
+  if (forAggCount_) {
     long count = 0;
     while (iter->Valid(txn_result_info)) {
       count++;
-      iter->Next();
+      status = iter->Next();
+      if (!status.ok()) {
+        if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+          DINGO_LOG(INFO) << fmt::format(
+              "[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() meet lock conflict, status: {}.",
+              status.error_str());
+
+          CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+              "[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() meet pb::error::Errno::ETXN_LOCK_CONFLICT, but "
+              "iter->Valid = true. txn_result_info: "
+              "{}",
+              txn_result_info.DebugString());
+          break;
+
+        } else {
+          std::string s = fmt::format("[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() failed, error: {}",
+                                      status.error_str());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(status.error_code(), s);
+        }
+      }
     }
 
     std::vector<std::any> result_record;
@@ -361,7 +381,7 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
 
     result_record.push_back(std::make_any<long>(count));
     status = GetKvFromExpr(result_record, &has_result_kv, &result_kv);
-    if(has_result_kv) {
+    if (has_result_kv) {
       kvs.emplace_back(std::move(result_kv));
     }
   } else {
@@ -407,7 +427,27 @@ butil::Status CoprocessorV2::Execute(TxnIteratorPtr iter, bool key_only, bool /*
           iter_next_spend_time_ms += lambda_time_diff_microseconds_function(next_start, next_end);
         });
       }
-      iter->Next();
+      status = iter->Next();
+      if (!status.ok()) {
+        if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+          DINGO_LOG(INFO) << fmt::format(
+              "[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() meet lock conflict, status: {}.",
+              status.error_str());
+
+          CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+              "[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() meet pb::error::Errno::ETXN_LOCK_CONFLICT, but "
+              "iter->Valid = true. txn_result_info: "
+              "{}",
+              txn_result_info.DebugString());
+          break;
+
+        } else {
+          std::string s = fmt::format("[txn] CoprocessorV2::Execute TxnIteratorPtr iter->Next() failed, error: {}",
+                                      status.error_str());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(status.error_code(), s);
+        }
+      }
     }
 
     status = GetKvFromExprEndOfFinish(&kvs);
@@ -647,8 +687,8 @@ butil::Status CoprocessorV2::GetKvFromExprEndOfFinish(std::vector<pb::common::Ke
       });
     }
     // int codec_version = GetCodecVersion(kv.key());
-    status = RelExprHelper::TransFromOperandWrapper(coprocessor_.codec_version(), result_operand_ptr, result_serial_schemas_,
-                                                    result_column_indexes_, result_record);
+    status = RelExprHelper::TransFromOperandWrapper(coprocessor_.codec_version(), result_operand_ptr,
+                                                    result_serial_schemas_, result_column_indexes_, result_record);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << status.error_cstr();
       return status;
