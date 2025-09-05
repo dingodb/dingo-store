@@ -32,6 +32,7 @@
 #include "butil/status.h"
 #include "bvar/latency_recorder.h"
 #include "common/constant.h"
+#include "common/gflag_validator.h"
 #include "common/helper.h"
 #include "common/logging.h"
 #include "common/stream.h"
@@ -52,6 +53,7 @@
 #include "rocksdb/sst_file_reader.h"
 #include "server/server.h"
 #include "vector/codec.h"
+
 namespace dingodb {
 
 DEFINE_int64(max_short_value_in_write_cf, 256, "max short value in write cf");
@@ -73,6 +75,10 @@ DEFINE_int64(max_restore_count, 100000, "max restore count");
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
+
+DEFINE_validator(dingo_log_switch_txn_detail, &PassBool);
+DEFINE_validator(dingo_log_switch_txn_gc_detail, &PassBool);
+DEFINE_validator(dingo_log_switch_backup_detail, &PassBool);
 
 butil::Status TxnReader::Init() {
   if (is_initialized_) {
