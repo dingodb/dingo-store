@@ -830,8 +830,16 @@ butil::Status TxnIterator::GetCurrentValue() {
     // if lock_key == write_key, then we can get data from write_cf
     if (last_lock_key_ == last_write_key_) {
       bool is_value_found = false;
-      GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_, last_write_key_,
-                              is_value_found, value_);
+      butil::Status status = GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_,
+                                                     last_write_key_, is_value_found, value_);
+      if (!status.ok()) {
+        key_.clear();
+        value_.clear();
+        std::string s = fmt::format("[txn]Scan get user value in write_iter failed, key: {}, status: {}",
+                                    Helper::StringToHex(key_), status.error_str());
+        DINGO_LOG(ERROR) << s;
+        return status;
+      }
 
       if (is_value_found) {
         return butil::Status::OK();
@@ -849,8 +857,16 @@ butil::Status TxnIterator::GetCurrentValue() {
     key_ = last_write_key_;
 
     bool is_value_found = false;
-    GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_, last_write_key_,
-                            is_value_found, value_);
+    butil::Status status = GetUserValueInWriteIter(write_iter_, reader_, isolation_level_, seek_ts_, start_ts_, key_,
+                                                   last_write_key_, is_value_found, value_);
+    if (!status.ok()) {
+      key_.clear();
+      value_.clear();
+      std::string s = fmt::format("[txn]Scan get user value in write_iter failed, key: {}, status: {}",
+                                  Helper::StringToHex(key_), status.error_str());
+      DINGO_LOG(ERROR) << s;
+      return status;
+    }
 
     if (is_value_found) {
       return butil::Status::OK();
@@ -1281,15 +1297,45 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
   }
 
   // get or new TxnIterator.
-  auto stream_state =
-      std::dynamic_pointer_cast<TxnScanStreamState>(stream->GetOrNewStreamState([&]() -> StreamStatePtr {
-        auto iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
-        auto ret = iter->Init();
-        CHECK(ret.ok()) << fmt::format("[txn][{}] Scan init txn_iter failed, start_ts: {} range: {}  status: {}.",
-                                       stream->StreamId(), start_ts, Helper::RangeToString(range), ret.error_str());
-        iter->Seek(range.start_key());
-        return TxnScanStreamState::New(iter);
-      }));
+  StreamStatePtr current_stream_state = stream->StreamState();
+  if (!current_stream_state) {
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+        "[txn][{}] Scan current_stream_state is null, need to create new TxnIterator.", stream->StreamId());
+
+    auto iter = std::make_shared<TxnIterator>(raw_engine, range, start_ts, isolation_level, resolved_locks);
+    butil::Status status = iter->Init();
+    if (!status.ok()) {
+      std::string s = fmt::format("[txn][{}] Scan init txn_iter failed, start_ts: {} range: {}  status: {}.",
+                                  stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(status.error_code(), s);
+    }
+
+    status = iter->Seek(range.start_key());
+    if (!status.ok()) {
+      if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+        DINGO_LOG(INFO) << fmt::format("[txn][{}] Scan seek meet lock conflict, start_ts: {} range: {}  status: {}.",
+                                       stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+
+        CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+            "[txn][{}] Scan Seek meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
+            "{}",
+            stream->StreamId(), txn_result_info.DebugString());
+        return butil::Status::OK();
+
+      } else {
+        std::string s = fmt::format("[txn][{}] Scan seek txn_iter failed, start_ts: {} range: {}  status: {}.",
+                                    stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(status.error_code(), s);
+      }
+    }
+
+    StreamStatePtr new_stream_state = TxnScanStreamState::New(iter);
+    stream->SetStreamState(new_stream_state);
+  }  // if (!current_stream_state)
+
+  TxnScanStreamStatePtr stream_state = std::dynamic_pointer_cast<TxnScanStreamState>(stream->StreamState());
   TxnIteratorPtr iter = stream_state->iter;
   CHECK(iter != nullptr) << fmt::format("[txn][{}] Scan stream_state->iter is nullptr.", stream->StreamId());
 
@@ -1340,13 +1386,50 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
         break;
       }
 
-      iter->Next();
+      butil::Status status = iter->Next();
+      if (!status.ok()) {
+        if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+          DINGO_LOG(INFO) << fmt::format("[txn][{}] Scan Next meet lock conflict, start_ts: {} range: {}  status: {}.",
+                                         stream->StreamId(), start_ts, Helper::RangeToString(range),
+                                         status.error_str());
+
+          CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+              "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
+              "{}",
+              stream->StreamId(), txn_result_info.DebugString());
+          return butil::Status::OK();
+
+        } else {
+          std::string s = fmt::format("[txn][{}] Scan iter->Next() failed, start_ts: {} range: {}  status: {}.",
+                                      stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(status.error_code(), s);
+        }
+      }
     }
   }
 
   if (iter->Valid(txn_result_info)) {
     end_scan_key = iter->Key();
-    iter->Next();
+    butil::Status status = iter->Next();
+    if (!status.ok()) {
+      if (status.error_code() == pb::error::Errno::ETXN_LOCK_CONFLICT) {
+        DINGO_LOG(INFO) << fmt::format("[txn][{}] Scan Next meet lock conflict, start_ts: {} range: {}  status: {}.",
+                                       stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+
+        CHECK(!iter->Valid(txn_result_info)) << fmt::format(
+            "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
+            "{}",
+            stream->StreamId(), txn_result_info.DebugString());
+        return butil::Status::OK();
+
+      } else {
+        std::string s = fmt::format("[txn][{}] Scan iter->Next() failed, start_ts: {} range: {}  status: {}.",
+                                    stream->StreamId(), start_ts, Helper::RangeToString(range), status.error_str());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(status.error_code(), s);
+      }
+    }
   }
 
   return butil::Status::OK();
@@ -4598,7 +4681,8 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})][type({})][nontxn] gc_stop set stop.  start_key : {} end_key : {}. return",
+            "[txn_gc][tenant({})][region({})][type({})][nontxn] gc_stop set stop.  start_key : {} end_key : {}. "
+            "return",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type),
             Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
         goto _interrupt1;
@@ -4606,7 +4690,8 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
 
       if (safe_point_ts < internal_safe_point_ts) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : {}. "
+            "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : "
+            "{}. "
             "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
             internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
@@ -4769,7 +4854,8 @@ butil::Status TxnEngineHelper::CheckLockForTxnGc(RawEngine::ReaderPtr reader, st
     bool parse_success = lock_info.ParseFromString(std::string(lock_iter_value));
     if (!parse_success) {
       std::string s = fmt::format(
-          "[txn_gc][lock][tenant({})][region({})][type({})][txn] parse lock info failed, lock_iter_key : {} lock_key: "
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] parse lock info failed, lock_iter_key : {} "
+          "lock_key: "
           "{} , lock_value : {} safe_point_ts : {}",
           tenant_id, region_id, pb::common::RegionType_Name(type), Helper::StringToHex(lock_iter_key),
           Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)), Helper::StringToHex(lock_iter_value),
@@ -4783,7 +4869,8 @@ butil::Status TxnEngineHelper::CheckLockForTxnGc(RawEngine::ReaderPtr reader, st
     int64_t lock_ts = lock_info.lock_ts();
     if (lock_ts <= safe_point_ts) {
       std::string s = fmt::format(
-          "[txn_gc][lock][tenant({})][region({})][type({})][txn] find lock error. exist lock_ts : {} <= safe_point_ts "
+          "[txn_gc][lock][tenant({})][region({})][type({})][txn] find lock error. exist lock_ts : {} <= "
+          "safe_point_ts "
           ": {}, lock_iter_key : {} lock_key: {}  , safe_point_ts : {} lock_value : {}",
           tenant_id, region_id, pb::common::RegionType_Name(type), lock_ts, safe_point_ts,
           Helper::StringToHex(lock_iter_key), Helper::StringToHex(lambda_get_raw_key_function(lock_iter_key)),
@@ -5022,7 +5109,8 @@ butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
       RaftEngineWriteForTxnGc(raft_engine, ctx, kv_deletes_lock, kv_deletes_data, kv_deletes_write, tenant_id, type);
   if (!status.ok()) {
     std::string s = fmt::format(
-        "[txn_gc][write][tenant({})][region({})][type({})][txn] RaftEngineWriteForTxnGc failed. kv_deletes_lock size : "
+        "[txn_gc][write][tenant({})][region({})][type({})][txn] RaftEngineWriteForTxnGc failed. kv_deletes_lock size "
+        ": "
         "{} kv_deletes_data size : {} kv_deletes_write : {} safe_point_ts : {}. ignore.",
         tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_lock.size(), kv_deletes_data.size(),
         kv_deletes_write.size(), safe_point_ts);
@@ -5284,7 +5372,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
     } else {
       if (pb::common::StoreRegionState::NORMAL != region_ptr->State()) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})] is leader. but state is not normal : {}.  start_key : {} end_key : {}.  "
+            "[txn_gc][tenant({})][region({})] is leader. but state is not normal : {}.  start_key : {} end_key : {}. "
+            " "
             "ignore.",
             tenant_id, region_ptr->Id(), static_cast<int>(region_ptr->State()),
             Helper::StringToHex(region_ptr->Range().start_key()), Helper::StringToHex(region_ptr->Range().end_key()));
@@ -5308,7 +5397,8 @@ void TxnEngineHelper::RegularDoGcHandler(void * /*arg*/) {
 
     if (safe_point_ts < internal_safe_point_ts) {
       DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-          "[txn_gc][tenant({})][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, we'll "
+          "[txn_gc][tenant({})][region({})] current safe_point_ts : {}. newest safe_point_ts : {}. Don't worry, "
+          "we'll "
           "deal with it next time. ignore.",
           tenant_id, region_ptr->Id(), safe_point_ts, internal_safe_point_ts);
     }
