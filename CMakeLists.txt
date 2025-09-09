@@ -667,7 +667,7 @@ endif()
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 
 execute_process(
-  COMMAND git describe --always --dirty
+  COMMAND git describe --tags --always --dirty
   OUTPUT_VARIABLE GIT_VERSION
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
