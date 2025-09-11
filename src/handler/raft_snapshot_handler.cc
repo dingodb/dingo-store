@@ -231,29 +231,6 @@ butil::Status RaftSnapshot::HandleRaftSnapshotRegionMeta(braft::SnapshotReader* 
     }
   }
 
-  // update store_state_machine's applied_index from snapshot meta.
-  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
-  if (raft_store_engine == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft store engine is null", region->Id());
-    return butil::Status(pb::error::EINTERNAL, "raft store engine is null");
-  }
-  auto raft_node = raft_store_engine->GetNode(region->Id());
-  if (raft_node == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft node is null", region->Id());
-    return butil::Status(pb::error::EINTERNAL, "raft node is null");
-  }
-  auto fsm = raft_node->GetStateMachine();
-  if (fsm == nullptr) {
-    DINGO_LOG(ERROR) << fmt::format("[raft.snapshot][region({})] raft node's fsm is null", region->Id());
-    return butil::Status(pb::error::EINTERNAL, "raft node's fsm is null");
-  }
-  auto store_state_machine = std::dynamic_pointer_cast<StoreStateMachine>(fsm);
-  auto old_index = store_state_machine->GetAppliedIndex();
-  store_state_machine->UpdateAppliedIndex(meta.log_index());
-
-  DINGO_LOG(INFO) << fmt::format("[raft.snapshot][region({})] update applied index from snapshot meta, from: {} to: {}",
-                                 region->Id(), old_index, meta.log_index());
-
   return butil::Status();
 }
 
