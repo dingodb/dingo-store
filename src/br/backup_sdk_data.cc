@@ -68,6 +68,19 @@ butil::Status BackupSdkData::Filter() {
         wait_for_handle_document_regions_->push_back(region);
       }
     }
+
+    if (FLAGS_br_backup_enable_sdk_txn_region_backup) {
+      // only handle sdk txn region for dingo-fs
+      if (dingodb::Helper::IsClientTxn(region.definition().range().start_key())) {
+        if (dingodb::pb::common::RegionType::STORE_REGION == region.region_type()) {
+          wait_for_handle_store_regions_->push_back(region);
+        } else if (dingodb::pb::common::RegionType::INDEX_REGION == region.region_type()) {
+          wait_for_handle_index_regions_->push_back(region);
+        } else if (dingodb::pb::common::RegionType::DOCUMENT_REGION == region.region_type()) {
+          wait_for_handle_document_regions_->push_back(region);
+        }
+      }
+    }
   }
 
   if (FLAGS_br_log_switch_backup_detail) {

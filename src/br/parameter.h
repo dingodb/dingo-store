@@ -180,6 +180,9 @@ DECLARE_bool(br_restore_document_must_be_exist);
 // backup region timeout ms (macro second)
 DECLARE_int64(br_backup_region_timeout_ms);
 
+// backup enable sdk txn region backup. default true.
+DECLARE_bool(br_backup_enable_sdk_txn_region_backup);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_
