@@ -253,6 +253,9 @@ butil::Status Backup::Init() {
 
   DINGO_LOG(INFO) << "write backup lock file : " << lock_path << " success";
 
+  DINGO_LOG(INFO) << "Backup::FLAGS_br_backup_enable_sdk_txn_region_backup : "
+                  << (FLAGS_br_backup_enable_sdk_txn_region_backup ? "true" : "false");
+
   DINGO_LOG(INFO) << "Backup::Init " << " success";
 
   return butil::Status::OK();

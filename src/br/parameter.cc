@@ -138,4 +138,7 @@ DEFINE_bool(br_restore_document_must_be_exist, false,
 // backup region timeout ms (macro second)
 DEFINE_int64(br_backup_region_timeout_ms, 600000, "backup region timeout ms. default 10m");
 
+// backup enable sdk txn region backup. default true.
+DEFINE_bool(br_backup_enable_sdk_txn_region_backup, true, "br backup enable sdk txn region backup. default true.");
+
 }  // namespace br

@@ -35,10 +35,10 @@ class BrBackupSdkDataTest : public testing::Test {
   void SetUp() override {}
   void TearDown() override {}
 
-  inline static std::string backupts = "2024-12-30 09:35:00 +08:00";
+  inline static std::string backupts = "2025-09-10 17:19:00 +08:00";
   inline static int64_t backuptso_internal = 0;
-  inline static std::string storage = "local://./backup";
-  inline static std::string storage_internal = "./backup";
+  inline static std::string storage = "local://./backup4";
+  inline static std::string storage_internal = "./backup4";
 
   inline static std::shared_ptr<br::BackupSdkData> backup_sdk_data;
 
@@ -114,7 +114,8 @@ TEST_F(BrBackupSdkDataTest, SetRegionMap) {
 
   auto iter = region_maps->mutable_regions()->begin();
   while (iter != region_maps->mutable_regions()->end()) {
-    if (iter->id() != 80046 && iter->id() != 80045 && iter->id() != 80047) {
+    //if (iter->id() != 80046 && iter->id() != 80045 && iter->id() != 80047) {
+    if (iter->id() <= 80044) {
       iter = region_maps->mutable_regions()->erase(iter);
     } else {
       ++iter;
