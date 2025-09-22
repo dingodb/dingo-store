@@ -6487,10 +6487,11 @@ butil::Status CoordinatorControl::GetStoreOperationOfCreateForSend(
       *(create_store_operation.add_region_cmds()) = region_cmd;
     }
 
-    auto status = SendStoreOperation(store_id, store_operation, meta_increment);
+    auto status = SendStoreOperation(store_id, create_store_operation, meta_increment);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[joblist] SendStoreOperation failed, error:{}, store_id:{}, store_operation:{}",
-                                      Helper::PrintStatus(status), store_id, store_operation.ShortDebugString());
+      DINGO_LOG(ERROR) << fmt::format(
+          "[joblist] SendStoreOperation failed, error:{}, store_id:{}, create_store_operation:{}",
+          Helper::PrintStatus(status), store_id, create_store_operation.ShortDebugString());
     }
   }
 
@@ -6526,8 +6527,9 @@ butil::Status CoordinatorControl::GetStoreOperationOfNotCreateForSend(
 
     auto status = SendStoreOperation(store_id, not_create_store_operation, meta_increment);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[joblist] SendStoreOperation failed, error:{}, store_id:{}, store_operation:{}",
-                                      Helper::PrintStatus(status), store_id, store_operation.ShortDebugString());
+      DINGO_LOG(ERROR) << fmt::format(
+          "[joblist] SendStoreOperation failed, error:{}, store_id:{}, not_create_store_operation:{}",
+          Helper::PrintStatus(status), store_id, not_create_store_operation.ShortDebugString());
     }
   }
 
