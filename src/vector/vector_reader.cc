@@ -1606,6 +1606,13 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
   auto metric_type = vector_index->GetMetricType();
   auto dimension = vector_index->GetDimension();
 
+  if (dimension <= 0) {
+    std::string s =
+        fmt::format("This is bug. Subsequent complete repair vector index dimension({}) is invalid", dimension);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_INVALID, s);
+  }
+
   auto encode_range = mvcc::Codec::EncodeRange(region_range);
 
   pb::common::RegionEpoch epoch;
