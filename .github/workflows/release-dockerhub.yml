@@ -13,6 +13,7 @@ on:
       branches:
         - develop
         - main
+        - quickBI-v3.0.0
       pull_requests:
         - merged
 
@@ -27,6 +28,64 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download branch name file
+        uses: actions/download-artifact@v4
+        with:
+          name: branch_name
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./
+
+      - name: Config trigger branch env
+        run: |
+          if [ -f branch_name.txt ]; then
+            echo "BRANCH_NAME=$(cat branch_name.txt)" >> $GITHUB_ENV
+          fi
+
+      - name: Download commit id file
+        uses: actions/download-artifact@v4
+        with:
+          name: commit_id
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./
+
+      - name: Config commit id env
+        run: |
+          if [ -f commit_id.txt ]; then
+            echo "COMMIT_ID=$(cat commit_id.txt)" >> $GITHUB_ENV
+          fi
+
+      - name: Download event type file
+        uses: actions/download-artifact@v4
+        with:
+          name: event
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./
+
+      - name: Config trigger event env
+        run: |
+          if [ -f event.txt ]; then
+            echo "EVENT=$(cat event.txt)" >> $GITHUB_ENV
+          fi
+
+      - name: Download tag name file
+        if: ${{ env.EVENT == 'tag' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: tag_name
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./
+
+      - name: Config push tag env
+        if: ${{ env.EVENT == 'tag' }}
+        run: |
+          if [ -f tag_name.txt ]; then
+            echo "TAG_NAME=$(cat tag_name.txt)" >> $GITHUB_ENV
+          fi
 
       - name: Download artifact
         uses: dawidd6/action-download-artifact@v2
@@ -50,15 +109,26 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Docker meta info
+        id: store-meta
+        uses: docker/metadata-action@v5
+        with:
+          images: dingodatabase/dingo-store
+          tags: |
+            type=raw,enable=${{ env.EVENT == 'tag' }},value=${{ env.TAG_NAME }}
+            type=raw,value=latest,enable=${{ env.BRANCH_NAME == 'main' && env.EVENT != 'tag'}}
+            type=sha,prefix=,format=short,enable=${{ env.BRANCH_NAME == 'main' && env.EVENT != 'tag' }}
+            type=raw,prefix=${{ env.BRANCH_NAME }}-,value=${{ env.COMMIT_ID }},enable=${{ env.EVENT != 'tag' && env.BRANCH_NAME != 'main' }}
+
       - name: Build image and push to Docker Hub and GitHub Container Registry
         uses: docker/build-push-action@v6
         with:
           # relative path to the place where source code with Dockerfile is located
           context: ./docker
-          # Note: tags has to be all lower-case
-          tags: dingodatabase/dingo-store:latest
-          # build on feature branches, push only on develop branch
-          push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+          #tags: dingodatabase/dingo-store:latest
+          tags: ${{ steps.store-meta.outputs.tags }}
+          # push: ${{ github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main' }}
+          push: true
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
