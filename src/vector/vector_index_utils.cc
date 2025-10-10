@@ -28,6 +28,10 @@
 #include "common/constant.h"
 #include "common/logging.h"
 #include "coprocessor/utils.h"
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include "document/codec.h"
+#include "fmt/format.h"
+#endif
 #include "faiss/MetricType.h"
 #include "faiss/utils/extra_distances-inl.h"
 #include "fmt/core.h"
@@ -344,7 +348,7 @@ butil::Status VectorIndexUtils::DoCalcHammingDistanceByFaiss(
   distance = vector_distance(left_vectors.data(), right_vectors.data());
 
   ResultOpBinaryVectorAssignmentWrapper(op_left_vectors, op_right_vectors, is_return_normlize, result_op_left_vectors,
-                                  result_op_right_vectors);
+                                        result_op_right_vectors);
 
   return butil::Status();
 }
@@ -429,7 +433,7 @@ void VectorIndexUtils::ResultOpVectorAssignment(dingodb::pb::common::Vector& res
 }
 
 void VectorIndexUtils::ResultOpBinaryVectorAssignment(dingodb::pb::common::Vector& result_op_vectors,
-                                           const ::dingodb::pb::common::Vector& op_vectors) {
+                                                      const ::dingodb::pb::common::Vector& op_vectors) {
   result_op_vectors = op_vectors;
   result_op_vectors.set_dimension(result_op_vectors.binary_values().size() * CHAR_BIT);
   result_op_vectors.set_value_type(::dingodb::pb::common::ValueType::UINT8);
@@ -807,8 +811,13 @@ butil::Status VectorIndexUtils::CheckVectorIndexParameterCompatibility(const pb:
 // validate vector index parameter
 // in: vector_index_parameter
 // return: errno
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
+    const pb::common::VectorIndexParameter& vector_index_parameter, bool check_document) {
+#else
 butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     const pb::common::VectorIndexParameter& vector_index_parameter) {
+#endif
   // check vector_index_parameter.index_type is not NONE
   if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_NONE) {
     DINGO_LOG(ERROR) << "vector_index_parameter.index_type is NONE";
@@ -1031,13 +1040,13 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
   }
-#if 10
+
   butil::Status status = ValidateDiskannParameter(vector_index_parameter);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << status.error_cstr();
     return status;
   }
-#endif
+
   if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT) {
     if (!vector_index_parameter.has_binary_flat_parameter()) {
       DINGO_LOG(ERROR) << "vector_index_type is Binary FLAT, but has_binary_flat_parameter is not set";
@@ -1107,7 +1116,19 @@ butil::Status VectorIndexUtils::ValidateVectorIndexParameter(
     }
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  status = VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << status.error_cstr();
+    return status;
+  }
+  if (check_document) {
+    return ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+  }
+  return butil::Status::OK();
+#else
   return VectorIndexUtils::ValidateVectorScalarSchema(vector_index_parameter.scalar_schema());
+#endif
 }
 
 butil::Status VectorIndexUtils::ValidateDiskannParameter(
@@ -1210,23 +1231,25 @@ butil::Status VectorIndexUtils::ValidateVectorScalarSchema(const pb::common::Sca
 
     pb::common::ScalarFieldType scalar_field_type = field.field_type();
     switch (scalar_field_type) {
-      case pb::common::BOOL:
+      case pb::common::ScalarFieldType::BOOL:
         [[fallthrough]];
-      case pb::common::INT8:
+      case pb::common::ScalarFieldType::INT8:
         [[fallthrough]];
-      case pb::common::INT16:
+      case pb::common::ScalarFieldType::INT16:
         [[fallthrough]];
-      case pb::common::INT32:
+      case pb::common::ScalarFieldType::INT32:
         [[fallthrough]];
-      case pb::common::INT64:
+      case pb::common::ScalarFieldType::INT64:
         [[fallthrough]];
-      case pb::common::FLOAT32:
+      case pb::common::ScalarFieldType::FLOAT32:
         [[fallthrough]];
-      case pb::common::DOUBLE:
+      case pb::common::ScalarFieldType::DOUBLE:
         [[fallthrough]];
-      case pb::common::STRING:
+      case pb::common::ScalarFieldType::STRING:
         [[fallthrough]];
-      case pb::common::BYTES:
+      case pb::common::ScalarFieldType::BYTES:
+        break;
+      case pb::common::ScalarFieldType::DATETIME:
         break;
       case pb::common::ScalarFieldType_INT_MIN_SENTINEL_DO_NOT_USE_:
       case pb::common::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -1410,5 +1433,447 @@ template butil::Status VectorIndexUtils::FillSearchResult<int>(const std::vector
                                                                unsigned int, const std::vector<int>&,
                                                                const std::vector<long>&, pb::common::MetricType, long,
                                                                std::vector<pb::index::VectorWithDistanceResult>&);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(
+    pb::common::VectorIndexParameter& vector_index_parameter) {
+  bool enable_scalar_speed_up_with_document = vector_index_parameter.enable_scalar_speed_up_with_document();
+  if (!enable_scalar_speed_up_with_document) {
+    return butil::Status::OK();
+  }
+
+  const auto& scalar_schema = vector_index_parameter.scalar_schema();
+
+  ::dingodb::pb::common::DocumentIndexParameter* document_index_parameter =
+      vector_index_parameter.mutable_document_index_parameter();
+
+  // file document scalar_schema
+  if (!document_index_parameter->has_scalar_schema()) {
+    auto* document_scalar_schema = document_index_parameter->mutable_scalar_schema();
+    for (const auto& field : scalar_schema.fields()) {
+      if (field.enable_speed_up()) {
+        pb::common::ScalarSchemaItem* new_field = document_scalar_schema->add_fields();
+        new_field->CopyFrom(field);
+      }
+    }
+  }
+
+  // file json_parameter
+  if (vector_index_parameter.document_index_parameter().json_parameter().empty()) {
+    // create json_parameter
+    // generate default json_parameter
+    std::string error_message, json_parameter;
+    std::map<std::string, dingodb::TokenizerType> column_tokenizer_parameter;
+
+    for (const auto& field : vector_index_parameter.document_index_parameter().scalar_schema().fields()) {
+      const auto field_type = field.field_type();
+
+      switch (field_type) {
+        case pb::common::ScalarFieldType::BOOL: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeBool;
+          break;
+        }
+        case pb::common::ScalarFieldType::INT64: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeI64;
+          break;
+        }
+
+        case pb::common::ScalarFieldType::DOUBLE: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeF64;
+          break;
+        }
+        case pb::common::ScalarFieldType::STRING: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeText;
+          break;
+        }
+        case pb::common::ScalarFieldType::DATETIME: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeDateTime;
+          break;
+        }
+        case pb::common::ScalarFieldType::BYTES: {
+          column_tokenizer_parameter[field.key()] = dingodb::TokenizerType::kTokenizerTypeBytes;
+          break;
+        }
+        case pb::common::ScalarFieldType::NONE:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType::INT8:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType::INT16:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType::INT32:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType::FLOAT32:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType_INT_MIN_SENTINEL_DO_NOT_USE_:
+          [[fallthrough]];
+        case pb::common::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_:
+          [[fallthrough]];
+        default: {
+          error_message =
+              fmt::format("unsupported field type : {}", ::dingodb::pb::common::ScalarFieldType_Name(field_type));
+          DINGO_LOG(ERROR) << error_message;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_message);
+        }
+      }
+    }
+
+    auto json_valid = DocumentCodec::GenDefaultTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+        column_tokenizer_parameter, json_parameter, error_message);
+
+    if (!json_valid) {
+      std::string s = fmt::format("gen default json_parameter is illegal, error_message: {}", error_message);
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    vector_index_parameter.mutable_document_index_parameter()->set_json_parameter(json_parameter);
+  }
+
+  return butil::Status::OK();
+}
+
+butil::Status VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(
+    const pb::common::VectorIndexParameter& vector_index_parameter) {
+  const auto& scalar_schema = vector_index_parameter.scalar_schema();
+
+  bool enable_scalar_speed_up_with_document = vector_index_parameter.enable_scalar_speed_up_with_document();
+  if (!enable_scalar_speed_up_with_document) {
+    if (vector_index_parameter.has_document_index_parameter()) {
+      std::string s = fmt::format(
+          "vector_index_parameter enable_scalar_speed_up_with_document is false, but set document_index_parameter. "
+          "vector_index_parameter: {}",
+          vector_index_parameter.DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+    return butil::Status::OK();
+  }
+
+  // not support diskann and bruteforce
+  if (vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN ||
+      vector_index_parameter.vector_index_type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but vector_index_type is {} not "
+        "support. vector_index_parameter: {}",
+        pb::common::VectorIndexType_Name(vector_index_parameter.vector_index_type()),
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  // collect speed up fields.
+  std::vector<pb::common::ScalarSchemaItem> scalar_schema_speed_up_fields;
+  for (const auto& field : scalar_schema.fields()) {
+    if (field.enable_speed_up()) {
+      scalar_schema_speed_up_fields.push_back(field);
+    }
+  }
+
+  if (!vector_index_parameter.has_document_index_parameter()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but not set document_index_parameter. "
+        "vector_index_parameter: {}",
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (!vector_index_parameter.document_index_parameter().has_scalar_schema()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but not set "
+        "document_index_parameter.scalar_schema. vector_index_parameter: {}",
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (vector_index_parameter.document_index_parameter().json_parameter().empty()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but not set "
+        "document_index_parameter.json_parameter. vector_index_parameter: {}",
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (scalar_schema_speed_up_fields.size() !=
+      vector_index_parameter.document_index_parameter().scalar_schema().fields().size()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+        "scalar_schema speed up fields size : {} != document_index_parameter.scalar_schema.fields size : {}. "
+        "vector_index_parameter: "
+        "{}",
+        scalar_schema_speed_up_fields.size(),
+        vector_index_parameter.document_index_parameter().scalar_schema().fields().size(),
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (0 == scalar_schema_speed_up_fields.size()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but not find speed up fields. "
+        "vector_index_parameter: {}",
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  if (0 == vector_index_parameter.document_index_parameter().scalar_schema().fields().size()) {
+    std::string s = fmt::format(
+        "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+        "document_index_parameter.scalar_schema.fields is empty. vector_index_parameter: {}",
+        vector_index_parameter.DebugString());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  for (const auto& field : vector_index_parameter.document_index_parameter().scalar_schema().fields()) {
+    const std::string& key = field.key();
+
+    pb::common::ScalarFieldType scalar_field_type = field.field_type();
+
+    auto it = std::find_if(scalar_schema_speed_up_fields.begin(), scalar_schema_speed_up_fields.end(),
+                           [&key](const pb::common::ScalarSchemaItem& item) { return item.key() == key; });
+    if (it == scalar_schema_speed_up_fields.end()) {
+      std::string s = fmt::format(
+          "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+          "document_index_parameter.scalar_schema.fields key : {} not exist in vector_index_parameter.scalar_schema. "
+          "vector_index_parameter: {}",
+          key, vector_index_parameter.DebugString());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+    }
+
+    switch (scalar_field_type) {
+      case pb::common::ScalarFieldType::BOOL: {
+        if (it->field_type() != pb::common::ScalarFieldType::BOOL) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::INT64: {
+        if (it->field_type() != pb::common::ScalarFieldType::INT64) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::DOUBLE: {
+        if (it->field_type() != pb::common::ScalarFieldType::DOUBLE) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::STRING: {
+        if (it->field_type() != pb::common::ScalarFieldType::STRING) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::BYTES: {
+        if (it->field_type() != pb::common::ScalarFieldType::BYTES) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::DATETIME: {
+        if (it->field_type() != pb::common::ScalarFieldType::DATETIME) {
+          std::string s = fmt::format(
+              "vector_index_parameter enable_scalar_speed_up_with_document is true, but "
+              "document_index_parameter.scalar_schema.fields key : {} field_type : {} not match "
+              "vector_index_parameter "
+              "scalar_schema field_type : {}. vector_index_parameter: {}",
+              key, pb::common::ScalarFieldType_Name(scalar_field_type),
+              pb::common::ScalarFieldType_Name(it->field_type()), vector_index_parameter.DebugString());
+          DINGO_LOG(ERROR) << s;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+        }
+        break;
+      }
+      case pb::common::ScalarFieldType::NONE:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::INT8:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::INT16:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::INT32:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::FLOAT32:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::ScalarFieldType_INT_MIN_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      case pb::common::ScalarFieldType::ScalarFieldType_INT_MAX_SENTINEL_DO_NOT_USE_:
+        [[fallthrough]];
+      default: {
+        std::string s = fmt::format("invalid scalar field type : {} {}", static_cast<int>(scalar_field_type),
+                                    pb::common::ScalarFieldType_Name(scalar_field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+    }
+  }
+
+  return ValidateVectorWithDocumentSpeedupJsonParameter(
+      vector_index_parameter.document_index_parameter().scalar_schema(),
+      vector_index_parameter.document_index_parameter().json_parameter());
+}
+
+butil::Status VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(
+    const pb::common::ScalarSchema& scalar_schema, const std::string& json_parameter) {
+  // validate json parameter
+
+  std::map<std::string, TokenizerType> column_tokenizer_parameter;
+  std::string error_message;
+
+  auto json_valid = DocumentCodec::IsValidTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+      json_parameter, column_tokenizer_parameter, error_message);
+
+  if (!json_valid) {
+    DINGO_LOG(ERROR) << "json_parameter is illegal, error_message:" << error_message;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_message);
+  }
+
+  if (!column_tokenizer_parameter.empty() && scalar_schema.fields().empty()) {
+    std::string error_msg = "json_parameter is not consistent with scalar_schema, scalar_schema is empty";
+    DINGO_LOG(ERROR) << error_msg;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+  }
+
+  // check if json_parameter is consistent with scalar_schema
+  for (const auto& field : scalar_schema.fields()) {
+    // compatible executor
+    std::string lower_str = field.key();
+    std::transform(lower_str.begin(), lower_str.end(), lower_str.begin(),
+                   [](char const& c) { return std::tolower(c); });
+
+    if (column_tokenizer_parameter.find(field.key()) == column_tokenizer_parameter.end()) {
+      if (column_tokenizer_parameter.find(lower_str) == column_tokenizer_parameter.end()) {
+        std::string error_msg =
+            fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}", field.key());
+        DINGO_LOG(ERROR) << error_msg;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+      }
+    }
+
+    if ((column_tokenizer_parameter[field.key()] == dingodb::TokenizerType::kTokenizerTypeUnknown) &&
+        (column_tokenizer_parameter[lower_str] == dingodb::TokenizerType::kTokenizerTypeUnknown)) {
+      std::string error_msg =
+          fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}, type unknown", field.key());
+      DINGO_LOG(ERROR) << error_msg;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+    }
+
+    switch (field.field_type()) {
+      case pb::common::ScalarFieldType::BYTES:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeBytes) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeBytes)) {
+          std::string error_msg = fmt::format(
+              "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:BYTES vs "
+              "{} ",
+              field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      case pb::common::ScalarFieldType::STRING:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeText) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeText)) {
+          std::string error_msg =
+              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}, field_type:STRING vs {}",
+                          field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      case pb::common::ScalarFieldType::INT64:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeI64) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeI64)) {
+          std::string error_msg =
+              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}, field_type:INT64 vs {}",
+                          field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      case pb::common::ScalarFieldType::DOUBLE:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeF64) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeF64)) {
+          std::string error_msg =
+              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}, field_type:DOUBLE vs {}",
+                          field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      case pb::common::ScalarFieldType::DATETIME:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeDateTime) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeDateTime)) {
+          std::string error_msg = fmt::format(
+              "json_parameter is not consistent with scalar_schema, field_name:{}, field_type:datetime vs {}",
+              field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      case pb::common::ScalarFieldType::BOOL:
+        if ((column_tokenizer_parameter[field.key()] != dingodb::TokenizerType::kTokenizerTypeBool) &&
+            (column_tokenizer_parameter[lower_str] != dingodb::TokenizerType::kTokenizerTypeBool)) {
+          std::string error_msg =
+              fmt::format("json_parameter is not consistent with scalar_schema, field_name:{}, field_type:bool vs {}",
+                          field.key(), DocumentCodec::GetTokenizerTypeString(column_tokenizer_parameter[field.key()]));
+          DINGO_LOG(ERROR) << error_msg;
+          return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, error_msg);
+        }
+        break;
+      default:
+        DINGO_LOG(ERROR) << "field type is NONE";
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "field type is NONE");
+        break;
+    }
+  }
+
+  return butil::Status::OK();
+}
+#endif
 
 }  // namespace dingodb

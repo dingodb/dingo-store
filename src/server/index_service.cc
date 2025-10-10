@@ -415,6 +415,27 @@ static butil::Status ValidateVectorAddRequest(StoragePtr storage, const pb::inde
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  const pb::common::RegionDefinition& definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (!document_index_wrapper) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND,
+                           fmt::format("Not found document index wrapper in region {}", region->Id()));
+    } else {
+      if (!document_index_wrapper->IsReady()) {
+        if (document_index_wrapper->IsBuildError()) {
+          return butil::Status(
+              pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+              fmt::format("Document index {} build error, please wait for recover.", document_index_wrapper->Id()));
+        }
+        return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                             fmt::format("Document index {} not ready, please retry.", document_index_wrapper->Id()));
+      }
+    }
+  }
+#endif
+
   if (vector_index_wrapper->IsExceedsMaxElements(request->vectors_size())) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
@@ -613,6 +634,27 @@ static butil::Status ValidateVectorDeleteRequest(StoragePtr storage, const pb::i
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  const pb::common::RegionDefinition& definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (!document_index_wrapper) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND,
+                           fmt::format("Not found document index wrapper in region {}", region->Id()));
+    } else {
+      if (!document_index_wrapper->IsReady()) {
+        if (document_index_wrapper->IsBuildError()) {
+          return butil::Status(
+              pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+              fmt::format("Document index {} build error, please wait for recover.", document_index_wrapper->Id()));
+        }
+        return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                             fmt::format("Document index {} not ready, please retry.", document_index_wrapper->Id()));
+      }
+    }
+  }
+#endif
 
   if (vector_index_wrapper->Type() == pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
     std::string s =
@@ -1212,6 +1254,27 @@ static butil::Status ValidateVectorImportRequestForAdd(StoragePtr storage,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  const pb::common::RegionDefinition& definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (!document_index_wrapper) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND,
+                           fmt::format("Not found document index wrapper in region {}", region->Id()));
+    } else {
+      if (!document_index_wrapper->IsReady()) {
+        if (document_index_wrapper->IsBuildError()) {
+          return butil::Status(
+              pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+              fmt::format("Document index {} build error, please wait for recover.", document_index_wrapper->Id()));
+        }
+        return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                             fmt::format("Document index {} not ready, please retry.", document_index_wrapper->Id()));
+      }
+    }
+  }
+#endif
+
   if (vector_index_wrapper->IsExceedsMaxElements(request->vectors_size())) {
     return butil::Status(pb::error::EVECTOR_INDEX_EXCEED_MAX_ELEMENTS,
                          fmt::format("Vector index {} exceeds max elements.", region->Id()));
@@ -1300,6 +1363,27 @@ static butil::Status ValidateVectorImportRequestForDelete(StoragePtr storage,
     return butil::Status(pb::error::EVECTOR_INDEX_NOT_READY,
                          fmt::format("Vector index {} not ready, please retry.", region->Id()));
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  const pb::common::RegionDefinition& definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (!document_index_wrapper) {
+      return butil::Status(pb::error::EREGION_NOT_FOUND,
+                           fmt::format("Not found document index wrapper in region {}", region->Id()));
+    } else {
+      if (!document_index_wrapper->IsReady()) {
+        if (document_index_wrapper->IsBuildError()) {
+          return butil::Status(
+              pb::error::EDOCUMENT_INDEX_BUILD_ERROR,
+              fmt::format("Document index {} build error, please wait for recover.", document_index_wrapper->Id()));
+        }
+        return butil::Status(pb::error::EDOCUMENT_INDEX_NOT_READY,
+                             fmt::format("Document index {} not ready, please retry.", document_index_wrapper->Id()));
+      }
+    }
+  }
+#endif
 
   if (vector_index_wrapper->Type() != pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN) {
     std::string s = fmt::format("Vector index {}, type is not DISKANN, can not support import.", region->Id());
@@ -1925,6 +2009,113 @@ void IndexServiceImpl::VectorDump(google::protobuf::RpcController* controller,
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoVectorDump(storage_, controller, request, response, svr_done);
+  });
+  bool ret = read_worker_set_->ExecuteRR(task);
+  if (!ret) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
+static butil::Status ValidateVectorDisplayDocumentDetails(StoragePtr storage,
+                                                          const pb::index::VectorDisplayDocumentDetailsRequest* request,
+                                                          store::RegionPtr region) {
+  if (region == nullptr) {
+    return butil::Status(
+        pb::error::EREGION_NOT_FOUND,
+        fmt::format("Not found region {} at server {}", request->context().region_id(), Server::GetInstance().Id()));
+  }
+
+  auto status = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
+  if (!status.ok()) {
+    return status;
+  }
+
+  if (request->context().region_id() == 0) {
+    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "Param region_id is error");
+  }
+
+  status = storage->ValidateLeader(region);
+  if (!status.ok()) {
+    return status;
+  }
+
+#if !WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  return butil::Status(pb::error::EVECTOR_NOT_SUPPORT,
+                       "Vector index display document details feature is disabled, please recompile with "
+                       "WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP=ON option.");
+#endif
+
+  return ServiceHelper::ValidateIndexRegion(region, {});
+}
+
+void DoVectorDisplayDocumentDetails(StoragePtr storage, google::protobuf::RpcController* controller,
+                                    const pb::index::VectorDisplayDocumentDetailsRequest* request,
+                                    pb::index::VectorDisplayDocumentDetailsResponse* response, TrackClosure* done) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto region = done->GetRegion();
+  int64_t region_id = request->context().region_id();
+
+  butil::Status status = ValidateVectorDisplayDocumentDetails(storage, request, region);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+
+  auto* mut_request = const_cast<pb::index::VectorDisplayDocumentDetailsRequest*>(request);
+  auto ctx = std::make_shared<Engine::VectorReader::Context>();
+  ctx->partition_id = region->PartitionId();
+  ctx->region_id = region->Id();
+  ctx->vector_index = region->VectorIndexWrapper();
+  ctx->region_range = region->Range(false);
+  ctx->raw_engine_type = region->GetRawEngineType();
+  ctx->store_engine_type = region->GetStoreEngineType();
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  ctx->document_index = region->DocumentIndexWrapper();
+
+  std::vector<std::string> dump_datas;
+  status = storage->VectorDisplayDocumentDetails(ctx, region, response);
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    return;
+  }
+#else
+  status = butil::Status(pb::error::EVECTOR_NOT_SUPPORT,
+                         "Vector index display document details feature is disabled, please recompile with "
+                         "WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP=ON option.");
+
+  if (!status.ok()) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    ServiceHelper::GetStoreRegionInfo(region, response->mutable_error());
+    return;
+  }
+#endif
+}
+
+void IndexServiceImpl::VectorDisplayDocumentDetails(google::protobuf::RpcController* controller,
+                                                    const pb::index::VectorDisplayDocumentDetailsRequest* request,
+                                                    pb::index::VectorDisplayDocumentDetailsResponse* response,
+                                                    ::google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure(__func__, done, request, response);
+
+  if (svr_done->GetRegion() == nullptr) {
+    brpc::ClosureGuard done_guard(svr_done);
+    return;
+  }
+
+  if (!FLAGS_enable_async_vector_dump) {
+    return DoVectorDisplayDocumentDetails(storage_, controller, request, response, svr_done);
+  }
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoVectorDisplayDocumentDetails(storage_, controller, request, response, svr_done);
   });
   bool ret = read_worker_set_->ExecuteRR(task);
   if (!ret) {

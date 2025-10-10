@@ -15,6 +15,10 @@
 #ifndef DINGODB_DOCUMENT_INDEX_MANAGER_H_
 #define DINGODB_DOCUMENT_INDEX_MANAGER_H_
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include <sys/types.h>
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -86,13 +90,25 @@ class LoadOrBuildDocumentIndexTask : public TaskRunnable {
 // Manage document index, e.g. build/rebuild/save/load document index.
 class DocumentIndexManager {
  public:
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  explicit DocumentIndexManager(const UseDocumentPurposeType& use_document_purpose_type)
+      : use_document_purpose_type_(use_document_purpose_type) {}
+#else
   DocumentIndexManager() = default;
+#endif
   ~DocumentIndexManager() = default;
 
   bool Init();
   void Destroy();
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // default use for document module
+  static std::shared_ptr<DocumentIndexManager> New(const UseDocumentPurposeType& use_document_purpose_type) {
+    return std::make_shared<DocumentIndexManager>(use_document_purpose_type);
+  }
+#else
   static std::shared_ptr<DocumentIndexManager> New() { return std::make_shared<DocumentIndexManager>(); }
+#endif
 
   // Load document index for already exist document index at bootstrap.
   // Priority load from snapshot, if snapshot not exist then load from rocksdb.
@@ -169,12 +185,20 @@ class DocumentIndexManager {
 
   bool ExecuteTask(int64_t region_id, TaskRunnablePtr task);
   bool ExecuteTaskFast(int64_t region_id, TaskRunnablePtr task);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  bool ExecuteTaskVectorScalarSearch(int64_t region_id, TaskRunnablePtr task);
+  static bool ExecuteTaskForVector(int64_t region_id, TaskRunnablePtr task);
+#endif
 
   static bool ExecuteTask(int64_t region_id, TaskRunnablePtr task, bool is_fast_task);
 
   std::vector<std::vector<std::string>> GetPendingTaskTrace();
 
   uint64_t GetBackgroundPendingTaskCount();
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  UseDocumentPurposeType GetUseDocumentPurposeType() const { return use_document_purpose_type_; }
+#endif
 
  private:
   static butil::Status LoadDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
@@ -185,12 +209,25 @@ class DocumentIndexManager {
   // Catch up document index.
   static butil::Status CatchUpLogToDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
                                                  DocumentIndexPtr document_index, const std::string& trace);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // Replay log to document index.
+  static butil::Status ReplayWalToDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
+                                                DocumentIndexPtr document_index, int64_t start_log_id,
+                                                int64_t end_log_id);
+#else
   // Replay log to document index.
   static butil::Status ReplayWalToDocumentIndex(DocumentIndexPtr document_index, int64_t start_log_id,
                                                 int64_t end_log_id);
+#endif
   // Execute all document index load/build/rebuild/save task.
   WorkerSetPtr workers_;
   WorkerSetPtr fast_workers_;
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // only for vector index scalar search with document
+  WorkerSetPtr vector_scalar_search_workers_;
+  UseDocumentPurposeType use_document_purpose_type_;
+#endif
 };
 
 using DocumentIndexManagerPtr = std::shared_ptr<DocumentIndexManager>;

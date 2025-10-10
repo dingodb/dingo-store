@@ -39,6 +39,9 @@ log:
 vector:
   index_path: $BASE_PATH$/data/vector_index_snapshot
   enable_follower_hold_index: false
+document:
+  index_path: $BASE_PATH$/data/document_index
+  enable_follower_hold_index: false
 store:
   path: $BASE_PATH$/data/db
   block_cache_size: 2147483648 # 2GB

@@ -37,6 +37,7 @@
 #include "client/client_router.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#include "coordinator/coordinator_interaction.h"
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -93,6 +94,8 @@ DEFINE_bool(show_detail, false, "show detail");
 
 DECLARE_string(import_data_set);
 DECLARE_string(import_data_path);
+
+extern std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction;
 
 namespace client {
 
@@ -820,6 +823,121 @@ void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn) {
 
     lambda_print_result_vector_function("after  sort result_vt_ids");
   }
+}
+
+void SendVectorSearchUseDocument(int64_t region_id, uint32_t topn) {
+  dingodb::pb::index::VectorSearchRequest request;
+  dingodb::pb::index::VectorSearchResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  auto* vector = request.add_vector_with_ids();
+
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id is 0";
+    return;
+  }
+
+  if (topn == 0) {
+    DINGO_LOG(ERROR) << "topn is 0";
+    return;
+  }
+
+  dingodb::pb::coordinator::QueryRegionRequest query_region_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_region_response;
+
+  query_region_request.set_region_id(region_id);
+
+  butil::Status status =
+      coordinator_interaction->SendRequest("QueryRegion", query_region_request, query_region_response);
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "send QueryRegion request failed, error=" << status.error_str();
+    return;
+  }
+
+  const auto& index_parameter = query_region_response.region().definition().index_parameter();
+
+  uint32_t dimension = 0;
+  auto type = index_parameter.vector_index_parameter().vector_index_type();
+  switch (type) {
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT: {
+      dimension = index_parameter.vector_index_parameter().flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW: {
+      dimension = index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT: {
+      dimension = index_parameter.vector_index_parameter().ivf_flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ: {
+      dimension = index_parameter.vector_index_parameter().ivf_pq_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN: {
+      dimension = index_parameter.vector_index_parameter().diskann_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE: {
+      dimension = index_parameter.vector_index_parameter().bruteforce_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT: {
+      dimension = index_parameter.vector_index_parameter().binary_flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT: {
+      dimension = index_parameter.vector_index_parameter().binary_ivf_flat_parameter().dimension();
+      break;
+    }
+    default: {
+      DINGO_LOG(ERROR) << "not support vector index type: " << dingodb::pb::common::VectorIndexType_Name(type);
+      return;
+    }
+  }
+
+  for (int i = 0; i < dimension; i++) {
+    vector->mutable_vector()->add_float_values(1.0 * i);
+  }
+  vector->mutable_vector()->set_dimension(dimension);
+
+  request.mutable_parameter()->set_top_n(topn);
+
+  if (FLAGS_without_vector) {
+    request.mutable_parameter()->set_without_vector_data(true);
+  }
+
+  if (FLAGS_without_scalar) {
+    request.mutable_parameter()->set_without_scalar_data(true);
+  }
+
+  if (FLAGS_without_table) {
+    request.mutable_parameter()->set_without_table_data(true);
+  }
+
+  if (FLAGS_with_scalar_pre_filter) {
+    request.mutable_parameter()->set_vector_filter(::dingodb::pb::common::VectorFilter::SCALAR_FILTER);
+    request.mutable_parameter()->set_vector_filter_type(::dingodb::pb::common::VectorFilterType::QUERY_PRE);
+    request.mutable_parameter()->set_is_scalar_speed_up_with_document(true);
+    std::string query_string = "speedup_key_long:>=1 AND speedup_key_long:<=10";
+    request.mutable_parameter()->set_query_string(query_string);
+  }
+
+  if (FLAGS_print_vector_search_delay) {
+    auto start = std::chrono::steady_clock::now();
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
+    auto end = std::chrono::steady_clock::now();
+    auto diff = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    DINGO_LOG(INFO) << fmt::format("SendVectorSearch  span: {} (us)", diff);
+
+  } else {
+    InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorSearch", request, response);
+  }
+
+  DINGO_LOG(INFO) << "VectorSearch response: " << response.DebugString();
 }
 
 void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
@@ -2567,6 +2685,29 @@ void SendVectorDelete(int64_t region_id, uint32_t start_id,  // NOLINT
                                  response.key_states().size() - success_count);
 }
 
+void SendVectorDeleteUseDocument(int64_t region_id, uint32_t start_id,  // NOLINT
+                                 uint32_t count) {                      // NOLINT
+  dingodb::pb::index::VectorDeleteRequest request;
+  dingodb::pb::index::VectorDeleteResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+  for (int i = 0; i < count; ++i) {
+    request.add_ids(i + start_id);
+  }
+
+  InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorDelete", request, response);
+  int success_count = 0;
+  for (auto key_state : response.key_states()) {
+    if (key_state) {
+      ++success_count;
+    }
+  }
+
+  DINGO_LOG(INFO) << "VectorDelete repsonse error: " << response.error().DebugString();
+  DINGO_LOG(INFO) << fmt::format("VectorDelete response success count: {} fail count: {}", success_count,
+                                 response.key_states().size() - success_count);
+}
+
 void SendVectorGetMaxId(int64_t region_id) {  // NOLINT
   dingodb::pb::index::VectorGetBorderIdRequest request;
   dingodb::pb::index::VectorGetBorderIdResponse response;
@@ -2734,6 +2875,200 @@ void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, u
                                  static_cast<long double>(total) / count);
 
   out.close();
+}
+
+static std::string ToRFC3339(const std::chrono::system_clock::time_point& time_point) {
+  std::time_t time_t = std::chrono::system_clock::to_time_t(time_point);
+  std::tm* tm_ptr = std::gmtime(&time_t);
+
+  std::ostringstream oss;
+  oss << std::put_time(tm_ptr, "%Y-%m-%dT%H:%M:%SZ");
+  return oss.str();
+}
+
+void SendVectorAddBatchUseDocument(int64_t region_id, uint32_t count, int64_t start_id) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+
+  if (count == 0) {
+    DINGO_LOG(ERROR) << "count must be greater than 0";
+    return;
+  }
+  if (start_id < 0) {
+    DINGO_LOG(ERROR) << "start_id must be greater than 0";
+    return;
+  }
+
+  dingodb::pb::coordinator::QueryRegionRequest query_region_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_region_response;
+
+  query_region_request.set_region_id(region_id);
+
+  butil::Status status =
+      coordinator_interaction->SendRequest("QueryRegion", query_region_request, query_region_response);
+
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "send QueryRegion request failed, error=" << status.error_str();
+    return;
+  }
+
+  const auto& index_parameter = query_region_response.region().definition().index_parameter();
+
+  uint32_t dimension = 0;
+  auto type = index_parameter.vector_index_parameter().vector_index_type();
+  switch (type) {
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT: {
+      dimension = index_parameter.vector_index_parameter().flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW: {
+      dimension = index_parameter.vector_index_parameter().hnsw_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT: {
+      dimension = index_parameter.vector_index_parameter().ivf_flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ: {
+      dimension = index_parameter.vector_index_parameter().ivf_pq_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN: {
+      dimension = index_parameter.vector_index_parameter().diskann_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE: {
+      dimension = index_parameter.vector_index_parameter().bruteforce_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_FLAT: {
+      dimension = index_parameter.vector_index_parameter().binary_flat_parameter().dimension();
+      break;
+    }
+    case dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BINARY_IVF_FLAT: {
+      dimension = index_parameter.vector_index_parameter().binary_ivf_flat_parameter().dimension();
+      break;
+    }
+    default: {
+      DINGO_LOG(ERROR) << "not support vector index type: " << dingodb::pb::common::VectorIndexType_Name(type);
+      return;
+    }
+  }
+
+  std::mt19937 rng;
+  std::uniform_real_distribution<> distrib(0.0, 10.0);
+  std::vector<float> random_seeds;
+  random_seeds.resize(count * dimension);
+  for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t j = 0; j < dimension; ++j) {
+      random_seeds[i * dimension + j] = distrib(rng);
+    }
+
+    if (i % 10000 == 0) {
+      DINGO_LOG(INFO) << fmt::format("generate random seeds: {}", count);
+    }
+  }
+
+  DINGO_LOG(INFO) << fmt::format("generate random seeds: {}", count);
+
+  dingodb::pb::index::VectorAddRequest request;
+  dingodb::pb::index::VectorAddResponse response;
+
+  if (FLAGS_is_update) {
+    request.set_is_update(true);
+  }
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  const auto& scalar_schema = index_parameter.vector_index_parameter().scalar_schema();
+
+  for (uint32_t i = 0; i < count; i++) {
+    auto* vector_with_id = request.add_vectors();
+    vector_with_id->set_id(start_id + i);
+    vector_with_id->mutable_vector()->set_dimension(dimension);
+    vector_with_id->mutable_vector()->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    for (int j = 0; j < dimension; j++) {
+      vector_with_id->mutable_vector()->add_float_values(random_seeds[(i)*dimension + j]);
+    }
+
+    if (!FLAGS_without_scalar) {
+      for (const auto& field : scalar_schema.fields()) {
+        ::dingodb::pb::common::ScalarValue scalar_value;
+
+        switch (field.field_type()) {
+          case ::dingodb::pb::common::ScalarFieldType::BOOL: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+            scalar_value.mutable_fields()->Add()->set_bool_data(((start_id + i) % 2) == 0);
+            break;
+          }
+          case ::dingodb::pb::common::ScalarFieldType::INT8: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT8);
+            scalar_value.mutable_fields()->Add()->set_int_data(static_cast<int8_t>((start_id + i) % 128));
+            break;
+          }
+          case ::dingodb::pb::common::ScalarFieldType::INT16: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT16);
+            scalar_value.mutable_fields()->Add()->set_int_data(static_cast<int16_t>((start_id + i) % 32768));
+            break;
+          }
+
+          case ::dingodb::pb::common::ScalarFieldType::INT32: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT32);
+            scalar_value.mutable_fields()->Add()->set_int_data(static_cast<int32_t>((start_id + i) % 2147483647));
+            break;
+          }
+
+          case ::dingodb::pb::common::ScalarFieldType::INT64: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+            scalar_value.mutable_fields()->Add()->set_long_data(start_id + i);
+            break;
+          }
+          case ::dingodb::pb::common::ScalarFieldType::DOUBLE: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+            scalar_value.mutable_fields()->Add()->set_double_data(static_cast<double>(start_id + i));
+            break;
+          }
+          case ::dingodb::pb::common::ScalarFieldType::STRING: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+            scalar_value.mutable_fields()->Add()->set_string_data("string_value" + std::to_string(start_id + i));
+            break;
+          }
+          case ::dingodb::pb::common::ScalarFieldType::FLOAT32: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::FLOAT32);
+            scalar_value.mutable_fields()->Add()->set_float_data(static_cast<float>(start_id + i));
+            break;
+          }
+
+          case ::dingodb::pb::common::ScalarFieldType::DATETIME: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::DATETIME);
+            scalar_value.mutable_fields()->Add()->set_datetime_data(ToRFC3339(std::chrono::system_clock::now()));
+            break;
+          }
+
+          case ::dingodb::pb::common::ScalarFieldType::BYTES: {
+            scalar_value.set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+            scalar_value.mutable_fields()->Add()->set_bytes_data("bytes_value" + std::to_string(start_id + i));
+            break;
+          }
+
+          default:
+            DINGO_LOG(ERROR) << "not support scalar field type: "
+                             << dingodb::pb::common::ScalarFieldType_Name(field.field_type());
+            return;
+        }
+
+        vector_with_id->mutable_scalar_data()->mutable_scalar_data()->insert({field.key(), scalar_value});
+      }
+    }
+  }
+  status = InteractionManager::GetInstance().SendRequestWithContext("IndexService", "VectorAdd", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "VectorAdd request failed, error=" << status.error_str();
+    return;
+  }
+  DINGO_LOG(INFO) << "VectorAdd request succeeded";
 }
 
 void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
@@ -3042,6 +3377,23 @@ void SendVectorDump(int64_t region_id, bool dump_all) {
 
   DINGO_LOG(INFO) << "VectorDump request: " << request.DebugString();
   DINGO_LOG(INFO) << "VectorDump response: " << response.DebugString();
+}
+
+void SendVectorDisplayDocumentDetails(int64_t region_id) {
+  if (region_id == 0) {
+    DINGO_LOG(ERROR) << "region_id must be greater than 0";
+    return;
+  }
+  dingodb::pb::index::VectorDisplayDocumentDetailsRequest request;
+  dingodb::pb::index::VectorDisplayDocumentDetailsResponse response;
+
+  *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(region_id);
+
+  butil::Status status = InteractionManager::GetInstance().SendRequestWithContext(
+      "IndexService", "VectorDisplayDocumentDetails", request, response);
+
+  DINGO_LOG(INFO) << "VectorDisplayDocumentDetails request: " << request.DebugString();
+  DINGO_LOG(INFO) << "VectorDisplayDocumentDetails response: " << response.DebugString();
 }
 
 void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,

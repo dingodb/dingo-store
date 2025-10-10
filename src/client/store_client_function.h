@@ -112,6 +112,7 @@ void SendDocumentGetRegionMetrics(int64_t region_id);
 
 // vector
 void SendVectorSearch(int64_t region_id, uint32_t dimension, uint32_t topn);
+void SendVectorSearchUseDocument(int64_t region_id, uint32_t topn);
 void SendVectorSearchDebug(int64_t region_id, uint32_t dimension, int64_t start_vector_id, uint32_t topn,
                            uint32_t batch_count, const std::string& key, const std::string& value);
 void SendVectorRangeSearch(int64_t region_id, uint32_t dimension, double radius);
@@ -122,10 +123,12 @@ void SendVectorBatchQuery(int64_t region_id, std::vector<int64_t> vector_ids);
 void SendVectorAddRetry(std::shared_ptr<Context> ctx);
 void SendVectorAdd(std::shared_ptr<Context> ctx);
 void SendVectorDelete(int64_t region_id, uint32_t start_id, uint32_t count);
+void SendVectorDeleteUseDocument(int64_t region_id, uint32_t start_id, uint32_t count);
 void SendVectorGetMaxId(int64_t region_id);
 void SendVectorGetMinId(int64_t region_id);
 void SendVectorAddBatch(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                         const std::string& file);
+void SendVectorAddBatchUseDocument(int64_t region_id, uint32_t count, int64_t start_id);
 void SendVectorImport(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count, int64_t start_id,
                       bool import_for_add);
 void SendVectorBuild(int64_t region_id);
@@ -133,6 +136,7 @@ void SendVectorLoad(int64_t region_id, bool direct_load_without_build, uint32_t 
 void SendVectorStatus(int64_t region_id);
 void SendVectorReset(int64_t region_id, bool delete_data_file);
 void SendVectorDump(int64_t region_id, bool dump_all);
+void SendVectorDisplayDocumentDetails(int64_t region_id);
 void SendVectorScanQuery(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
 void SendVectorScanDump(int64_t region_id, int64_t start_id, int64_t end_id, int64_t limit, bool is_reverse);
 void SendVectorAddBatchDebug(int64_t region_id, uint32_t dimension, uint32_t count, uint32_t step_count,

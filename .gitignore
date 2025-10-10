@@ -56,7 +56,7 @@ third-party
 
 # bazel
 
-build/
+/build*
 dist/
 .vscode/
 *.bak

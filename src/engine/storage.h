@@ -165,6 +165,10 @@ class Storage {
 
   butil::Status VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
                            std::vector<std::string>& dump_datas);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  butil::Status VectorDisplayDocumentDetails(std::shared_ptr<Engine::VectorReader::Context> ctx, store::RegionPtr region,
+                                             pb::index::VectorDisplayDocumentDetailsResponse* response);
+#endif
 
   static butil::Status VectorCalcDistance(
       const ::dingodb::pb::index::VectorCalcDistanceRequest& request,

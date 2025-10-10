@@ -36,6 +36,7 @@
 #include "engine/rocks_raw_engine.h"
 #include "engine/storage.h"
 #include "log/rocks_log_storage.h"
+#include "merge/merge_checker.h"
 #include "meta/meta_reader.h"
 #include "meta/store_meta_manager.h"
 #include "metrics/store_metrics_manager.h"
@@ -46,7 +47,6 @@
 #include "store/region_controller.h"
 #include "store/store_controller.h"
 #include "vector/vector_index_manager.h"
-#include "merge/merge_checker.h"
 
 namespace dingodb {
 
@@ -102,8 +102,13 @@ class Server {
   // Init vector index manager
   bool InitVectorIndexManager();
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // Init document index manager
+  bool InitDocumentIndexManager(UseDocumentPurposeType use_document_purpose_type);
+#else
   // Init document index manager
   bool InitDocumentIndexManager();
+#endif
 
   static LogLevel GetDingoLogLevel(std::shared_ptr<dingodb::Config> config);
 

@@ -65,11 +65,27 @@ RegionPtr Region::New(const pb::common::RegionDefinition& definition) {
       return nullptr;
     }
     region->SetVectorIndexWrapper(vector_index_wrapper);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+      auto document_index_wrapper = DocumentIndexWrapper::New(
+          definition.id(), definition.index_parameter().vector_index_parameter().document_index_parameter(),
+          UseDocumentPurposeType::kVectorIndexModule);
+      if (document_index_wrapper == nullptr) {
+        return nullptr;
+      }
+      region->SetDocumentIndexWrapper(document_index_wrapper);
+    }
+#endif
   } else if (definition.index_parameter().index_type() == pb::common::INDEX_TYPE_DOCUMENT) {
     region->inner_region_.set_region_type(pb::common::DOCUMENT_REGION);
 
     auto document_index_wrapper =
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+        DocumentIndexWrapper::New(definition.id(), definition.index_parameter().document_index_parameter(),
+                                  UseDocumentPurposeType::kDocumentModule);
+#else
         DocumentIndexWrapper::New(definition.id(), definition.index_parameter().document_index_parameter());
+#endif
     if (document_index_wrapper == nullptr) {
       return nullptr;
     }
@@ -85,6 +101,25 @@ RegionPtr Region::New(const pb::common::RegionDefinition& definition) {
 
 bool Region::Recover() {
   if (Type() == pb::common::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if (inner_region_.definition().index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+      auto document_index_wrapper = DocumentIndexWrapper::New(
+          Id(), inner_region_.definition().index_parameter().vector_index_parameter().document_index_parameter(),
+          UseDocumentPurposeType::kVectorIndexModule);
+      if (document_index_wrapper == nullptr) {
+        DINGO_LOG(WARNING) << "Failed to create document index wrapper for region " << Id() << ",  "
+                           << inner_region_.definition()
+                                  .index_parameter()
+                                  .vector_index_parameter()
+                                  .document_index_parameter()
+                                  .DebugString();
+      }
+      SetDocumentIndexWrapper(document_index_wrapper);
+      if (!document_index_wrapper->Recover()) {
+        DINGO_LOG(WARNING) << "Failed to recover document index wrapper for region " << Id();
+      }
+    }
+#endif
     auto vector_index_wrapper =
         VectorIndexWrapper::New(Id(), inner_region_.definition().index_parameter().vector_index_parameter());
     if (vector_index_wrapper == nullptr) {
@@ -94,12 +129,17 @@ bool Region::Recover() {
     return vector_index_wapper_->Recover();
   } else if (Type() == pb::common::DOCUMENT_REGION) {
     auto document_index_wrapper =
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+        DocumentIndexWrapper::New(Id(), inner_region_.definition().index_parameter().document_index_parameter(),
+                                  UseDocumentPurposeType::kDocumentModule);
+#else
         DocumentIndexWrapper::New(Id(), inner_region_.definition().index_parameter().document_index_parameter());
+#endif
     if (document_index_wrapper == nullptr) {
       return false;
     }
     SetDocumentIndexWrapper(document_index_wrapper);
-    return document_index_wapper_->Recover();
+    return document_index_wrapper->Recover();
   }
 
   return true;

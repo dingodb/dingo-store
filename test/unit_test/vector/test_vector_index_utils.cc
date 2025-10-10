@@ -28,6 +28,7 @@
 
 #include "butil/status.h"
 #include "glog/logging.h"
+#include "gtest/gtest.h"
 #include "proto/common.pb.h"
 #include "proto/error.pb.h"
 #include "proto/index.pb.h"
@@ -45,6 +46,419 @@ class VectorIndexUtilsTest : public testing::Test {
 
   void TearDown() override {}
 };
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+
+TEST_F(VectorIndexUtilsTest, AutoFillScalarSchemaWithDocumentSpeedup) {
+  pb::common::VectorIndexParameter vector_index_parameter;
+  butil::Status status;
+
+  // enable_scalar_speed_up_with_document false
+  {
+    status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    vector_index_parameter.Clear();
+  }
+
+  // only set enable_scalar_speed_up_with_document true
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document true but not speedup field
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::ScalarSchema* scalar_schema = vector_index_parameter.mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    }
+
+    status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document true speedup field has support type
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::ScalarSchema* scalar_schema = vector_index_parameter.mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_int");
+      item->set_field_type(pb::common::ScalarFieldType::INT32);
+      item->set_enable_speed_up(true);
+    }
+
+    status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document true speedup field all support type
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::ScalarSchema* scalar_schema = vector_index_parameter.mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+      item->set_enable_speed_up(true);
+    }
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_int64");
+      item->set_field_type(pb::common::ScalarFieldType::INT64);
+      item->set_enable_speed_up(true);
+    }
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_double");
+      item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+      item->set_enable_speed_up(true);
+    }
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_string");
+      item->set_field_type(pb::common::ScalarFieldType::STRING);
+      item->set_enable_speed_up(true);
+    }
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_datetime");
+      item->set_field_type(pb::common::ScalarFieldType::DATETIME);
+      item->set_enable_speed_up(true);
+    }
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_bytes");
+      item->set_field_type(pb::common::ScalarFieldType::BYTES);
+      item->set_enable_speed_up(true);
+    }
+
+    status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    LOG(INFO) << vector_index_parameter.DebugString();
+    vector_index_parameter.Clear();
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, ValidateVectorWithDocumentSpeedupJsonParameter) {
+  pb::common::ScalarSchema scalar_schema;
+  butil::Status status;
+  std::string json_parameter;
+
+  // both empty ok
+  {
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, "");
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter empty and scalar_schema not empty
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter not empty and scalar_schema empty
+  {
+    json_parameter = R"({ "bool_name":{"tokenizer":{"type":"bool"}} })";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter and scalar_schema all not empty  not match
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    json_parameter = R"({ "bytes_name":{"tokenizer":{"type":"bytes"}} })";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter and scalar_schema all not empty  not match type
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_bytes");
+    item->set_field_type(pb::common::ScalarFieldType::BYTES);
+    item->set_enable_speed_up(true);
+
+    json_parameter = R"({ "bool_name":{"tokenizer":{"type":"bool"}} })";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter and scalar_schema all not empty  not match type
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_int");
+    item->set_field_type(pb::common::ScalarFieldType::INT32);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    json_parameter = R"({ "key_int":{"tokenizer":{"type":"i64"}} , "key_bool":{"tokenizer":{"type":"bool"}}})";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter and scalar_schema all not empty. match ok
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    json_parameter = R"({"key_bool":{"tokenizer":{"type":"bool"}}})";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+
+  // json_parameter and scalar_schema all not empty. multiple match ok
+  {
+    pb::common::ScalarSchemaItem* item = scalar_schema.add_fields();
+    item->set_key("key_bool");
+    item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_int64");
+    item->set_field_type(pb::common::ScalarFieldType::INT64);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_double");
+    item->set_field_type(pb::common::ScalarFieldType::DOUBLE);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_string");
+    item->set_field_type(pb::common::ScalarFieldType::STRING);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_datetime");
+    item->set_field_type(pb::common::ScalarFieldType::DATETIME);
+    item->set_enable_speed_up(true);
+
+    item = scalar_schema.add_fields();
+    item->set_key("key_bytes");
+    item->set_field_type(pb::common::ScalarFieldType::BYTES);
+    item->set_enable_speed_up(true);
+
+    json_parameter = R"({
+      "key_bool":{"tokenizer":{"type":"bool"}},
+      "key_int64":{"tokenizer":{"type":"i64"}},
+      "key_double":{"tokenizer":{"type":"f64"}},
+      "key_string":{"tokenizer":{"type":"raw"}},
+      "key_datetime":{"tokenizer":{"type":"datetime"}},
+      "key_bytes":{"tokenizer":{"type":"bytes"}}
+    })";
+
+    status = VectorIndexUtils::ValidateVectorWithDocumentSpeedupJsonParameter(scalar_schema, json_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    scalar_schema.Clear();
+    json_parameter.clear();
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, ValidateVectorScalarSchemaWithDocumentSpeedup) {
+  pb::common::VectorIndexParameter vector_index_parameter;
+  butil::Status status;
+
+  // empty ok
+  {
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+  }
+
+  // enable_scalar_speed_up_with_document true but no document_index_parameter
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document and no document_index_parameter.scalar_schema
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::DocumentIndexParameter* document_index_parameter =
+        vector_index_parameter.mutable_document_index_parameter();
+
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document and has document_index_parameter type : VECTOR_INDEX_TYPE_DISKANN not support
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::DocumentIndexParameter* document_index_parameter =
+        vector_index_parameter.mutable_document_index_parameter();
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN);
+
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document and has document_index_parameter type : VECTOR_INDEX_TYPE_BRUTEFORCE not
+  // support
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::DocumentIndexParameter* document_index_parameter =
+        vector_index_parameter.mutable_document_index_parameter();
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE);
+
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // enable_scalar_speed_up_with_document and has document_index_parameter ok
+  {
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+    pb::common::DocumentIndexParameter* document_index_parameter =
+        vector_index_parameter.mutable_document_index_parameter();
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+
+    pb::common::ScalarSchema* scalar_schema = vector_index_parameter.mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+      item->set_enable_speed_up(true);
+    }
+
+    pb::common::ScalarSchema* document_scalar_schema = document_index_parameter->mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = document_scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    }
+
+    document_index_parameter->set_json_parameter(R"({ "key_bool":{"tokenizer":{"type":"bool"}} })");
+
+    status = VectorIndexUtils::ValidateVectorScalarSchemaWithDocumentSpeedup(vector_index_parameter);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    vector_index_parameter.Clear();
+  }
+}
+
+TEST_F(VectorIndexUtilsTest, ValidateVectorIndexParameter) {
+  pb::common::VectorIndexParameter vector_index_parameter;
+  bool check_document = false;
+  butil::Status status;
+
+  // check_document = false flat enable_scalar_speed_up_with_document false
+  {
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    vector_index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_parameter.mutable_flat_parameter()->set_dimension(10);
+
+    check_document = false;
+    status = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter, check_document);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    vector_index_parameter.Clear();
+  }
+
+  // check_document = true flat enable_scalar_speed_up_with_document false
+  {
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    vector_index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_parameter.mutable_flat_parameter()->set_dimension(10);
+
+    check_document = true;
+    status = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter, check_document);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    vector_index_parameter.Clear();
+  }
+
+  // check_document = true flat enable_scalar_speed_up_with_document true
+  {
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    vector_index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_parameter.mutable_flat_parameter()->set_dimension(10);
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+
+    check_document = true;
+    status = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter, check_document);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::EILLEGAL_PARAMTETERS);
+    vector_index_parameter.Clear();
+  }
+
+  // check_document = true flat enable_scalar_speed_up_with_document true
+  {
+    vector_index_parameter.set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+    vector_index_parameter.mutable_flat_parameter()->set_metric_type(::dingodb::pb::common::MetricType::METRIC_TYPE_L2);
+    vector_index_parameter.mutable_flat_parameter()->set_dimension(10);
+    vector_index_parameter.set_enable_scalar_speed_up_with_document(true);
+
+    check_document = true;
+
+    pb::common::ScalarSchema* scalar_schema = vector_index_parameter.mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+      item->set_enable_speed_up(true);
+    }
+
+    pb::common::DocumentIndexParameter* document_index_parameter =
+        vector_index_parameter.mutable_document_index_parameter();
+    pb::common::ScalarSchema* document_scalar_schema = document_index_parameter->mutable_scalar_schema();
+    {
+      pb::common::ScalarSchemaItem* item = document_scalar_schema->add_fields();
+      item->set_key("key_bool");
+      item->set_field_type(pb::common::ScalarFieldType::BOOL);
+    }
+
+    document_index_parameter->set_json_parameter(R"({ "key_bool":{"tokenizer":{"type":"bool"}} })");
+
+    check_document = true;
+    status = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter, check_document);
+    EXPECT_EQ(status.error_code(), pb::error::Errno::OK);
+    vector_index_parameter.Clear();
+  }
+}
+
+#endif
 
 TEST_F(VectorIndexUtilsTest, CheckVectorIdDuplicated) {
   butil::Status ok;

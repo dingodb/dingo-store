@@ -71,7 +71,9 @@ DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
 
 DEFINE_int64(max_restore_data_memory_size, 20 * 1024 * 1024, "max restore data memory size");
+BRPC_VALIDATE_GFLAG(max_restore_data_memory_size, brpc::PositiveInteger);
 DEFINE_int64(max_restore_count, 100000, "max restore count");
+BRPC_VALIDATE_GFLAG(max_restore_count, brpc::PositiveInteger);
 
 DECLARE_int64(stream_message_max_bytes);
 DECLARE_int64(stream_message_max_limit_size);
@@ -4679,6 +4681,18 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
   std::vector<std::string> kv_deletes_scalar;
   std::vector<std::string> kv_deletes_table;
   std::vector<std::string> kv_deletes_scalar_speedup;
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::vector<std::string> kv_deletes_use_document;
+  bool enable_scalar_speed_up_with_document_wrap = false;
+  if (type == pb::common::RegionType::INDEX_REGION) {
+    const pb::common::RegionDefinition &definition = region->Definition();
+    bool enable_scalar_speed_up_with_document =
+        definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document();
+    if (enable_scalar_speed_up_with_document && region->DocumentIndexWrapper()) {
+      enable_scalar_speed_up_with_document_wrap = true;
+    }
+  }
+#endif
 
   RawEngine::ReaderPtr reader = raw_engine->Reader();
   std::shared_ptr<Snapshot> snapshot = raw_engine->GetSnapshot();
@@ -4717,24 +4731,35 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
     region_part_id = region->PartitionId();
   }
 
-  auto lambda_emplace_back_function = [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar,
-                                       &kv_deletes_table, &kv_deletes_scalar_speedup](
-                                          pb::common::RegionType type, std::string_view default_iter_key,
-                                          int64_t vector_id, int64_t default_ts) {
-    kv_deletes_default.emplace_back(std::string(default_iter_key));
-    if (type == pb::common::RegionType::INDEX_REGION) {
-      kv_deletes_scalar.emplace_back(std::string(default_iter_key));
-      kv_deletes_table.emplace_back(std::string(default_iter_key));
-      pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
-      for (const auto &fields : scalar_schema.fields()) {
-        if (fields.enable_speed_up()) {
-          std::string encode_key_with_ts =
-              VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
-          kv_deletes_scalar_speedup.emplace_back(std::move(encode_key_with_ts));
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  auto lambda_emplace_back_function =
+      [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
+       &kv_deletes_scalar_speedup, &kv_deletes_use_document, enable_scalar_speed_up_with_document_wrap](
+#else
+  auto lambda_emplace_back_function =
+      [&region, &prefix, &region_part_id, &kv_deletes_default, &kv_deletes_scalar, &kv_deletes_table,
+       &kv_deletes_scalar_speedup](
+#endif
+          pb::common::RegionType type, std::string_view default_iter_key, int64_t vector_id, int64_t default_ts) {
+        kv_deletes_default.emplace_back(std::string(default_iter_key));
+        if (type == pb::common::RegionType::INDEX_REGION) {
+          kv_deletes_scalar.emplace_back(std::string(default_iter_key));
+          kv_deletes_table.emplace_back(std::string(default_iter_key));
+          pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+          for (const auto &fields : scalar_schema.fields()) {
+            if (fields.enable_speed_up()) {
+              std::string encode_key_with_ts =
+                  VectorCodec::EncodeVectorKey(prefix, region_part_id, vector_id, fields.key(), default_ts);
+              kv_deletes_scalar_speedup.emplace_back(std::move(encode_key_with_ts));
+            }
+          }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+          if (enable_scalar_speed_up_with_document_wrap) {
+            kv_deletes_use_document.emplace_back(default_iter_key);
+          }
+#endif
         }
-      }
-    }
-  };
+      };
 
   while (default_iter->Valid()) {
     total_iter_count++;
@@ -4836,8 +4861,13 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
       }
     }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+         kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size()) >= FLAGS_gc_delete_batch_count) {
+#else
     if ((kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
          kv_deletes_scalar_speedup.size()) >= FLAGS_gc_delete_batch_count) {
+#endif
       auto [internal_gc_stop, internal_safe_point_ts] = gc_safe_point->GetGcFlagAndSafePointTs();
       if (internal_gc_stop) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
@@ -4850,17 +4880,25 @@ butil::Status TxnEngineHelper::DoGcCoreNonTxn(RawEnginePtr raw_engine, std::shar
 
       if (safe_point_ts < internal_safe_point_ts) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-            "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : "
+            "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts "
+            ": "
             "{}. "
             "Don't worry, we'll deal with it next time. ignore.  start_key : {} end_key : {}",
             gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
             internal_safe_point_ts, Helper::StringToHex(region_start_key), Helper::StringToHex(region_end_key));
       }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+                            kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
+      DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
+                             kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
+#else
       total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
                             kv_deletes_scalar_speedup.size();
       DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default,
                              kv_deletes_scalar, kv_deletes_table, kv_deletes_scalar_speedup);
+#endif
     }
 
     default_iter->Next();
@@ -4879,16 +4917,25 @@ _interrupt1:
 
   if (safe_point_ts < internal_safe_point_ts) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_gc_detail) << fmt::format(
-        "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : {}. "
+        "[txn_gc][tenant({})][region({})][type({})][nontxn] current safe_point_ts : {}. newest safe_point_ts : "
+        "{}. "
         "Don't worry, we'll deal with it next time. ignore.",
         gc_safe_point->GetTenantId(), ctx->RegionId(), pb::common::RegionType_Name(type), safe_point_ts,
         internal_safe_point_ts);
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  total_delete_count += kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() +
+                        kv_deletes_scalar_speedup.size() + kv_deletes_use_document.size();
+  DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
+                         kv_deletes_table, kv_deletes_scalar_speedup, kv_deletes_use_document);
+#else
   total_delete_count +=
       kv_deletes_default.size() + kv_deletes_scalar.size() + kv_deletes_table.size() + kv_deletes_scalar_speedup.size();
   DoFinalWorkForNonTxnGc(raft_engine, ctx, gc_safe_point->GetTenantId(), type, kv_deletes_default, kv_deletes_scalar,
                          kv_deletes_table, kv_deletes_scalar_speedup);
+
+#endif
 
 _interrupt2:
   end_time_ms = Helper::TimestampMs();
@@ -5155,11 +5202,19 @@ butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnStoreAndDocumentGc(
 #endif
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
+    std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+    const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
+    const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
+    const std::vector<std::string> &kv_deletes_use_document, int64_t tenant_id, pb::common::RegionType type) {
+#else
 butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
     std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
     const std::vector<std::string> &kv_deletes_default, const std::vector<std::string> &kv_deletes_scalar,
     const std::vector<std::string> &kv_deletes_table, const std::vector<std::string> &kv_deletes_scalar_speedup,
     int64_t tenant_id, pb::common::RegionType type) {
+#endif
   BvarLatencyGuard bvar_guard(&g_txn_raft_engine_write_for_gc_latency);
 
   pb::raft::TxnRaftRequest txn_raft_request;
@@ -5201,9 +5256,27 @@ butil::Status TxnEngineHelper::RaftEngineWriteForNonTxnIndexGc(
     }
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  pb::raft::DeletesWithCf *use_document_dels = nullptr;
+  if (!kv_deletes_use_document.empty()) {
+    use_document_dels = cf_put_delete->add_deletes_with_cf();
+    use_document_dels->set_cf_name(Constant::kVectorScalarUseDocumentCF);
+    for (const auto &key_del : kv_deletes_use_document) {
+      use_document_dels->add_keys(key_del);
+    }
+  }
+#endif
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels &&
+      nullptr == use_document_dels) {
+    return butil::Status::OK();
+  }
+#else
   if (nullptr == default_dels && nullptr == scalar_dels && nullptr == table_dels && nullptr == scalar_speedup_dels) {
     return butil::Status::OK();
   }
+#endif
 
   if (txn_raft_request.ByteSizeLong() == 0) {
     return butil::Status::OK();
@@ -5288,17 +5361,42 @@ butil::Status TxnEngineHelper::DoFinalWorkForTxnGc(
   return butil::Status();
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
+                                                      int64_t tenant_id, pb::common::RegionType type,
+                                                      std::vector<std::string> &kv_deletes_default,
+                                                      std::vector<std::string> &kv_deletes_scalar,
+                                                      std::vector<std::string> &kv_deletes_table,
+                                                      std::vector<std::string> &kv_deletes_scalar_speedup,
+                                                      std::vector<std::string> &kv_deletes_use_document) {
+#else
 butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                                       int64_t tenant_id, pb::common::RegionType type,
                                                       std::vector<std::string> &kv_deletes_default,
                                                       std::vector<std::string> &kv_deletes_scalar,
                                                       std::vector<std::string> &kv_deletes_table,
                                                       std::vector<std::string> &kv_deletes_scalar_speedup) {
+#endif
   BvarLatencyGuard bvar_guard(&g_txn_do_final_work_for_gc_latency);
 
   butil::Status status;
 
   if (type == pb::common::RegionType::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    status = RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar, kv_deletes_table,
+                                             kv_deletes_scalar_speedup, kv_deletes_use_document, tenant_id, type);
+    if (!status.ok()) {
+      std::string s = fmt::format(
+          "[txn_gc][write][tenant({})][region({})][type({})][nontxn] RaftEngineWriteForNonTxnIndexGc failed. "
+          "kv_deletes_default size : {}  kv_deletes_scalar size : {}  kv_deletes_table size : {} "
+          "kv_deletes_scalar_speedup size : {}  kv_deletes_use_document size : {}. "
+          "ignore.",
+          tenant_id, ctx->RegionId(), pb::common::RegionType_Name(type), kv_deletes_default.size(),
+          kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size(),
+          kv_deletes_use_document.size());
+      DINGO_LOG(ERROR) << s + status.error_str();
+    }
+#else
     status = RaftEngineWriteForNonTxnIndexGc(raft_engine, ctx, kv_deletes_default, kv_deletes_scalar, kv_deletes_table,
                                              kv_deletes_scalar_speedup, tenant_id, type);
     if (!status.ok()) {
@@ -5311,6 +5409,8 @@ butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> ra
           kv_deletes_scalar.size(), kv_deletes_table.size(), kv_deletes_scalar_speedup.size());
       DINGO_LOG(ERROR) << s + status.error_str();
     }
+#endif
+
   } else {
     status = RaftEngineWriteForNonTxnStoreAndDocumentGc(raft_engine, ctx, kv_deletes_default, tenant_id, type);
     if (!status.ok()) {
@@ -5326,6 +5426,9 @@ butil::Status TxnEngineHelper::DoFinalWorkForNonTxnGc(std::shared_ptr<Engine> ra
   kv_deletes_scalar.resize(0);
   kv_deletes_table.resize(0);
   kv_deletes_scalar_speedup.resize(0);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  kv_deletes_use_document.resize(0);
+#endif
 
   return butil::Status();
 }

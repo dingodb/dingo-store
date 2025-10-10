@@ -14,6 +14,9 @@
 
 #include "handler/raft_apply_handler.h"
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include <algorithm>
+#endif
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
@@ -48,6 +51,12 @@
 #include "vector/vector_index_utils.h"
 
 DECLARE_int32(init_election_timeout_ms);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+DEFINE_bool(dingo_log_switch_raft_vector_add_use_document_detail, false,
+            "print detail log when raft apply vector add use document index. default false.");
+BRPC_VALIDATE_GFLAG(dingo_log_switch_raft_vector_add_use_document_detail, brpc::PassValidate);
+#endif
 
 namespace dingodb {
 DECLARE_bool(dingo_log_switch_scalar_speed_up_detail);
@@ -330,6 +339,30 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
   store_region_meta->UpdateState(to_region, pb::common::StoreRegionState::NORMAL);
 
   if (to_region->Type() == pb::common::RegionType::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    const auto &from_definition = from_region->Definition();
+    const auto &to_definition = to_region->Definition();
+    if (from_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        to_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        from_region->DocumentIndexWrapper() != nullptr && to_region->DocumentIndexWrapper() != nullptr) {
+      // Set child share document index
+      auto document_index = from_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+      if (document_index != nullptr) {
+        to_region->DocumentIndexWrapper()->SetShareDocumentIndex(document_index);
+      } else {
+        DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent document index.",
+                                       request.job_id(), from_region->Id(), to_region->Id());
+      }
+
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+      // Rebuild document index
+      DocumentIndexManager::LaunchRebuildDocumentIndex(to_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                       "splitChild");
+
+      DocumentIndexManager::LaunchRebuildDocumentIndex(from_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                       "splitParent");
+    }
+#endif
     // Set child share vector index
     auto vector_index = from_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -564,6 +597,30 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
   store_region_meta->UpdateState(child_region, pb::common::StoreRegionState::NORMAL);
 
   if (parent_region->Type() == pb::common::RegionType::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    const auto &parent_definition = parent_region->Definition();
+    const auto &child_definition = child_region->Definition();
+    if (parent_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        child_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        parent_region->DocumentIndexWrapper() != nullptr && child_region->DocumentIndexWrapper() != nullptr) {
+      // Set child share document index
+      auto document_index = parent_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+      if (document_index != nullptr) {
+        child_region->DocumentIndexWrapper()->SetShareDocumentIndex(document_index);
+      } else {
+        DINGO_LOG(INFO) << fmt::format("[split.spliting][job_id({}).region({}->{})] not found parent document index.",
+                                       request.job_id(), parent_region->Id(), child_region->Id());
+      }
+
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+      // Rebuild document index
+      DocumentIndexManager::LaunchRebuildDocumentIndex(child_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                       "splitChild");
+
+      DocumentIndexManager::LaunchRebuildDocumentIndex(parent_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                       "splitParent");
+    }
+#endif
     // Set child share vector index
     auto vector_index = parent_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -934,6 +991,29 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Save snapshot finish");
 
   if (target_region->Type() == pb::common::RegionType::INDEX_REGION) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    const auto &source_definition = source_region->Definition();
+    const auto &target_definition = target_region->Definition();
+    if (source_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        target_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+        source_region->DocumentIndexWrapper() != nullptr && target_region->DocumentIndexWrapper() != nullptr) {
+      // Set child share document index
+      auto document_index = source_region->DocumentIndexWrapper()->GetOwnDocumentIndex();
+      if (document_index != nullptr) {
+        target_region->DocumentIndexWrapper()->SetSiblingDocumentIndex(document_index);
+      } else {
+        DINGO_LOG(WARNING) << fmt::format(
+            "[merge.merging][job_id({}).region({}/{})] merge region get document index failed.", request.job_id(),
+            source_region->Id(), target_region->Id());
+      }
+
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch target region rebuild document index");
+      ADD_REGION_CHANGE_RECORD_TIMEPOINT(request.job_id(), "Launch rebuild document index");
+      // Rebuild document index
+      DocumentIndexManager::LaunchRebuildDocumentIndex(target_region->DocumentIndexWrapper(), request.job_id(), false,
+                                                       "merge");
+    }
+#endif
     // Set child share vector index
     auto vector_index = source_region->VectorIndexWrapper()->GetOwnVectorIndex();
     if (vector_index != nullptr) {
@@ -1055,6 +1135,17 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
   std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
   std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::vector<pb::common::KeyValue> kvs_scalar_use_document;  // for vector scalar data use document
+  std::vector<pb::common::DocumentWithId> document_with_ids;
+  bool enable_scalar_speed_up_with_document = false;
+  const pb::common::RegionDefinition &definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+      region->DocumentIndexWrapper()) {
+    enable_scalar_speed_up_with_document = true;
+  }
+#endif
+
   auto prefix = region->GetKeyPrefix();
   auto region_part_id = region->PartitionId();
   for (const auto &vector : request.vectors()) {
@@ -1088,16 +1179,21 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       kv.mutable_value()->swap(value);
       kvs_scalar.push_back(std::move(kv));
     }
-
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+#endif
     // vector scalar data key speed up
     {
+#if !WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
       std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
-      pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+#endif
+      const pb::common::ScalarSchema &scalar_schema = region->ScalarSchema();
       VectorIndexUtils::SplitVectorScalarData(scalar_schema, vector.scalar_data(), scalar_key_value_pairs);
 
-      for (const auto &[key, scalar_value] : scalar_key_value_pairs) {
+      for (const auto &[scalar_key, scalar_value] : scalar_key_value_pairs) {
         pb::common::KeyValue kv;
-        std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, region_part_id, vector.id(), key, ts);
+        std::string encode_key_with_ts =
+            VectorCodec::EncodeVectorKey(prefix, region_part_id, vector.id(), scalar_key, ts);
         kv.mutable_key()->swap(encode_key_with_ts);
 
         std::string value = scalar_value.SerializeAsString();
@@ -1125,6 +1221,34 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
       kv.mutable_value()->swap(value);
       kvs_table.push_back(std::move(kv));
     }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    {
+      // vector scalar data use document
+      if (!scalar_key_value_pairs.empty() && enable_scalar_speed_up_with_document) {
+        pb::common::DocumentWithId document_with_id;
+        document_with_id.set_id(vector.id());
+        for (const auto &[scalar_key, scalar_value] : scalar_key_value_pairs) {
+          pb::common::DocumentValue document_value;
+          document_value.set_field_type(scalar_value.field_type());
+          document_value.mutable_field_value()->CopyFrom(scalar_value.fields(0));
+          document_with_id.mutable_document()->mutable_document_data()->insert(
+              std::make_pair(scalar_key, document_value));
+        }
+        pb::common::KeyValue kv;
+        kv.set_key(encode_key_with_ts);
+        std::string value = document_with_id.document().SerializeAsString();
+        if (req.ttl() == 0) {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
+        } else {
+          mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
+        }
+        kv.mutable_value()->swap(value);
+        kvs_scalar_use_document.push_back(std::move(kv));
+        document_with_ids.push_back(std::move(document_with_id));
+      }  // if (!scalar_key_value_pairs.empty() && enable_scalar_speed_up_with_document) {
+    }
+#endif
   }
   kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
   kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
@@ -1132,6 +1256,12 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kvs_scalar_speed_up);
   }
   kv_puts_with_cf.insert_or_assign(Constant::kVectorTableCF, kvs_table);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (!document_with_ids.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarUseDocumentCF, kvs_scalar_use_document);
+  }
+#endif
 
   // Put vector data to rocksdb
   if (!kv_puts_with_cf.empty()) {
@@ -1195,6 +1325,48 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
     }
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // Handle document index
+  if (enable_scalar_speed_up_with_document) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper) {
+      int64_t document_index_id = document_index_wrapper->Id();
+      is_ready = document_index_wrapper->IsReady();
+
+      if (is_ready) {
+        // Check if the log_id is greater than the ApplyLogIndex of the vector index
+        if (log_id > document_index_wrapper->ApplyLogId() ||
+            region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+          try {
+            auto start_time = Helper::TimestampNs();
+            auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
+                                              : document_index_wrapper->Add(document_with_ids);
+            if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+            DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}ns",
+                                            document_index_id, document_with_ids.size(),
+                                            Helper::TimestampNs() - start_time);
+            if (status.ok()) {
+              if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+                document_index_wrapper->SetApplyLogId(log_id);
+              }
+            } else {
+              if (ctx) {
+                ctx->SetStatus(status);
+              }
+              DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert document failed, count: {} err: {}",
+                                                document_index_id, document_with_ids.size(),
+                                                Helper::PrintStatus(status));
+            }
+          } catch (const std::exception &e) {
+            DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert document exception, error: {}",
+                                            document_index_id, e.what());
+          }
+        }
+      }  //   if (is_ready) {
+    }  // if (document_index_wrapper) {
+  }  // if (enable_scalar_speed_up_with_document) {
+#endif
+
   return 0;
 }
 
@@ -1222,10 +1394,19 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   // Transform vector to kv
   auto prefix = region->GetKeyPrefix();
   auto partition_id = region->PartitionId();
-  pb::common::ScalarSchema scalar_schema = region->ScalarSchema();
+  const pb::common::ScalarSchema &scalar_schema = region->ScalarSchema();
 
   std::vector<pb::common::KeyValue> vector_kvs;
   std::vector<pb::common::KeyValue> vector_scalar_speedup_kvs;
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::vector<pb::common::KeyValue> kvs_scalar_use_document;  // for vector scalar data use document
+  bool enable_scalar_speed_up_with_document = false;
+  const pb::common::RegionDefinition &definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+      region->DocumentIndexWrapper()) {
+    enable_scalar_speed_up_with_document = true;
+  }
+#endif
   for (int i = 0; i < request.ids_size(); ++i) {
     pb::common::KeyValue kv;
     std::string encode_key_with_ts = VectorCodec::EncodeVectorKey(prefix, partition_id, request.ids(i), ts);
@@ -1245,6 +1426,15 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
       }
     }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if (enable_scalar_speed_up_with_document) {
+      pb::common::KeyValue kv;
+      kv.set_key(encode_key_with_ts);
+      kv.set_value(mvcc::Codec::ValueFlagDelete());
+      kvs_scalar_use_document.push_back(std::move(kv));
+    }
+#endif
+
     DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete vector id {}", region->Id(), request.ids(i));
   }
 
@@ -1258,6 +1448,12 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
   if (!vector_scalar_speedup_kvs.empty()) {
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, vector_scalar_speedup_kvs);
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (!kvs_scalar_use_document.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarUseDocumentCF, kvs_scalar_use_document);
+  }
+#endif
 
   // Delete vector and write wal
   if (!kv_puts_with_cf.empty()) {
@@ -1303,6 +1499,46 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
     }
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // If the region enable vector scalar speed up with document, need to delete the document in vector scalar use
+  // document index
+  if (enable_scalar_speed_up_with_document) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper) {
+      int64_t document_index_id = document_index_wrapper->Id();
+      bool is_ready = document_index_wrapper->IsReady();
+      if (is_ready && !request.ids().empty()) {
+        if (log_id > document_index_wrapper->ApplyLogId() ||
+            region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+          try {
+            auto start_time = Helper::TimestampNs();
+            auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.ids()));
+            if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+            DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
+                                            document_index_id, request.ids().size(),
+                                            Helper::TimestampNs() - start_time);
+            if (status.ok()) {
+              if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+                document_index_wrapper->SetApplyLogId(log_id);
+              }
+            } else {
+              if (ctx) {
+                ctx->SetStatus(status);
+              }
+              DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document failed, count: {}, error: {}",
+                                                document_index_id, request.ids().size(), Helper::PrintStatus(status));
+            }
+          } catch (const std::exception &e) {
+            DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete document exception, error: {}",
+                                            document_index_id, e.what());
+          }
+        }
+      }  // if (is_ready && !request.ids().empty()) {
+    }  // if (document_index_wrapper) {
+  }  // if (enable_scalar_speed_up_with_document) {
+
+#endif
+
   return 0;
 }
 
@@ -1345,6 +1581,16 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   std::vector<pb::common::KeyValue> kvs_scalar;           // for vector scalar data
   std::vector<pb::common::KeyValue> kvs_table;            // for vector table data
   std::vector<pb::common::KeyValue> kvs_scalar_speed_up;  // for vector scalar data speed up
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::vector<pb::common::KeyValue> kvs_scalar_use_document;  // for vector scalar data use document
+  std::vector<pb::common::DocumentWithId> document_with_ids;
+  bool enable_scalar_speed_up_with_document = false;
+  const pb::common::RegionDefinition &definition = region->Definition();
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+      region->DocumentIndexWrapper()) {
+    enable_scalar_speed_up_with_document = true;
+  }
+#endif
 
   // Transform vector to kv
   for (const auto &kv : request.kvs_default()) {
@@ -1364,6 +1610,81 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
     kv_puts_with_cf.insert_or_assign(Constant::kStoreDataCF, kvs_default);
   }
   if (!kvs_scalar.empty()) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    // Add any special handling for kvs_default when document speedup is enabled
+    if (enable_scalar_speed_up_with_document) {
+      for (const auto &kv : kvs_scalar) {
+        const std::string &key = kv.key();
+        const std::string &value = kv.value();
+        mvcc::ValueFlag value_flag = mvcc::Codec::GetValueFlag(value);
+        switch (value_flag) {
+          case mvcc::ValueFlag::kPut:
+            [[fallthrough]];  // fall through
+          case mvcc::ValueFlag::kPutTTL: {
+            int64_t vector_id = 0;
+            int64_t partition_id = 0;
+            VectorCodec::DecodeFromEncodeKeyWithTs(std::string(key), partition_id, vector_id);
+
+            pb::common::VectorScalardata vector_scalar_data;
+            bool ret = vector_scalar_data.ParseFromString(mvcc::Codec::UnPackageValue(value));
+            if (!ret) {
+              DINGO_LOG(FATAL) << fmt::format(
+                  "[raft.apply][region({})] parse vector_scalar_data from kv value failed, vector_id: {}", region->Id(),
+                  vector_id);
+            }
+
+            if (FLAGS_dingo_log_switch_raft_vector_add_use_document_detail) {
+              DINGO_LOG(INFO) << fmt::format(
+                  "[raft.apply][region({})] process kvs_scalar for vector_id: {} with document speedup enabled, "
+                  "vector_scalar_data: {}",
+                  region->Id(), vector_id, vector_scalar_data.DebugString());
+            }
+
+            std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+            VectorIndexUtils::SplitVectorScalarData(region->ScalarSchema(), vector_scalar_data, scalar_key_value_pairs);
+            pb::common::DocumentWithId document_with_id;
+            document_with_id.set_id(vector_id);
+            for (const auto &[scalar_key, scalar_value] : scalar_key_value_pairs) {
+              pb::common::DocumentValue document_value;
+              document_value.set_field_type(scalar_value.field_type());
+              document_value.mutable_field_value()->CopyFrom(scalar_value.fields(0));
+              document_with_id.mutable_document()->mutable_document_data()->insert(
+                  std::make_pair(scalar_key, document_value));
+            }
+            pb::common::KeyValue doc_kv;
+            doc_kv.set_key(key);
+            if (FLAGS_dingo_log_switch_raft_vector_add_use_document_detail) {
+              DINGO_LOG(INFO) << fmt::format(
+                  "[raft.apply][region({})] process kvs_scalar for vector_id: {} with document speedup enabled, "
+                  "document_with_id: {}",
+                  region->Id(), vector_id, document_with_id.DebugString());
+            }
+            std::string document = document_with_id.document().SerializeAsString();
+            int64_t ttl = 0;
+            if (mvcc::ValueFlag::kPutTTL == value_flag) {
+              mvcc::ValueFlag unused_flag;
+              mvcc::Codec::UnPackageValue(value, unused_flag, ttl);
+              mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, document);
+            } else {
+              mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, document);
+            }
+
+            doc_kv.mutable_value()->swap(document);
+            kvs_scalar_use_document.push_back(std::move(doc_kv));
+            break;
+          }
+          case mvcc::ValueFlag::kDelete: {
+            pb::common::KeyValue doc_kv;
+            doc_kv.set_key(key);
+            doc_kv.set_value(mvcc::Codec::ValueFlagDelete());
+            kvs_scalar_use_document.push_back(std::move(doc_kv));
+            break;
+          }
+        }
+      }  // for (const auto &kv : kvs_scalar) {
+    }  // if (enable_scalar_speed_up_with_document)
+
+#endif
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
   }
   if (!kvs_table.empty()) {
@@ -1372,6 +1693,12 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   if (!kvs_scalar_speed_up.empty()) {
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarKeySpeedUpCF, kvs_scalar_speed_up);
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (!kvs_scalar_use_document.empty()) {
+    kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarUseDocumentCF, kvs_scalar_use_document);
+  }
+#endif
 
   // Put vector data to rocksdb
   if (!kv_puts_with_cf.empty()) {
@@ -1389,6 +1716,39 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
   if (ctx) {
     ctx->SetStatus(status);
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (enable_scalar_speed_up_with_document) {
+    for (const auto &vector : request.vectors()) {
+      const pb::common::VectorWithId &vector_with_id = vector;
+      int64_t vector_id = vector.id();
+      if (vector_with_id.has_scalar_data()) {
+        std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+        VectorIndexUtils::SplitVectorScalarData(region->ScalarSchema(), vector_with_id.scalar_data(),
+                                                scalar_key_value_pairs);
+        pb::common::DocumentWithId document_with_id;
+        document_with_id.set_id(vector_id);
+        for (const auto &[scalar_key, scalar_value] : scalar_key_value_pairs) {
+          pb::common::DocumentValue document_value;
+          document_value.set_field_type(scalar_value.field_type());
+          document_value.mutable_field_value()->CopyFrom(scalar_value.fields(0));
+          document_with_id.mutable_document()->mutable_document_data()->insert(
+              std::make_pair(scalar_key, document_value));
+        }
+
+        if (FLAGS_dingo_log_switch_raft_vector_add_use_document_detail) {
+          DINGO_LOG(INFO) << fmt::format(
+              "[raft.apply][region({})] process vector_with_id for vector_id: {} with document speedup enabled, "
+              "document_with_id: {}",
+              region->Id(), vector_id, document_with_id.DebugString());
+        }
+        document_with_ids.push_back(std::move(document_with_id));
+      }
+
+    }  // for (const auto &vector : request.vectors()) {
+  }  // if (enable_scalar_speed_up_with_document)
+
+#endif
 
   // Handle vector index
   auto vector_index_wrapper = region->VectorIndexWrapper();
@@ -1411,7 +1771,7 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
           vector_with_ids.push_back(vector_with_id);
         }
         if (vector_with_ids.empty()) {
-          return 0;
+          goto _HANDLE_VECTOR_DELETE;
         }
         auto start_time = Helper::TimestampNs();
         auto status = request.is_update() ? vector_index_wrapper->Upsert(vector_with_ids)
@@ -1435,23 +1795,26 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
                                         e.what());
       }
 
+    _HANDLE_VECTOR_DELETE:
       // delete vector id
       try {
-        auto start_time = Helper::TimestampNs();
-        auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_vector_ids()));
-        if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
-        if (status.ok()) {
-          if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
-            vector_index_wrapper->SetApplyLogId(log_id);
-          }
-        } else {
-          if (status.error_code() != pb::error::Errno::EVECTOR_INVALID) {
-            if (ctx) {
-              ctx->SetStatus(status);
+        if (!request.delete_vector_ids().empty()) {
+          auto start_time = Helper::TimestampNs();
+          auto status = vector_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_vector_ids()));
+          if (tracker) tracker->SetVectorIndexWriteTime(Helper::TimestampNs() - start_time);
+          if (status.ok()) {
+            if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+              vector_index_wrapper->SetApplyLogId(log_id);
             }
-            DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
-                                              vector_index_id, request.delete_vector_ids().size(),
-                                              Helper::PrintStatus(status));
+          } else {
+            if (status.error_code() != pb::error::Errno::EVECTOR_INVALID) {
+              if (ctx) {
+                ctx->SetStatus(status);
+              }
+              DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete vector failed, count: {}, error: {}",
+                                                vector_index_id, request.delete_vector_ids().size(),
+                                                Helper::PrintStatus(status));
+            }
           }
         }
       } catch (const std::exception &e) {
@@ -1460,6 +1823,80 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
       }
     }
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // Handle document index
+  if (enable_scalar_speed_up_with_document) {
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper) {
+      int64_t document_index_id = document_index_wrapper->Id();
+      is_ready = document_index_wrapper->IsReady();
+
+      // add
+      if (is_ready && !document_with_ids.empty()) {
+        // Check if the log_id is greater than the ApplyLogIndex of the vector index
+        if (log_id > document_index_wrapper->ApplyLogId() ||
+            region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+          try {
+            auto start_time = Helper::TimestampNs();
+            auto status = request.is_update() ? document_index_wrapper->Upsert(document_with_ids)
+                                              : document_index_wrapper->Add(document_with_ids);
+            if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+            DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] upsert document, count: {} cost: {}ns",
+                                            document_index_id, document_with_ids.size(),
+                                            Helper::TimestampNs() - start_time);
+            if (status.ok()) {
+              if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+                document_index_wrapper->SetApplyLogId(log_id);
+              }
+            } else {
+              if (ctx) {
+                ctx->SetStatus(status);
+              }
+              DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] upsert document failed, count: {} err: {}",
+                                                document_index_id, document_with_ids.size(),
+                                                Helper::PrintStatus(status));
+            }
+          } catch (const std::exception &e) {
+            DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] upsert document exception, error: {}",
+                                            document_index_id, e.what());
+          }
+        }
+      }  //   if (is_ready && !document_with_ids.empty()) {
+
+      // delete
+      if (is_ready && !request.delete_vector_ids().empty()) {
+        if (log_id > document_index_wrapper->ApplyLogId() ||
+            region->GetStoreEngineType() == pb::common::STORE_ENG_MONO_STORE) {
+          try {
+            auto start_time = Helper::TimestampNs();
+            auto status = document_index_wrapper->Delete(Helper::PbRepeatedToVector(request.delete_vector_ids()));
+            if (tracker) tracker->SetDocumentIndexWriteTime(Helper::TimestampNs() - start_time);
+            DINGO_LOG(DEBUG) << fmt::format("[raft.apply][region({})] delete document, count: {} cost: {}ns",
+                                            document_index_id, request.delete_vector_ids().size(),
+                                            Helper::TimestampNs() - start_time);
+            if (status.ok()) {
+              if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE && log_id != INT64_MAX) {
+                document_index_wrapper->SetApplyLogId(log_id);
+              }
+            } else {
+              if (ctx) {
+                ctx->SetStatus(status);
+              }
+              DINGO_LOG(WARNING) << fmt::format("[raft.apply][region({})] delete document failed, count: {}, error: {}",
+                                                document_index_id, request.delete_vector_ids().size(),
+                                                Helper::PrintStatus(status));
+            }
+          } catch (const std::exception &e) {
+            DINGO_LOG(FATAL) << fmt::format("[raft.apply][region({})] delete document exception, error: {}",
+                                            document_index_id, e.what());
+          }
+        }
+      }  // if (is_ready && !request.delete_vector_ids().empty()) {
+
+    }  // if (document_index_wrapper) {
+  }  // if (enable_scalar_speed_up_with_document) {
+#endif
 
   return 0;
 }
@@ -1495,7 +1932,7 @@ int DocumentAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr re
     if (req.ttl() == 0) {
       mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, value);
     } else {
-      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPut, ttl, value);
+      mvcc::Codec::PackageValue(mvcc::ValueFlag::kPutTTL, ttl, value);
     }
     kv.mutable_value()->swap(value);
 

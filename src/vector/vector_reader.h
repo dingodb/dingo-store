@@ -48,6 +48,10 @@ class VectorReader {
                                  std::vector<pb::common::VectorWithId>& vector_with_ids);
 
   butil::Status VectorGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min, int64_t& vector_id);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  butil::Status VectorGetBorderIdForDocument(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                             int64_t& vector_id);
+#endif
 
   butil::Status VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                 std::vector<pb::common::VectorWithId>& vector_with_ids);
@@ -120,6 +124,10 @@ class VectorReader {
                                      std::vector<pb::index::VectorWithDistanceResult>& results);
 
   butil::Status GetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min, int64_t& vector_id);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  butil::Status GetBorderIdForDocument(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                       int64_t& vector_id);
+#endif
   butil::Status ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx, std::vector<int64_t>& vector_ids);
 
   butil::Status DoVectorSearchForVectorIdPreFilter(
@@ -133,6 +141,14 @@ class VectorReader {
       const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
       const pb::common::ScalarSchema& scalar_schema,
       std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  butil::Status DoVectorSearchForScalarPreFilterWithDocument(
+      VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
+      const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+      const pb::common::ScalarSchema& scalar_schema,
+      std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results);
+#endif
 
   static bool ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
                                 const pb::common::VectorScalardata& internal_vector_scalar);

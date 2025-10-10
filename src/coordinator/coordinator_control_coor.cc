@@ -1643,7 +1643,7 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
     if (selected_stores_for_regions.size() != replica_num) {
       selected_stores_for_regions.clear();
-      DINGO_LOG(INFO) << "Store ids size not match, store_ids.size=" << store_ids.size()
+      DINGO_LOG(ERROR) << "Store ids size not match, store_ids.size=" << store_ids.size()
                       << ", replica_num=" << replica_num;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store_ids size not match replica_num");
     }

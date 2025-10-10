@@ -389,9 +389,8 @@ static void SignalHandlerWithoutLineno(int signo) {
       } else {
         std::stringstream string_stream;
         string_stream << "Frame [" << i++ << "] symbol=[" << nameptr << " + " << offset << "] (0x" << std::hex << pc
-                      << ") "
-                      << " fname=[" << info.dli_fname << "] saddr=[" << info.dli_saddr << "] fbase=[" << info.dli_fbase
-                      << "]";
+                      << ") " << " fname=[" << info.dli_fname << "] saddr=[" << info.dli_saddr << "] fbase=["
+                      << info.dli_fbase << "]";
         std::string const error_msg = string_stream.str();
         DINGO_LOG(ERROR) << error_msg;
         std::cout << error_msg << '\n';
@@ -1079,6 +1078,15 @@ int main(int argc, char *argv[]) {
     }
 
     index_service.SetVectorIndexManager(dingo_server.GetVectorIndexManager());
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if (!dingo_server.InitDocumentIndexManager(dingodb::UseDocumentPurposeType::kVectorIndexModule)) {
+      DINGO_LOG(ERROR) << "InitDocumentIndexManager failed!";
+      return -1;
+    }
+    index_service.SetDocumentIndexManager(dingo_server.GetDocumentIndexManager());
+#endif
+
     if (!dingo_server.InitStoreMetaManager()) {
       DINGO_LOG(ERROR) << "InitStoreMetaManager failed!";
       return -1;
@@ -1230,9 +1238,13 @@ int main(int argc, char *argv[]) {
       return -1;
     }
 
-    // region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
-    // workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
+// region will do recover in InitStoreMetaManager, and if leader is elected, then it need document index manager
+// workers to load index, so InitDocumentIndexManager must be called before InitStoreMetaManager
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    if (!dingo_server.InitDocumentIndexManager(dingodb::UseDocumentPurposeType::kDocumentModule)) {
+#else
     if (!dingo_server.InitDocumentIndexManager()) {
+#endif
       DINGO_LOG(ERROR) << "InitDocumentIndexManager failed!";
       return -1;
     }

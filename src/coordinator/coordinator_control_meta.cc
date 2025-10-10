@@ -961,10 +961,22 @@ butil::Status CoordinatorControl::ValidateIndexDefinition(pb::meta::TableDefinit
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS,
                            "index_type is INDEX_TYPE_VECTOR, but vector_index_parameter is not set");
     }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    auto* tmp_vector_index_parameter = index_parameter->mutable_vector_index_parameter();
+
+    // auto fill document scalar schema and json_parameter. if needed.
+    butil::Status status = VectorIndexUtils::AutoFillScalarSchemaWithDocumentSpeedup(*tmp_vector_index_parameter);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << "AutoFillScalarSchemaWithDocumentSpeedup failed, error:" << status.error_str();
+      return status;
+    }
 
     const auto& vector_index_parameter = index_parameter->vector_index_parameter();
-
+    auto ret = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter, true);
+#else
+    const auto& vector_index_parameter = index_parameter->vector_index_parameter();
     auto ret = VectorIndexUtils::ValidateVectorIndexParameter(vector_index_parameter);
+#endif
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << "vector_index_parameter is illegal, error:" << ret.error_str();
       return ret;

@@ -244,6 +244,18 @@ bool Server::InitDirectory() {
       DINGO_LOG(ERROR) << "Create vector index directory failed: " << vector_index_path;
       return false;
     }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    auto document_index_path = GetDocumentIndexPath();
+    if (document_index_path.empty()) {
+      DINGO_LOG(ERROR) << "Get document index path failed";
+      return false;
+    }
+    ret = Helper::CreateDirectories(document_index_path);
+    if (!ret.ok()) {
+      DINGO_LOG(ERROR) << "Create document index directory failed: " << document_index_path;
+      return false;
+    }
+#endif
   }
 
   // document index path
@@ -861,11 +873,19 @@ bool Server::InitVectorIndexManager() {
   return vector_index_manager_->Init();
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+bool Server::InitDocumentIndexManager(UseDocumentPurposeType use_document_purpose_type) {
+#else
 bool Server::InitDocumentIndexManager() {
+#endif
   document_index_thread_pool_ =
       std::make_shared<ThreadPool>("document_index", FLAGS_document_operation_parallel_thread_num);
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  document_index_manager_ = DocumentIndexManager::New(use_document_purpose_type);
+#else
   document_index_manager_ = DocumentIndexManager::New();
+#endif
   return document_index_manager_->Init();
 }
 
@@ -940,6 +960,12 @@ void Server::Destroy() {
   if (GetRole() == pb::common::INDEX && vector_index_manager_) {
     vector_index_manager_->Destroy();
   }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  if (GetRole() == pb::common::INDEX && document_index_manager_) {
+    document_index_manager_->Destroy();
+  }
+#endif
 
   if (GetRole() == pb::common::DOCUMENT && document_index_manager_) {
     document_index_manager_->Destroy();

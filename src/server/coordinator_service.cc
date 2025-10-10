@@ -3267,7 +3267,11 @@ void CoordinatorServiceImpl::CreateRegion(google::protobuf::RpcController *contr
     }
 
     if (index_parameter.has_vector_index_parameter()) {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      auto ret = VectorIndexUtils::ValidateVectorIndexParameter(index_parameter.vector_index_parameter(), false);
+#else
       auto ret = VectorIndexUtils::ValidateVectorIndexParameter(index_parameter.vector_index_parameter());
+#endif
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << "CreateRegion vector_index_parameter is invalid, reject create region";
         ServiceHelper::SetError(response->mutable_error(), pb::error::EILLEGAL_PARAMTETERS,
