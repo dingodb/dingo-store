@@ -29,9 +29,15 @@
 #include "common/constant.h"
 #include "common/helper.h"
 #include "common/logging.h"
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include "common/uuid.h"
+#endif
 #include "coprocessor/coprocessor_scalar.h"
 #include "coprocessor/coprocessor_v2.h"
 #include "coprocessor/utils.h"
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include "document/codec.h"
+#endif
 #include "fmt/core.h"
 #include "gflags/gflags.h"
 #include "glog/logging.h"
@@ -59,6 +65,17 @@ bvar::LatencyRecorder g_bruteforce_search_latency("dingo_bruteforce_search_laten
 bvar::LatencyRecorder g_bruteforce_range_search_latency("dingo_bruteforce_range_search_latency");
 
 DECLARE_bool(dingo_log_switch_coprocessor_scalar_detail);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+DEFINE_bool(vector_index_uses_document_to_enable_flow_control, true,
+            "use document to enable flow control. default true.");
+BRPC_VALIDATE_GFLAG(vector_index_uses_document_to_enable_flow_control, brpc::PassValidate);
+
+DEFINE_bool(vector_index_uses_document_print_document, false,
+            "print document when search with pre filter. default false.");
+BRPC_VALIDATE_GFLAG(vector_index_uses_document_print_document, brpc::PassValidate);
+
+#endif
 
 butil::Status VectorReader::QueryVectorWithId(int64_t ts, const pb::common::Range& region_range, int64_t partition_id,
                                               int64_t vector_id, bool with_vector_data,
@@ -500,6 +517,13 @@ butil::Status VectorReader::VectorGetBorderId(int64_t ts, const pb::common::Rang
   return GetBorderId(ts, region_range, get_min, vector_id);
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status VectorReader::VectorGetBorderIdForDocument(int64_t ts, const pb::common::Range& region_range,
+                                                         bool get_min, int64_t& vector_id) {
+  return GetBorderIdForDocument(ts, region_range, get_min, vector_id);
+}
+#endif
+
 butil::Status VectorReader::VectorScanQuery(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                             std::vector<pb::common::VectorWithId>& vector_with_ids) {
   DINGO_LOG(INFO) << fmt::format("Scan vector, region_id: {} start_id: {} is_reverse: {} limit: {}", ctx->region_id,
@@ -674,6 +698,32 @@ butil::Status VectorReader::GetBorderId(int64_t ts, const pb::common::Range& reg
   return butil::Status::OK();
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status VectorReader::GetBorderIdForDocument(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                                   int64_t& vector_id) {
+  const std::string& start_key = region_range.start_key();
+  const std::string& end_key = region_range.end_key();
+
+  std::string plain_key;
+  if (get_min) {
+    auto status = reader_->KvMinKey(Constant::kVectorScalarUseDocumentCF, ts, start_key, end_key, plain_key);
+    if (!status.ok()) {
+      return status;
+    }
+
+  } else {
+    auto status = reader_->KvMaxKey(Constant::kVectorScalarUseDocumentCF, ts, start_key, end_key, plain_key);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  vector_id = plain_key.empty() ? 0 : VectorCodec::UnPackageVectorId(plain_key);
+
+  return butil::Status::OK();
+}
+#endif
+
 // ScanVectorId
 butil::Status VectorReader::ScanVectorId(std::shared_ptr<Engine::VectorReader::Context> ctx,
                                          std::vector<int64_t>& vector_ids) {
@@ -814,85 +864,307 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
   }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  bool is_scalar_speed_up_with_document = parameter.is_scalar_speed_up_with_document();
+  if (is_scalar_speed_up_with_document) {
+    // if vector index type is bruteforce, not support scalar pre filter search!!!
+    if (vector_index->Type() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
+      std::string s = "bruteforce not support scalar pre filter search";
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+    }
+    // Implement document-based scalar pre-filter search
+    return DoVectorSearchForScalarPreFilterWithDocument(vector_index, region_range, vector_with_ids, parameter,
+                                                        scalar_schema, vector_with_distance_results);
+  } else {  // Use the following method
+#endif
 
-  bool use_coprocessor = parameter.has_vector_coprocessor();
+    bool use_coprocessor = parameter.has_vector_coprocessor();
 
-  if (!use_coprocessor && vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
-    std::string s = fmt::format("vector_with_ids[0].scalar_data() empty not support");
-    DINGO_LOG(ERROR) << s;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
-  }
-
-  bool enable_speed_up = false;
-  if (use_coprocessor) {
-    status = VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, parameter.vector_coprocessor(), enable_speed_up);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
+    if (!use_coprocessor && vector_with_ids[0].scalar_data().scalar_data_size() == 0) {
+      std::string s = fmt::format("vector_with_ids[0].scalar_data() empty not support");
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
     }
 
-  } else {
-    status =
-        VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_with_ids[0].scalar_data(), enable_speed_up);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-  }
+    bool enable_speed_up = false;
+    if (use_coprocessor) {
+      status =
+          VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, parameter.vector_coprocessor(), enable_speed_up);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
 
-  std::set<std::string> compare_keys;
-  std::shared_ptr<RawCoprocessor> scalar_coprocessor;
-
-  if (use_coprocessor) {
-    if (enable_speed_up) {
-      status = Utils::CollectKeysFromCoprocessor(parameter.vector_coprocessor(), compare_keys);
+    } else {
+      status =
+          VectorIndexUtils::IsNeedToScanKeySpeedUpCF(scalar_schema, vector_with_ids[0].scalar_data(), enable_speed_up);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
       }
     }
 
-    const auto& coprocessor = parameter.vector_coprocessor();
+    std::set<std::string> compare_keys;
+    std::shared_ptr<RawCoprocessor> scalar_coprocessor;
 
-    scalar_coprocessor = std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
+    if (use_coprocessor) {
+      if (enable_speed_up) {
+        status = Utils::CollectKeysFromCoprocessor(parameter.vector_coprocessor(), compare_keys);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << status.error_cstr();
+          return status;
+        }
+      }
 
-    status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
+      const auto& coprocessor = parameter.vector_coprocessor();
+
+      scalar_coprocessor = std::make_shared<CoprocessorScalar>(Helper::GetKeyPrefix(region_range.start_key()));
+
+      status = scalar_coprocessor->Open(CoprocessorPbWrapper{coprocessor});
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
+        return status;
+      }
+
+    } else {
+      if (enable_speed_up) {
+        const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
+        for (const auto& [key, _] : std_vector_scalar.scalar_data()) {
+          compare_keys.insert(key);
+        }
+      }
+    }
+
+    DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
+        << fmt::format("enable_speed_up: {} use_coprocessor: {} scalar_schema: {} compare_keys: {}",
+                       (enable_speed_up ? "true" : "false"), (use_coprocessor ? "true" : "false"),
+                       scalar_schema.ShortDebugString(), Helper::SetToString(compare_keys));
+
+    std::vector<int64_t> vector_ids;
+    vector_ids.reserve(1024);
+    if (enable_speed_up) {
+      const auto& std_vector_scalar =
+          use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
+      status = InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
+          region_range, compare_keys, use_coprocessor, scalar_coprocessor, std_vector_scalar, vector_ids);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    } else {
+      const auto& std_vector_scalar =
+          use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
+      status = InternalVectorSearchForScalarPreFilterWithScalarCF(region_range, use_coprocessor, scalar_coprocessor,
+                                                                  std_vector_scalar, vector_ids);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << status.error_cstr();
+        return status;
+      }
+    }
+
+    std::vector<std::shared_ptr<VectorIndex::FilterFunctor>> filters;
+    status = VectorReader::SetVectorIndexIdsFilter(false, false, vector_ids, filters);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << "scalar coprocessor::Open failed " << status.error_cstr();
+      DINGO_LOG(ERROR) << status.error_cstr();
       return status;
     }
 
+    status = VectorReader::SearchAndRangeSearchWrapper(vector_index, region_range, vector_with_ids, parameter,
+                                                       vector_with_distance_results, parameter.top_n(), filters);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  }
+#endif
+
+  return butil::Status::OK();
+}
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+class InVectorUseDocumentSearchTask : public TaskRunnable {
+ public:
+  InVectorUseDocumentSearchTask(BthreadCondPtr cond, DocumentIndexWrapperPtr document_index_wrapper,
+                                const std::string& query_string,
+                                std::vector<pb::common::DocumentWithScore>& document_results, butil::Status& status,
+                                const pb::common::Range& region_range, std::string job_id, const std::string& trace)
+      : cond_(cond),
+        document_index_wrapper_(document_index_wrapper),
+        query_string_(query_string),
+        document_results_(document_results),
+        status_(status),
+        region_range_(region_range),
+        job_id_(job_id),
+        trace_(trace) {
+    start_time_ = Helper::TimestampMs();
+  }
+  ~InVectorUseDocumentSearchTask() override = default;
+
+  std::string Type() override { return "VECTOR_PRE_FILTER_USE_DOCUMENT_SEARCH"; }
+
+  void Run() override {
+    pb::common::DocumentSearchParameter document_search_parameter;
+    document_search_parameter.set_top_n(0);  // for all
+    document_search_parameter.set_query_string(query_string_);
+    // document_ids ignore
+    // column_names ignore
+    document_search_parameter.set_without_scalar_data(true);
+    // selected_keys ignore
+    document_search_parameter.set_without_table_data(true);  // must be true. else crash.
+    document_search_parameter.set_query_unlimited(true);     // for all
+
+    status_ = document_index_wrapper_->Search(region_range_, document_search_parameter, document_results_);
+    if (!status_.ok()) {
+      DINGO_LOG(ERROR) << status_.error_cstr() << " " << Trace();
+    }
+
+    DINGO_LOG(DEBUG) << fmt::format(
+        "Document search use document index success, region_id: {}, "
+        "document_results size: {}. {}",
+        document_index_wrapper_->Id(), document_results_.size(), Trace());
+    cond_->DecreaseSignal();
+  }
+
+  std::string Trace() override {
+    return fmt::format("[document_index.search][id({}).start_time({}).job_id({})] {}", document_index_wrapper_->Id(),
+                       Helper::FormatMsTime(start_time_), job_id_, trace_);
+  }
+
+ private:
+  BthreadCondPtr cond_;
+  DocumentIndexWrapperPtr document_index_wrapper_;
+  std::string query_string_;
+  std::vector<pb::common::DocumentWithScore>& document_results_;
+  pb::common::Range region_range_;
+  butil::Status& status_;
+
+  std::string job_id_;
+  std::string trace_;
+  int64_t start_time_;
+};
+
+butil::Status VectorReader::DoVectorSearchForScalarPreFilterWithDocument(
+    VectorIndexWrapperPtr vector_index, pb::common::Range region_range,
+    const std::vector<pb::common::VectorWithId>& vector_with_ids, const pb::common::VectorSearchParameter& parameter,
+    const pb::common::ScalarSchema& /*scalar_schema*/,
+    std::vector<pb::index::VectorWithDistanceResult>& vector_with_distance_results) {
+  butil::Status status;
+
+  const std::string& query_string = parameter.query_string();
+  if (query_string.empty()) {
+    std::string s = fmt::format("Region: {} parameter.query_string() empty not support", vector_index->Id());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+  }
+
+  store::RegionPtr region = Server::GetInstance().GetRegion(vector_index->Id());
+  const pb::common::RegionDefinition& definition = region->Definition();
+  bool enable_scalar_speed_up_with_document =
+      definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document();
+  if (!enable_scalar_speed_up_with_document) {
+    std::string s = fmt::format("Region: {} not support scalar speed up with document", region->Id());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
+  DocumentIndexWrapperPtr document_index_wrapper = region->DocumentIndexWrapper();
+  if (document_index_wrapper == nullptr) {
+    std::string s = fmt::format("Region: {} document index not exist", region->Id());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
+  if (document_index_wrapper->GetUseDocumentPurposeType() != UseDocumentPurposeType::kVectorIndexModule) {
+    std::string s = fmt::format("Region: {} document index not support use for vector index. type : {}", region->Id(),
+                                static_cast<int>(document_index_wrapper->GetUseDocumentPurposeType()));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
+  DocumentIndexManagerPtr document_index_manager = Server::GetInstance().GetDocumentIndexManager();
+  if (document_index_manager == nullptr) {
+    std::string s = fmt::format("Region: {} . DocumentIndexManager not exist", region->Id());
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
+  UseDocumentPurposeType use_document_purpose_type = document_index_manager->GetUseDocumentPurposeType();
+  if (use_document_purpose_type != UseDocumentPurposeType::kVectorIndexModule) {
+    std::string s = fmt::format("Region: {} . DocumentIndexManager not support use for vector index. type : {}",
+                                region->Id(), static_cast<int>(use_document_purpose_type));
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EVECTOR_NOT_SUPPORT, s);
+  }
+
+  std::vector<pb::common::DocumentWithScore> document_results;
+
+  // default not use flow control
+  if (FLAGS_vector_index_uses_document_to_enable_flow_control) {
+    BthreadCondPtr cond = std::make_shared<BthreadCond>();
+    std::string job_id = UUIDGenerator::GenerateUUID();
+    std::string trace = fmt::format("{}-{}", job_id, trace);
+    std::shared_ptr<InVectorUseDocumentSearchTask> task = std::make_shared<InVectorUseDocumentSearchTask>(
+        cond, document_index_wrapper, query_string, document_results, status, region_range, job_id, trace);
+
+    if (!document_index_manager->ExecuteTaskVectorScalarSearch(region->Id(), task)) {
+      std::string s =
+          fmt::format("Region: {} . DocumentIndexManager ExecuteTaskVectorScalarSearch failed", region->Id());
+      DINGO_LOG(ERROR) << s;
+      return butil::Status(pb::error::Errno::EDOCUMENT_INDEX_FULL, s);
+    }
+
+    cond->IncreaseWait();
+
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
+    }
   } else {
-    if (enable_speed_up) {
-      const auto& std_vector_scalar = vector_with_ids[0].scalar_data();
-      for (const auto& [key, _] : std_vector_scalar.scalar_data()) {
-        compare_keys.insert(key);
-      }
+    pb::common::DocumentSearchParameter document_search_parameter;
+    document_search_parameter.set_top_n(0);  // for all
+    document_search_parameter.set_query_string(query_string);
+    // document_ids ignore
+    // column_names ignore
+    document_search_parameter.set_without_scalar_data(true);
+    // selected_keys ignore
+    document_search_parameter.set_without_table_data(true);  // must be true. else crash.
+    document_search_parameter.set_query_unlimited(true);     // for all
+
+    status = document_index_wrapper->Search(region_range, document_search_parameter, document_results);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << status.error_cstr();
+      return status;
     }
   }
 
-  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_scalar_speed_up_detail)
-      << fmt::format("enable_speed_up: {} use_coprocessor: {} scalar_schema: {} compare_keys: {}",
-                     (enable_speed_up ? "true" : "false"), (use_coprocessor ? "true" : "false"),
-                     scalar_schema.ShortDebugString(), Helper::SetToString(compare_keys));
-
   std::vector<int64_t> vector_ids;
-  vector_ids.reserve(1024);
-  if (enable_speed_up) {
-    const auto& std_vector_scalar = use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
-    status = InternalVectorSearchForScalarPreFilterWithScalarKeySpeedUpCF(
-        region_range, compare_keys, use_coprocessor, scalar_coprocessor, std_vector_scalar, vector_ids);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
-    }
-  } else {
-    const auto& std_vector_scalar = use_coprocessor ? pb::common::VectorScalardata() : vector_with_ids[0].scalar_data();
-    status = InternalVectorSearchForScalarPreFilterWithScalarCF(region_range, use_coprocessor, scalar_coprocessor,
-                                                                std_vector_scalar, vector_ids);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << status.error_cstr();
-      return status;
+  vector_ids.reserve(document_results.size());
+
+  for (const auto& document_with_score : document_results) {
+    vector_ids.push_back(document_with_score.document_with_id().id());
+    if (FLAGS_vector_index_uses_document_print_document) {
+      int64_t document_id = document_with_score.document_with_id().id();
+      auto partition_id = region->PartitionId();
+      std::string plain_key =
+          VectorCodec::PackageVectorKey(Helper::GetKeyPrefix(region_range), partition_id, document_id);
+
+      std::string plain_value;
+      auto status = reader_->KvGet(Constant::kVectorScalarUseDocumentCF, 0, plain_key, plain_value);
+      if (!status.ok()) {
+        return status;
+      }
+
+      pb::common::DocumentWithId document;
+      document.set_id(document_id);
+      if (!document.mutable_document()->ParseFromString(plain_value)) {
+        return butil::Status(pb::error::EINTERNAL, "Parse proto from string error");
+      }
+
+      DINGO_LOG(INFO) << fmt::format("Document id: {} score: {} ", document_with_score.document_with_id().id(),
+                                     document.DebugString());
     }
   }
 
@@ -912,6 +1184,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilter(
 
   return butil::Status::OK();
 }
+#endif  // #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
 
 bool VectorReader::ScalarCompareCore(const pb::common::VectorScalardata& std_vector_scalar,
                                      const pb::common::VectorScalardata& internal_vector_scalar) {

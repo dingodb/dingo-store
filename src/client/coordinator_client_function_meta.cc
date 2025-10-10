@@ -67,7 +67,7 @@ DEFINE_bool(is_updating_index, false, "is index");
 DEFINE_bool(is_index, false, "is index");
 DEFINE_bool(use_json_parameter, false, "use json parameter");
 
-
+DECLARE_bool(enable_scalar_speed_up_with_document);
 
 dingodb::pb::common::Engine GetEngine(const std::string& engine_name) {
   if (engine_name == "rocksdb") {
@@ -107,8 +107,7 @@ void SendGetSchemas(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& schema : response.schemas()) {
-    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]"
-                    << "schema_name=[" << schema.name() << "]"
+    DINGO_LOG(INFO) << "schema_id=[" << schema.id().entity_id() << "]" << "schema_name=[" << schema.name() << "]"
                     << "child_table_count=" << schema.table_ids_size();
     for (const auto& child_table_id : schema.table_ids()) {
       DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -136,9 +135,8 @@ void SendGetSchema(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]" << "schema_id=["
+                  << response.schema().id().entity_id() << "]" << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto& child_table_id : response.schema().table_ids()) {
     DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -168,9 +166,8 @@ void SendGetSchemaByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
 
-  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]"
-                  << "schema_id=[" << response.schema().id().entity_id() << "]"
-                  << "schema_name=[" << response.schema().name() << "]"
+  DINGO_LOG(INFO) << "tenant_id=[" << response.schema().tenant_id() << "]" << "schema_id=["
+                  << response.schema().id().entity_id() << "]" << "schema_name=[" << response.schema().name() << "]"
                   << "child_table_count=" << response.schema().table_ids_size();
   for (const auto& child_table_id : response.schema().table_ids()) {
     DINGO_LOG(INFO) << "child table_id=[" << child_table_id.entity_id() << "]";
@@ -213,8 +210,8 @@ void SendGetTablesBySchema(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& table_definition_with_id : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]"
-                    << "table_name=[" << table_definition_with_id.table_definition().name() << "], column_count=["
+    DINGO_LOG(INFO) << "table_id=[" << table_definition_with_id.table_id().entity_id() << "]" << "table_name=["
+                    << table_definition_with_id.table_definition().name() << "], column_count=["
                     << table_definition_with_id.table_definition().columns_size() << "]";
   }
 
@@ -286,10 +283,10 @@ void SendGetTableRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& it : response.table_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
+                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
+                    << ":" << it.leader().port() << "]";
   }
 }
 
@@ -627,8 +624,8 @@ void SendGetIndexs(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
-                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]" << "index_name=["
+                    << index_definition_with_id.index_definition().name() << "], index_type=["
                     << dingodb::pb::common::IndexType_Name(
                            index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
@@ -759,10 +756,10 @@ void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordina
   DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& it : response.index_range().range_distribution()) {
-    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]"
-                    << "range=[" << dingodb::Helper::StringToHex(it.range().start_key()) << ","
-                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]"
-                    << " leader=[" << it.leader().host() << ":" << it.leader().port() << "]";
+    DINGO_LOG(INFO) << "region_id=[" << it.id().entity_id() << "]" << "range=["
+                    << dingodb::Helper::StringToHex(it.range().start_key()) << ","
+                    << dingodb::Helper::StringToHex(it.range().end_key()) << "]" << " leader=[" << it.leader().host()
+                    << ":" << it.leader().port() << "]";
   }
 }
 
@@ -1051,6 +1048,271 @@ void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coor
   }
 }
 
+void SendCreateVectorIndexUseDocument(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
+  dingodb::pb::meta::CreateIndexRequest request;
+  dingodb::pb::meta::CreateIndexResponse response;
+
+  if (FLAGS_name.empty()) {
+    DINGO_LOG(WARNING) << "name is empty";
+    return;
+  }
+
+  auto* schema_id = request.mutable_schema_id();
+  schema_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_SCHEMA);
+  schema_id->set_entity_id(::dingodb::pb::meta::ReservedSchemaIds::DINGO_SCHEMA);
+  schema_id->set_parent_entity_id(::dingodb::pb::meta::ReservedSchemaIds::ROOT_SCHEMA);
+
+  if (FLAGS_schema_id > 0) {
+    schema_id->set_entity_id(FLAGS_schema_id);
+  }
+
+  if (FLAGS_part_count == 0) {
+    FLAGS_part_count = 1;
+  }
+  uint32_t part_count = FLAGS_part_count;
+
+  std::vector<int64_t> new_ids;
+  int ret = GetCreateTableIds(coordinator_interaction, 1 + FLAGS_part_count, new_ids);
+  if (ret < 0) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.empty()) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+  if (new_ids.size() != 1 + FLAGS_part_count) {
+    DINGO_LOG(WARNING) << "GetCreateTableIds failed";
+    return;
+  }
+
+  int64_t new_index_id = new_ids.at(0);
+  DINGO_LOG(INFO) << "index_id = " << new_index_id;
+
+  std::vector<int64_t> part_ids;
+  for (int i = 0; i < part_count; i++) {
+    int64_t new_part_id = new_ids.at(1 + i);
+    part_ids.push_back(new_part_id);
+  }
+
+  for (const auto& id : part_ids) {
+    DINGO_LOG(INFO) << "part_id = " << id;
+  }
+
+  // setup index_id
+  auto* index_id = request.mutable_index_id();
+  index_id->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_INDEX);
+  index_id->set_parent_entity_id(schema_id->entity_id());
+  index_id->set_entity_id(new_index_id);
+
+  // string name = 1;
+  auto* index_definition = request.mutable_index_definition();
+  index_definition->set_name(FLAGS_name);
+
+  if (FLAGS_replica > 0) {
+    index_definition->set_replica(FLAGS_replica);
+  }
+
+  if (FLAGS_with_auto_increment) {
+    index_definition->set_with_auto_incrment(true);
+    index_definition->set_auto_increment(1024);
+  }
+
+  // vector index parameter
+  index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_VECTOR);
+  auto* vector_index_parameter = index_definition->mutable_index_parameter()->mutable_vector_index_parameter();
+
+  if (FLAGS_vector_index_type.empty()) {
+    DINGO_LOG(WARNING) << "vector_index_type is empty";
+    return;
+  }
+
+  if (FLAGS_vector_index_type == "hnsw") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_HNSW);
+  } else if (FLAGS_vector_index_type == "flat") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_FLAT);
+  } else if (FLAGS_vector_index_type == "bruteforce") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_BRUTEFORCE);
+  } else if (FLAGS_vector_index_type == "ivf_flat") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_FLAT);
+  } else if (FLAGS_vector_index_type == "ivf_pq") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_IVF_PQ);
+  } else if (FLAGS_vector_index_type == "diskann") {
+    vector_index_parameter->set_vector_index_type(::dingodb::pb::common::VectorIndexType::VECTOR_INDEX_TYPE_DISKANN);
+  } else {
+    DINGO_LOG(WARNING) << "vector_index_type is invalid, now only support hnsw and flat";
+    return;
+  }
+
+  if (FLAGS_dimension == 0) {
+    DINGO_LOG(WARNING) << "dimension is empty";
+    return;
+  }
+
+  dingodb::pb::common::MetricType metric_type;
+
+  if (FLAGS_metrics_type == "L2" || FLAGS_metrics_type == "l2") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_L2;
+  } else if (FLAGS_metrics_type == "IP" || FLAGS_metrics_type == "ip") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_INNER_PRODUCT;
+  } else if (FLAGS_metrics_type == "COSINE" || FLAGS_metrics_type == "cosine") {
+    metric_type = ::dingodb::pb::common::MetricType::METRIC_TYPE_COSINE;
+  } else {
+    DINGO_LOG(WARNING) << "metrics_type is invalid, now only support L2, IP and COSINE";
+    return;
+  }
+
+  if (FLAGS_vector_index_type == "hnsw") {
+    if (FLAGS_max_elements < 0) {
+      DINGO_LOG(WARNING) << "max_elements is negative";
+      return;
+    }
+    if (FLAGS_efconstruction == 0) {
+      DINGO_LOG(WARNING) << "efconstruction is empty";
+      return;
+    }
+    if (FLAGS_nlinks == 0) {
+      DINGO_LOG(WARNING) << "nlinks is empty";
+      return;
+    }
+
+    DINGO_LOG(INFO) << "max_elements=" << FLAGS_max_elements << ", dimension=" << FLAGS_dimension;
+
+    auto* hsnw_index_parameter = vector_index_parameter->mutable_hnsw_parameter();
+
+    hsnw_index_parameter->set_dimension(FLAGS_dimension);
+    hsnw_index_parameter->set_metric_type(metric_type);
+    hsnw_index_parameter->set_efconstruction(FLAGS_efconstruction);
+    hsnw_index_parameter->set_nlinks(FLAGS_nlinks);
+    hsnw_index_parameter->set_max_elements(FLAGS_max_elements);
+  } else if (FLAGS_vector_index_type == "flat") {
+    auto* flat_index_parameter = vector_index_parameter->mutable_flat_parameter();
+    flat_index_parameter->set_dimension(FLAGS_dimension);
+    flat_index_parameter->set_metric_type(metric_type);
+  } else if (FLAGS_vector_index_type == "bruteforce") {
+    auto* bruteforce_index_parameter = vector_index_parameter->mutable_bruteforce_parameter();
+    bruteforce_index_parameter->set_dimension(FLAGS_dimension);
+    bruteforce_index_parameter->set_metric_type(metric_type);
+  } else if (FLAGS_vector_index_type == "ivf_flat") {
+    auto* ivf_flat_index_parameter = vector_index_parameter->mutable_ivf_flat_parameter();
+    ivf_flat_index_parameter->set_dimension(FLAGS_dimension);
+    ivf_flat_index_parameter->set_metric_type(metric_type);
+    ivf_flat_index_parameter->set_ncentroids(FLAGS_ncentroids);
+  } else if (FLAGS_vector_index_type == "ivf_pq") {
+    auto* ivf_pq_index_parameter = vector_index_parameter->mutable_ivf_pq_parameter();
+    ivf_pq_index_parameter->set_dimension(FLAGS_dimension);
+    ivf_pq_index_parameter->set_metric_type(metric_type);
+    ivf_pq_index_parameter->set_ncentroids(FLAGS_ncentroids);
+    ivf_pq_index_parameter->set_nsubvector(FLAGS_nsubvector);
+    ivf_pq_index_parameter->set_nbits_per_idx(FLAGS_nbits_per_idx);
+  } else if (FLAGS_vector_index_type == "diskann") {
+    auto* diskann_parameter = vector_index_parameter->mutable_diskann_parameter();
+    diskann_parameter->set_dimension(FLAGS_dimension);
+    diskann_parameter->set_metric_type(metric_type);
+    diskann_parameter->set_value_type(::dingodb::pb::common::ValueType::FLOAT);
+    diskann_parameter->set_max_degree(FLAGS_max_degree);
+    diskann_parameter->set_search_list_size(FLAGS_search_list_size);
+  }
+
+  index_definition->set_version(1);
+
+  auto* partition_rule = index_definition->mutable_index_partition();
+  auto* part_column = partition_rule->add_columns();
+  part_column->assign("test_part_column");
+
+  for (int i = 0; i < part_count; i++) {
+    auto* part = partition_rule->add_partitions();
+    part->mutable_id()->set_entity_id(part_ids[i]);
+    part->mutable_id()->set_entity_type(::dingodb::pb::meta::EntityType::ENTITY_TYPE_PART);
+    part->mutable_id()->set_parent_entity_id(new_index_id);
+    part->mutable_range()->set_start_key(client::Helper::EncodeRegionRange(part_ids[i]));
+    part->mutable_range()->set_end_key(client::Helper::EncodeRegionRange(part_ids[i] + 1));
+  }
+
+  if (FLAGS_with_auto_increment) {
+    DINGO_LOG(INFO) << "with_auto_increment";
+    index_definition->set_auto_increment(100);
+  }
+
+  // scalar key speed up
+  if (FLAGS_with_scalar_schema) {
+    auto* scalar_parameter = vector_index_parameter->mutable_scalar_schema();
+
+    auto* field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("speedup_key_datetime");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DATETIME);
+    field->set_enable_speed_up(true);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bool");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_long");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::INT64);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_double");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DOUBLE);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_string");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::STRING);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_bytes");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::BYTES);
+    field->set_enable_speed_up(false);
+
+    field = scalar_parameter->add_fields();
+    field->set_key("key_datetime");
+    field->set_field_type(::dingodb::pb::common::ScalarFieldType::DATETIME);
+    field->set_enable_speed_up(false);
+  }
+
+  if (FLAGS_enable_scalar_speed_up_with_document) {
+    vector_index_parameter->set_enable_scalar_speed_up_with_document(true);
+  }
+
+  DINGO_LOG(INFO) << "Request: " << request.DebugString();
+
+  auto status = coordinator_interaction->SendRequest("CreateIndex", request, response);
+  DINGO_LOG(INFO) << "SendRequest status=" << status;
+  DINGO_LOG(INFO) << response.DebugString();
+  if (response.error().errcode() == 0) {
+    DINGO_LOG(INFO) << "create index success, index_id==" << response.index_id().entity_id();
+  }
+}
+
 void SendCreateDocumentIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction) {
   dingodb::pb::meta::CreateIndexRequest request;
   dingodb::pb::meta::CreateIndexResponse response;
@@ -1248,8 +1510,8 @@ void SendGetIndexes(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator
   // DINGO_LOG(INFO) << response.DebugString();
 
   for (const auto& index_definition_with_id : response.index_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]"
-                    << "index_name=[" << index_definition_with_id.index_definition().name() << "], index_type=["
+    DINGO_LOG(INFO) << "index_id=[" << index_definition_with_id.index_id().entity_id() << "]" << "index_name=["
+                    << index_definition_with_id.index_definition().name() << "], index_type=["
                     << dingodb::pb::common::IndexType_Name(
                            index_definition_with_id.index_definition().index_parameter().index_type())
                     << "]";
@@ -1572,9 +1834,8 @@ void SendGetDeletedTable(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto& table : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]"
-                    << "table_name=[" << table.table_definition().name() << "]"
-                    << " detail: " << table.ShortDebugString();
+    DINGO_LOG(INFO) << "table_id=[" << table.table_id().entity_id() << "]" << "table_name=["
+                    << table.table_definition().name() << "]" << " detail: " << table.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted table count=" << response.table_definition_with_ids_size();
 }
@@ -1594,9 +1855,8 @@ void SendGetDeletedIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordi
   DINGO_LOG(INFO) << "SendRequest status=" << status;
 
   for (const auto& index : response.table_definition_with_ids()) {
-    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]"
-                    << "index_name=[" << index.table_definition().name() << "]"
-                    << " detail: " << index.ShortDebugString();
+    DINGO_LOG(INFO) << "index_id=[" << index.table_id().entity_id() << "]" << "index_name=["
+                    << index.table_definition().name() << "]" << " detail: " << index.ShortDebugString();
   }
   DINGO_LOG(INFO) << "Deleted index count=" << response.table_definition_with_ids_size();
 }

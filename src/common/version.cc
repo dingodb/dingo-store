@@ -69,6 +69,7 @@ DEFINE_bool(use_diskann, USE_DISKANN, "use diskann");
 DEFINE_bool(diskann_depend_on_system, ENABLE_DISKANN_DEPEND_ON_SYSTEM,
             "if true, diskann depend on system, else use third_party.");
 DEFINE_string(boost_summary, BOOST_SUMMARY, "boost summary");
+DEFINE_bool(with_vector_index_use_document, false, "use vector index use document");
 
 std::string GetBuildFlag() {
 #ifdef USE_MKL
@@ -101,13 +102,21 @@ std::string GetBuildFlag() {
   FLAGS_use_sanitizer = false;
 #endif
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  FLAGS_with_vector_index_use_document = true;
+#else
+  FLAGS_with_vector_index_use_document = false;
+#endif
+
   return butil::string_printf(
       "DINGO_STORE USE_MKL:[%s] USE_OPENBLAS:[%s] LINK_TCMALLOC:[%s] BRPC_ENABLE_CPU_PROFILER:[%s] "
-      "USE_SANITIZE:[%s]\nDINGO_STORE USE_DISKANN:[%s]  DISKANN_DEPEND_ON_SYSTEM:[%s]\nDINGO_STORE "
+      "USE_SANITIZE:[%s]\nDINGO_STORE USE_DISKANN:[%s]  DISKANN_DEPEND_ON_SYSTEM:[%s] "
+      "WITH_VECTOR_INDEX_USE_DOCUMENT:[%s]\nDINGO_STORE "
       "BOOST_SUMMARY:[%s]\n",
       FLAGS_use_mkl ? "ON" : "OFF", FLAGS_use_openblas ? "ON" : "OFF", FLAGS_use_tcmalloc ? "ON" : "OFF",
       FLAGS_use_profiler ? "ON" : "OFF", FLAGS_use_sanitizer ? "ON" : "OFF", FLAGS_use_diskann ? "ON" : "OFF",
-      FLAGS_diskann_depend_on_system ? "ON" : "OFF", FLAGS_boost_summary.c_str());
+      FLAGS_diskann_depend_on_system ? "ON" : "OFF", FLAGS_with_vector_index_use_document ? "ON" : "OFF",
+      FLAGS_boost_summary.c_str());
 }
 
 static void ReplaceAll(std::string& str, const std::string& from, const std::string& to) {

@@ -15,6 +15,9 @@
 #ifndef DINGODB_INDEX_SERVICE_H_
 #define DINGODB_INDEX_SERVICE_H_
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include "document/document_index_manager.h"
+#endif
 #include "engine/storage.h"
 #include "proto/index.pb.h"
 #include "vector/vector_index_manager.h"
@@ -68,6 +71,11 @@ class IndexServiceImpl : public pb::index::IndexService {
 
   void VectorDump(google::protobuf::RpcController* controller, const pb::index::VectorDumpRequest* request,
                   pb::index::VectorDumpResponse* response, ::google::protobuf::Closure* done) override;
+
+  void VectorDisplayDocumentDetails(google::protobuf::RpcController* controller,
+                                    const pb::index::VectorDisplayDocumentDetailsRequest* request,
+                                    pb::index::VectorDisplayDocumentDetailsResponse* response,
+                                    ::google::protobuf::Closure* done) override;
 
   // for debug
   void VectorSearchDebug(google::protobuf::RpcController* controller,
@@ -136,13 +144,20 @@ class IndexServiceImpl : public pb::index::IndexService {
   }
 
   bool IsBackgroundPendingTaskCountExceed();
-
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  void SetDocumentIndexManager(DocumentIndexManagerPtr document_index_manager) {
+    document_index_manager_ = document_index_manager;
+  }
+#endif
  private:
   StoragePtr storage_;
   // Run service request.
   WorkerSetPtr read_worker_set_;
   WorkerSetPtr write_worker_set_;
   VectorIndexManagerPtr vector_index_manager_;
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  DocumentIndexManagerPtr document_index_manager_;
+#endif
 };
 
 }  // namespace dingodb

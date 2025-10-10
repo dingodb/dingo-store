@@ -170,6 +170,24 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
           vector_index_status->set_snapshot_log_id(vector_index_wrapper->SnapshotLogId());
           vector_index_status->set_last_build_epoch_version(vector_index_wrapper->LastBuildEpochVersion());
         }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+        const auto& definition = region_meta->Definition();
+        if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+          auto document_index_wrapper = region_meta->DocumentIndexWrapper();
+          if (document_index_wrapper != nullptr) {
+            auto* document_index_status = tmp_region_metrics.mutable_document_index_status();
+            document_index_status->set_is_stop(document_index_wrapper->IsDestoryed());
+            document_index_status->set_is_ready(document_index_wrapper->IsReady());
+            document_index_status->set_is_own_ready(document_index_wrapper->IsOwnReady());
+            document_index_status->set_is_build_error(document_index_wrapper->IsBuildError());
+            document_index_status->set_is_rebuild_error(document_index_wrapper->IsRebuildError());
+            document_index_status->set_is_switching(document_index_wrapper->IsSwitchingDocumentIndex());
+            document_index_status->set_is_hold_document_index(document_index_wrapper->IsOwnReady());
+            document_index_status->set_apply_log_id(document_index_wrapper->ApplyLogId());
+            document_index_status->set_last_build_epoch_version(document_index_wrapper->LastBuildEpochVersion());
+          }
+        }
+#endif
       } else if (role == pb::common::ClusterRole::DOCUMENT) {
         auto document_index_wrapper = region_meta->DocumentIndexWrapper();
         if (document_index_wrapper != nullptr) {
@@ -190,7 +208,8 @@ void HeartbeatTask::SendStoreHeartbeat(std::shared_ptr<CoordinatorInteraction> c
     }
 
     DINGO_LOG(INFO) << fmt::format(
-        "[heartbeat.store] start_time({}) request region count({}) size({}) region_ids_count({}), elapsed time({} ms)",
+        "[heartbeat.store] start_time({}) request region count({}) size({}) region_ids_count({}), elapsed time({} "
+        "ms)",
         first_start_time, mut_region_metrics_map->size(), request.ByteSizeLong(), region_ids.size(),
         Helper::TimestampMs() - start_time);
   }

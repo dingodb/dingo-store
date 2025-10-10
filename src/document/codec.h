@@ -90,6 +90,14 @@ class DocumentCodec {
   static bool IsValidTokenizerJsonParameter(const std::string& json_parameter,
                                             std::map<std::string, TokenizerType>& column_tokenizer_parameter,
                                             std::string& error_message);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  static bool IsValidTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+      const std::string& json_parameter, std::map<std::string, TokenizerType>& column_tokenizer_parameter,
+      std::string& error_message);
+  static bool GenDefaultTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+      const std::map<std::string, TokenizerType>& column_tokenizer_parameter, std::string& json_parameter,
+      std::string& error_message);
+#endif
   static bool GenDefaultTokenizerJsonParameter(const std::map<std::string, TokenizerType>& column_tokenizer_parameter,
                                                std::string& json_parameter, std::string& error_message);
 

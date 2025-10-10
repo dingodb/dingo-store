@@ -117,6 +117,10 @@ class MonoStoreEngine : public Engine {
                                    std::vector<pb::common::VectorWithId>& vector_with_ids) override;
     butil::Status VectorGetBorderId(int64_t ts, const pb::common::Range& region_range, bool get_min,
                                     int64_t& vector_id) override;
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    butil::Status VectorGetBorderIdForDocument(int64_t ts, const pb::common::Range& region_range, bool get_min,
+                                               int64_t& vector_id) override;
+#endif
     butil::Status VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                   std::vector<pb::common::VectorWithId>& vector_with_ids) override;
     butil::Status VectorGetRegionMetrics(int64_t region_id, const pb::common::Range& region_range,

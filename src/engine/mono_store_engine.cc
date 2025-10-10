@@ -69,6 +69,15 @@ bool MonoStoreEngine::Recover() {
       if (GetRole() == pb::common::INDEX) {
         auto vector_index_wrapper = region->VectorIndexWrapper();
         VectorIndexManager::LaunchLoadOrBuildVectorIndex(vector_index_wrapper, false, false, 0, "recover");
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+        const auto& definition = region->Definition();
+        if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+          auto document_index_wrapper = region->DocumentIndexWrapper();
+          if (document_index_wrapper != nullptr) {
+            DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, false, 0, "recover");
+          }
+        }
+#endif
       }
       if (GetRole() == pb::common::DOCUMENT) {
         auto document_index_wrapper = region->DocumentIndexWrapper();
@@ -228,6 +237,15 @@ butil::Status MonoStoreEngine::VectorReader::VectorGetBorderId(int64_t ts, const
   auto vector_reader = dingodb::VectorReader::New(reader_);
   return vector_reader->VectorGetBorderId(ts, region_range, get_min, vector_id);
 }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status MonoStoreEngine::VectorReader::VectorGetBorderIdForDocument(int64_t ts,
+                                                                          const pb::common::Range& region_range,
+                                                                          bool get_min, int64_t& vector_id) {
+  auto vector_reader = dingodb::VectorReader::New(reader_);
+  return vector_reader->VectorGetBorderIdForDocument(ts, region_range, get_min, vector_id);
+}
+#endif
 
 butil::Status MonoStoreEngine::VectorReader::VectorScanQuery(std::shared_ptr<VectorReader::Context> ctx,
                                                              std::vector<pb::common::VectorWithId>& vector_with_ids) {

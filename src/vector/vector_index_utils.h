@@ -206,7 +206,12 @@ class VectorIndexUtils {
                                              std::vector<pb::index::VectorWithDistanceResult>& results);
   static butil::Status CheckVectorIndexParameterCompatibility(const pb::common::VectorIndexParameter& source,
                                                               const pb::common::VectorIndexParameter& target);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  static butil::Status ValidateVectorIndexParameter(const pb::common::VectorIndexParameter& vector_index_parameter,
+                                                    bool check_document);
+#else
   static butil::Status ValidateVectorIndexParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
+#endif
   static butil::Status ValidateDiskannParameter(const pb::common::VectorIndexParameter& vector_index_parameter);
 
   static butil::Status ValidateVectorScalarSchema(const pb::common::ScalarSchema& scalar_schema);
@@ -224,6 +229,14 @@ class VectorIndexUtils {
   static butil::Status IsNeedToScanKeySpeedUpCF(const pb::common::ScalarSchema& scalar_schema,
                                                 const pb::common::VectorScalardata& vector_scalar_data,
                                                 bool& is_need);  // NOLINT
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  static butil::Status AutoFillScalarSchemaWithDocumentSpeedup(
+      pb::common::VectorIndexParameter& vector_index_parameter);
+  static butil::Status ValidateVectorScalarSchemaWithDocumentSpeedup(
+      const pb::common::VectorIndexParameter& vector_index_parameter);
+  static butil::Status ValidateVectorWithDocumentSpeedupJsonParameter(const pb::common::ScalarSchema& scalar_schema,
+                                                                      const std::string& json_parameter);
+#endif
 };
 
 }  // namespace dingodb

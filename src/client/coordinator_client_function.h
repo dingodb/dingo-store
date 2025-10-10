@@ -123,6 +123,7 @@ void SendGetIndexByName(std::shared_ptr<dingodb::CoordinatorInteraction> coordin
 void SendGetIndexRange(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateIndexId(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateVectorIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
+void SendCreateVectorIndexUseDocument(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendCreateDocumentIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendUpdateIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
 void SendDropIndex(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction);
@@ -202,6 +203,10 @@ void SendDebug();
 std::string EncodeUint64(int64_t value);
 int64_t DecodeUint64(const std::string& str);
 bool GetBrpcChannel(const std::string& location, brpc::Channel& channel);
+
+// debug service
+void SendDebugServiceDebug(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t region_id,
+                           const std::string& debug_service_debug_type, bool is_actual);
 
 class Bthread {
  public:

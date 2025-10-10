@@ -181,7 +181,20 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
   }
-
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // index region
+  if (GetRole() == pb::common::INDEX) {
+    const auto& region_definition = region->Definition();
+    bool enable_scalar_speed_up_with_document =
+        region_definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document();
+    if (enable_scalar_speed_up_with_document) {
+      auto document_index_wrapper = region->DocumentIndexWrapper();
+      if (document_index_wrapper != nullptr) {
+        DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, true, 0, "creating");
+      }
+    }
+  }
+#endif
   if (GetRole() == pb::common::DOCUMENT) {
     auto document_index_wrapper = region->DocumentIndexWrapper();
     DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(document_index_wrapper, false, true, 0, "creating");
@@ -284,6 +297,12 @@ butil::Status DeleteRegionTask::DeleteRegion(std::shared_ptr<Context> ctx, int64
     if (vector_index_wrapper != nullptr) {
       vector_index_wrapper->Destroy();
     }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    auto document_index_wrapper = region->DocumentIndexWrapper();
+    if (document_index_wrapper != nullptr) {
+      document_index_wrapper->Destroy();
+    }
+#endif
   }
 
   // document region

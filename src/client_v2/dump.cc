@@ -523,6 +523,9 @@ butil::Status DumpRegion(CheckRestoreRegionDataOptions const& opt, dingodb::pb::
       cf_names.push_back(dingodb::Constant::kVectorScalarCF);
       cf_names.push_back(dingodb::Constant::kVectorTableCF);
       cf_names.push_back(dingodb::Constant::kVectorScalarKeySpeedUpCF);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      cf_names.push_back(dingodb::Constant::kVectorScalarUseDocumentCF);
+#endif
     } else if (index_type == dingodb::pb::common::INDEX_TYPE_DOCUMENT) {
       cf_names.push_back(dingodb::Constant::kStoreDataCF);
     }

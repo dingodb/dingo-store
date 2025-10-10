@@ -73,10 +73,7 @@ void RegionImpl::default_method(google::protobuf::RpcController* controller,
          << "  .green-text {\n"
          << "    color: green;\n"
          << "  }\n"
-         << "  .bold-text {"
-         << "    font-weight: bold;"
-         << "  }"
-         << "  .part .full {\n"
+         << "  .bold-text {" << "    font-weight: bold;" << "  }" << "  .part .full {\n"
          << "    visibility: hidden;\n"
          << "    width: 500px;\n"
          << "    background-color: gray;\n"
@@ -582,6 +579,8 @@ void RegionImpl::PrintRegions(std::ostream& os, bool use_html) {
 
       line.push_back(std::to_string(region.metrics().vector_index_status().is_rebuild_error()));  // REBUILD_ERROR
       url_line.push_back(std::string());
+
+      // TODO :  implement  DOCUMENT
 
     } else if (region.definition().index_parameter().has_document_index_parameter()) {
       line.push_back("DOCUMENT");  // INDEX_TYPE

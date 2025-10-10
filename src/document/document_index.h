@@ -29,6 +29,16 @@
 
 namespace dingodb {
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+
+#ifndef ENABLE_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP_MOCK
+#define ENABLE_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP_MOCK
+#endif
+
+#undef ENABLE_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP_MOCK
+
+#endif  // #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+
 // Document index abstract base class.
 // One region own one document index(region_id==document_index_id)
 // But one region can refer other document index when region split.
@@ -67,8 +77,7 @@ class DocumentIndex {
   butil::Status Load(const std::string& path);
 
   butil::Status Search(uint32_t topk, const std::string& query_string, bool use_range_filter, int64_t start_id,
-                       int64_t end_id, bool use_id_filter, bool query_unlimited,
-                       const std::vector<uint64_t>& alive_ids,
+                       int64_t end_id, bool use_id_filter, bool query_unlimited, const std::vector<uint64_t>& alive_ids,
                        const std::vector<std::string>& column_names,
                        std::vector<pb::common::DocumentWithScore>& results);
 
@@ -104,6 +113,17 @@ class DocumentIndex {
   butil::Status SaveMeta(int64_t apply_log_id);
   static std::shared_ptr<DocumentIndex> LoadIndex(int64_t id, const pb::common::RegionEpoch& epoch,
                                                   const pb::common::DocumentIndexParameter& param);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  void SetDeferDestroyed() {
+    RWLockWriteGuard guard(&rw_lock_);
+    is_defer_destroyed_ = true;
+  }
+
+  bool IsDeferDestroyed() {
+    RWLockReadGuard guard(&rw_lock_);
+    return is_defer_destroyed_;
+  }
+#endif
 
  private:
   // document index id
@@ -122,16 +142,34 @@ class DocumentIndex {
 
   RWLock rw_lock_;
   bool is_destroyed_{false};
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  bool is_defer_destroyed_{false};  // defer destroy for vector index use document speedup and document index
+#endif
 };
 
 using DocumentIndexPtr = std::shared_ptr<DocumentIndex>;
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+enum class UseDocumentPurposeType : uint8_t { kNone = 0, kDocumentModule = 1, kVectorIndexModule = 2 };
+#endif
+
 class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWrapper> {
  public:
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter,
+                       UseDocumentPurposeType use_document_purpose_type);
+#else
   DocumentIndexWrapper(int64_t id, pb::common::DocumentIndexParameter index_parameter);
+#endif
+
   ~DocumentIndexWrapper();
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  static std::shared_ptr<DocumentIndexWrapper> New(int64_t id, pb::common::DocumentIndexParameter index_parameter,
+                                                   UseDocumentPurposeType use_document_purpose_type);
+#else
   static std::shared_ptr<DocumentIndexWrapper> New(int64_t id, pb::common::DocumentIndexParameter index_parameter);
+#endif
 
   std::shared_ptr<DocumentIndexWrapper> GetSelf();
 
@@ -222,6 +260,10 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   butil::Status Search(const pb::common::Range& region_range, const pb::common::DocumentSearchParameter& parameter,
                        std::vector<pb::common::DocumentWithScore>& results);
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  UseDocumentPurposeType GetUseDocumentPurposeType() const { return use_document_purpose_type_; }
+#endif
+
  private:
   // document index id
   int64_t id_;
@@ -261,6 +303,10 @@ class DocumentIndexWrapper : public std::enable_shared_from_this<DocumentIndexWr
   std::atomic<int32_t> loadorbuilding_num_;
   // document index rebuilding num
   std::atomic<int32_t> rebuilding_num_;
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  UseDocumentPurposeType use_document_purpose_type_;
+#endif
 };
 
 using DocumentIndexWrapperPtr = std::shared_ptr<DocumentIndexWrapper>;

@@ -88,25 +88,31 @@ namespace bdb {
 
 // we use visable char as prefix, so we can use it as a range upper bound and better for debug.
 std::unordered_map<std::string, char> BdbHelper::cf_name_to_id = {
-    {Constant::kStoreDataCF, '0'},              // default
-    {Constant::kStoreMetaCF, '1'},              // meta
-    {Constant::kVectorScalarCF, '2'},           // vector_scalar
-    {Constant::kVectorTableCF, '3'},            // vector_table
-    {Constant::kTxnDataCF, '4'},                // data
-    {Constant::kTxnLockCF, '5'},                // lock
-    {Constant::kTxnWriteCF, '6'},               // write
-    {Constant::kVectorScalarKeySpeedUpCF, '7'}  // vector_scalar_key_speed_up
+    {Constant::kStoreDataCF, '0'},               // default
+    {Constant::kStoreMetaCF, '1'},               // meta
+    {Constant::kVectorScalarCF, '2'},            // vector_scalar
+    {Constant::kVectorTableCF, '3'},             // vector_table
+    {Constant::kTxnDataCF, '4'},                 // data
+    {Constant::kTxnLockCF, '5'},                 // lock
+    {Constant::kTxnWriteCF, '6'},                // write
+    {Constant::kVectorScalarKeySpeedUpCF, '7'},  // vector_scalar_key_speed_up
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    {Constant::kVectorScalarUseDocumentCF, '8'}  // vector_scalar_use_document
+#endif
 };
 
 std::unordered_map<char, std::string> BdbHelper::cf_id_to_name = {
-    {'0', Constant::kStoreDataCF},              // default
-    {'1', Constant::kStoreMetaCF},              // meta
-    {'2', Constant::kVectorScalarCF},           // vector_scalar
-    {'3', Constant::kVectorTableCF},            // vector_table
-    {'4', Constant::kTxnDataCF},                // data
-    {'5', Constant::kTxnLockCF},                // lock
-    {'6', Constant::kTxnWriteCF},               // write
-    {'7', Constant::kVectorScalarKeySpeedUpCF}  // vector_scalar_key_speed_up
+    {'0', Constant::kStoreDataCF},               // default
+    {'1', Constant::kStoreMetaCF},               // meta
+    {'2', Constant::kVectorScalarCF},            // vector_scalar
+    {'3', Constant::kVectorTableCF},             // vector_table
+    {'4', Constant::kTxnDataCF},                 // data
+    {'5', Constant::kTxnLockCF},                 // lock
+    {'6', Constant::kTxnWriteCF},                // write
+    {'7', Constant::kVectorScalarKeySpeedUpCF},  // vector_scalar_key_speed_up
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    {'8', Constant::kVectorScalarUseDocumentCF}  // vector_scalar_use_document
+#endif
 };
 
 static void DelayBeforeNextRetry(int32_t retry_count) {
@@ -1971,7 +1977,7 @@ void LogBDBError(const DbEnv*, const char* /*errpfx*/, const char* msg) {
   DINGO_LOG(ERROR) << "[bdb] error msg: " << msg;
 }
 
-void LogBDBMsg(const DbEnv*, const char* msg) { DINGO_LOG(INFO) << "[bdb] bdb info msg: " << msg; }
+void LogBDBMsg(const DbEnv*, const char* msg) { DINGO_LOG(DEBUG) << "[bdb] bdb info msg: " << msg; }
 
 // override functions
 bool BdbRawEngine::Init(std::shared_ptr<Config> config, const std::vector<std::string>& /*cf_names*/) {

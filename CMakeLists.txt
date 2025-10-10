@@ -41,6 +41,7 @@ option(XDPROCKS_PATH "Enable xdprocks raw engine")
 option(VECTORIZATION_INSTRUCTION_SET "vectorization instruction set")
 option(WITH_LIBURING "Build with liburing" ON)
 option(DISKANN_DEPEND_ON_SYSTEM "diskann require system dependencies for boost and aio " OFF)
+option(WITH_VECTOR_INDEX_USE_DOCUMENT "Build with vector index use document speed up" ON)
 
 message(STATUS CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
 message(STATUS THIRD_PARTY_BUILD_TYPE=${THIRD_PARTY_BUILD_TYPE})
@@ -54,6 +55,12 @@ message(STATUS "CMAKE_CXX_STANDARD: ${CMAKE_CXX_STANDARD}")
 message(STATUS "SYSTEM: ${CMAKE_HOST_SYSTEM_NAME} ${CMAKE_HOST_SYSTEM_PROCESSOR}")
 message(STATUS "CMAKE_C_FLAGS: ${CMAKE_C_FLAGS}")
 message(STATUS "CMAKE_CXX_FLAGS: ${CMAKE_CXX_FLAGS}")
+
+if(WITH_VECTOR_INDEX_USE_DOCUMENT)
+  add_definitions(-DWITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP=1)
+else()
+  add_definitions(-DWITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP=0)
+endif()
 
 # xdprocks
 if(XDPROCKS_PATH)

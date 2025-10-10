@@ -238,6 +238,13 @@ DEFINE_bool(delete_data_file, false, "diskann If true, delete data file after re
 DEFINE_bool(dump_all, false,
             "diskann If true, dump all vector id data from diskann. or just dump the data of this region.");
 
+// vector index use document speed up
+DEFINE_bool(enable_scalar_speed_up_with_document, false, "enable scalar speed up with document");
+
+// debug service debug
+DEFINE_string(debug_service_debug_type, "", "debug service debug type");
+DEFINE_bool(is_actual, false, "debug service is actual");
+
 bvar::LatencyRecorder g_latency_recorder("dingo-store");
 
 const std::map<std::string, std::vector<std::string>> kParamConstraint = {
@@ -469,6 +476,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       // 1.0, 2.0, 3.0, 4.0
       // only one vector data, no new line at the end of the file, and only float value and , is allowed
       client::SendVectorSearch(FLAGS_region_id, FLAGS_dimension, FLAGS_topn);
+    } else if (method == "VectorSearchUseDocument") {
+      client::SendVectorSearchUseDocument(FLAGS_region_id, FLAGS_topn);
     } else if (method == "VectorSearchDebug") {
       client::SendVectorSearchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_vector_id, FLAGS_topn, FLAGS_batch_count,
                                     FLAGS_key, FLAGS_value);
@@ -512,6 +521,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       }
     } else if (method == "VectorDelete") {
       client::SendVectorDelete(FLAGS_region_id, FLAGS_start_id, FLAGS_count);
+    } else if (method == "VectorDeleteUseDocument") {
+      client::SendVectorDeleteUseDocument(FLAGS_region_id, FLAGS_start_id, FLAGS_count);
     } else if (method == "VectorGetMaxId") {
       client::SendVectorGetMaxId(FLAGS_region_id);
     } else if (method == "VectorGetMinId") {
@@ -519,7 +530,11 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
     } else if (method == "VectorAddBatch") {
       client::SendVectorAddBatch(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                  FLAGS_vector_index_add_cost_file);
-    } else if (method == "VectorImport") {
+    } else if (method == "VectorAddBatchUseDocument") {
+      client::SendVectorAddBatchUseDocument(FLAGS_region_id, FLAGS_count, FLAGS_start_id);
+    }
+
+    else if (method == "VectorImport") {
       client::SendVectorImport(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                FLAGS_import_for_add);
     } else if (method == "VectorBuild") {
@@ -532,6 +547,8 @@ void Sender(std::shared_ptr<client::Context> ctx, const std::string& method, int
       client::SendVectorReset(FLAGS_region_id, FLAGS_delete_data_file);
     } else if (method == "VectorDump") {
       client::SendVectorDump(FLAGS_region_id, FLAGS_dump_all);
+    } else if (method == "VectorDisplayDocumentDetails") {
+      client::SendVectorDisplayDocumentDetails(FLAGS_region_id);
     } else if (method == "VectorAddBatchDebug") {
       client::SendVectorAddBatchDebug(FLAGS_region_id, FLAGS_dimension, FLAGS_count, FLAGS_step_count, FLAGS_start_id,
                                       FLAGS_vector_index_add_cost_file);
@@ -896,6 +913,8 @@ int CoordinatorSender() {
     SendGetIndexesCount(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndex") {
     SendCreateVectorIndex(coordinator_interaction_meta);
+  } else if (FLAGS_method == "CreateVectorIndexUseDocument") {
+    SendCreateVectorIndexUseDocument(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateDocumentIndex") {
     SendCreateDocumentIndex(coordinator_interaction_meta);
   } else if (FLAGS_method == "CreateIndexId") {
@@ -1128,7 +1147,13 @@ int CoordinatorSender() {
   // debug
   else if (FLAGS_method == "CoordinatorDebug") {
     CoordinatorSendDebug();
-  } else {
+  }
+  // DebugService
+  else if (FLAGS_method == "DebugServiceDebug") {
+    SendDebugServiceDebug(coordinator_interaction, FLAGS_region_id, FLAGS_debug_service_debug_type, FLAGS_is_actual);
+  }
+
+  else {
     DINGO_LOG(INFO) << " not coordinator method, try to send to store";
     return -1;
   }

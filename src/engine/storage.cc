@@ -26,6 +26,7 @@
 #include "common/helper.h"
 #include "common/logging.h"
 #include "document/codec.h"
+#include "document/document_index.h"
 #include "engine/raft_store_engine.h"
 #include "engine/snapshot.h"
 #include "engine/write_data.h"
@@ -819,6 +820,338 @@ butil::Status Storage::VectorDump(std::shared_ptr<Engine::VectorReader::Context>
 
   return butil::Status();
 }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+butil::Status Storage::VectorDisplayDocumentDetails(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                                    store::RegionPtr region,
+                                                    pb::index::VectorDisplayDocumentDetailsResponse* response) {
+  auto status = ValidateLeader(ctx->region_id);
+  if (!status.ok()) {
+    return status;
+  }
+
+  pb::common::RegionDefinition definition = region->Definition();
+  if (!definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()) {
+    std::string s = fmt::format(
+        "definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document()= false, "
+        "region_id {} not use document speedup.",
+        ctx->region_id);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_SUPPORT_SPEEDUP, s);
+  }
+
+  DocumentIndexWrapperPtr document_index_wrapper = ctx->document_index;
+  if (!document_index_wrapper) {
+    std::string s = fmt::format("enable_scalar_speed_up_with_document = true, but document_index is nullptr.");
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND_DOCUMENT_INDEX, s);
+  }
+
+  // get document index metrics
+  {
+    dingodb::pb::common::DocumentIndexMetrics document_index_metrics;
+
+    auto vector_reader = GetEngineVectorReader(region->GetStoreEngineType(), region->GetRawEngineType());
+
+    int64_t total_num_docs = 0;
+    int64_t total_num_tokens = 0;
+    int64_t max_id = 0;
+    int64_t min_id = 0;
+    std::string meta_json;
+    std::string json_parameter;
+    status = document_index_wrapper->GetDocCount(total_num_docs);
+    if (!status.ok()) {
+      total_num_docs = -1;
+    }
+
+    status = document_index_wrapper->GetTokenCount(total_num_tokens);
+    if (!status.ok()) {
+      total_num_tokens = -1;
+    }
+
+    status = vector_reader->VectorGetBorderIdForDocument(0, ctx->region_range, true, min_id);
+    if (!status.ok()) {
+      min_id = -1;
+    }
+
+    status = vector_reader->VectorGetBorderIdForDocument(0, ctx->region_range, false, max_id);
+    if (!status.ok()) {
+      max_id = -1;
+    }
+
+    status = document_index_wrapper->GetMetaJson(meta_json);
+    if (!status.ok()) {
+      meta_json = "";
+    }
+
+    status = document_index_wrapper->GetJsonParameter(json_parameter);
+    if (!status.ok()) {
+      json_parameter = "";
+    }
+
+    document_index_metrics.set_total_num_docs(total_num_docs);
+    document_index_metrics.set_total_num_tokens(total_num_tokens);
+    document_index_metrics.set_max_id(max_id);
+    document_index_metrics.set_min_id(min_id);
+    document_index_metrics.set_meta_json(meta_json);
+    document_index_metrics.set_json_parameter(json_parameter);
+
+    *response->mutable_document_index_metrics() = document_index_metrics;
+  }
+
+  // get document index status
+  {
+    bool is_stop = true;
+    bool is_ready = false;
+    bool is_own_ready = false;
+    bool is_build_error = true;
+    bool is_rebuild_error = true;
+    bool is_switching = true;
+    bool is_hold_document_index = false;  // is hold document index
+    int64_t apply_log_id = 0;
+    int64_t snapshot_log_id = 0;
+    int64_t last_build_epoch_version = 0;
+    dingodb::pb::common::DocumentIndexStatus document_index_status;
+
+    is_stop = document_index_wrapper->IsDestoryed();
+    is_ready = document_index_wrapper->IsReady();
+    is_own_ready = document_index_wrapper->IsOwnReady();
+    is_build_error = document_index_wrapper->IsBuildError();
+    is_rebuild_error = document_index_wrapper->IsRebuildError();
+    is_switching = document_index_wrapper->IsSwitchingDocumentIndex();
+    is_hold_document_index = document_index_wrapper->IsPermanentHoldDocumentIndex(ctx->region_id);
+    apply_log_id = document_index_wrapper->ApplyLogId();
+    snapshot_log_id = 0;
+    last_build_epoch_version = document_index_wrapper->LastBuildEpochVersion();
+
+    document_index_status.set_is_stop(is_stop);
+    document_index_status.set_is_ready(is_ready);
+    document_index_status.set_is_own_ready(is_own_ready);
+    document_index_status.set_is_build_error(is_build_error);
+    document_index_status.set_is_rebuild_error(is_rebuild_error);
+    document_index_status.set_is_switching(is_switching);
+    document_index_status.set_is_hold_document_index(is_hold_document_index);
+    document_index_status.set_apply_log_id(apply_log_id);
+    document_index_status.set_snapshot_log_id(snapshot_log_id);
+    document_index_status.set_last_build_epoch_version(last_build_epoch_version);
+
+    *response->mutable_document_index_status() = document_index_status;
+  }
+
+  // get vector_index_parameter
+  { *response->mutable_vector_index_parameter() = region->Definition().index_parameter().vector_index_parameter(); }
+
+  //  get document_index_extended_status
+  {
+    dingodb::pb::common::DocumentIndexExtendedStatus document_index_extended_status;
+
+    document_index_extended_status.set_id(document_index_wrapper->Id());
+    document_index_extended_status.set_version(document_index_wrapper->Version());
+    document_index_extended_status.mutable_document_index_parameter()->CopyFrom(
+        document_index_wrapper->IndexParameter());
+    document_index_extended_status.set_pending_task_num(document_index_wrapper->PendingTaskNum());
+    document_index_extended_status.set_load_or_building_num(document_index_wrapper->LoadorbuildingNum());
+    document_index_extended_status.set_rebuilding_num(document_index_wrapper->RebuildingNum());
+    int64_t doc_count = 0;
+    status = document_index_wrapper->GetDocCount(doc_count);
+    if (!status.ok()) {
+      doc_count = -1;
+    }
+    document_index_extended_status.set_doc_count(doc_count);
+
+    int64_t tokens_count = 0;
+    status = document_index_wrapper->GetTokenCount(tokens_count);
+    if (!status.ok()) {
+      tokens_count = -1;
+    }
+    document_index_extended_status.set_token_count(tokens_count);
+
+    std::string meta_json;
+    status = document_index_wrapper->GetMetaJson(meta_json);
+    if (!status.ok()) {
+      meta_json = "";
+    }
+    document_index_extended_status.set_meta_json(meta_json);
+
+    std::string json_parameter;
+    status = document_index_wrapper->GetJsonParameter(json_parameter);
+    if (!status.ok()) {
+      json_parameter = "";
+    }
+    document_index_extended_status.set_json_parameter(json_parameter);
+
+    UseDocumentPurposeType purpose_type = document_index_wrapper->GetUseDocumentPurposeType();
+    switch (purpose_type) {
+      case UseDocumentPurposeType::kNone:
+        document_index_extended_status.set_purpose_type("UseDocumentPurposeType::kNone");
+        break;
+      case UseDocumentPurposeType::kDocumentModule:
+        document_index_extended_status.set_purpose_type("UseDocumentPurposeType::kDocumentModule");
+        break;
+      case UseDocumentPurposeType::kVectorIndexModule:
+        document_index_extended_status.set_purpose_type("UseDocumentPurposeType::kVectorIndexModule");
+        break;
+      default:
+        document_index_extended_status.set_purpose_type("UseDocumentPurposeType::kUnknown");
+        break;
+    }
+
+    // self
+    {
+      dingodb::pb::common::DocumentIndexExtendedStatusItem item;
+      DocumentIndexPtr self = document_index_wrapper->GetOwnDocumentIndex();
+      item.set_name("self");
+      if (self) {
+        item.set_is_valid(true);
+        int64_t doc_count = 0;
+        status = self->GetDocCount(doc_count);
+        if (!status.ok()) {
+          doc_count = -1;
+        }
+        item.set_doc_count(doc_count);
+
+        int64_t tokens_count = 0;
+        status = self->GetTokenCount(tokens_count);
+        if (!status.ok()) {
+          tokens_count = -1;
+        }
+        item.set_token_count(tokens_count);
+
+        std::string meta_json;
+        status = self->GetMetaJson(meta_json);
+        if (!status.ok()) {
+          meta_json = "";
+        }
+        item.set_meta_json(meta_json);
+
+        std::string json_parameter;
+        status = self->GetJsonParameter(json_parameter);
+        if (!status.ok()) {
+          json_parameter = "";
+        }
+        item.set_json_parameter(json_parameter);
+
+        item.set_id(self->Id());
+
+        item.mutable_document_index_parameter()->CopyFrom(self->DocumentIndexParameter());
+
+        item.set_apply_log_id(self->ApplyLogId());
+        item.mutable_epoch()->CopyFrom(self->Epoch());
+        item.mutable_range_raw()->CopyFrom(self->Range(false));
+        item.set_range_string(self->RangeString());
+        item.set_is_destroyed(self->IsDestroyed());
+        item.set_is_defer_destroyed(self->IsDeferDestroyed());
+        item.set_index_path(self->IndexPath());
+      } else {
+        item.set_is_valid(false);
+      }
+      document_index_extended_status.mutable_self()->CopyFrom(item);
+    }
+
+    // share
+    {
+      dingodb::pb::common::DocumentIndexExtendedStatusItem item;
+      DocumentIndexPtr share = document_index_wrapper->ShareDocumentIndex();
+      item.set_name("share");
+      if (share) {
+        item.set_is_valid(true);
+        int64_t doc_count = 0;
+        status = share->GetDocCount(doc_count);
+        if (!status.ok()) {
+          doc_count = -1;
+        }
+        item.set_doc_count(doc_count);
+
+        int64_t tokens_count = 0;
+        status = share->GetTokenCount(tokens_count);
+        if (!status.ok()) {
+          tokens_count = -1;
+        }
+        item.set_token_count(tokens_count);
+
+        std::string meta_json;
+        status = share->GetMetaJson(meta_json);
+        if (!status.ok()) {
+          meta_json = "";
+        }
+        item.set_meta_json(meta_json);
+
+        std::string json_parameter;
+        status = share->GetJsonParameter(json_parameter);
+        if (!status.ok()) {
+          json_parameter = "";
+        }
+        item.set_json_parameter(json_parameter);
+
+        item.set_id(share->Id());
+
+        item.mutable_document_index_parameter()->CopyFrom(share->DocumentIndexParameter());
+
+        item.set_apply_log_id(share->ApplyLogId());
+        item.mutable_epoch()->CopyFrom(share->Epoch());
+        item.mutable_range_raw()->CopyFrom(share->Range(false));
+        item.set_range_string(share->RangeString());
+        item.set_is_destroyed(share->IsDestroyed());
+        item.set_is_defer_destroyed(share->IsDeferDestroyed());
+        item.set_index_path(share->IndexPath());
+      } else {
+        item.set_is_valid(false);
+      }
+      document_index_extended_status.mutable_share()->CopyFrom(item);
+    }
+
+    // sibling
+    {
+      dingodb::pb::common::DocumentIndexExtendedStatusItem item;
+      DocumentIndexPtr sibling = document_index_wrapper->SiblingDocumentIndex();
+      item.set_name("sibling");
+      if (sibling) {
+        item.set_is_valid(true);
+        int64_t doc_count = 0;
+        status = sibling->GetDocCount(doc_count);
+        if (!status.ok()) {
+          doc_count = -1;
+        }
+        item.set_doc_count(doc_count);
+        int64_t tokens_count = 0;
+        status = sibling->GetTokenCount(tokens_count);
+        if (!status.ok()) {
+          tokens_count = -1;
+        }
+        item.set_token_count(tokens_count);
+        std::string meta_json;
+        status = sibling->GetMetaJson(meta_json);
+        if (!status.ok()) {
+          meta_json = "";
+        }
+        item.set_meta_json(meta_json);
+        std::string json_parameter;
+        status = sibling->GetJsonParameter(json_parameter);
+        if (!status.ok()) {
+          json_parameter = "";
+        }
+        item.set_json_parameter(json_parameter);
+        item.set_id(sibling->Id());
+        item.mutable_document_index_parameter()->CopyFrom(sibling->DocumentIndexParameter());
+        item.set_apply_log_id(sibling->ApplyLogId());
+        item.mutable_epoch()->CopyFrom(sibling->Epoch());
+        item.mutable_range_raw()->CopyFrom(sibling->Range(false));
+        item.set_range_string(sibling->RangeString());
+        item.set_is_destroyed(sibling->IsDestroyed());
+        item.set_is_defer_destroyed(sibling->IsDeferDestroyed());
+        item.set_index_path(sibling->IndexPath());
+      } else {
+        item.set_is_valid(false);
+      }
+      document_index_extended_status.mutable_sibling()->CopyFrom(item);
+    }
+
+    *response->mutable_document_index_extended_status() = document_index_extended_status;
+  }
+
+  return butil::Status();
+}
+#endif
 
 butil::Status Storage::VectorCalcDistance(const ::dingodb::pb::index::VectorCalcDistanceRequest& request,
                                           std::vector<std::vector<float>>& distances,

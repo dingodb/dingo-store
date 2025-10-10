@@ -41,6 +41,9 @@
 #include "proto/node.pb.h"
 #include "proto/raft.pb.h"
 #include "server/server.h"
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+#include "vector/vector_index_utils.h"
+#endif
 
 namespace dingodb {
 
@@ -55,6 +58,20 @@ BRPC_VALIDATE_GFLAG(document_fast_background_worker_num, brpc::PositiveInteger);
 
 DEFINE_int64(document_max_background_task_count, 32, "document index max background task count");
 BRPC_VALIDATE_GFLAG(document_max_background_task_count, brpc::PositiveInteger);
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+DEFINE_int32(document_vector_scalar_search_background_worker_num, 10,
+             "document index vector scalar search background worker num");
+BRPC_VALIDATE_GFLAG(document_vector_scalar_search_background_worker_num, brpc::PositiveInteger);
+
+DEFINE_int32(document_vector_scalar_search_background_pending_num, 10,
+             "document index vector scalar search background pending num");
+BRPC_VALIDATE_GFLAG(document_vector_scalar_search_background_pending_num, brpc::PositiveInteger);
+
+DEFINE_bool(use_pthread_document_vector_scalar_search_background_worker_set, true,
+            "use pthread document vector scalar search background worker set");
+BRPC_VALIDATE_GFLAG(use_pthread_document_vector_scalar_search_background_worker_set, brpc::PassValidate);
+#endif
 
 std::string RebuildDocumentIndexTask::Trace() {
   return fmt::format("[document_index.rebuild][id({}).start_time({}).job_id({})] {}", document_index_wrapper_->Id(),
@@ -388,6 +405,20 @@ bool DocumentIndexManager::Init() {
     return false;
   }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  // only for vector index scalar search with document
+  if (use_document_purpose_type_ == UseDocumentPurposeType::kVectorIndexModule) {
+    vector_scalar_search_workers_ = SimpleWorkerSet::New(
+        "document_mgr_vector_scalar_search_background", FLAGS_document_vector_scalar_search_background_worker_num,
+        FLAGS_document_vector_scalar_search_background_pending_num,
+        FLAGS_use_pthread_document_vector_scalar_search_background_worker_set, false);
+    if (!vector_scalar_search_workers_->Init()) {
+      DINGO_LOG(ERROR) << "Init document index manager vector scalar search background worker set fail!";
+      return false;
+    }
+  }
+#endif
+
   return true;
 }
 
@@ -466,9 +497,16 @@ void DocumentIndexManager::LaunchLoadOrBuildDocumentIndex(DocumentIndexWrapperPt
   }
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+// Replay log to document index.
+butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexWrapperPtr document_index_wrapper,
+                                                             DocumentIndexPtr document_index, int64_t start_log_id,
+                                                             int64_t end_log_id) {
+#else
 // Replay document index from WAL
 butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr document_index, int64_t start_log_id,
                                                              int64_t end_log_id) {
+#endif
   assert(document_index != nullptr);
 
   if (start_log_id >= end_log_id) {
@@ -494,6 +532,24 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
   std::vector<int64_t> ids;
   ids.reserve(Constant::kBuildDocumentIndexBatchSize);
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  store::RegionPtr region = Server::GetInstance().GetRegion(document_index->Id());
+  const pb::common::RegionDefinition& definition = region->Definition();
+  bool enable_scalar_speed_up_with_document = false;
+  if (definition.index_parameter().vector_index_parameter().enable_scalar_speed_up_with_document() &&
+      region->DocumentIndexWrapper()) {
+    enable_scalar_speed_up_with_document = true;
+  }
+
+  UseDocumentPurposeType use_document_purpose_type = document_index_wrapper->GetUseDocumentPurposeType();
+
+  bool is_first_document_add = false;
+  bool is_first_document_delete = false;
+  bool is_first_vector_add = false;
+  bool is_first_vector_delete = false;
+
+#endif
+
   int64_t last_log_id = document_index->ApplyLogId();
   auto log_entrys = log_storage->GetDataEntries(document_index->Id(), start_log_id, end_log_id);
   for (const auto& log_entry : log_entrys) {
@@ -502,6 +558,17 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
     for (auto& request : *raft_cmd->mutable_requests()) {
       switch (request.cmd_type()) {
         case pb::raft::DOCUMENT_ADD: {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+          if (!is_first_document_add) {
+            is_first_document_add = true;
+            if (use_document_purpose_type != UseDocumentPurposeType::kDocumentModule) {
+              DINGO_LOG(FATAL) << fmt::format(
+                  "[document_index.replaywal][id({})] first document add, document index use purpose should be "
+                  "UseDocumentPurposeType::kDocumentModule, but is : {}, maybe some thing wrong.",
+                  document_index->Id(), static_cast<int>(use_document_purpose_type));
+            }
+          }
+#endif
           if (!ids.empty()) {
             document_index->Delete(ids);
             ids.clear();
@@ -520,6 +587,17 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
           break;
         }
         case pb::raft::DOCUMENT_DELETE: {
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+          if (!is_first_document_delete) {
+            is_first_document_delete = true;
+            if (use_document_purpose_type != UseDocumentPurposeType::kDocumentModule) {
+              DINGO_LOG(FATAL) << fmt::format(
+                  "[document_index.replaywal][id({})] first document delete, document index use purpose should be "
+                  "UseDocumentPurposeType::kDocumentModule, but is : {}, maybe some thing wrong.",
+                  document_index->Id(), static_cast<int>(use_document_purpose_type));
+            }
+          }
+#endif
           if (!documents.empty()) {
             document_index->Add(documents, false);
             documents.clear();
@@ -536,6 +614,88 @@ butil::Status DocumentIndexManager::ReplayWalToDocumentIndex(DocumentIndexPtr do
           }
           break;
         }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+        case pb::raft::VECTOR_ADD: {
+          if (!is_first_vector_add) {
+            is_first_vector_add = true;
+            if (use_document_purpose_type != UseDocumentPurposeType::kVectorIndexModule) {
+              DINGO_LOG(FATAL) << fmt::format(
+                  "[document_index.replaywal][id({})] first vector add, document index use purpose should be "
+                  "UseDocumentPurposeType::kVectorIndexModule, but is : {}, "
+                  "maybe "
+                  "some thing wrong.",
+                  document_index->Id(), static_cast<int>(use_document_purpose_type));
+            }
+          }
+          if (enable_scalar_speed_up_with_document) {
+            if (!ids.empty()) {
+              document_index->Delete(ids);
+              ids.clear();
+            }
+
+            for (auto& vector : *request.mutable_vector_add()->mutable_vectors()) {
+              if (vector.id() >= min_document_id && vector.id() < max_document_id) {
+                std::vector<std::pair<std::string, pb::common::ScalarValue>> scalar_key_value_pairs;
+                const pb::common::ScalarSchema& scalar_schema = region->ScalarSchema();
+                VectorIndexUtils::SplitVectorScalarData(scalar_schema, vector.scalar_data(), scalar_key_value_pairs);
+
+                // vector scalar data use document
+                if (!scalar_key_value_pairs.empty()) {
+                  pb::common::DocumentWithId document_with_id;
+                  document_with_id.set_id(vector.id());
+                  for (const auto& [scalar_key, scalar_value] : scalar_key_value_pairs) {
+                    pb::common::DocumentValue document_value;
+                    document_value.set_field_type(scalar_value.field_type());
+                    document_value.mutable_field_value()->CopyFrom(scalar_value.fields(0));
+                    document_with_id.mutable_document()->mutable_document_data()->insert(
+                        std::make_pair(scalar_key, document_value));
+                  }
+
+                  documents.push_back(std::move(document_with_id));
+                }  // if (!scalar_key_value_pairs.empty() && region->DocumentIndexWrapper()) {
+              }
+            }
+
+            if (documents.size() >= Constant::kBuildDocumentIndexBatchSize) {
+              document_index->Add(documents, false);
+              documents.clear();
+            }
+          }  // if (enable_scalar_speed_up_with_document) {
+
+          break;
+        }
+        case pb::raft::VECTOR_DELETE: {
+          if (!is_first_vector_delete) {
+            is_first_vector_delete = true;
+            if (use_document_purpose_type != UseDocumentPurposeType::kVectorIndexModule) {
+              DINGO_LOG(FATAL) << fmt::format(
+                  "[document_index.replaywal][id({})] first vector delete, document index use purpose should be "
+                  "UseDocumentPurposeType::kVectorIndexModule, but is : {}, "
+                  "maybe "
+                  "some thing wrong.",
+                  document_index->Id(), static_cast<int>(use_document_purpose_type));
+            }
+          }
+          if (enable_scalar_speed_up_with_document) {
+            if (!documents.empty()) {
+              document_index->Add(documents, false);
+              documents.clear();
+            }
+
+            for (auto vector_id : request.vector_delete().ids()) {
+              if (vector_id >= min_document_id && vector_id < max_document_id) {
+                ids.push_back(vector_id);
+              }
+            }
+
+            if (ids.size() >= Constant::kBuildDocumentIndexBatchSize) {
+              document_index->Delete(ids);
+              ids.clear();
+            }
+          }  // if (enable_scalar_speed_up_with_document) {
+          break;
+        }
+#endif
         default:
           break;
       }
@@ -607,7 +767,8 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   const std::string& end_key = encode_range.end_key();
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.build][id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: ({})",
+      "[document_index.build][id({})][trace({})] Build document index, range: [{}({})-{}({})) parallel: {} path: "
+      "({})",
       document_index_id, trace, Helper::StringToHex(start_key), DocumentCodec::UnPackageDocumentId(start_key),
       Helper::StringToHex(end_key), DocumentCodec::UnPackageDocumentId(end_key), document_index->WriteOpParallelNum(),
       document_index_path);
@@ -618,7 +779,32 @@ DocumentIndexPtr DocumentIndexManager::BuildDocumentIndex(DocumentIndexWrapperPt
   options.upper_bound = end_key;
 
   auto raw_engine = Server::GetInstance().GetRawEngine(region->GetRawEngineType());
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  std::string which_cf;
+  auto use_document_purpose_type = document_index_wrapper->GetUseDocumentPurposeType();
+  switch (use_document_purpose_type) {
+    case UseDocumentPurposeType::kDocumentModule: {
+      which_cf = Constant::kStoreDataCF;
+      break;
+    }
+    case UseDocumentPurposeType::kVectorIndexModule: {
+      which_cf = Constant::kVectorScalarUseDocumentCF;
+      break;
+    }
+    case UseDocumentPurposeType::kNone:
+      [[fallthrough]];
+    default: {
+      DINGO_LOG(FATAL) << fmt::format(
+          "[document_index.build][id({})][trace({})] use_document_purpose_type not set : {}, please set it first.",
+          document_index_id, trace, static_cast<int>(use_document_purpose_type));
+      return nullptr;
+    }
+  }
+  auto iter = raw_engine->Reader()->NewIterator(which_cf, options);
+#else
   auto iter = raw_engine->Reader()->NewIterator(Constant::kStoreDataCF, options);
+#endif
+
   CHECK(iter != nullptr) << fmt::format("[document_index.build][id({})] NewIterator fail.", document_index_id);
 
   int64_t count = 0;
@@ -733,7 +919,8 @@ butil::Status DocumentIndexManager::RebuildDocumentIndex(DocumentIndexWrapperPtr
   }
 
   DINGO_LOG(INFO) << fmt::format(
-      "[document_index.rebuild][id({}_v{})][trace({})] Build document index success, log_id({}) elapsed time({}ms).",
+      "[document_index.rebuild][id({}_v{})][trace({})] Build document index success, log_id({}) elapsed "
+      "time({}ms).",
       document_index_id, document_index_wrapper->Version(), trace, document_index->ApplyLogId(),
       Helper::TimestampMs() - start_time);
 
@@ -827,8 +1014,12 @@ butil::Status DocumentIndexManager::CatchUpLogToDocumentIndex(DocumentIndexWrapp
     if (end_log_id - start_log_id < FLAGS_document_catchup_log_min_gap) {
       break;
     }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    auto status = ReplayWalToDocumentIndex(document_index_wrapper, document_index, start_log_id, end_log_id);
+#else
 
     auto status = ReplayWalToDocumentIndex(document_index, start_log_id, end_log_id);
+#endif
     if (!status.ok()) {
       document_index_wrapper->SetRebuildError();
       return butil::Status(pb::error::Errno::EINTERNAL,
@@ -860,8 +1051,13 @@ butil::Status DocumentIndexManager::CatchUpLogToDocumentIndex(DocumentIndexWrapp
 
     int64_t start_log_id = document_index->ApplyLogId() + 1;
     int64_t end_log_id = raft_meta->AppliedId();
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+    // second ground replay wal
+    auto status = ReplayWalToDocumentIndex(document_index_wrapper, document_index, start_log_id, end_log_id);
+#else
     // second ground replay wal
     auto status = ReplayWalToDocumentIndex(document_index, start_log_id, end_log_id);
+#endif
     if (!status.ok()) {
       document_index_wrapper->SetRebuildError();
       return status;
@@ -897,6 +1093,16 @@ bool DocumentIndexManager::ExecuteTaskFast(int64_t region_id, TaskRunnablePtr ta
 
   return fast_workers_->ExecuteHashByRegionId(region_id, task);
 }
+
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+bool DocumentIndexManager::ExecuteTaskVectorScalarSearch(int64_t /*region_id*/, TaskRunnablePtr task) {
+  return vector_scalar_search_workers_->Execute(task);
+}
+
+bool DocumentIndexManager::ExecuteTaskForVector(int64_t region_id, TaskRunnablePtr task) {
+  return Server::GetInstance().GetDocumentIndexManager()->ExecuteTaskVectorScalarSearch(region_id, task);
+}
+#endif
 
 bool DocumentIndexManager::ExecuteTask(int64_t region_id, TaskRunnablePtr task, bool is_fast_task) {
   if (is_fast_task) {

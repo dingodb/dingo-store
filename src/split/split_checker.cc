@@ -495,6 +495,15 @@ void PreSplitCheckTask::PreSplitCheck() {
                              Constant::kVectorIndexTaskRunningNumExpectValue);
         break;
       }
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      runing_num = DocumentIndexManager::GetDocumentIndexTaskRunningNum();
+      if (runing_num > Constant::kDocumentIndexTaskRunningNumExpectValue) {
+        need_scan_check = false;
+        reason = fmt::format("runing document index task num({}) too many, exceed expect num({})", runing_num,
+                             Constant::kDocumentIndexTaskRunningNumExpectValue);
+        break;
+      }
+#endif
     } while (false);
 
     DINGO_LOG(INFO) << fmt::format(

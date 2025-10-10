@@ -53,6 +53,9 @@ class Constant {
   inline static const std::string kVectorScalarCF = "vector_scalar";
   inline static const std::string kVectorScalarKeySpeedUpCF = "vector_scalar_key_speed_up";
   inline static const std::string kVectorTableCF = "vector_table";
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+  inline static const std::string kVectorScalarUseDocumentCF = "vector_scalar_use_document";
+#endif
 
   // region range prefix
   inline static const char kExecutorRaw = 'r';
@@ -224,6 +227,7 @@ class Constant {
   static constexpr uint32_t kRaftElectionTimeoutSDefaultValue = 6;
 
   static constexpr int32_t kVectorIndexTaskRunningNumExpectValue = 6;
+  static constexpr int32_t kDocumentIndexTaskRunningNumExpectValue = 6;
 
   static constexpr uint32_t kLogPrintMaxLength = 256;
 

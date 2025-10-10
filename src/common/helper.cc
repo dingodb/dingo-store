@@ -930,7 +930,11 @@ std::vector<std::string> Helper::GetColumnFamilyNamesByRole() {
             Constant::kTxnWriteCF,
             Constant::kVectorScalarCF,
             Constant::kVectorScalarKeySpeedUpCF,
-            Constant::kVectorTableCF};
+            Constant::kVectorTableCF,
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+            Constant::kVectorScalarUseDocumentCF
+#endif
+    };
   }
 
   return {};
@@ -942,9 +946,17 @@ std::vector<std::string> Helper::GetColumnFamilyNamesExecptMetaByRole() {
   } else if (GetRole() == pb::common::ClusterRole::STORE || GetRole() == pb::common::ClusterRole::DOCUMENT) {
     return {Constant::kStoreDataCF, Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
-    return {Constant::kStoreDataCF,  Constant::kTxnDataCF,      Constant::kTxnLockCF,
-            Constant::kTxnWriteCF,   Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
-            Constant::kVectorTableCF};
+    return {Constant::kStoreDataCF,
+            Constant::kTxnDataCF,
+            Constant::kTxnLockCF,
+            Constant::kTxnWriteCF,
+            Constant::kVectorScalarCF,
+            Constant::kVectorScalarKeySpeedUpCF,
+            Constant::kVectorTableCF,
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+            Constant::kVectorScalarUseDocumentCF
+#endif
+    };
   }
 
   return {};
@@ -960,12 +972,24 @@ std::vector<std::string> Helper::GetColumnFamilyNames(const std::string& key) {
     return {Constant::kStoreDataCF};
   } else if (GetRole() == pb::common::ClusterRole::INDEX) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
-      return {Constant::kTxnDataCF,    Constant::kTxnLockCF,      Constant::kTxnWriteCF,
-              Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
-              Constant::kVectorTableCF};
+      return {Constant::kTxnDataCF,
+              Constant::kTxnLockCF,
+              Constant::kTxnWriteCF,
+              Constant::kVectorDataCF,
+              Constant::kVectorScalarCF,
+              Constant::kVectorScalarKeySpeedUpCF,
+              Constant::kVectorTableCF,
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+              Constant::kVectorScalarUseDocumentCF
+#endif
+      };
     }
     return {Constant::kVectorDataCF, Constant::kVectorScalarCF, Constant::kVectorScalarKeySpeedUpCF,
-            Constant::kVectorTableCF};
+            Constant::kVectorTableCF,
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+            Constant::kVectorScalarUseDocumentCF
+#endif
+    };
   } else if (GetRole() == pb::common::ClusterRole::DOCUMENT) {
     if (IsExecutorTxn(key) || IsClientTxn(key)) {
       return {Constant::kTxnDataCF, Constant::kTxnLockCF, Constant::kTxnWriteCF, Constant::kStoreDataCF};
@@ -1001,6 +1025,9 @@ void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::strin
       raw_cf_names.push_back(Constant::kVectorScalarCF);
       raw_cf_names.push_back(Constant::kVectorScalarKeySpeedUpCF);
       raw_cf_names.push_back(Constant::kVectorTableCF);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      raw_cf_names.push_back(Constant::kVectorScalarUseDocumentCF);
+#endif
 
       return;
     } else {
@@ -1008,6 +1035,9 @@ void Helper::GetColumnFamilyNames(const std::string& key, std::vector<std::strin
       raw_cf_names.push_back(Constant::kVectorScalarCF);
       raw_cf_names.push_back(Constant::kVectorScalarKeySpeedUpCF);
       raw_cf_names.push_back(Constant::kVectorTableCF);
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+      raw_cf_names.push_back(Constant::kVectorScalarUseDocumentCF);
+#endif
     }
   }
 }

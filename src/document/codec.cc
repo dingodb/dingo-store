@@ -401,6 +401,109 @@ bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parame
   return true;
 }
 
+#if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
+bool DocumentCodec::IsValidTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+    const std::string& json_parameter, std::map<std::string, TokenizerType>& column_tokenizer_parameter,
+    std::string& error_message) {
+  if (!nlohmann::json::accept(json_parameter)) {
+    error_message = "json_parameter is illegal json";
+    return false;
+  }
+
+  nlohmann::json json = nlohmann::json::parse(json_parameter);
+  for (const auto& item : json.items()) {
+    auto tokenizer = item.value();
+
+    if (tokenizer.find("tokenizer") == tokenizer.end()) {
+      error_message = "not found tokenizer";
+      return false;
+    }
+
+    const auto& tokenizer_item = tokenizer.at("tokenizer");
+
+    if (tokenizer_item.find("type") == tokenizer_item.end()) {
+      error_message = "not found tokenizer type";
+      return false;
+    }
+
+    const auto& tokenizer_type = tokenizer_item.at("type");
+
+    if (tokenizer_type == "raw") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeText;
+    } else if (tokenizer_type == "i64") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeI64;
+    } else if (tokenizer_type == "f64") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeF64;
+    } else if (tokenizer_type == "bytes") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBytes;
+    } else if (tokenizer_type == "datetime") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeDateTime;
+    } else if (tokenizer_type == "bool") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBool;
+    } else {
+      // error_message = fmt::format("Key({}) is invalid.", 123);
+      error_message = fmt::format("unknown column {}", tokenizer_type.dump());
+      return false;
+    }
+  }
+
+  // use ffi to validate json_parameter again for more tokenizer parameter
+  auto bool_result = ffi_varify_index_parameter(json_parameter);
+  if (!bool_result.result) {
+    DINGO_LOG(ERROR) << "ffi_varify_index_parameter failed, error_message:[" << bool_result.error_msg.c_str() << "]";
+    error_message = bool_result.error_msg.c_str();
+    column_tokenizer_parameter.clear();
+    return false;
+  }
+
+  return true;
+}
+
+bool DocumentCodec::GenDefaultTokenizerJsonParameterForVectorIndexWithDocumentSpeedup(
+    const std::map<std::string, TokenizerType>& column_tokenizer_parameter, std::string& json_parameter,
+    std::string& error_message) {
+  if (column_tokenizer_parameter.empty()) {
+    error_message = "column_tokenizer_parameter is empty";
+    return false;
+  }
+
+  nlohmann::json json;
+
+  for (const auto& [field_name, field_type] : column_tokenizer_parameter) {
+    nlohmann::json tokenizer;
+    switch (field_type) {
+      case TokenizerType::kTokenizerTypeText:
+        tokenizer["type"] = "raw";
+        break;
+      case TokenizerType::kTokenizerTypeI64:
+        tokenizer["type"] = "i64";
+        break;
+      case TokenizerType::kTokenizerTypeF64:
+        tokenizer["type"] = "f64";
+        break;
+      case TokenizerType::kTokenizerTypeBytes:
+        tokenizer["type"] = "bytes";
+        break;
+      case TokenizerType::kTokenizerTypeDateTime:
+        tokenizer["type"] = "datetime";
+        break;
+      case TokenizerType::kTokenizerTypeBool:
+        tokenizer["type"] = "bool";
+        break;
+      default:
+        error_message = fmt::format("unknown column {} {}", field_name, static_cast<int>(field_type));
+        return false;
+    }
+
+    json[field_name] = {{"tokenizer", tokenizer}};
+  }
+
+  json_parameter = json.dump();
+
+  return true;
+}
+#endif
+
 bool DocumentCodec::GenDefaultTokenizerJsonParameter(
     const std::map<std::string, TokenizerType>& column_tokenizer_parameter, std::string& json_parameter,
     std::string& error_message) {

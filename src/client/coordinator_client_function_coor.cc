@@ -19,6 +19,7 @@
 
 #include "butil/time.h"
 #include "client/client_helper.h"
+#include "client/client_interation.h"
 #include "client/coordinator_client_function.h"
 #include "common/helper.h"
 #include "common/logging.h"
@@ -27,6 +28,7 @@
 #include "gflags/gflags_declare.h"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
+#include "proto/debug.pb.h"
 #include "proto/error.pb.h"
 #include "proto/node.pb.h"
 
@@ -171,8 +173,7 @@ void SendRaftAddPeer() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -222,8 +223,7 @@ void SendRaftRemovePeer() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -277,8 +277,7 @@ void SendRaftTransferLeader() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -320,8 +319,7 @@ void SendRaftSnapshot() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -385,8 +383,7 @@ void SendRaftResetPeer() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " request_attachment=" << cntl.request_attachment().size()
+    DINGO_LOG(INFO) << "Received response" << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
   }
@@ -422,8 +419,7 @@ void SendGetNodeInfo() {
   }
 
   if (FLAGS_log_each_request) {
-    DINGO_LOG(INFO) << "Received response"
-                    << " cluster_id=" << request.cluster_id()
+    DINGO_LOG(INFO) << "Received response" << " cluster_id=" << request.cluster_id()
                     << " request_attachment=" << cntl.request_attachment().size()
                     << " response_attachment=" << cntl.response_attachment().size() << " latency=" << cntl.latency_us();
     DINGO_LOG(INFO) << response.DebugString();
@@ -2184,4 +2180,113 @@ void SendCreateIds(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_
   auto status = coordinator_interaction->SendRequest("CreateIds", request, response);
   DINGO_LOG(INFO) << "SendRequest status=" << status;
   DINGO_LOG(INFO) << response.DebugString();
+}
+
+// debug service
+void SendDebugServiceDebug(std::shared_ptr<dingodb::CoordinatorInteraction> coordinator_interaction, int64_t region_id,
+                           const std::string& debug_service_debug_type, bool is_actual) {
+  dingodb::pb::debug::DebugType type = dingodb::pb::debug::DebugType::NONE;
+
+  std::string debug_type_str;
+  debug_type_str += "\tSTORE_REGION_META_STAT = 1\n";
+  debug_type_str += "\tSTORE_REGION_META_DETAILS = 2\n";
+  debug_type_str += "\tSTORE_REGION_CONTROL_COMMAND = 3\n";
+  debug_type_str += "\tSTORE_RAFT_META = 4\n";
+  debug_type_str += "\tSTORE_REGION_EXECUTOR = 5\n";
+  debug_type_str += "\tSTORE_REGION_METRICS = 6\n";
+  debug_type_str += "\tSTORE_FILE_READER = 7\n";
+  debug_type_str += "\tSTORE_REGION_ACTUAL_METRICS = 8\n";
+  debug_type_str += "\tSTORE_METRICS = 9\n";
+  debug_type_str += "\tSTORE_REGION_CHANGE_RECORD = 10\n";
+  debug_type_str += "\tINDEX_VECTOR_INDEX_METRICS = 100\n";
+  debug_type_str += "\tDOCUMENT_INDEX_METRICS = 101\n";
+  debug_type_str += "\tTS_PROVIDER_METRICS = 110\n";
+  debug_type_str += "\tRAFT_LOG_META = 111\n";
+
+  if (debug_service_debug_type == "1" || debug_service_debug_type == "STORE_REGION_META_STAT") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_META_STAT;
+  } else if (debug_service_debug_type == "2" || debug_service_debug_type == "STORE_REGION_META_DETAILS") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_META_DETAILS;
+  } else if (debug_service_debug_type == "3" || debug_service_debug_type == "STORE_REGION_CONTROL_COMMAND") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_CONTROL_COMMAND;
+  } else if (debug_service_debug_type == "4" || debug_service_debug_type == "STORE_RAFT_META") {
+    type = dingodb::pb::debug::DebugType::STORE_RAFT_META;
+  } else if (debug_service_debug_type == "5" || debug_service_debug_type == "STORE_REGION_EXECUTOR") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_EXECUTOR;
+  } else if (debug_service_debug_type == "6" || debug_service_debug_type == "STORE_REGION_METRICS") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_METRICS;
+  } else if (debug_service_debug_type == "7" || debug_service_debug_type == "STORE_FILE_READER") {
+    type = dingodb::pb::debug::DebugType::STORE_FILE_READER;
+  } else if (debug_service_debug_type == "8" || debug_service_debug_type == "STORE_REGION_ACTUAL_METRICS") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_ACTUAL_METRICS;
+  } else if (debug_service_debug_type == "9" || debug_service_debug_type == "STORE_METRICS") {
+    type = dingodb::pb::debug::DebugType::STORE_METRICS;
+  } else if (debug_service_debug_type == "10" || debug_service_debug_type == "STORE_REGION_CHANGE_RECORD") {
+    type = dingodb::pb::debug::DebugType::STORE_REGION_CHANGE_RECORD;
+  } else if (debug_service_debug_type == "100" || debug_service_debug_type == "INDEX_VECTOR_INDEX_METRICS") {
+    type = dingodb::pb::debug::DebugType::INDEX_VECTOR_INDEX_METRICS;
+  } else if (debug_service_debug_type == "101" || debug_service_debug_type == "DOCUMENT_INDEX_METRICS") {
+    type = dingodb::pb::debug::DebugType::DOCUMENT_INDEX_METRICS;
+  } else if (debug_service_debug_type == "110" || debug_service_debug_type == "TS_PROVIDER_METRICS") {
+    type = dingodb::pb::debug::DebugType::TS_PROVIDER_METRICS;
+  } else if (debug_service_debug_type == "111" || debug_service_debug_type == "RAFT_LOG_META") {
+    type = dingodb::pb::debug::DebugType::RAFT_LOG_META;
+  } else {
+    DINGO_LOG(INFO) << "debug_service_debug_type is invalid : " << "\"" << debug_service_debug_type << "\"";
+    DINGO_LOG(INFO) << "debug_service_debug_type options: \n" << debug_type_str;
+    return;
+  }
+
+  dingodb::pb::coordinator::QueryRegionRequest query_request;
+  dingodb::pb::coordinator::QueryRegionResponse query_response;
+  query_request.set_region_id(region_id);
+  auto status = coordinator_interaction->SendRequest("QueryRegion", query_request, query_response);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "QueryRegion SendRequest status=" << status;
+    return;
+  }
+  // DINGO_LOG(INFO) << "QueryRegion SendRequest status=" << status;
+  // DINGO_LOG(INFO) << query_response.DebugString();
+
+  dingodb::pb::debug::DebugRequest request;
+  request.add_region_ids(region_id);
+  request.set_type(type);
+  request.set_is_actual(is_actual);
+  dingodb::pb::debug::DebugResponse response;
+
+  std::string which_service = "DebugService";
+  std::string which_method = "Debug";
+
+  dingodb::pb::common::RegionType region_type = query_response.region().region_type();
+  switch (region_type) {
+    case dingodb::pb::common::RegionType::STORE_REGION:
+      DINGO_LOG(INFO) << "region_type is STORE_REGION";
+      break;
+    case dingodb::pb::common::RegionType::INDEX_REGION:
+      DINGO_LOG(INFO) << "region_type is INDEX_REGION";
+      break;
+    case dingodb::pb::common::RegionType::DOCUMENT_REGION:
+      DINGO_LOG(INFO) << "region_type is DOCUMENT_REGION";
+      break;
+
+    default:
+      DINGO_LOG(ERROR) << "region_type is invalid : " << static_cast<int>(region_type);
+      return;
+  }
+
+  status = client::InteractionManager::GetInstance().CreateStoreInteraction(region_id);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "CreateStoreInteraction failed, region_id=" << region_id << ", status=" << status;
+    return;
+  }
+
+  DINGO_LOG(INFO) << "DebugRequest request : " << request.DebugString();
+  status =
+      client::InteractionManager::GetInstance().SendRequestWithoutContext("DebugService", "Debug", request, response);
+  if (!status.ok()) {
+    DINGO_LOG(ERROR) << "DebugService Debug SendRequest status=" << status;
+    return;
+  }
+
+  DINGO_LOG(INFO) << "DebugRequest response : " << response.DebugString();
 }
