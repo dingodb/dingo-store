@@ -173,16 +173,28 @@ class Region {
   }
 
   void SetRawAppliedMaxTs(int64_t ts) {
-    if (ts > raw_applied_max_ts_.load(std::memory_order_acquire)) {
-      raw_applied_max_ts_.store(ts, std::memory_order_release);
-    }
+    do {
+      int64_t applied_max_ts = raw_applied_max_ts_.load(std::memory_order_acquire);
+      if (ts <= applied_max_ts) break;
+
+      if (raw_applied_max_ts_.compare_exchange_weak(applied_max_ts, ts)) {
+        break;
+      }
+
+    } while (true);
   }
   int64_t RawAppliedMaxTs() { return raw_applied_max_ts_.load(std::memory_order_acquire); }
 
   void SetTxnAccessMaxTs(int64_t ts) {
-    if (ts > txn_access_max_ts_.load(std::memory_order_acquire)) {
-      txn_access_max_ts_.store(ts, std::memory_order_release);
-    }
+    do {
+      int64_t access_max_ts = txn_access_max_ts_.load(std::memory_order_acquire);
+      if (ts <= access_max_ts) break;
+
+      if (txn_access_max_ts_.compare_exchange_weak(access_max_ts, ts)) {
+        break;
+      }
+
+    } while (true);
   }
   int64_t TxnAccessMaxTs() { return txn_access_max_ts_.load(std::memory_order_acquire); }
 
