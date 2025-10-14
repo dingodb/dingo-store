@@ -98,6 +98,8 @@ public final class CodecUtils {
         schema.setAllowNull(column.isNullable());
         schema.setIsKey(column.getIndexOfKey() >= 0);
         schema.setIndex(index);
+        schema.setPrecision(column.getPrecision());
+        schema.setScale(column.getScale());
         return schema;
     }
 

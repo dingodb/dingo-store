@@ -19,6 +19,8 @@ package io.dingodb.sdk.common.serial.schema;
 import io.dingodb.sdk.common.serial.Buf;
 import io.dingodb.sdk.common.serial.schema.DingoSchema;
 import io.dingodb.sdk.common.serial.schema.Type;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -28,6 +30,14 @@ public class BooleanListSchema implements DingoSchema<List<Boolean>> {
     private int index;
     private boolean isKey;
     private boolean allowNull = true;
+
+    @Getter
+    @Setter
+    private long precision;
+
+    @Getter
+    @Setter
+    private long scale;
 
     public BooleanListSchema() {
     }

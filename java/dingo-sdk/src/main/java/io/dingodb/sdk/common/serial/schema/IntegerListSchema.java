@@ -17,6 +17,8 @@
 package io.dingodb.sdk.common.serial.schema;
 
 import io.dingodb.sdk.common.serial.Buf;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +28,14 @@ public class IntegerListSchema implements DingoSchema<List<Integer>> {
     private int index;
     private boolean isKey;
     private boolean allowNull = true;
+
+    @Getter
+    @Setter
+    private long precision;
+
+    @Getter
+    @Setter
+    private long scale;
 
     public IntegerListSchema() {
     }

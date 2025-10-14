@@ -35,6 +35,8 @@
 #include "serial/record_decoder.h"
 #include "serial/record_encoder.h"
 #include "serial/schema/base_schema.h"
+#include "serial/utils/common.h"
+#include "serial/schema/decimal_schema.h"
 
 namespace dingodb {
 
@@ -89,12 +91,14 @@ butil::Status Utils::CheckPbSchema(const google::protobuf::RepeatedPtrField<pb::
     if (type != pb::common::Schema::Type::Schema_Type_BOOL && type != pb::common::Schema::Type::Schema_Type_INTEGER &&
         type != pb::common::Schema::Type::Schema_Type_FLOAT && type != pb::common::Schema::Type::Schema_Type_LONG &&
         type != pb::common::Schema::Type::Schema_Type_DOUBLE && type != pb::common::Schema::Type::Schema_Type_STRING &&
+        type != pb::common::Schema::Type::Schema_Type_DECIMAL &&
         type != pb::common::Schema::Type::Schema_Type_BOOLLIST &&
         type != pb::common::Schema::Type::Schema_Type_INTEGERLIST &&
         type != pb::common::Schema::Type::Schema_Type_FLOATLIST &&
         type != pb::common::Schema::Type::Schema_Type_LONGLIST &&
         type != pb::common::Schema::Type::Schema_Type_DOUBLELIST &&
-        type != pb::common::Schema::Type::Schema_Type_STRINGLIST) {
+        type != pb::common::Schema::Type::Schema_Type_STRINGLIST &&
+        type != pb::common::Schema::Type::Schema_Type_DECIMALLIST) {
       std::string error_message = fmt::format("pb_schema invalid type : {}. not support", static_cast<int>(type));
       DINGO_LOG(ERROR) << error_message;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, error_message);
@@ -227,6 +231,13 @@ butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrFiel
       serial_schema->SetAllowNull(pb_schema.is_nullable());
       serial_schema->SetIndex(pb_schema.index());
       serial_schema->SetName(pb_schema.name());
+      serial_schema->SetPrecision(pb_schema.precision());
+      serial_schema->SetScale(pb_schema.scale());
+
+      /*
+      std::string error_message = fmt::format("TransToSerialSchema precison: {}, scale: {}", serial_schema->GetPrecision(), serial_schema->GetScale());
+      DINGO_LOG(ERROR) << error_message;
+      */
     };
 
     switch (pb_schema.type()) {
@@ -262,6 +273,13 @@ butil::Status Utils::TransToSerialSchema(const google::protobuf::RepeatedPtrFiel
       case pb::common::Schema::Type::Schema_Type_STRING: {
         SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
                                          std::shared_ptr<std::string>>(pb_schema, serial_schema_construct_lambda,
+                                                                       serial_schemas);
+
+        break;
+      }
+      case pb::common::Schema::Type::Schema_Type_DECIMAL: {
+        SerialBaseSchemaConstructWrapper<decltype(pb_schema), decltype(serial_schema_construct_lambda),
+                                         std::shared_ptr<DecimalString>>(pb_schema, serial_schema_construct_lambda,
                                                                        serial_schemas);
 
         break;
@@ -323,6 +341,13 @@ std::shared_ptr<BaseSchema> Utils::CloneSerialSchema(const std::shared_ptr<BaseS
       clone_serial_schema->SetAllowNull(serial_schema->AllowNull());
       clone_serial_schema->SetIndex(serial_schema->GetIndex());
       clone_serial_schema->SetName(serial_schema->GetName());
+      clone_serial_schema->SetPrecision(serial_schema->GetPrecision());
+      clone_serial_schema->SetScale(serial_schema->GetScale());
+
+      /*
+      std::string error_message = fmt::format("CloneSerialSchema precison: {}, scale: {}", clone_serial_schema->GetPrecision(), clone_serial_schema->GetScale());
+      DINGO_LOG(ERROR) << error_message;
+      */
     };
     switch (type) {
       case BaseSchema::Type::kBool: {
@@ -876,6 +901,21 @@ std::any Utils::CloneColumn(const std::any& column, BaseSchema::Type type) {
         return {};
       }
     }
+    case BaseSchema::Type::kDecimal: {
+      try {
+        const std::optional<std::shared_ptr<DecimalString>>& value =
+            std::any_cast<std::optional<std::shared_ptr<DecimalString>>>(column);
+        if (value.has_value()) {
+          // return std::optional<std::shared_ptr<std::string>>(new std::string(*value.value()));
+          return std::optional<std::shared_ptr<DecimalString>>(value.value());
+        } else {
+          return std::optional<std::shared_ptr<DecimalString>>(std::nullopt);
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{}  any_cast std::optional<std::shared_ptr<std::string>> failed", bad.what());
+        return {};
+      }
+    }
     case BaseSchema::Type::kBoolList: {
       try {
         const std::optional<std::shared_ptr<std::vector<bool>>>& value =
@@ -1077,6 +1117,9 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::S
       case pb::common::Schema_Type_STRING:
         ss << "Schema_Type_STRING";
         break;
+      case pb::common::Schema_Type_DECIMAL:
+        ss << "Schema_Type_DECIMAL";
+        break;
       case pb::common::Schema_Type_BOOLLIST:
         ss << "Schema_Type_BOOLLIST";
         break;
@@ -1095,6 +1138,9 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::S
       case pb::common::Schema_Type_STRINGLIST:
         ss << "Schema_Type_STRINGLIST";
         break;
+      case pb::common::Schema_Type_DECIMALLIST:
+        ss << "Schema_Type_DECIMALLIST";
+        break;
       case pb::common::Schema_Type_Schema_Type_INT_MIN_SENTINEL_DO_NOT_USE_:
       case pb::common::Schema_Type_Schema_Type_INT_MAX_SENTINEL_DO_NOT_USE_:
         break;
@@ -1104,6 +1150,8 @@ void Utils::DebugPbSchema(const google::protobuf::RepeatedPtrField<pb::common::S
     ss << "\tis_nullable : " << (schema.is_nullable() ? "true" : "false");
     ss << "\tindex : " << (schema.index());
     ss << "\tname : " << (schema.name());
+    ss << "\tprecision : " << (schema.precision());
+    ss << "\tscale : " << (schema.scale());
 
     COPROCESSOR_LOG << ss.str() << "\n";
     i++;
@@ -1149,6 +1197,9 @@ void Utils::DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<
         case BaseSchema::kString:
           ss << "BaseSchema::kString";
           break;
+        case BaseSchema::kDecimal:
+          ss << "BaseSchema::kDecimal";
+          break;
         case BaseSchema::kBoolList:
           ss << "BaseSchema::kBoolList";
           break;
@@ -1173,6 +1224,8 @@ void Utils::DebugSerialSchema(const std::shared_ptr<std::vector<std::shared_ptr<
       ss << "\tAllowNull : " << (schema->AllowNull() ? "true" : "false");
       ss << "\tIndex : " << (schema->GetIndex());
       ss << "\tName : " << (schema->GetName());
+      ss << "\tName : " << (schema->GetPrecision());
+      ss << "\tName : " << (schema->GetScale());
 
       COPROCESSOR_LOG << ss.str() << "\n";
       i++;
@@ -1370,6 +1423,23 @@ void Utils::DebugColumn(const std::any& column, BaseSchema::Type type, const std
         }
       } catch (const std::bad_any_cast& bad) {
         DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<std::string>> failed", name,
+                                        bad.what());
+        return;
+      }
+      break;
+    }
+    case BaseSchema::Type::kDecimal: {
+      try {
+        const std::optional<std::shared_ptr<DecimalString>>& value =
+            std::any_cast<std::optional<std::shared_ptr<DecimalString>>>(column);
+        if (value.has_value()) {
+          COPROCESSOR_LOG << name
+                          << " std::optional<std::shared_ptr<DecimalString>> : " << Helper::StringToHex(((value.value())->str));
+        } else {
+          COPROCESSOR_LOG << name << " std::optional<std::shared_ptr<DecimalString>> : null";
+        }
+      } catch (const std::bad_any_cast& bad) {
+        DINGO_LOG(ERROR) << fmt::format("{} {}  any_cast std::optional<std::shared_ptr<DecimalString>> failed", name,
                                         bad.what());
         return;
       }
@@ -1892,7 +1962,17 @@ butil::Status Utils::CompareCoprocessorSchemaAndScalarSchema(
       }
       break;
     }
-
+    case pb::common::Schema_Type_DECIMAL: {
+      pb::common::ScalarFieldType field_type = scalar_schema->field_type();
+      if (field_type != pb::common::ScalarFieldType::DECIMAL) {
+        std::string s = fmt::format("pb::common::Schema_Type : {} {}  pb::common::ScalarFieldType : {} {} not match.",
+                                    static_cast<int>(type), pb::common::Schema_Type_Name(type),
+                                    static_cast<int>(field_type), pb::common::ScalarFieldType_Name(field_type));
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
     case pb::common::Schema_Type_BOOLLIST:
       [[fallthrough]];
     case pb::common::Schema_Type_INTEGERLIST:
@@ -1904,6 +1984,8 @@ butil::Status Utils::CompareCoprocessorSchemaAndScalarSchema(
     case pb::common::Schema_Type_DOUBLELIST:
       [[fallthrough]];
     case pb::common::Schema_Type_STRINGLIST:
+      [[fallthrough]];
+    case pb::common::Schema_Type_DECIMALLIST:
       [[fallthrough]];
     case pb::common::Schema_Type_Schema_Type_INT_MIN_SENTINEL_DO_NOT_USE_:
       [[fallthrough]];
