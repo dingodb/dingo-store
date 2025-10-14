@@ -59,7 +59,7 @@ public class DecimalSchema implements DingoSchema<String> {
 
     @Override
     public Type getType() {
-        return Type.STRING;
+        return Type.DECIMAL;
     }
 
     @Override

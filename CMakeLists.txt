@@ -295,6 +295,7 @@ include(yaml-cpp)
 include(ftxui)
 include(hnswlib)
 include(bdb)
+include(gmp)
 include(tantivy-search)
 if(WITH_DISKANN)
   if(NOT DISKANN_DEPEND_ON_SYSTEM)
@@ -346,7 +347,9 @@ add_custom_target(
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/serial/src/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libexpr/src/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/libexpr/src/types/decimal)
 include_directories(${BDB_INCLUDE_DIR})
+include_directories(${GMP_INCLUDE_DIR})
 if(ENABLE_XDPROCKS)
   include_directories(${XDPROCKS_PATH}/include)
 endif()
@@ -378,7 +381,9 @@ set(DYNAMIC_LIB
     ${TANTIVY_SEARCH_LIBRARIES}
     ${FTXUI_COMPONENT_LIBRARY}
     ${FTXUI_DOM_LIBRARY}
-    ${FTXUI_SCREEN_LIBRARY})
+    ${FTXUI_SCREEN_LIBRARY}
+    ${GMP_LIBRARIES}
+    ${GMPXX_LIBRARIES})
 
 if(WITH_DISKANN)
   if(NOT DISKANN_DEPEND_ON_SYSTEM)
@@ -401,7 +406,7 @@ if(WITH_LIBURING)
   set(DYNAMIC_LIB ${DYNAMIC_LIB} uring::uring)
 endif()
 
-set(DEPEND_LIBS yamlcpp faiss bdb tantivy-search ftxui)
+set(DEPEND_LIBS yamlcpp faiss bdb gmp tantivy-search ftxui)
 
 if(WITH_MKL)
   if(DEFINED ENV{MKLROOT})
