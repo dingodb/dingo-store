@@ -3991,7 +3991,9 @@ void DoImportEpochType(google::protobuf::RpcController * /*controller*/,
   pb::coordinator_internal::MetaIncrement meta_increment;
   for (const auto &it : request->id_epoch_type_and_value().items()) {
     if (it.type() == pb::coordinator::IdEpochType::ID_GC_RESOLVE_LOCK_SAFE_POINT ||
-        it.type() == pb::coordinator::IdEpochType::ID_GC_SAFE_POINT) {
+        it.type() == pb::coordinator::IdEpochType::ID_GC_SAFE_POINT ||
+        it.type() == pb::coordinator::IdEpochType::RAFT_APPLY_TERM ||
+        it.type() == pb::coordinator::IdEpochType::RAFT_APPLY_INDEX) {
       DINGO_LOG(INFO) << "skip restore : " << pb::coordinator::IdEpochType_Name(it.type());
       continue;
     }
