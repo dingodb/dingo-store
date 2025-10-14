@@ -20,8 +20,10 @@
 #include "common/logging.h"
 #include "fmt/core.h"
 #include "proto/error.pb.h"
-#include "serial/schema/base_schema.h"
 #include "serial/record/V2/common.h"
+#include "serial/schema/base_schema.h"
+#include "serial/utils/common.h"
+#include "libexpr/src/types/decimal/decimal.h"
 
 namespace dingodb {
 
@@ -115,6 +117,19 @@ butil::Status RelExprHelper::TransToOperand(
       break;
     }
     case BaseSchema::Type::kString: {
+      try {
+        operand_ptr->emplace_back(expr::any_optional_data_adaptor::ToOperand<
+                                  std::shared_ptr<std::string>>(column));
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format(
+            "{}  any_cast std::optional<std::shared_ptr<std::string>> failed",
+            bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kDecimal: {
       try {
         operand_ptr->emplace_back(expr::any_optional_data_adaptor::ToOperand<
                                   std::shared_ptr<std::string>>(column));
@@ -287,6 +302,24 @@ butil::Status RelExprHelper::TransToOperandV2(
       } catch (const std::bad_any_cast& bad) {
         std::string s = fmt::format(
             "{}  any_cast std::optional<std::shared_ptr<std::string>> failed",
+            bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kDecimal: {
+      try {
+        if (column.has_value()) {
+          std::string col_value = std::any_cast<std::string>(column);
+          Decimal decimal = Decimal(col_value);
+          operand_ptr->emplace_back(std::make_shared<Decimal>(std::move(decimal)));
+        } else {
+          operand_ptr->emplace_back(nullptr);
+        }
+      } catch (const std::bad_any_cast& bad) {
+        std::string s = fmt::format(
+            "{}  any_cast DecimalP failed",
             bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
@@ -499,6 +532,20 @@ butil::Status RelExprHelper::TransFromOperand(
       }
       break;
     }
+    case BaseSchema::Type::kDecimal: {
+      try {
+        columns.emplace_back(
+            expr::any_optional_data_adaptor::FromOperand<
+                std::shared_ptr<std::string>>((*operand_ptr)[index]));
+      } catch (const std::bad_variant_access& bad) {
+        std::string s = fmt::format(
+            "Operand to std::any<std::shared_ptr<std::string>> failed, {}",
+            bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
     case BaseSchema::Type::kBoolList: {
       try {
         columns.emplace_back(
@@ -591,7 +638,8 @@ butil::Status RelExprHelper::TransFromOperand(
 butil::Status RelExprHelper::TransFromOperandV2(
     BaseSchema::Type type,
     const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
-    size_t index, std::vector<std::any>& columns) {
+    size_t index, std::vector<std::any>& columns,
+    long precision, long scale) {
   if (!operand_ptr) {
     std::string s = fmt::format("operand_ptr is nullptr. not support");
     DINGO_LOG(ERROR) << s;
@@ -659,6 +707,25 @@ butil::Status RelExprHelper::TransFromOperandV2(
                 std::shared_ptr<std::string>>((*operand_ptr)[index]);
         if (operand_value) {
           columns.emplace_back(std::any(*operand_value));
+        } else {
+          columns.emplace_back(std::any());
+        }
+      } catch (const std::bad_variant_access& bad) {
+        std::string s =
+            fmt::format("Operand to std::string failed, {}", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      }
+      break;
+    }
+    case BaseSchema::Type::kDecimal: {
+      try {
+        std::shared_ptr<Decimal> operand_value =
+            expr::any_optional_data_adaptor::FromOperandV2<
+                std::shared_ptr<Decimal>>((*operand_ptr)[index]);
+        if (operand_value) {
+          std::string internalValue = operand_value->toString(precision, scale);
+          columns.emplace_back(std::any(internalValue));
         } else {
           columns.emplace_back(std::any());
         }
@@ -853,8 +920,10 @@ butil::Status RelExprHelper::TransFromOperandWrapper(
     for (const auto& tuple : *operand_ptr) {
       BaseSchema::Type type =
           (*result_serial_schemas)[result_column_indexes[i]]->GetType();
+      long precison = (*result_serial_schemas)[result_column_indexes[i]]->GetPrecision();
+      long scale = (*result_serial_schemas)[result_column_indexes[i]]->GetScale();
       status = RelExprHelper::TransFromOperandV2(type, operand_ptr, i,
-                                                 result_record);
+                                                 result_record, precison, scale);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;

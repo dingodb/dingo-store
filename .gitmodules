@@ -37,3 +37,6 @@
 [submodule "contrib/libaio"]
 	path = contrib/libaio
 	url = https://pagure.io/libaio.git
+[submodule "contrib/gmp"]
+	path = contrib/gmp
+	url = https://github.com/dingodb/dingo-gmp.git

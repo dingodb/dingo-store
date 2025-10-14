@@ -17,6 +17,8 @@
 package io.dingodb.sdk.common.serial.schema;
 
 import io.dingodb.sdk.common.serial.Buf;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.nio.charset.StandardCharsets;
 
@@ -25,6 +27,14 @@ public class ArraySchema<T> implements DingoSchema<T[]> {
     private boolean isKey;
     private boolean allowNull = true;
     private DingoSchema<T> elementSchema;
+
+    @Getter
+    @Setter
+    private long precision;
+
+    @Getter
+    @Setter
+    private long scale;
 
     public ArraySchema(DingoSchema<T> elementSchema) {
         this.elementSchema = elementSchema;
