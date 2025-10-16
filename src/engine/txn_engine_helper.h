@@ -160,6 +160,10 @@ class TxnEngineHelper {
                                   std::shared_ptr<Context> ctx, std::vector<std::string> &keys_to_rollback_with_data,
                                   std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
 
+  static butil::Status MarkRollBackOnMissingLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                 std::shared_ptr<Context> ctx, std::string primary_key,
+                                                 int64_t start_ts);
+
   static butil::Status DoUpdateLock(std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx,
                                     const pb::store::LockInfo &lock_info);
 
@@ -193,7 +197,8 @@ class TxnEngineHelper {
 
   static butil::Status CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> engine,
                                       std::shared_ptr<Context> ctx, const std::string &primary_key, int64_t lock_ts,
-                                      int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit);
+                                      int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit,
+                                      bool rollback_if_not_exist);
 
   static butil::Status TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Context> ctx,
                                               store::RegionPtr region, int64_t start_ts,

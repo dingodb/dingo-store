@@ -306,7 +306,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
                                     int64_t commit_ts, const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key,
                                             int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts,
-                                            bool force_sync_commit) = 0;
+                                            bool force_sync_commit, bool rollback_if_not_exist) = 0;
     virtual butil::Status TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                  int64_t start_ts, const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
