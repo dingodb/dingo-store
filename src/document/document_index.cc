@@ -41,8 +41,18 @@ DEFINE_int32(document_index_save_log_gap, 10, "document index save log gap");
 BRPC_VALIDATE_GFLAG(document_index_save_log_gap, brpc::PositiveInteger);
 
 butil::Status DocumentIndex::RemoveIndexFiles(int64_t id, const std::string& index_path) {
-  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] remove index files, path: {}", id, index_path);
-  Helper::RemoveAllFileOrDirectory(index_path);
+  // index_path: /home/dingo-store/dist/document1/data/document_index/80040/epoch_1
+  // need remove index_path: /home/dingo-store/dist/document1/data/document_index/80040
+  size_t last_slash = index_path.find_last_of('/');
+  if (last_slash == std::string::npos){
+    auto s = fmt::format("[document_index.raw][id({})] remove index file failed, path: {} not find '/' ", id, index_path);
+    DINGO_LOG(ERROR) << s;
+    return butil::Status(pb::error::Errno::EFILE_NOT_DIRECTORY, s);
+  }
+  std::string remove_path = index_path.substr(0, last_slash);
+  DINGO_LOG(INFO) << fmt::format("[document_index.raw][id({})] remove index files, path: {}", id, remove_path);
+
+  Helper::RemoveAllFileOrDirectory(remove_path);
   return butil::Status::OK();
 }
 
