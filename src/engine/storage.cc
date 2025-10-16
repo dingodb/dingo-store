@@ -1700,7 +1700,8 @@ butil::Status Storage::TxnCommit(std::shared_ptr<Context> ctx, store::RegionPtr 
 }
 
 butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
-                                         int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit) {
+                                         int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit,
+                                         bool rollback_if_not_exist) {
   auto status = ValidateLeader(ctx->RegionId());
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
@@ -1711,7 +1712,8 @@ butil::Status Storage::TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts, force_sync_commit);
+  status = writer->TxnCheckTxnStatus(ctx, primary_key, lock_ts, caller_start_ts, current_ts, force_sync_commit,
+                                     rollback_if_not_exist);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }

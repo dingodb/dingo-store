@@ -3389,7 +3389,7 @@ bvar::LatencyRecorder g_txn_check_txn_status_latency("dingo_txn_check_txn_status
 butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                               std::shared_ptr<Context> ctx, const std::string &primary_key,
                                               int64_t lock_ts, int64_t caller_start_ts, int64_t current_ts,
-                                              bool force_sync_commit) {
+                                              bool force_sync_commit, bool rollback_if_not_exist) {
   BvarLatencyGuard bvar_guard(&g_txn_check_txn_status_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -3606,6 +3606,19 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     }
 
     if (commit_ts == 0) {
+      if (rollback_if_not_exist) {
+        auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, primary_key, lock_ts);
+        if (!ret3.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
+                           << ", MarkRollBackOnMissingLock failed";
+          return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
+        }
+        response->set_lock_ttl(0);
+        response->set_commit_ts(0);
+        response->set_action(pb::store::Action::LockNotExistRollback);
+        return butil::Status::OK();
+      }
+
       // it seems there is a lock previously exists, but it is not committed, and there is no rollback, there must
       // be some error, return TxnNotFound
       auto *txn_not_found = txn_result->mutable_txn_not_found();
@@ -3847,6 +3860,45 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
   if (ret.error_code() == EPERM) {
     DINGO_LOG(ERROR) << "[txn]Rollback failed, start_ts: " << start_ts << ", error_code: " << ret.error_code()
                      << ", error_msg: " << ret.error_str();
+    return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
+  }
+
+  return ret;
+}
+
+// MarkRollBackOnMissingLock
+butil::Status TxnEngineHelper::MarkRollBackOnMissingLock(RawEnginePtr /*raw_engine*/,
+                                                         std::shared_ptr<Engine> raft_engine,
+                                                         std::shared_ptr<Context> ctx, std::string primary_key,
+                                                         int64_t start_ts) {
+  BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
+
+  DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]MarkRollBackOnMissingLock start_ts: " << start_ts
+                                                        << ", primary_key: " << Helper::StringToHex(primary_key);
+
+  // add write
+  pb::store::WriteInfo write_info;
+  write_info.set_start_ts(start_ts);
+  write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+  pb::common::KeyValue kv_put;
+  kv_put.set_key(mvcc::Codec::EncodeKey(primary_key, start_ts));
+  kv_put.set_value(write_info.SerializeAsString());
+
+  // after all mutations is processed, write into raft engine
+  pb::raft::TxnRaftRequest txn_raft_request;
+  auto *cf_put_delete = txn_raft_request.mutable_multi_cf_put_and_delete();
+
+  auto *write_puts = cf_put_delete->add_puts_with_cf();
+  write_puts->set_cf_name(Constant::kTxnWriteCF);
+  auto *kv = write_puts->add_kvs();
+  kv->set_key(kv_put.key());
+  kv->set_value(kv_put.value());
+
+  auto ret = raft_engine->Write(ctx, WriteDataBuilder::BuildWrite(txn_raft_request));
+  if (ret.error_code() == EPERM) {
+    DINGO_LOG(ERROR) << "[txn]MarkRollBackOnMissingLock failed, start_ts: " << start_ts
+                     << ", error_code: " << ret.error_code() << ", error_msg: " << ret.error_str();
     return butil::Status(pb::error::Errno::ERAFT_NOTLEADER, ret.error_str());
   }
 

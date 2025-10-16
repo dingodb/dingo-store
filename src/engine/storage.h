@@ -116,7 +116,7 @@ class Storage {
                           const std::vector<std::string>& keys);
   butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys);
   butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
-                                  int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit);
+                                  int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit, bool rollback_if_not_exist);
   butil::Status TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
                                        const std::vector<std::string>& keys);
   butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,

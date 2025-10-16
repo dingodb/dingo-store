@@ -669,9 +669,9 @@ butil::Status MonoStoreEngine::TxnWriter::TxnCommit(std::shared_ptr<Context> ctx
 butil::Status MonoStoreEngine::TxnWriter::TxnCheckTxnStatus(std::shared_ptr<Context> ctx,
                                                             const std::string& primary_key, int64_t lock_ts,
                                                             int64_t caller_start_ts, int64_t current_ts,
-                                                            bool force_sync_commit) {
+                                                            bool force_sync_commit, bool rollback_if_not_exist) {
   return TxnEngineHelper::CheckTxnStatus(txn_writer_raw_engine_, mono_engine_, ctx, primary_key, lock_ts,
-                                         caller_start_ts, current_ts, force_sync_commit);
+                                         caller_start_ts, current_ts, force_sync_commit, rollback_if_not_exist);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region,
