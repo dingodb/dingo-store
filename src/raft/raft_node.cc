@@ -272,8 +272,16 @@ std::shared_ptr<SnapshotContext> RaftNode::MakeSnapshotContext() {
   return fsm != nullptr ? fsm->MakeSnapshotContext() : nullptr;
 }
 
-void RaftNode::SetDisableSaveSnapshot(bool disable) { return disable_save_snapshot_.store(disable); }
+void RaftNode::SetDisableSaveSnapshot(bool disable) {
+  return disable_save_snapshot_.store(disable, std::memory_order_release);
+}
 
-bool RaftNode::DisableSaveSnapshot() { return disable_save_snapshot_.load(); }
+bool RaftNode::DisableSaveSnapshot() { return disable_save_snapshot_.load(std::memory_order_acquire); }
+
+void RaftNode::SetConsistentReadable(bool consistent_readable) {
+  return consistent_readable_.store(consistent_readable, std::memory_order_release);
+}
+
+bool RaftNode::ConsistentReadable() { return consistent_readable_.load(std::memory_order_acquire); }
 
 }  // namespace dingodb

@@ -92,6 +92,7 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
     if (node->ElectionTimeout() != election_timeout_ms) {
       node->ResetElectionTimeout(election_timeout_ms, 1000);
     }
+    node->SetConsistentReadable(true);
   }
 
   // Set raw apply max ts
@@ -120,7 +121,13 @@ int SmLeaderStartEventListener::OnEvent(std::shared_ptr<Event> event) {
 
 int SmLeaderStopEventListener::OnEvent(std::shared_ptr<Event> event) {
   auto the_event = std::dynamic_pointer_cast<SmLeaderStopEvent>(event);
+  auto region = the_event->region;
 
+  auto raft_store_engine = Server::GetInstance().GetRaftStoreEngine();
+  auto node = raft_store_engine->GetNode(region->Id());
+  if (node != nullptr) {
+    node->SetConsistentReadable(false);
+  }
   // Invoke handler
   auto handlers = handler_collection_->GetHandlers();
   for (auto& handle : handlers) {
@@ -196,6 +203,7 @@ int SmStartFollowingEventListener::OnEvent(std::shared_ptr<Event> event) {
     if (node->ElectionTimeout() != election_timeout_ms) {
       node->ResetElectionTimeout(election_timeout_ms, 1000);
     }
+    node->SetConsistentReadable(false);
   }
 
   auto store_region_meta = GET_STORE_REGION_META;
