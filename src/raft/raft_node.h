@@ -82,6 +82,9 @@ class RaftNode {
   void SetDisableSaveSnapshot(bool disable);
   bool DisableSaveSnapshot();
 
+  void SetConsistentReadable(bool consistent_readable);
+  bool ConsistentReadable();
+
  private:
   std::string path_;
   int64_t node_id_;
@@ -95,6 +98,7 @@ class RaftNode {
   std::unique_ptr<braft::Node> node_;
 
   std::atomic<bool> disable_save_snapshot_;
+  std::atomic<bool> consistent_readable_;
 };
 
 }  // namespace dingodb

@@ -132,6 +132,11 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
     if (!node->IsLeader()) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
     }
+
+    if (!node->ConsistentReadable()) {
+      return butil::Status(pb::error::EREGION_WAIT_FOR_REPLAY_LOG,
+                           fmt::format("{} wait for replay raft log.", node->GetLeaderId().to_string()));
+    }
   }
 
   return butil::Status();
@@ -151,6 +156,11 @@ butil::Status Storage::ValidateLeader(store::RegionPtr region) {
 
     if (!node->IsLeader()) {
       return butil::Status(pb::error::ERAFT_NOTLEADER, node->GetLeaderId().to_string());
+    }
+
+    if (!node->ConsistentReadable()) {
+      return butil::Status(pb::error::EREGION_WAIT_FOR_REPLAY_LOG,
+                           fmt::format("{} wait for replay raft log.", node->GetLeaderId().to_string()));
     }
   }
 

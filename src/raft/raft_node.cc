@@ -276,4 +276,8 @@ void RaftNode::SetDisableSaveSnapshot(bool disable) { return disable_save_snapsh
 
 bool RaftNode::DisableSaveSnapshot() { return disable_save_snapshot_.load(); }
 
+void RaftNode::SetConsistentReadable(bool consistent_readable) { return consistent_readable_.store(consistent_readable); }
+
+bool RaftNode::ConsistentReadable() { return consistent_readable_.load(); }
+
 }  // namespace dingodb
