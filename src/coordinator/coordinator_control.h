@@ -870,6 +870,8 @@ class CoordinatorControl : public MetaControl {
   static void AddCheckTombstoneRegionTask(pb::coordinator::Task *check_tombstone_region_task, int64_t store_id,
                                           int64_t region_id);
 
+  static void AddCheckSplitChildRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id, int64_t region_id);
+
   void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
                                      int64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
 
