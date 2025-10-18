@@ -2861,7 +2861,8 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
   auto* check_region_task = new_job->add_tasks();
   // build split_region pre_check for each store region
   for (const auto& it : store_operations) {
-    AddCheckStoreRegionTask(check_region_task, it.store_id(), new_region_id);
+    AddCheckSplitChildRegionTask(check_region_task, it.store_id(), new_region_id);
+    // AddCheckStoreRegionTask(check_region_task, it.store_id(), new_region_id);
   }
 
   // build split_region task
@@ -3237,7 +3238,8 @@ butil::Status CoordinatorControl::ChangePeerRegionWithJob(int64_t region_id, std
       auto it = store_region_metrics_map_[store_id].region_metrics_map().find(region_id);
       if (it == store_region_metrics_map_[store_id].region_metrics_map().end()) {
         DINGO_LOG(ERROR) << "ChangePeerRegion region_metrics_map seek failed, region_id = " << region_id;
-        return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
+        return butil::Status::OK();
+        // return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "ChangePeerRegion region_metrics_map seek failed");
       }
 
       const auto& region_metrics = it->second;
@@ -5375,6 +5377,19 @@ void CoordinatorControl::AddCheckStoreRegionTask(pb::coordinator::Task* check_re
   region_check->set_type(pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
   region_check->mutable_store_region_check()->set_store_id(store_id);
   region_check->mutable_store_region_check()->set_region_id(region_id);
+}
+
+void CoordinatorControl::AddCheckSplitChildRegionTask(pb::coordinator::Task* check_region_task, int64_t store_id,
+                                                      int64_t region_id) {
+  // generate store operation for stores
+  auto* store_operation = check_region_task->add_store_operations();
+  store_operation->set_store_id(store_id);
+
+  auto* region_check = store_operation->mutable_pre_check();
+  region_check->set_type(pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(region_id);
+  region_check->mutable_store_region_check()->set_store_region_state(::dingodb::pb::common::StoreRegionState::STANDBY);
 }
 
 void CoordinatorControl::AddCheckChangePeerResultTask(pb::coordinator::Job* job, int64_t store_id, int64_t region_id,
