@@ -3450,7 +3450,7 @@ void SetUpVectorImport(CLI::App& app) {
 }
 
 void RunVectorImport(VectorImportOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3466,7 +3466,7 @@ void SetUpVectorBuild(CLI::App& app) {
 }
 
 void RunVectorBuild(VectorBuildOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3497,7 +3497,7 @@ void SetUpVectorLoad(CLI::App& app) {
 }
 
 void RunVectorLoad(VectorLoadOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3513,7 +3513,7 @@ void SetUpVectorStatus(CLI::App& app) {
 }
 
 void RunVectorStatus(VectorStatusOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3532,7 +3532,7 @@ void SetUpVectorReset(CLI::App& app) {
 }
 
 void RunVectorReset(VectorResetOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3552,7 +3552,7 @@ void SetUpVectorDump(CLI::App& app) {
 }
 
 void RunVectorDump(VectorDumpOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
@@ -3568,7 +3568,7 @@ void SetUpVectorCountMemory(CLI::App& app) {
 }
 
 void RunVectorCountMemory(VectorCountMemoryOptions const& opt) {
-  if (!SetUpStore(opt.coor_url, {}, 0)) {
+  if (!SetUpStore(opt.coor_url, {}, opt.region_id)) {
     exit(-1);
   }
 
