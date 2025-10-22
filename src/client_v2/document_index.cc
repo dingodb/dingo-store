@@ -301,6 +301,9 @@ void SendDocumentSearch(DocumentSearchOptions const& opt) {
   parameter->set_query_string(opt.query_string);
   parameter->set_without_scalar_data(opt.without_scalar);
 
+  if (opt.doc_id > 0) {
+    parameter->add_document_ids(opt.doc_id);
+  }
   *(request.mutable_context()) = RegionRouter::GetInstance().GenConext(opt.region_id);
 
   InteractionManager::GetInstance().SendRequestWithContext("DocumentService", "DocumentSearch", request, response);
@@ -613,6 +616,7 @@ void SetUpDocumentSearch(CLI::App& app) {
   cmd->add_option("--without_scalar", opt->without_scalar, "Request parameter without_scalar")
       ->default_val(false)
       ->default_str("false");
+  cmd->add_option("--doc_id", opt->doc_id, "Request parameter alive id");
   cmd->callback([opt]() { RunDocumentSearch(*opt); });
 }
 
