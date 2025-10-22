@@ -52,6 +52,8 @@ class TxnReader {
   std::shared_ptr<Iterator> GetWriteIter() { return write_iter_; }
   SnapshotPtr GetSnapshot() { return snapshot_; }
 
+  butil::Status CheckCommittedRecord(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info, int64_t &commit_ts, bool &find_record);
+
  private:
   bool is_initialized_{false};
   RawEnginePtr raw_engine_;
@@ -304,8 +306,8 @@ class TxnEngineHelper {
   static void RegularUpdateSafePointTsHandler(void *arg);
   static void RegularDoGcHandler(void *arg);
 
-  static int64_t GenFinalMinCommitTs(store::RegionPtr region, pb::store::LockInfo &lock_info, std::string key, int64_t start_ts,
-                                  int64_t for_update_ts, int64_t max_commit_ts);
+  static int64_t GenFinalMinCommitTs(store::RegionPtr region, pb::store::LockInfo &lock_info, std::string key,
+                                     int64_t start_ts, int64_t for_update_ts, int64_t max_commit_ts);
 
   static butil::Status GenPrewriteDataAndLock(
       store::RegionPtr region, const pb::store::Mutation &mutation, const pb::store::LockInfo &prev_lock_info,
@@ -467,15 +469,15 @@ class TxnEngineHelper {
                                                      const std::vector<pb::common::KeyValue> &kv_scalar,
                                                      const std::vector<pb::common::KeyValue> &kv_table,
                                                      const std::vector<std::string> &scalar_speed_up_keys,
-                                                     std::vector<pb::common::VectorWithId> &vector_with_ids, 
-                                                     std::vector<int64_t>& vector_delete_ids);
+                                                     std::vector<pb::common::VectorWithId> &vector_with_ids,
+                                                     std::vector<int64_t> &vector_delete_ids);
 
   static butil::Status PreProcessVectorIndex(const std::vector<pb::common::KeyValue> &kv_default,
                                              const std::vector<pb::common::KeyValue> &kv_scalar,
                                              const std::vector<pb::common::KeyValue> &kv_table,
                                              const std::vector<std::string> &scalar_speed_up_keys,
                                              std::vector<pb::common::VectorWithId> &vector_with_ids,
-                                             std::vector<int64_t>& vector_delete_ids);
+                                             std::vector<int64_t> &vector_delete_ids);
 
   static butil::Status RestoreNonTxnIndex(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                           std::shared_ptr<Engine> raft_engine,

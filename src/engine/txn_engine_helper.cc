@@ -262,6 +262,54 @@ butil::Status TxnReader::GetWriteInfo(int64_t min_commit_ts, int64_t max_commit_
   return butil::Status::OK();
 }
 
+butil::Status TxnReader::CheckCommittedRecord(int64_t start_ts, const std::string &key,
+                                              pb::store::WriteInfo &write_info, int64_t &commit_ts, bool &find_record) {
+  if (!is_initialized_) {
+    return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
+  }
+
+  IteratorOptions iter_options;
+  iter_options.lower_bound = mvcc::Codec::EncodeKey(key, Constant::kMaxVer);
+  iter_options.upper_bound = mvcc::Codec::EncodeKey(key, start_ts);
+
+  pb::store::WriteInfo tmp_write_info;
+  write_iter_->Seek(iter_options.lower_bound);
+  while (write_iter_->Valid() && write_iter_->Key() <= iter_options.upper_bound) {
+    if (write_iter_->Key().length() <= 8) {
+      DINGO_LOG(ERROR) << "invalid write_key, key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_key is less than 8 bytes: " << Helper::StringToHex(write_iter_->Key());
+      return butil::Status(pb::error::Errno::EINTERNAL, "invalid write_key");
+    }
+
+    std::string write_key;
+    int64_t write_ts;
+    mvcc::Codec::DecodeKey(write_iter_->Key(), write_key, write_ts);
+
+    auto ret = tmp_write_info.ParseFromArray(write_iter_->Value().data(), write_iter_->Value().size());
+    if (!ret) {
+      DINGO_LOG(ERROR) << "cannot parse tmp_write_info, key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_ts: " << write_ts << ", write_key: " << Helper::StringToHex(write_iter_->Key())
+                       << ", write_value(hex): " << Helper::StringToHex(write_iter_->Value());
+      return butil::Status(pb::error::Errno::EINTERNAL, "cannot parse tmp_write_info");
+    }
+
+    if (tmp_write_info.start_ts() != start_ts) {
+      write_iter_->Next();
+      continue;
+    }
+
+    if (tmp_write_info.op() == pb::store::Op::Rollback) {
+      break;
+    }
+
+    write_info = tmp_write_info;
+    commit_ts = write_ts;
+    find_record = true;
+    break;
+  }
+
+  return butil::Status::OK();
+}
 butil::Status TxnReader::GetRollbackInfo(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info) {
   if (!is_initialized_) {
     return butil::Status(pb::error::Errno::EINTERNAL, "txn reader is not initialized");
@@ -2539,6 +2587,34 @@ butil::Status TxnEngineHelper::Prewrite(
     // for optimistic prewrite
     if (!need_check_pessimistic_lock) {
       if (prev_lock_info.lock_type() == pb::store::Op::Lock) {
+        pb::store::WriteInfo prev_write_info;
+        int64_t prev_commit_ts = 0;
+        bool find_record = false;
+        auto status =
+            txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+        if (!status.ok()) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                           << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                           << ", start_ts: " << start_ts << ", status: " << status.error_str();
+        }
+
+        if (find_record) {
+          if (use_async_commit) {
+            response->set_min_commit_ts(prev_commit_ts);
+          }
+
+          if (try_one_pc) {
+            response->set_one_pc_commit_ts(prev_commit_ts);
+          }
+
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+              "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+              "write_info:{}",
+              region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+          return butil::Status::OK();
+        }
+
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << fmt::format("[txn][region({})] Prewrite, start_ts: {}", region->Id(), start_ts)
             << ", optimistic prewrite meet pessimistic lock, key: " << Helper::StringToHex(mutation.key())
@@ -2560,6 +2636,34 @@ butil::Status TxnEngineHelper::Prewrite(
           // this is a repeated prewrite, will skip write to raft state machine
           is_repeated_prewrite = true;
         } else {
+          pb::store::WriteInfo prev_write_info;
+          int64_t prev_commit_ts = 0;
+          bool find_record = false;
+          auto status =
+              txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+          if (!status.ok()) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                             << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", start_ts: " << start_ts << ", status: " << status.error_str();
+          }
+
+          if (find_record) {
+            if (use_async_commit) {
+              response->set_min_commit_ts(prev_commit_ts);
+            }
+
+            if (try_one_pc) {
+              response->set_one_pc_commit_ts(prev_commit_ts);
+            }
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+                "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+                "write_info:{}",
+                region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+            return butil::Status::OK();
+          }
+
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << fmt::format("[txn][region({})] Prewrite,", region->Id())
               << ", key: " << Helper::StringToHex(mutation.key())
@@ -2616,6 +2720,34 @@ butil::Status TxnEngineHelper::Prewrite(
             }
           }
         } else {
+          pb::store::WriteInfo prev_write_info;
+          int64_t prev_commit_ts = 0;
+          bool find_record = false;
+          auto status =
+              txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+          if (!status.ok()) {
+            DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                             << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                             << ", start_ts: " << start_ts << ", status: " << status.error_str();
+          }
+
+          if (find_record) {
+            if (use_async_commit) {
+              response->set_min_commit_ts(prev_commit_ts);
+            }
+
+            if (try_one_pc) {
+              response->set_one_pc_commit_ts(prev_commit_ts);
+            }
+
+            DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+                "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+                "write_info:{}",
+                region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+            return butil::Status::OK();
+          }
+
           DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
               << fmt::format("[txn][region({})] Prewrite,", region->Id())
               << ", key: " << Helper::StringToHex(mutation.key())
@@ -2692,6 +2824,34 @@ butil::Status TxnEngineHelper::Prewrite(
 
     if (commit_ts >= start_ts) {
       if (!need_check_pessimistic_lock) {
+        pb::store::WriteInfo prev_write_info;
+        int64_t prev_commit_ts = 0;
+        bool find_record = false;
+        auto status =
+            txn_reader.CheckCommittedRecord(start_ts, mutation.key(), prev_write_info, prev_commit_ts, find_record);
+        if (!status.ok()) {
+          DINGO_LOG(FATAL) << fmt::format("[txn][region({})] Prewrite,", region->Id())
+                           << ", CheckCommittedRecord failed, key: " << Helper::StringToHex(mutation.key())
+                           << ", start_ts: " << start_ts << ", status: " << status.error_str();
+        }
+
+        if (find_record) {
+          if (use_async_commit) {
+            response->set_min_commit_ts(prev_commit_ts);
+          }
+
+          if (try_one_pc) {
+            response->set_one_pc_commit_ts(prev_commit_ts);
+          }
+
+          DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << fmt::format(
+              "[txn][region({})] transaction has been committed,just return. start_ts:{}, commit_ts:{}, "
+              "write_info:{}",
+              region->Id(), start_ts, prev_commit_ts, prev_write_info.ShortDebugString());
+
+          return butil::Status::OK();
+        }
+
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << "Optimistic Prewrite find this transaction is committed after start_ts,return "
                "WriteConflict start_ts: "
