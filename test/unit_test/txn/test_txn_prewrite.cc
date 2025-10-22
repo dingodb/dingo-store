@@ -1364,6 +1364,184 @@ TEST_F(TxnPreWriteTest, RepeatedPreWriteWithOnePC) {
   }
 }
 
+TEST_F(TxnPreWriteTest, RepeatedComittedPreWriteWithOnePC) {
+  // create region for test
+  auto region_id = 373;
+  auto region = store::Region::New(region_id);
+  region->SetState(pb::common::StoreRegionState::NORMAL);
+  auto store_region_meta = mono_engine->GetStoreMetaManager()->GetStoreRegionMeta();
+  store_region_meta->AddRegion(region);
+  auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
+  mono_engine->GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
+
+  // optismistic reapeated prewrite1pc
+  {
+    // txn 1
+    butil::Status ok;
+    pb::store::TxnPrewriteResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::string key = "maru_test_key1";
+    std::string value = "value1";
+    std::string primary_lock = key;
+    int64_t target_start_ts = 10;
+    int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+    int64_t txn_size = 1;
+    bool try_one_pc = true;
+    int64_t min_commit_ts = 12;
+    int64_t max_commit_ts = 0;
+    std::vector<int64_t> pessimistic_checks;
+    std::map<int64_t, int64_t> for_update_ts_checks;
+    std::map<int64_t, std::string> lock_extra_datas;
+    pb::store::Mutation mutation;
+    mutation.set_op(::dingodb::pb::store::Op::Put);
+    mutation.set_key(key);
+    mutation.set_value(value);
+    mutations.emplace_back(mutation);
+    for_update_ts_checks.insert_or_assign(0, 0);
+    lock_extra_datas.insert_or_assign(0, "");
+    pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
+    // normal prewrite
+    auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                            target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+    EXPECT_EQ(status.ok(), true);
+    EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts);
+    EXPECT_EQ(response.txn_result_size(), 0);
+    MustUnlock(key);
+    MustGet(key, min_commit_ts, value);
+    MustGetCommitTs(key, min_commit_ts, min_commit_ts);
+
+    {
+      // txn 2
+      //  normal prewrite
+      int64_t target_start_ts_2 = 21;
+      int64_t min_commit_ts_2 = 22;
+      try_one_pc = false;
+      std::string value2 = "value2";
+      std::vector<pb::store::Mutation> mutations2;
+      pb::store::Mutation mutation2;
+      mutation2.set_op(::dingodb::pb::store::Op::Put);
+      mutation2.set_key(key);
+      mutation2.set_value(value2);
+      mutations2.emplace_back(mutation2);
+
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations2, primary_lock, target_start_ts_2,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts_2, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+      EXPECT_EQ(status.ok(), true);
+      EXPECT_EQ(response.txn_result_size(), 0);
+    }
+
+    {
+      // 1pc repeated commited prewrite
+      try_one_pc = true;
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+
+      EXPECT_EQ(status.ok(), true);
+      EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts);
+      EXPECT_EQ(response.txn_result_size(), 0);
+      MustGet(key, min_commit_ts + 1, value);
+      MustGetCommitTs(key, min_commit_ts, min_commit_ts);
+    }
+    DeleteRange();
+  }
+
+  // optismistic reapeated prewrite1pc
+  {
+    // txn 1
+    butil::Status ok;
+    pb::store::TxnPrewriteResponse response;
+    auto ctx = std::make_shared<Context>();
+    ctx->SetRegionId(region_id);
+    ctx->SetCfName(Constant::kStoreDataCF);
+    ctx->SetResponse(&response);
+    std::vector<pb::store::Mutation> mutations;
+    std::string key = "maru_test_key1";
+    std::string value = "value1";
+    std::string primary_lock = key;
+    int64_t target_start_ts = 10;
+    int64_t target_lock_ttl = lock_ttl;  // 2034-07-11 14:21:21
+    int64_t txn_size = 1;
+    bool try_one_pc = true;
+    int64_t min_commit_ts = 12;
+    int64_t max_commit_ts = 0;
+    std::vector<int64_t> pessimistic_checks;
+    std::map<int64_t, int64_t> for_update_ts_checks;
+    std::map<int64_t, std::string> lock_extra_datas;
+    pb::store::Mutation mutation;
+    mutation.set_op(::dingodb::pb::store::Op::Put);
+    mutation.set_key(key);
+    mutation.set_value(value);
+    mutations.emplace_back(mutation);
+    for_update_ts_checks.insert_or_assign(0, 0);
+    lock_extra_datas.insert_or_assign(0, "");
+    pessimistic_checks.push_back(0);
+    std::vector<std::string> secondaries;
+    // 1pc prewrite
+    auto status = TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                            target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                            pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+    std::cout << "tnx1 first write." << std::endl;
+    EXPECT_EQ(status.ok(), true);
+    EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts);
+    EXPECT_EQ(response.txn_result_size(), 0);
+    MustUnlock(key);
+    MustGet(key, min_commit_ts, value);
+    MustGetCommitTs(key, min_commit_ts, min_commit_ts);
+
+    {
+      // txn 2
+      //  1pc prewrite
+      int64_t target_start_ts_2 = 21;
+      int64_t min_commit_ts_2 = 22;
+      try_one_pc = true;
+      std::string value2 = "value2";
+      std::vector<pb::store::Mutation> mutations2;
+      pb::store::Mutation mutation2;
+      mutation2.set_op(::dingodb::pb::store::Op::Put);
+      mutation2.set_key(key);
+      mutation2.set_value(value2);
+      mutations2.emplace_back(mutation2);
+
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations2, primary_lock, target_start_ts_2,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts_2, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+      EXPECT_EQ(status.ok(), true);
+      EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts_2);
+      EXPECT_EQ(response.txn_result_size(), 0);
+      MustUnlock(key);
+      MustGet(key, min_commit_ts_2, value2);
+      MustGetCommitTs(key, min_commit_ts_2, min_commit_ts_2);
+    }
+
+    {
+      // 1pc repeated commited prewrite
+      try_one_pc = true;
+      auto status =
+          TxnEngineHelper::Prewrite(engine, mono_engine, ctx, region, mutations, primary_lock, target_start_ts,
+                                    target_lock_ttl, txn_size, try_one_pc, min_commit_ts, max_commit_ts,
+                                    pessimistic_checks, for_update_ts_checks, lock_extra_datas, secondaries);
+
+      EXPECT_EQ(status.ok(), true);
+      EXPECT_EQ(response.one_pc_commit_ts(), min_commit_ts);
+      EXPECT_EQ(response.txn_result_size(), 0);
+      MustGet(key, min_commit_ts + 1, value);
+      MustGetCommitTs(key, min_commit_ts, min_commit_ts);
+    }
+    DeleteRange();
+  }
+}
+
 TEST_F(TxnPreWriteTest, KvDeleteRange) { DeleteRange(); }
 
 }  // namespace dingodb
