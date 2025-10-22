@@ -91,6 +91,7 @@ struct DocumentSearchOptions {
   std::string query_string;
   int32_t topn;
   bool without_scalar;
+  int64_t doc_id;
 };
 void SetUpDocumentSearch(CLI::App &app);
 void RunDocumentSearch(DocumentSearchOptions const &opt);
