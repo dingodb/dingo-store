@@ -358,6 +358,8 @@ bool DocumentCodec::IsValidTokenizerJsonParameter(const std::string& json_parame
       column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBytes;
     } else if (tokenizer_type == "datetime") {
       column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeDateTime;
+    } else if (tokenizer_type == "bool") {
+      column_tokenizer_parameter[item.key()] = TokenizerType::kTokenizerTypeBool;
     } else {
       error_message = "unknown column";
       return false;
@@ -424,6 +426,9 @@ bool DocumentCodec::GenDefaultTokenizerJsonParameter(
         break;
       case TokenizerType::kTokenizerTypeDateTime:
         tokenizer["type"] = "datetime";
+        break;
+      case TokenizerType::kTokenizerTypeBool:
+        tokenizer["type"] = "bool";
         break;
       default:
         error_message = "unknown column";

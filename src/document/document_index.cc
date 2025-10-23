@@ -44,8 +44,9 @@ butil::Status DocumentIndex::RemoveIndexFiles(int64_t id, const std::string& ind
   // index_path: /home/dingo-store/dist/document1/data/document_index/80040/epoch_1
   // need remove index_path: /home/dingo-store/dist/document1/data/document_index/80040
   size_t last_slash = index_path.find_last_of('/');
-  if (last_slash == std::string::npos){
-    auto s = fmt::format("[document_index.raw][id({})] remove index file failed, path: {} not find '/' ", id, index_path);
+  if (last_slash == std::string::npos) {
+    auto s =
+        fmt::format("[document_index.raw][id({})] remove index file failed, path: {} not find '/' ", id, index_path);
     DINGO_LOG(ERROR) << s;
     return butil::Status(pb::error::Errno::EFILE_NOT_DIRECTORY, s);
   }
@@ -238,6 +239,8 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
     std::vector<std::string> bytes_column_docs;
     std::vector<std::string> date_column_names;
     std::vector<std::string> date_column_docs;
+    std::vector<std::string> bool_column_names;
+    std::vector<std::string> bool_column_docs;
 
     uint64_t document_id = document_with_id.id();
 
@@ -264,6 +267,10 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
           date_column_names.push_back(field_name);
           date_column_docs.push_back(document_value.field_value().string_data());
           break;
+        case pb::common::ScalarFieldType::BOOL:
+          bool_column_names.push_back(field_name);
+          bool_column_docs.push_back(document_value.field_value().string_data());
+          break;
         default:
           std::string err_msg =
               fmt::format("[document_index.raw][id({})] document_id: ({}) unknown field type({})", id_, document_id,
@@ -276,7 +283,8 @@ butil::Status DocumentIndex::Add(const std::vector<pb::common::DocumentWithId>& 
 
     auto bool_result = ffi_index_multi_type_column_docs(
         index_path_, document_id, text_column_names, text_column_docs, i64_column_names, i64_column_docs,
-        f64_column_names, f64_column_docs, bytes_column_names, bytes_column_docs, date_column_names, date_column_docs);
+        f64_column_names, f64_column_docs, bytes_column_names, bytes_column_docs, date_column_names, date_column_docs,
+        bool_column_names, bool_column_docs);
     if (!bool_result.result) {
       std::string err_msg =
           fmt::format("[document_index.raw][id({})] document_id: ({}) add failed, error: {}, error_msg: {}", id_,
