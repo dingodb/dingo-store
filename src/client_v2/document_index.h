@@ -68,6 +68,7 @@ struct DocumentAddOptions {
   std::string document_text1;
   std::string document_text2;
   bool is_update;
+  std::string document_bool;
 };
 void SetUpDocumentAdd(CLI::App &app);
 void RunDocumentAdd(DocumentAddOptions const &opt);
