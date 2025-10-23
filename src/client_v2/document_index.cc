@@ -129,7 +129,15 @@ void SendDocumentAdd(DocumentAddOptions const& opt) {
     std::cout << "doc_id: " << opt.document_id << " ,time_str:" << time_str << std::endl;
     (*document_data)["col5"] = document_value1;
   }
-
+  // col6 bool
+  {
+    if (opt.document_bool == "true" || opt.document_bool == "false") {
+      dingodb::pb::common::DocumentValue document_value1;
+      document_value1.set_field_type(dingodb::pb::common::ScalarFieldType::BOOL);
+      document_value1.mutable_field_value()->set_string_data(opt.document_bool);
+      (*document_data)["col6"] = document_value1;
+    }
+  }
   if (opt.is_update) {
     request.set_is_update(true);
   }
@@ -494,7 +502,7 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const& opt) {
   }
 
   std::string multi_type_column_json =
-      R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "datetime", "indexed": true }} })";
+      R"({"col1": { "tokenizer": { "type": "chinese"}}, "col2": { "tokenizer": {"type": "i64", "indexed": true }}, "col3": { "tokenizer": {"type": "f64", "indexed": true }}, "col4": { "tokenizer": {"type": "chinese"}}, "col5": { "tokenizer": {"type": "datetime", "indexed": true }}, "col6": { "tokenizer": {"type": "bool", "indexed": true }} })";
 
   // document index parameter
   index_definition->mutable_index_parameter()->set_index_type(dingodb::pb::common::IndexType::INDEX_TYPE_DOCUMENT);
@@ -520,6 +528,9 @@ void RunCreateDocumentIndex(CreateDocumentIndexOptions const& opt) {
   auto* field_col5 = scalar_schema->add_fields();
   field_col5->set_field_type(::dingodb::pb::common::ScalarFieldType::DATETIME);
   field_col5->set_key("col5");
+  auto* field_col6 = scalar_schema->add_fields();
+  field_col6->set_field_type(::dingodb::pb::common::ScalarFieldType::BOOL);
+  field_col6->set_key("col6");
 
   index_definition->set_version(1);
 
@@ -573,6 +584,8 @@ void SetUpDocumentAdd(CLI::App& app) {
   cmd->add_option("--is_update", opt->is_update, "Request parameter is_update")
       ->default_val(false)
       ->default_str("false");
+  cmd->add_option("--document_bool", opt->document_bool,
+                  "Request parameter document_bool can set true or false, empty means not set");
   cmd->callback([opt]() { RunDocumentAdd(*opt); });
 }
 
