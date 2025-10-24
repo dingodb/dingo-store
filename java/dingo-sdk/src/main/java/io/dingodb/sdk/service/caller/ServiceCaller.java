@@ -3,6 +3,7 @@ package io.dingodb.sdk.service.caller;
 import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
+import io.dingodb.sdk.common.utils.ErrorCodeUtils;
 import io.dingodb.sdk.service.JsonMessageUtils;
 import io.dingodb.sdk.service.Caller;
 import io.dingodb.sdk.service.ChannelProvider;
@@ -12,6 +13,7 @@ import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
 import io.dingodb.sdk.service.entity.error.Errno;
 import io.dingodb.sdk.service.entity.error.Error;
+import io.dingodb.sdk.service.entity.store.TxnPrewriteRequest;
 import io.grpc.CallOptions;
 import io.grpc.Channel;
 import io.grpc.MethodDescriptor;
@@ -25,6 +27,7 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 
 import static io.dingodb.sdk.common.utils.ErrorCodeUtils.errorToStrategy;
+import static io.dingodb.sdk.common.utils.ErrorCodeUtils.isPreWriteRequestFailed;
 
 @Slf4j
 public class ServiceCaller<S extends Service<S>> implements Caller<S> {
@@ -96,8 +99,10 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
                     errMsgs.compute(
                         channel.authority() + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1
                     );
+                    boolean isPreWriteFailed = isPreWriteFailed(request);
                     switch (handler.onErrStrategy(
-                        errorToStrategy(errCode),
+                            isPreWriteRequestFailed(errCode, isPreWriteFailed) ?
+                        ErrorCodeUtils.Strategy.FAILED : errorToStrategy(errCode),
                         this.retry, retry, request, response, options, channel.authority(), requestId
                     )) {
                         case RETRY:
@@ -139,6 +144,13 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
         }
 
         throw generateException(methodName, requestId, lastRequest, connected, errMsgs, handler);
+    }
+
+    private static <REQ extends Request> boolean isPreWriteFailed(REQ request) {
+        if (request instanceof TxnPrewriteRequest) {
+            return (((TxnPrewriteRequest) request).isTryOnePc() || ((TxnPrewriteRequest) request).isUseAsyncCommit());
+        }
+        return false;
     }
 
     private void waitRetry() {
