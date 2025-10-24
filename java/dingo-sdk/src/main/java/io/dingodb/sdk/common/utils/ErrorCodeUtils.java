@@ -90,5 +90,10 @@ public final class ErrorCodeUtils {
         return Strategy.FAILED;
     }
 
+    public static boolean isPreWriteRequestFailed(int code, boolean isPreWrite) {
+        return isPreWrite && (code == ERAFT_NOTLEADER_VALUE || code == ERAFT_COMMITLOG_VALUE);
+    }
+
+
     public static final Function<Integer, Strategy> errorToStrategyFunc = ErrorCodeUtils::errorToStrategy;
 }
