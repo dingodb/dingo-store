@@ -119,6 +119,11 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
                             continue;
                         case FAILED:
                             handler.onFailed(request, response, options, channel.authority(), requestId);
+                            if (isPreWriteFailed && errCode == Errno.ERAFT_NOTLEADER.number) {
+                                log.error("Not leader channel: {}", channel);
+                                channel = updateChannel(channel, requestId);
+                                log.error("Not leader update channel: {}", channel);
+                            }
                             throw new RequestErrorException(errCode, error.getErrmsg());
                         case REFRESH:
                             handler.onRefresh(request, response, options, channel.authority(), requestId);
