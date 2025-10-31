@@ -8,7 +8,7 @@ on:
       - completed
     on:
       branches:
-        - main
+        - dingo-store-v3.1.0
       pull_requests:
         - merged
 

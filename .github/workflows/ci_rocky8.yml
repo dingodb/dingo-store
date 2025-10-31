@@ -2,9 +2,9 @@ name: CMake_rocky8
 
 on:
   push:
-    branches: [ "main", "develop", "quickBI-v3.0.0" ]
+    branches: [ dingo-store-v3.1.0 ]
   pull_request:
-    branches: [ "main", "develop", "quickBI-v3.0.0" ]
+    branches: [ dingo-store-v3.1.0 ]
 
 env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)

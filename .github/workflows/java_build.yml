@@ -2,9 +2,9 @@ name: Java_Maven_Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ dingo-store-v3.1.0 ]
   pull_request:
-    branches: [ main ]
+    branches: [ dingo-store-v3.1.0 ]
 
 jobs:
   build:
