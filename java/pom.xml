@@ -33,7 +33,8 @@
         <junit.version>4.12</junit.version>
         <protostuff.java.version>3.25.5</protostuff.java.version>
         <grpc.version>1.69.0</grpc.version>
-        <jackson.version>2.13.4</jackson.version>
+        <jackson.version>2.20.0</jackson.version>
+        <jackson-annotations.version>2.20</jackson-annotations.version>
         <lombok.version>1.18.24</lombok.version>
         <maven.version>3.13.0</maven.version>
         <kr.version>1.7.1</kr.version>
@@ -103,7 +104,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-annotations</artifactId>
-                <version>${jackson.version}</version>
+                <version>${jackson-annotations.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.projectlombok</groupId>
