@@ -802,6 +802,27 @@ butil::Status VectorIndexUtils::CheckVectorIndexParameterCompatibility(const pb:
           "source_binary_ivf_flat_parameter.ncentroids() != target_binary_ivf_flat_parameter.ncentroids()");
     }
     return butil::Status::OK();
+  } else if (source.vector_index_type() == pb::common::VECTOR_INDEX_TYPE_BRUTEFORCE) {
+    const auto& source_bruteforce_parameter = source.bruteforce_parameter();
+    const auto& target_bruteforce_parameter = target.bruteforce_parameter();
+    if (source_bruteforce_parameter.dimension() != target_bruteforce_parameter.dimension()) {
+      std::string s =
+          fmt::format("source_bruteforce_parameter.dimension() : {} != target_bruteforce_parameter.dimension() : {}",
+                      source_bruteforce_parameter.dimension(), target_bruteforce_parameter.dimension());
+      DINGO_LOG(INFO) << s;
+      return butil::Status(pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH, s);
+    }
+
+    if (source_bruteforce_parameter.metric_type() != target_bruteforce_parameter.metric_type()) {
+      std::string s = fmt::format(
+          "source_bruteforce_parameter.metric_type() : {} != target_bruteforce_parameter.metric_type() : {}",
+          pb::common::MetricType_Name(source_bruteforce_parameter.metric_type()),
+          pb::common::MetricType_Name(target_bruteforce_parameter.metric_type()));
+      DINGO_LOG(INFO) << s;
+      return butil::Status(pb::error::EMERGE_VECTOR_INDEX_PARAMETER_NOT_MATCH, s);
+    }
+    return butil::Status::OK();
+
   } else {
     DINGO_LOG(ERROR) << "source.vector_index_type() is not supported";
     return butil::Status(pb::error::EMERGE_VECTOR_INDEX_TYPE_NOT_MATCH, "source.vector_index_type() is not supported");
