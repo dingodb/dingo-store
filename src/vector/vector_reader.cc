@@ -1876,6 +1876,12 @@ butil::Status VectorReader::BruteForceSearch(VectorIndexWrapperPtr vector_index,
                                              std::vector<std::shared_ptr<VectorIndex::FilterFunctor>>& filters,
                                              bool reconstruct, const pb::common::VectorSearchParameter& parameter,
                                              std::vector<pb::index::VectorWithDistanceResult>& results) {
+  if (!vector_index->IsReady()) {
+    DINGO_LOG(WARNING) << fmt::format("[vector_index.wrapper][index_id({})] vector index is not ready.",
+                                      vector_index->Id());
+    return butil::Status(pb::error::EVECTOR_INDEX_NOT_FOUND, "vector index %lu is not ready.", vector_index->Id());
+  }
+
   auto metric_type = vector_index->GetMetricType();
   auto dimension = vector_index->GetDimension();
 
