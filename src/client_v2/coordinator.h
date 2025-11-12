@@ -413,6 +413,11 @@ struct GetJobListOptions {
   int64_t start_id;
   int64_t limit;
   bool json_type;
+  bool unfinished_only;
+  std::string sort_by;    // "id" or "name" or "create_time"
+  std::string name_only;  // "All" BalanceLeader" "RecycleOrphanRegion" "DropRegion" "SplitRegion" "MergeRegion"
+                          // "ChangePeer" "TransferLeader" "CreateRegion "
+  bool is_interactive;    // whether to show interactive table. default false.
 };
 void SetUpGetJobList(CLI::App &app);
 void RunGetJobList(GetJobListOptions const &opt);
@@ -420,6 +425,8 @@ void RunGetJobList(GetJobListOptions const &opt);
 struct CleanJobListOption {
   std::string coor_url;
   int64_t id;
+  std::string id_array;  // like "1,2,3,4"
+  std::string id_range;  // like "[1-10] or [1, 10) or (1-10] or (1,10)"
 };
 void SetUpCleanJobList(CLI::App &app);
 void RunCleanJobList(CleanJobListOption const &opt);

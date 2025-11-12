@@ -16,6 +16,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/table.hpp>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -29,6 +32,8 @@
 #include "coprocessor/utils.h"
 #include "document/codec.h"
 #include "fmt/core.h"
+#include "ftxui/component/component.hpp"
+#include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/deprecated.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "ftxui/dom/node.hpp"
@@ -43,7 +48,6 @@
 #include "serial/record_encoder.h"
 #include "serial/utils.h"
 #include "vector/codec.h"
-
 namespace client_v2 {
 
 const uint32_t kStringReserveSize = 32;
@@ -126,6 +130,8 @@ static void PrintTable(const std::vector<std::vector<ftxui::Element>>& rows) {
   table.SelectRow(0).Decorate(ftxui::bold);
   table.SelectRow(0).SeparatorVertical(ftxui::LIGHT);
   table.SelectRow(0).Border(ftxui::DOUBLE);
+  table.SelectRow(0).DecorateCells(color(ftxui::Color::Green));
+  table.SelectRow(0).Decorate(color(ftxui::Color::Green));
 
   auto document = table.Render();
   auto screen = ftxui::Screen::Create(ftxui::Dimension::Fit(document));
@@ -133,6 +139,118 @@ static void PrintTable(const std::vector<std::vector<ftxui::Element>>& rows) {
   screen.Print();
 
   std::cout << std::endl;
+}
+
+static int GetTerminalHeightFallback() {
+  struct winsize w {};
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_row > 0) return static_cast<int>(w.ws_row);
+  return 24;
+}
+
+void Pretty::PrintTableInteractive(const std::vector<std::vector<ftxui::Element>>& rows) {
+  using namespace ftxui;
+
+  if (rows.empty()) return;
+
+  auto header = rows[0];
+  std::vector<std::vector<Element>> body(rows.begin() + 1, rows.end());
+  int scroll_y = 0;
+
+  auto screen = ScreenInteractive::Fullscreen();
+
+  // 🧮 Intelligent detection of row count in non-table areas
+  static int non_table_lines = -1;  // -1 It indicates that testing has not yet been conducted.
+  if (non_table_lines == -1) {
+    auto sample_table = Table({header, body.front()});
+    auto doc = vbox({
+        text("📊 Interactive Table Viewer") | color(ftxui::Color::Green),
+        separator(),
+        sample_table.Render(),
+        separator(),
+        text("↑↓ scroll | PageUp/PageDown Turn the page | (H/h)Home/(E/e)End Jump | q Exit"),
+        text("show: 1/1"),
+    });
+    auto sample_screen = Screen::Create(Dimension::Fit(doc));
+    Render(sample_screen, doc);
+    int total_terminal = GetTerminalHeightFallback();
+    non_table_lines = std::max(11, sample_screen.dimy() - 2);  // Dynamic estimation
+  }
+
+  auto renderer = Renderer([&] {
+    int terminal_height = screen.dimy();
+    if (terminal_height <= 4) terminal_height = GetTerminalHeightFallback();
+
+    int visible_body_rows = std::max(1, terminal_height - non_table_lines);
+
+    int total_body = static_cast<int>(body.size());
+
+    if (scroll_y < 0) scroll_y = 0;
+    if (scroll_y > std::max(0, total_body - visible_body_rows)) scroll_y = std::max(0, total_body - visible_body_rows);
+
+    int start = scroll_y;
+    int end = std::min(total_body, start + visible_body_rows);
+
+    std::vector<std::vector<Element>> visible_part;
+    visible_part.push_back(header);
+    for (int i = start; i < end; ++i) visible_part.push_back(body[i]);
+
+    auto table = Table(visible_part);
+    table.SelectAll().Border(LIGHT);
+    table.SelectRow(0).Decorate(bold);
+    table.SelectRow(0).Border(DOUBLE);
+    table.SelectRow(0).SeparatorVertical(LIGHT);
+    table.SelectRow(0).DecorateCells(color(ftxui::Color::Green));
+    table.SelectRow(0).Decorate(color(ftxui::Color::Green));
+
+    return vbox({
+               text("📊 Interactive Table Viewer") | bold | center | color(ftxui::Color::Green),
+               separator(),
+               table.Render() | flex,
+               separator(),
+               text("↑↓ scroll | PageUp/PageDown Turn the page | (H/h)Home/(E/e)End Jump | q Exit") | dim | center,
+               text("show: " + std::to_string(start + 1) + "-" + std::to_string(end) + " / " +
+                    std::to_string(total_body)) |
+                   dim | center,
+           }) |
+           border;
+  });
+
+  auto event_handler = CatchEvent(renderer, [&](Event event) {
+    int terminal_height = screen.dimy();
+    if (terminal_height <= 4) terminal_height = GetTerminalHeightFallback();
+
+    int visible_body_rows = std::max(1, terminal_height - non_table_lines);
+    int total_body = static_cast<int>(body.size());
+
+    if (event == Event::ArrowUp) {
+      if (scroll_y > 0) --scroll_y;
+      return true;
+    } else if (event == Event::ArrowDown) {
+      if (scroll_y + visible_body_rows < total_body) ++scroll_y;
+      return true;
+    } else if (event == Event::PageUp) {
+      scroll_y -= visible_body_rows;
+      if (scroll_y < 0) scroll_y = 0;
+      return true;
+    } else if (event == Event::PageDown) {
+      scroll_y += visible_body_rows;
+      if (scroll_y > total_body - visible_body_rows) scroll_y = std::max(0, total_body - visible_body_rows);
+      return true;
+    } else if (event == Event::Home || event == Event::Special("h") || event == Event::Special("H")) {
+      scroll_y = 0;
+      return true;
+    } else if (event == Event::End || event == Event::Special("e") || event == Event::Special("E")) {
+      scroll_y = std::max(0, total_body - visible_body_rows);
+      return true;
+    } else if (event == Event::Character('q') || event == Event::Escape) {
+      screen.ExitLoopClosure()();
+      return true;
+    }
+    return false;
+  });
+
+  screen.PostEvent(Event::Custom);
+  screen.Loop(event_handler);
 }
 
 void Pretty::Show(dingodb::pb::coordinator::GetCoordinatorMapResponse& response) {
@@ -1357,7 +1475,7 @@ void Pretty::Show(dingodb::pb::coordinator::GetGCSafePointResponse& response) {
   }
 }
 
-void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response) {
+void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response, bool is_interactive) {
   if (ShowError(response.error())) {
     return;
   }
@@ -1384,7 +1502,12 @@ void Pretty::Show(dingodb::pb::coordinator::GetJobListResponse& response) {
     };
     rows.push_back(row);
   }
-  PrintTable(rows);
+
+  if (is_interactive) {
+    PrintTableInteractive(rows);
+  } else {
+    PrintTable(rows);
+  }
   std::cout << "Sumary: total_job_size: " << response.job_list_size() << std::endl;
 }
 

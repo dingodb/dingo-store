@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "butil/status.h"
+#include "ftxui/dom/elements.hpp"
 #include "proto/common.pb.h"
 #include "proto/coordinator.pb.h"
 #include "proto/debug.pb.h"
@@ -75,7 +76,7 @@ class Pretty {
   static void Show(dingodb::pb::meta::GetTablesBySchemaResponse &response);
 
   static void Show(dingodb::pb::coordinator::GetGCSafePointResponse &response);
-  static void Show(dingodb::pb::coordinator::GetJobListResponse &response);
+  static void Show(dingodb::pb::coordinator::GetJobListResponse &response, bool is_interactive);
 
   static void Show(dingodb::pb::coordinator::GetExecutorMapResponse &response);
   static void Show(dingodb::pb::coordinator::QueryRegionResponse &response);
@@ -87,6 +88,7 @@ class Pretty {
   static void Show(dingodb::pb::meta::GetTenantsResponse &response);
   static void Show(dingodb::pb::coordinator::CreateIdsResponse &response);
   static void Show(dingodb::pb::store::TxnScanResponse &response, bool calc_count);
+  static void PrintTableInteractive(const std::vector<std::vector<ftxui::Element>> &rows);
 };
 
 }  // namespace client_v2
