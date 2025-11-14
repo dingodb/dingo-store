@@ -2200,7 +2200,7 @@ butil::Status TxnEngineHelper::GenPrewriteDataAndLock(
     // For CheckNotExists, this op is equal to PutIfAbsent, but we do not need to write anything, just check if key is
     // exist. So it is more likely to be a get op in prewrite.
     // do nothing;
-    if (try_one_pc) {
+    if (try_one_pc || use_async_commit) {
       final_min_commit_ts = start_ts + 1;
     }
   } else if (mutation.op() == pb::store::Op::Delete) {
@@ -2935,7 +2935,7 @@ butil::Status TxnEngineHelper::Prewrite(
 
     std::string lock_extra_data = lock_extra_datas.find(i) != lock_extra_datas.end() ? lock_extra_datas.at(i) : "";
     int64_t for_update_ts = for_update_ts_checks.find(i) != for_update_ts_checks.end() ? for_update_ts_checks.at(i) : 0;
-    int64_t temp_min_commit_ts;
+    int64_t temp_min_commit_ts = 0;
     // 3.1 write data and lock
     auto ret3 = GenPrewriteDataAndLock(region, mutation, prev_lock_info, write_info, primary_lock, start_ts,
                                        for_update_ts, lock_ttl, txn_size, lock_extra_data, min_commit_ts, max_commit_ts,
