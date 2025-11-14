@@ -1105,7 +1105,7 @@ butil::Status VectorReader::DoVectorSearchForScalarPreFilterWithDocument(
   if (FLAGS_vector_index_uses_document_to_enable_flow_control) {
     BthreadCondPtr cond = std::make_shared<BthreadCond>();
     std::string job_id = UUIDGenerator::GenerateUUID();
-    std::string trace = fmt::format("{}-{}", job_id, trace);
+    std::string trace = fmt::format("{}-{}", job_id, "in vector use document search task");
     std::shared_ptr<InVectorUseDocumentSearchTask> task = std::make_shared<InVectorUseDocumentSearchTask>(
         cond, document_index_wrapper, query_string, document_results, status, region_range, job_id, trace);
 
