@@ -1371,6 +1371,7 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
             "[txn][{}] Scan Seek meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
             "{}",
             stream->StreamId(), txn_result_info.DebugString());
+        has_more = true;
         return butil::Status::OK();
 
       } else {
@@ -1447,6 +1448,7 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
               "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
               "{}",
               stream->StreamId(), txn_result_info.DebugString());
+          has_more = true;
           return butil::Status::OK();
 
         } else {
@@ -1471,6 +1473,7 @@ butil::Status TxnEngineHelper::Scan(StreamPtr stream, RawEnginePtr raw_engine,
             "[txn][{}] Scan Next meet pb::error::Errno::ETXN_LOCK_CONFLICT, but iter->Valid = true. txn_result_info: "
             "{}",
             stream->StreamId(), txn_result_info.DebugString());
+        has_more = true;
         return butil::Status::OK();
 
       } else {
