@@ -43,7 +43,7 @@ jobs:
 
     - name: Pull dingo-store-rocky-8-dev:eureka
       run: |
-        docker pull dingodatabase/dingo-store-rocky-8-dev:eureka
+        docker pull dingodatabase/dingo-store-rocky-8-dev:eureka-v1.0
 
     - name: Init build script
       run: |
@@ -132,7 +132,7 @@ jobs:
     - name: Build dingo-store
       run: |
         echo "Build dingo-store"
-        docker run --name release-dingo-store --rm -v /mnt/dingo-store:/opt/dingo-store/ dingodatabase/dingo-store-rocky-8-dev:eureka /opt/dingo-store/build.sh
+        docker run --name release-dingo-store --rm -v /mnt/dingo-store:/opt/dingo-store/ dingodatabase/dingo-store-rocky-8-dev:eureka-v1.0 /opt/dingo-store/build.sh
 
     - name: copy artifactory to another workflow
       uses: actions/upload-artifact@v4
