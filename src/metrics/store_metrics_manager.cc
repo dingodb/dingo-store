@@ -183,8 +183,10 @@ bool StoreMetrics::CollectMetrics() {
     if (total_capacity != 0) {
       double disk_free_capacity_ratio = static_cast<double>(free_capacity) / static_cast<double>(total_capacity);
       if (disk_free_capacity_ratio < FLAGS_min_system_disk_capacity_free_ratio) {
-        std::string s = fmt::format("Disk capacity is not enough, capacity({} / {} / {:2.2})", free_capacity,
-                                    total_capacity, disk_free_capacity_ratio);
+        std::string s =
+            fmt::format("Disk capacity is not enough, capacity({}({}) / {}({}) / {:2.2}%)", free_capacity,
+                        Helper::HumanReadableBytes(uint64_t(free_capacity)), total_capacity,
+                        Helper::HumanReadableBytes(uint64_t(total_capacity)), disk_free_capacity_ratio * 100);
         DINGO_LOG(WARNING) << s;
         self_store_is_read_only = true;
         read_only_reason = s;
@@ -196,8 +198,10 @@ bool StoreMetrics::CollectMetrics() {
     if (total_memory != 0 && available_memory != INT64_MAX) {
       double memory_free_capacity_ratio = static_cast<double>(available_memory) / static_cast<double>(total_memory);
       if (memory_free_capacity_ratio < FLAGS_min_system_memory_capacity_free_ratio) {
-        std::string s = fmt::format("Memory capacity is not enough, capacity({} / {} / {:2.2})", available_memory,
-                                    total_memory, memory_free_capacity_ratio);
+        std::string s =
+            fmt::format("Memory capacity is not enough, capacity({}({}) / {}({}) / {:2.2}%)", available_memory,
+                        Helper::HumanReadableBytes(uint64_t(available_memory)), total_memory,
+                        Helper::HumanReadableBytes(uint64_t(total_memory)), memory_free_capacity_ratio * 100);
         DINGO_LOG(WARNING) << s;
         self_store_is_read_only = true;
         read_only_reason = s;

@@ -1131,7 +1131,9 @@ bool Helper::GetSystemDiskCapacity(const std::string& path, std::map<std::string
   output["system_total_capacity"] = total_space;
   output["system_free_capacity"] = free_space;
 
-  DINGO_LOG(INFO) << fmt::format("Disk total space: {} bytes, free space: {} bytes", total_space, free_space);
+  DINGO_LOG(INFO) << fmt::format("Disk total space: {} bytes ({}), free space: {} bytes ({})", total_space,
+                                 HumanReadableBytes(uint64_t(total_space)), free_space,
+                                 HumanReadableBytes(uint64_t(free_space)));
 
   return true;
 }
@@ -1204,8 +1206,10 @@ bool Helper::GetSystemMemoryInfo(std::map<std::string, int64_t>& output) {
     return false;
   }
 
-  DINGO_LOG(INFO) << "Available RAM (proc/meminfo): " << output["system_available_memory"] << " bytes, "
-                  << "Cached RAM (proc/meminfo): " << output["system_cached_memory"] << " bytes";
+  DINGO_LOG(INFO) << "Available RAM (proc/meminfo): " << output["system_available_memory"] << " bytes ("
+                  << HumanReadableBytes(uint64_t(output["system_available_memory"])) << "), "
+                  << "Cached RAM (proc/meminfo): " << output["system_cached_memory"] << " bytes ("
+                  << HumanReadableBytes(uint64_t(output["system_cached_memory"])) << ")";
 
   return true;
 }
@@ -2577,6 +2581,21 @@ std::string Helper::EncodeREContent(const std::string& input) {
   }
 
   return result;
+}
+
+std::string Helper::HumanReadableBytes(uint64_t bytes) {
+  const char* units[] = {"B", "KB", "MB", "GB", "TB"};
+  int unit_index = 0;
+  double size = static_cast<double>(bytes);
+
+  while (size >= 1024.0 && unit_index < 4) {
+    size /= 1024.0;
+    unit_index++;
+  }
+
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2) << size << " " << units[unit_index];
+  return oss.str();
 }
 
 }  // namespace dingodb
