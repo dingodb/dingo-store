@@ -303,7 +303,7 @@ int DumpPrometheusMetricsToIOBuf(butil::IOBuf* output) {
   os.move_to(*output);
 
   PrometheusMetricsDumper dumper_md(&os, "rpc_server");
-  const int ndump_md = bvar::MVariable::dump_exposed(&dumper_md, nullptr);
+  const int ndump_md = bvar::MVariable<std::list<std::string>>::dump_exposed(&dumper_md, nullptr);
   if (ndump_md < 0) {
     return -1;
   }

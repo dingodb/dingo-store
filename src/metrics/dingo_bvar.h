@@ -36,17 +36,17 @@ namespace dingodb {
 constexpr int64_t MAX_MULTI_DIMENSION_STATS_COUNT = 100000;  // NOLINT
 
 template <typename T>
-class DingoMultiDimension : public bvar::MVariable {
+class DingoMultiDimension : public bvar::MVariable<std::list<std::string>> {
  public:
   enum STATS_OP {    // NOLINT
     READ_ONLY,       // NOLINT
     READ_OR_INSERT,  // NOLINT
   };
 
-  typedef MVariable Base;                   // NOLINT
-  typedef std::list<std::string> key_type;  // NOLINT
-  typedef T value_type;                     // NOLINT
-  typedef T* value_ptr_type;                // NOLINT
+  typedef bvar::MVariable<std::list<std::string>> Base;  // NOLINT
+  typedef std::list<std::string> key_type;               // NOLINT
+  typedef T value_type;                                  // NOLINT
+  typedef T* value_ptr_type;                             // NOLINT
 
   struct KeyHash {
     size_t operator()(const key_type& key) const {
