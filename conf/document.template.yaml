@@ -7,6 +7,7 @@ server:
   host: $SERVER_HOST$
   port: $SERVER_PORT$
   heartbeat_interval_s: 6
+  store_metrics_collect_interval_s: 30
   metrics_collect_interval_s: 300
   approximate_size_metrics_collect_interval_s: 300
   scrub_document_index_interval_s: 60

@@ -15,8 +15,11 @@
 
 #include "client_v2/coordinator.h"
 
+#include <cstdint>
 #include <iostream>
+#include <map>
 #include <ostream>
+#include <string>
 
 #include "client_v2/helper.h"
 #include "client_v2/pretty.h"
@@ -2189,6 +2192,19 @@ void SetUpGetJobList(CLI::App &app) {
   cmd->add_option("--json_type", opt->json_type, "Request parameter json_type")
       ->default_val(false)
       ->default_str("false");
+  cmd->add_option("--unfinished_only", opt->unfinished_only, "Request parameter unfinished_only")
+      ->default_val(false)
+      ->default_str("false");
+  cmd->add_option("--sort_by", opt->sort_by, R"(Request parameter sort_by : "id" or "name" or "create_time" )")
+      ->default_val("id");
+  cmd->add_option(
+         "--name_only", opt->name_only,
+         R"(Request parameter name_only : "All" or "BalanceLeader" or "RecycleOrphanRegion" or "DropRegion" or "SplitRegion" or "MergeRegion" or "ChangePeer" or "TransferLeader" or "CreateRegion")")
+      ->default_val("All")
+      ->default_str("All");
+  cmd->add_option("--is_interactive", opt->is_interactive, "Request parameter is_interactive")
+      ->default_val(false)
+      ->default_str("false");
   cmd->callback([opt]() { RunGetJobList(*opt); });
 }
 
@@ -2197,25 +2213,238 @@ void RunGetJobList(GetJobListOptions const &opt) {
     exit(-1);
   }
   dingodb::pb::coordinator::GetJobListRequest request;
+  dingodb::pb::coordinator::GetJobListResponse unorganized_response;
   dingodb::pb::coordinator::GetJobListResponse response;
+  bool unfinished_only = opt.unfinished_only;
+  std::string sort_by = opt.sort_by;
+  std::string name_only = opt.name_only;
+  bool is_interactive = opt.is_interactive;
+
+  enum class SortBy : uint8_t { kSortById = 0, kSortByName = 1, kSortByCreateTime = 2 };
+  SortBy sort_by_enum = SortBy::kSortById;
+
+  std::transform(sort_by.begin(), sort_by.end(), sort_by.begin(), [](unsigned char c) { return std::tolower(c); });
+
+  if (sort_by.find("id") != std::string::npos) {
+    sort_by_enum = SortBy::kSortById;
+  } else if (sort_by.find("name") != std::string::npos) {
+    sort_by_enum = SortBy::kSortByName;
+  } else if (sort_by.find("create_time") != std::string::npos) {
+    sort_by_enum = SortBy::kSortByCreateTime;
+  } else {
+    std::cout << "Invalid sort_by parameter, must be 'id' or 'name' or 'create_time'" << std::endl;
+    return;
+  }
+
+  enum class NameOnly : uint8_t {
+    kAll = 0,
+    kBalanceLeader = 1,
+    kRecycleOrphanRegion = 2,
+    kDropRegion = 3,
+    kSplitRegion = 4,
+    kMergeRegion = 5,
+    kChangePeer = 6,
+    kTransferLeader = 7,
+    kCreateRegion = 8
+  };
+  NameOnly name_only_enum = NameOnly::kAll;
+
+  std::transform(name_only.begin(), name_only.end(), name_only.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+  if (name_only.find("all") != std::string::npos) {
+    name_only_enum = NameOnly::kAll;
+  } else if (name_only.find("balanceleader") != std::string::npos) {
+    name_only_enum = NameOnly::kBalanceLeader;
+  } else if (name_only.find("recycleorphanregion") != std::string::npos) {
+    name_only_enum = NameOnly::kRecycleOrphanRegion;
+  } else if (name_only.find("dropregion") != std::string::npos) {
+    name_only_enum = NameOnly::kDropRegion;
+  } else if (name_only.find("splitregion") != std::string::npos) {
+    name_only_enum = NameOnly::kSplitRegion;
+  } else if (name_only.find("mergeregion") != std::string::npos) {
+    name_only_enum = NameOnly::kMergeRegion;
+  } else if (name_only.find("changepeer") != std::string::npos) {
+    name_only_enum = NameOnly::kChangePeer;
+  } else if (name_only.find("transferleader") != std::string::npos) {
+    name_only_enum = NameOnly::kTransferLeader;
+  } else if (name_only.find("createregion") != std::string::npos) {
+    name_only_enum = NameOnly::kCreateRegion;
+  } else {
+    std::cout << "Invalid name_only parameter. " << name_only << std::endl;
+    return;
+  }
 
   request.set_job_id(opt.id);
   request.set_include_archive(opt.include_archive);
   request.set_archive_limit(opt.limit);
   request.set_archive_start_id(opt.start_id);
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetJobList", request, response);
-  if (opt.json_type) {
-    if (response.error().errcode() != 0) {
-      std::cout << "Get task list failed, error:" << response.error().ShortDebugString() << std::endl;
-      return;
+  auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("GetJobList", request,
+                                                                                              unorganized_response);
+
+  if (unorganized_response.error().errcode() != 0) {
+    std::cout << "Get task list failed, error:" << unorganized_response.error().ShortDebugString() << std::endl;
+    return;
+  }
+
+  if (unfinished_only) {
+    for (const auto &job : unorganized_response.job_list()) {
+      if (job.finish_time().empty()) {
+        auto *new_job = response.add_job_list();
+        *new_job = job;
+      }
     }
-    for (const auto &job : response.job_list()) {
+  } else {
+    response = unorganized_response;
+  }
+
+  switch (sort_by_enum) {
+    case SortBy::kSortById: {
+      // Sort by ID
+      std::multimap<int64_t, dingodb::pb::coordinator::Job> sorted_jobs;
+      for (const auto &job : response.job_list()) {
+        sorted_jobs.insert(std::make_pair(job.id(), job));
+      }
+      response.clear_job_list();
+      for (const auto &pair : sorted_jobs) {
+        *response.add_job_list() = pair.second;
+      }
+      break;
+    }
+    case SortBy::kSortByName: {
+      // Sort by Name
+      std::multimap<std::string, dingodb::pb::coordinator::Job> sorted_jobs;
+      for (const auto &job : response.job_list()) {
+        sorted_jobs.insert(std::make_pair(job.name(), job));
+      }
+      response.clear_job_list();
+      for (const auto &pair : sorted_jobs) {
+        *response.add_job_list() = pair.second;
+      }
+      break;
+    }
+    case SortBy::kSortByCreateTime: {
+      // Sort by Create Time
+      std::multimap<std::string, dingodb::pb::coordinator::Job> sorted_jobs;
+      for (const auto &job : response.job_list()) {
+        sorted_jobs.insert(std::make_pair(job.create_time(), job));
+      }
+      response.clear_job_list();
+      for (const auto &pair : sorted_jobs) {
+        *response.add_job_list() = pair.second;
+      }
+      break;
+    }
+    default:
+      std::cout << "Invalid sort_by parameter. " << sort_by << std::endl;
+      return;
+  }
+
+  switch (name_only_enum) {
+    case NameOnly::kAll:
+      // No filtering needed
+      break;
+    case NameOnly::kBalanceLeader: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "BalanceLeader") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kRecycleOrphanRegion: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "RecycleOrphanRegion") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kDropRegion: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "DropRegion") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kSplitRegion: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "SplitRegion") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kMergeRegion: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "MergeRegion") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kChangePeer: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "ChangePeer") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kTransferLeader: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "TransferLeader") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+    case NameOnly::kCreateRegion: {
+      dingodb::pb::coordinator::GetJobListResponse filtered_response;
+      for (const auto &job : response.job_list()) {
+        if (job.name() == "CreateRegion") {
+          auto *new_job = filtered_response.add_job_list();
+          *new_job = job;
+        }
+      }
+      response = filtered_response;
+      break;
+    }
+
+    default:
+      std::cout << "Invalid name_only parameter. " << name_only << std::endl;
+      return;
+  }
+
+  if (opt.json_type) {
+    for (const auto &job : unorganized_response.job_list()) {
       std::cout << "job: " << job.DebugString() << std::endl;
     }
   } else {
-    Pretty::Show(response);
+    Pretty::Show(response, is_interactive);
   }
 }
 
@@ -2223,7 +2452,25 @@ void SetUpCleanJobList(CLI::App &app) {
   auto opt = std::make_shared<CleanJobListOption>();
   auto *cmd = app.add_subcommand("CleanJobList", "Clean task list")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--id", opt->id, "Request parameter task id, if you want to clean all job, set --id=0")->required();
+
+  auto *group = cmd->add_option_group("CleanJobList Options, must set one of --id, --id_array, --id_range");
+
+  group->add_option("--id", opt->id, "Request parameter task id, if you want to clean all job, set --id=0");
+  group
+      ->add_option("--id_array", opt->id_array,
+                   R"delimiter(Request parameter task id array, clean jobs in the array, such as : "1, 2, 3, 4""
+                  "if both --id and --id_array are set, only --id_array takes effect")delimiter")
+      ->default_val("")
+      ->default_str("");
+  group
+      ->add_option(
+          "--id_range", opt->id_range,
+          R"delimiter(Request parameter task id range, clean jobs in the range, such as : "[1-10] or [1, 10) or (1-10] or (1,10)" if both --id_array and --id_range are set, only --id_range takes effect)delimiter")
+      ->default_val("")
+      ->default_str("");
+
+  group->require_option(1, 1);
+
   cmd->callback([opt]() { RunCleanJobList(*opt); });
 }
 
@@ -2231,21 +2478,180 @@ void RunCleanJobList(CleanJobListOption const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
+
   dingodb::pb::coordinator::CleanJobListRequest request;
   dingodb::pb::coordinator::CleanJobListResponse response;
+  size_t count = 0;
 
-  request.set_job_id(opt.id);
+  if (!opt.id_range.empty()) {
+    // parse id_range
+    bool include_start = false;
+    bool include_end = false;
+    int64_t start_id = 0;
+    int64_t end_id = 0;
 
-  auto status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList", request, response);
+    std::string range = opt.id_range;
+    // remove all spaces. include spaces in the middle
+    range.erase(std::remove(range.begin(), range.end(), ' '), range.end());
 
-  if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
-    std::cout << "Clean task list failed , error:"
-              << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
-              << response.error().errmsg();
-    return;
+    if (range.size() < 5) {
+      std::cout << "Invalid id_range parameter. " << opt.id_range << std::endl;
+      return;
+    }
+
+    if (range.front() == '[') {
+      include_start = true;
+    } else if (range.front() == '(') {
+      include_start = false;
+    } else {
+      std::cout << "Invalid id_range parameter. " << opt.id_range << std::endl;
+      return;
+    }
+
+    if (range.back() == ']') {
+      include_end = true;
+    } else if (range.back() == ')') {
+      include_end = false;
+    } else {
+      std::cout << "Invalid id_range parameter. " << opt.id_range << std::endl;
+      return;
+    }
+
+    size_t dash_pos = range.find('-');
+    if (dash_pos == std::string::npos) {
+      dash_pos = range.find(',');
+      if (dash_pos == std::string::npos) {
+        std::cout << "Invalid id_range parameter. " << opt.id_range << std::endl;
+        return;
+      }
+    }
+
+    try {
+      start_id = std::stoll(range.substr(1, dash_pos - 1));
+      end_id = std::stoll(range.substr(dash_pos + 1, range.size() - dash_pos - 2));
+    } catch (const std::exception &e) {
+      std::cout << "Invalid id_range parameter. " << opt.id_range << std::endl;
+      return;
+    }
+
+    std::string id_array_str;
+
+    for (int64_t i = start_id; i <= end_id; i++) {
+      if ((i == start_id && !include_start) || (i == end_id && !include_end)) {
+        continue;
+      }
+
+      id_array_str += std::to_string(i);
+      if ((i != end_id && include_end) || (i != (end_id - 1) && !include_end)) {
+        id_array_str += ", ";
+      }
+
+      request.set_job_id(i);
+
+      auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList",
+                                                                                                  request, response);
+
+      if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+        std::cout << "Clean task list failed , error:"
+                  << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                  << " " << response.error().errmsg();
+        continue;
+      }
+    }
+
+    std::cout << "Clean task id array: [" << id_array_str << "]." << std::endl;
+
+    std::cout << "Clean task id range: ";
+    if (include_start) {
+      std::cout << "[";
+    } else {
+      std::cout << "(";
+    }
+
+    std::cout << start_id << ", ";
+
+    if (include_end) {
+      std::cout << end_id << "]";
+    } else {
+      std::cout << end_id << ")";
+    }
+
+    std::cout << std::endl;
+    count = end_id - start_id + 1;
+    if (!include_start) {
+      count--;
+    }
+    if (!include_end) {
+      count--;
+    }
+
+  } else if (!opt.id_array.empty()) {
+    // parse id_array
+    std::vector<int64_t> id_array;
+    std::string ids_str = opt.id_array;
+    // remove all spaces. include spaces in the middle
+    ids_str.erase(std::remove(ids_str.begin(), ids_str.end(), ' '), ids_str.end());
+    size_t pos = 0;
+    std::string token;
+    while ((pos = ids_str.find(',')) != std::string::npos) {
+      token = ids_str.substr(0, pos);
+      try {
+        id_array.push_back(std::stoll(token));
+      } catch (const std::exception &e) {
+        std::cout << "Invalid id_array parameter. " << opt.id_array << std::endl;
+        return;
+      }
+      ids_str.erase(0, pos + 1);
+    }
+
+    try {
+      id_array.push_back(std::stoll(ids_str));
+    } catch (const std::exception &e) {
+      std::cout << "Invalid id_array parameter. " << opt.id_array << std::endl;
+      return;
+    }
+
+    for (int64_t i : id_array) {
+      request.set_job_id(i);
+
+      auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList",
+                                                                                                  request, response);
+
+      if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+        std::cout << "Clean task list failed , error:"
+                  << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name()
+                  << " " << response.error().errmsg();
+        continue;
+      }
+    }
+
+    std::string id_array_str;
+    for (size_t i = 0; i < id_array.size(); i++) {
+      id_array_str += std::to_string(id_array[i]);
+      if (i != id_array.size() - 1) {
+        id_array_str += ", ";
+      }
+    }
+    std::cout << "Clean task id array: [" << id_array_str << "]." << std::endl;
+
+    count = id_array.size();
+
+  } else {
+    count = 1;
+    request.set_job_id(opt.id);
+
+    auto status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("CleanJobList", request,
+                                                                                                response);
+
+    if (response.has_error() && response.error().errcode() != dingodb::pb::error::Errno::OK) {
+      std::cout << "Clean task list failed , error:"
+                << dingodb::pb::error::Errno_descriptor()->FindValueByNumber(response.error().errcode())->name() << " "
+                << response.error().errmsg();
+      return;
+    }
   }
-  std::cout << "Clean task list success." << std::endl;
+
+  std::cout << "Clean task list success. " << "count : " << count << std::endl;
 }
 
 void SetUpUpdateRegionCmdStatus(CLI::App &app) {

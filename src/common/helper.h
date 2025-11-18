@@ -432,6 +432,8 @@ class Helper {
   static size_t FindReEnd(const std::string& s, size_t start_pos);
   static std::string Base64Encode(const std::string& input);
   static std::string EncodeREContent(const std::string& input);
+
+  static std::string HumanReadableBytes(uint64_t bytes);
 };
 
 }  // namespace dingodb
