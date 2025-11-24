@@ -306,6 +306,16 @@ public class Services {
     }
 
     @SneakyThrows
+    public static DocumentService documentRegionService(
+            Set<Location> locations, byte[] key, int retry
+    ) {
+        return new ServiceCaller<>(
+                regionChannelProvider(locations, key), retry, DEFAULT, DocumentService.Impl::new
+        ).getService();
+    }
+
+
+    @SneakyThrows
     public static StoreService storeRegionService(
         Set<Location> locations, long regionId, int retry
     ) {
