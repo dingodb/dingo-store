@@ -37,6 +37,7 @@ import static io.dingodb.error.ErrorOuterClass.Errno.EREQUEST_FULL_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ESCHEMA_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.ETABLE_NOT_FOUND_VALUE;
 import static io.dingodb.error.ErrorOuterClass.Errno.EVECTOR_INDEX_NOT_READY_VALUE;
+import static io.dingodb.error.ErrorOuterClass.Errno.ERAFT_NOT_CONSISTENT_READ_VALUE;
 
 public final class ErrorCodeUtils {
 
@@ -69,7 +70,8 @@ public final class ErrorCodeUtils {
         EREGION_STATE_VALUE,
         EVECTOR_INDEX_NOT_READY_VALUE,
         EREQUEST_FULL_VALUE,
-        ELEASE_NOT_EXISTS_OR_EXPIRED_VALUE
+        ELEASE_NOT_EXISTS_OR_EXPIRED_VALUE,
+        ERAFT_NOT_CONSISTENT_READ_VALUE
     );
 
     public static final List<Integer> ignoreCode = Arrays.asList(
