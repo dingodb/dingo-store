@@ -288,7 +288,7 @@ public class DecimalSchema implements DingoSchema<String> {
         }
 
         //Forward skip codec version field.
-        buf.reverseSkipInt();
+        //buf.reverseSkipInt();
 
         return internalReadDecimal(buf);
     }
@@ -379,10 +379,14 @@ public class DecimalSchema implements DingoSchema<String> {
                 buf.ensureRemainder(1);
                 buf.write(NOTNULL);
 
-                internalEncodeKeyV2(buf, data);
+                int size = internalEncodeKeyV2(buf, data);
+                buf.ensureRemainder(4);
+                buf.reverseWriteInt(size);
             }
         } else {
-            internalEncodeKeyV2(buf, data);
+            int size = internalEncodeKeyV2(buf, data);
+            buf.ensureRemainder(4);
+            buf.reverseWriteInt(size);
         }
     }
 
