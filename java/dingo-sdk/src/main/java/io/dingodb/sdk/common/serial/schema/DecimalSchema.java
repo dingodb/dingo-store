@@ -139,12 +139,16 @@ public class DecimalSchema implements DingoSchema<String> {
                 buf.ensureRemainder(1);
                 buf.write(NOTNULL);
 
-                int size = internalEncodeKeyV2(buf, data);
+                byte[] decimalBin = s2bin(data);
+                int size = internalEncodeKey(buf, decimalBin);
+
                 buf.ensureRemainder(4);
                 buf.reverseWriteInt(size);
             }
         } else {
-            int size = internalEncodeKeyV2(buf, data);
+            byte[] decimalBin = s2bin(data);
+            int size = internalEncodeKey(buf, decimalBin);
+
             buf.ensureRemainder(4);
             buf.reverseWriteInt(size);
         }
@@ -159,6 +163,11 @@ public class DecimalSchema implements DingoSchema<String> {
             len++;
         }
         return len;
+    }
+
+    private byte[] s2bin(String data) {
+        MyDecimal myDecimal = new MyDecimal(data, (int)this.precision, (int)this.scale);
+        return myDecimal.toBin();
     }
 
     private int internalEncodeKey(Buf buf, byte[] data) {
@@ -213,14 +222,24 @@ public class DecimalSchema implements DingoSchema<String> {
                 buf.reverseWriteInt0();
             } else {
                 buf.write(NOTNULL);
-                buf.reverseWriteInt(internalEncodeKeyV2(buf, data));
+
+                byte[] decimalBin = s2bin(data);
+                int size = internalEncodeKey(buf, decimalBin);
+
+                buf.ensureRemainder(4);
+                buf.reverseWriteInt(size);
             }
         } else {
             if (data == null) {
                 throw new RuntimeException("Data is not allow as null.");
             }
             buf.write(NOTNULL);
-            buf.reverseWriteInt(internalEncodeKeyV2(buf, data));
+
+            byte[] decimalBin = s2bin(data);
+            int size = internalEncodeKey(buf, decimalBin);
+
+            buf.ensureRemainder(4);
+            buf.reverseWriteInt(size);
         }
     }
 
@@ -273,7 +292,8 @@ public class DecimalSchema implements DingoSchema<String> {
             }
         }
 
-        return internalReadDecimal(buf);
+        byte[] decBin = internalReadKeyPrefixBytes(buf);
+        return new MyDecimal(decBin, (int)this.precision, (int)this.scale).decimalToString();
     }
 
     //This interface is both used by v1 and v2. We use same way to decode key prefix.
@@ -282,15 +302,12 @@ public class DecimalSchema implements DingoSchema<String> {
     public String decodeKeyPrefix(Buf buf) {
         if (allowNull) {
             if (buf.read() == NULL) {
-                buf.reverseSkipInt();
                 return null;
             }
         }
 
-        //Forward skip codec version field.
-        //buf.reverseSkipInt();
-
-        return internalReadDecimal(buf);
+        byte[] decBin = internalReadKeyPrefixBytes(buf);
+        return new MyDecimal(decBin, (int)this.precision, (int)this.scale).decimalToString();
     }
 
     private byte[] internalReadKeyPrefixBytes(Buf buf) {
@@ -379,14 +396,12 @@ public class DecimalSchema implements DingoSchema<String> {
                 buf.ensureRemainder(1);
                 buf.write(NOTNULL);
 
-                int size = internalEncodeKeyV2(buf, data);
-                buf.ensureRemainder(4);
-                buf.reverseWriteInt(size);
+                byte[] decimalBin = s2bin(data);
+                internalEncodeKey(buf, decimalBin);
             }
         } else {
-            int size = internalEncodeKeyV2(buf, data);
-            buf.ensureRemainder(4);
-            buf.reverseWriteInt(size);
+            byte[] decimalBin = s2bin(data);
+            internalEncodeKey(buf, decimalBin);
         }
     }
 
