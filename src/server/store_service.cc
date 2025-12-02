@@ -2646,18 +2646,6 @@ static butil::Status ValidateTxnResolveLockRequest(const dingodb::pb::store::Txn
     return status;
   }
 
-  if (request->start_ts() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0, it's illegal");
-  }
-
-  if (request->commit_ts() < 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < 0, it's illegal");
-  }
-
-  if (request->commit_ts() > 0 && request->commit_ts() < request->start_ts()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < start_ts, it's illegal");
-  }
-
   if (request->keys_size() > 0) {
     for (const auto& key : request->keys()) {
       if (key.empty()) {
@@ -2722,8 +2710,12 @@ void DoTxnResolveLock(StoragePtr storage, google::protobuf::RpcController* contr
     keys.emplace_back(key);
   }
 
-  std::vector<pb::common::KeyValue> kvs;
-  status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys);
+  std::map<int64_t, int64_t> txn_infos;
+  for (const auto& txn_info : request->txn_infos()) {
+    txn_infos.insert_or_assign(txn_info.start_ts(), txn_info.commit_ts());
+  }
+
+  status = storage->TxnResolveLock(ctx, request->start_ts(), request->commit_ts(), keys, txn_infos);
   if (BAIDU_UNLIKELY(!status.ok())) {
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
 

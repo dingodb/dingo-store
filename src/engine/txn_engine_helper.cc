@@ -4017,9 +4017,95 @@ butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, s
 
 bvar::LatencyRecorder g_txn_resolve_lock_latency("dingo_txn_resolve_lock");
 
+butil::Status TxnEngineHelper::BatchResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                const std::map<int64_t, int64_t> &txn_infos,
+                                                pb::store::TxnResultInfo *txn_result) {
+  if (txn_infos.empty()) return butil::Status::OK();
+
+  for (const auto &[start_ts, commit_ts] : txn_infos) {
+    std::vector<std::string> keys_to_rollback;
+
+    std::vector<pb::store::LockInfo> lock_infos_to_commit;
+    std::vector<std::string> keys_to_rollback_with_data;
+    std::vector<std::string> keys_to_rollback_without_data;
+
+    auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
+    std::vector<pb::store::LockInfo> tmp_lock_infos;
+    bool has_more = false;
+    std::string end_key{};
+    auto ret = ScanLockInfo(stream, raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos,
+                            has_more, end_key);
+    if (!ret.ok()) {
+      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                       << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    }
+
+    for (const auto &lock_info : tmp_lock_infos) {
+      // if the lock is a pessimistic lock, can't do resolvelock
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
+                         << ", pessimistic lock, can't do resolvelock, key: " << lock_info.key()
+                         << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock,", region->Id())
+                         << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+
+      // prepare to do rollback or commit
+      const std::string &key = lock_info.key();
+      if (commit_ts > 0) {
+        // do commit
+        lock_infos_to_commit.push_back(lock_info);
+      } else {
+        if (lock_info.short_value().empty()) {
+          keys_to_rollback_with_data.push_back(key);
+        } else {
+          keys_to_rollback_without_data.push_back(key);
+        }
+      }
+    }
+
+    if (!lock_infos_to_commit.empty()) {
+      auto ret = DoTxnCommit(raw_engine, raft_engine, ctx, region, lock_infos_to_commit, start_ts, commit_ts);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                         << ", do txn commit failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+        return ret;
+      }
+    }
+
+    if (!keys_to_rollback_with_data.empty() || !keys_to_rollback_without_data.empty()) {
+      for (auto const &key : keys_to_rollback_with_data) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
+                        << ", do rollback with data, start_ts: " << start_ts;
+      }
+      for (auto const &key : keys_to_rollback_without_data) {
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
+                        << ", do rollback without data, start_ts: " << start_ts;
+      }
+      auto ret =
+          DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
+      if (!ret.ok()) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
+                         << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+        return ret;
+      }
+    }
+  }
+  return butil::Status::OK();
+}
+
 butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                            std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                           const std::vector<std::string> &keys) {
+                                           const std::vector<std::string> &keys,
+                                           const std::map<int64_t, int64_t> &txn_infos) {
   BvarLatencyGuard bvar_guard(&g_txn_resolve_lock_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -4039,20 +4125,6 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
                      << ", region is not found, region_id: " << ctx->RegionId();
     return butil::Status(pb::error::Errno::EREGION_NOT_FOUND, "region is not found");
-  }
-
-  if (commit_ts < 0) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                     << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
-                     << ", commit_ts: " << commit_ts;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
-  }
-
-  if (commit_ts > 0 && commit_ts <= start_ts) {
-    DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
-                     << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
-                     << ", commit_ts: " << commit_ts;
-    return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
   }
 
   // if commit_ts = 0, do rollback else do commit
@@ -4087,6 +4159,20 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
 
   // if keys is not empty, we only do resolve lock for these keys
   if (!keys.empty()) {
+    if (commit_ts < 0) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                       << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                       << ", commit_ts: " << commit_ts;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
+    }
+
+    if (commit_ts > 0 && commit_ts <= start_ts) {
+      DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                       << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                       << ", commit_ts: " << commit_ts;
+      return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
+    }
+
     for (const auto &key : keys) {
       pb::store::LockInfo lock_info;
       auto ret = txn_reader.GetLockInfo(key, lock_info);
@@ -4146,47 +4232,23 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   }
   // scan for keys to rollback
   else {
-    auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
-    std::vector<pb::store::LockInfo> tmp_lock_infos;
-    bool has_more = false;
-    std::string end_key{};
-    auto ret = ScanLockInfo(stream, raw_engine, start_ts, start_ts + 1, region->Range(false), 0, tmp_lock_infos,
-                            has_more, end_key);
-    if (!ret.ok()) {
-      DINGO_LOG(FATAL) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
-                       << ", get lock info failed, start_ts: " << start_ts << ", status: " << ret.error_str();
+    for (const auto &[start_ts, commit_ts] : txn_infos) {
+      if (commit_ts < 0) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                         << ", commit_ts < 0, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                         << ", commit_ts: " << commit_ts;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts < 0");
+      }
+
+      if (commit_ts > 0 && commit_ts <= start_ts) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock", region->Id())
+                         << ", commit_ts <= start_ts, region_id: " << ctx->RegionId() << ", start_ts: " << start_ts
+                         << ", commit_ts: " << commit_ts;
+        return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "commit_ts <= start_ts");
+      }
     }
+    return BatchResolveLock(raw_engine, raft_engine, ctx, region, txn_infos, txn_result);
 
-    for (const auto &lock_info : tmp_lock_infos) {
-      // if the lock is a pessimistic lock, can't do resolvelock
-      if (lock_info.lock_type() == pb::store::Op::Lock) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
-                         << ", pessimistic lock, can't do resolvelock, key: " << lock_info.key()
-                         << ", start_ts: " << start_ts << ", lock_info: " << lock_info.ShortDebugString();
-        *txn_result->mutable_locked() = lock_info;
-        return butil::Status::OK();
-      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock,", region->Id())
-                         << ", invalid lock_type, key: " << lock_info.key() << ", start_ts: " << start_ts
-                         << ", lock_info: " << lock_info.ShortDebugString();
-        *txn_result->mutable_locked() = lock_info;
-        return butil::Status::OK();
-      }
-
-      // prepare to do rollback or commit
-      const std::string &key = lock_info.key();
-      if (commit_ts > 0) {
-        // do commit
-        lock_infos_to_commit.push_back(lock_info);
-      } else {
-        if (lock_info.short_value().empty()) {
-          keys_to_rollback_with_data.push_back(key);
-        } else {
-          keys_to_rollback_without_data.push_back(key);
-        }
-      }
-    }  // end while iter
   }  // end scan lock
 
   if (!lock_infos_to_commit.empty()) {

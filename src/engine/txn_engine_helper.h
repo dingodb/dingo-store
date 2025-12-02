@@ -206,7 +206,9 @@ class TxnEngineHelper {
 
   static butil::Status ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                   const std::vector<std::string> &keys);
+                                   const std::vector<std::string> &keys, const std::map<int64_t, int64_t> &txn_infos);
+
+  static butil::Status BatchResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, const std::map<int64_t, int64_t> &txn_infos, pb::store::TxnResultInfo* txn_result);
 
   static butil::Status HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                  std::shared_ptr<Context> ctx, const std::string &primary_lock, int64_t start_ts,
