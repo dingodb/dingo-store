@@ -116,11 +116,12 @@ class Storage {
                           const std::vector<std::string>& keys);
   butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts, const std::vector<std::string>& keys);
   butil::Status TxnCheckTxnStatus(std::shared_ptr<Context> ctx, const std::string& primary_key, int64_t lock_ts,
-                                  int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit, bool rollback_if_not_exist);
+                                  int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit,
+                                  bool rollback_if_not_exist);
   butil::Status TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
                                        const std::vector<std::string>& keys);
   butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                               const std::vector<std::string>& keys);
+                               const std::vector<std::string>& keys, const std::map<int64_t, int64_t>& txn_infos);
   butil::Status TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, int64_t start_ts,
                              int64_t advise_lock_ttl);
   butil::Status TxnGc(std::shared_ptr<Context> ctx, int64_t safe_point_ts);
@@ -167,7 +168,8 @@ class Storage {
   butil::Status VectorDump(std::shared_ptr<Engine::VectorReader::Context> ctx, bool dump_all,
                            std::vector<std::string>& dump_datas);
 #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
-  butil::Status VectorDisplayDocumentDetails(std::shared_ptr<Engine::VectorReader::Context> ctx, store::RegionPtr region,
+  butil::Status VectorDisplayDocumentDetails(std::shared_ptr<Engine::VectorReader::Context> ctx,
+                                             store::RegionPtr region,
                                              pb::index::VectorDisplayDocumentDetailsResponse* response);
 #endif
 

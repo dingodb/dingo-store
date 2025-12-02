@@ -681,8 +681,8 @@ butil::Status MonoStoreEngine::TxnWriter::TxnCheckSecondaryLocks(std::shared_ptr
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts,
-                                                         int64_t commit_ts, const std::vector<std::string>& keys) {
-  return TxnEngineHelper::ResolveLock(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, commit_ts, keys);
+                                                         int64_t commit_ts, const std::vector<std::string>& keys, const std::map<int64_t, int64_t>& txn_infos) {
+  return TxnEngineHelper::ResolveLock(txn_writer_raw_engine_, mono_engine_, ctx, start_ts, commit_ts, keys, txn_infos);
 }
 
 butil::Status MonoStoreEngine::TxnWriter::TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,

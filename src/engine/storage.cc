@@ -1741,18 +1741,19 @@ butil::Status Storage::TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, stor
 }
 
 butil::Status Storage::TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                      const std::vector<std::string>& keys) {
+                                      const std::vector<std::string>& keys,
+                                      const std::map<int64_t, int64_t>& txn_infos) {
   auto status = ValidateLeader(ctx->RegionId());
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }
 
   DINGO_LOG(DEBUG) << "TxnResolveLock start_ts : " << start_ts << " commit_ts : " << commit_ts
-                   << " keys size : " << keys.size();
+                   << " keys size : " << keys.size() << " , txn_info size : " << txn_infos.size();
 
   auto writer = GetEngineTxnWriter(ctx->StoreEngineType(), ctx->RawEngineType());
 
-  status = writer->TxnResolveLock(ctx, start_ts, commit_ts, keys);
+  status = writer->TxnResolveLock(ctx, start_ts, commit_ts, keys, txn_infos);
   if (BAIDU_UNLIKELY(!status.ok())) {
     return status;
   }

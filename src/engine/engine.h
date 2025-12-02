@@ -310,7 +310,7 @@ class Engine : public std::enable_shared_from_this<Engine> {
     virtual butil::Status TxnCheckSecondaryLocks(std::shared_ptr<Context> ctx, store::RegionPtr region,
                                                  int64_t start_ts, const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnResolveLock(std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
-                                         const std::vector<std::string>& keys) = 0;
+                                         const std::vector<std::string>& keys, const std::map<int64_t, int64_t>& txn_infos) = 0;
     virtual butil::Status TxnBatchRollback(std::shared_ptr<Context> ctx, int64_t start_ts,
                                            const std::vector<std::string>& keys) = 0;
     virtual butil::Status TxnHeartBeat(std::shared_ptr<Context> ctx, const std::string& primary_lock, int64_t start_ts,
