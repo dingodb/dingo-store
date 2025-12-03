@@ -1946,6 +1946,7 @@ void DocumentServiceImpl::TxnCheckTxnStatus(google::protobuf::RpcController* con
 
   auto status = DocumentValidateTxnCheckTxnStatusRequest(request, region);
   if (!status.ok()) {
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
@@ -1968,18 +1969,6 @@ static butil::Status DocumentValidateTxnResolveLockRequest(const pb::store::TxnR
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
   if (!epoch_ret.ok()) {
     return epoch_ret;
-  }
-
-  if (request->start_ts() == 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "start_ts is 0, it's illegal");
-  }
-
-  if (request->commit_ts() < 0) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < 0, it's illegal");
-  }
-
-  if (request->commit_ts() > 0 && request->commit_ts() < request->start_ts()) {
-    return butil::Status(pb::error::EILLEGAL_PARAMTETERS, "commit_ts < start_ts, it's illegal");
   }
 
   if (request->keys_size() > 0) {
@@ -2036,13 +2025,12 @@ void DocumentServiceImpl::TxnResolveLock(google::protobuf::RpcController* contro
 
   auto region = svr_done->GetRegion();
   int64_t region_id = request->context().region_id();
-
   auto status = DocumentValidateTxnResolveLockRequest(request, region);
   if (!status.ok()) {
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
-
   // Run in queue.
   auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
     DoTxnResolveLock(storage_, controller, request, response, svr_done, true);
@@ -2404,6 +2392,7 @@ void DocumentServiceImpl::TxnGc(google::protobuf::RpcController* controller, con
 
   auto status = DocumentValidateTxnGcRequest(request, region);
   if (!status.ok()) {
+    brpc::ClosureGuard done_guard(svr_done);
     ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
     return;
   }
