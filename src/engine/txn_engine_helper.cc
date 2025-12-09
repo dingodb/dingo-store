@@ -3075,51 +3075,38 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
     //   return butil::Status::OK();
     // }
 
-    // if lock is exists, check if lock_ts is equal to start_ts
-    // if not equal, means this key is locked by other txn, return LockInfo
-    if (lock_info.lock_ts() != 0) {
-      // if lock is exists but start_ts is not equal to lock_ts, return locked
-      if (lock_info.lock_ts() != start_ts) {
-        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
-                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
-
+    if (lock_info.lock_ts() == start_ts) {
+      // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
+      // If this is a pessimistic lock in Lock phase, return LockInfo
+      // If this is not a Put/Delete/PutIfAbsent, return LockInfo
+      if (lock_info.lock_type() == pb::store::Op::Lock) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", meet a pessimistic lock, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
         *txn_result->mutable_locked() = lock_info;
         return butil::Status::OK();
-      } else {
-        // lock_ts match start_ts, check if lock_type is Put/Delete/PutIfAbsent
-        // If this is a pessimistic lock in Lock phase, return LockInfo
-        // If this is not a Put/Delete/PutIfAbsent, return LockInfo
-        if (lock_info.lock_type() == pb::store::Op::Lock) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", meet a pessimistic lock, there must BUG in executor, key: " << Helper::StringToHex(key)
-                           << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
-                   lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
-          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
-                                          start_ts, commit_ts)
-                           << ", meet a invalid lock_type, there must BUG in executor, key: "
-                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
-          *txn_result->mutable_locked() = lock_info;
-          return butil::Status::OK();
-        }
+      } else if (lock_info.lock_type() != pb::store::Op::Put && lock_info.lock_type() != pb::store::Op::Delete &&
+                 lock_info.lock_type() != pb::store::Op::PutIfAbsent) {
+        DINGO_LOG(ERROR) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(), start_ts,
+                                        commit_ts)
+                         << ", meet a invalid lock_type, there must BUG in executor, key: " << Helper::StringToHex(key)
+                         << ", lock_info: " << lock_info.ShortDebugString();
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
 
-        // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
-        // get a new tso from coordinator, then commit again.
-        if (lock_info.min_commit_ts() > 0 && commit_ts < lock_info.min_commit_ts()) {
-          // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
-          auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
-          commit_ts_expired->set_start_ts(start_ts);
-          commit_ts_expired->set_attempted_commit_ts(commit_ts);
-          commit_ts_expired->set_key(key);
-          commit_ts_expired->set_min_commit_ts(lock_info.min_commit_ts());
+      // check if the commit_ts is bigger than min_commit_ts, if not, return CommitTsExpired, the executor should
+      // get a new tso from coordinator, then commit again.
+      if (lock_info.min_commit_ts() > 0 && commit_ts < lock_info.min_commit_ts()) {
+        // the min_commit_ts is already setup and commit_ts is less than min_commit_ts, return CommitTsExpired
+        auto *commit_ts_expired = txn_result->mutable_commit_ts_expired();
+        commit_ts_expired->set_start_ts(start_ts);
+        commit_ts_expired->set_attempted_commit_ts(commit_ts);
+        commit_ts_expired->set_key(key);
+        commit_ts_expired->set_min_commit_ts(lock_info.min_commit_ts());
 
-          return butil::Status::OK();
-        }
+        return butil::Status::OK();
       }
     } else {
       // check if the key is already committed, if it is committed can skip it
@@ -3178,6 +3165,17 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
         return butil::Status::OK();
       }
 
+      // if lock is exists but start_ts is not equal to lock_ts, return locked
+      if (lock_info.lock_ts() > 0) {
+        DINGO_LOG(WARNING) << fmt::format("[txn][region({})] Commit, start_Ts: {}, commit_ts: {}", region->Id(),
+                                          start_ts, commit_ts)
+                           << ", txn_not_found with lock_info.lock_ts not equal to start_ts, key: "
+                           << Helper::StringToHex(key) << ", lock_info: " << lock_info.ShortDebugString();
+
+        *txn_result->mutable_locked() = lock_info;
+        return butil::Status::OK();
+      }
+
       // no committed and no rollbacked, there may be BUG
       auto *txn_not_found = txn_result->mutable_txn_not_found();
       txn_not_found->set_start_ts(start_ts);
@@ -3190,7 +3188,6 @@ butil::Status TxnEngineHelper::Commit(RawEnginePtr raw_engine, std::shared_ptr<E
 
       return butil::Status::OK();
     }
-
     // now txn is match, prepare to commit
     lock_infos.push_back(lock_info);
   }
