@@ -6,7 +6,7 @@
 
     <groupId>io.dingodb</groupId>
     <artifactId>Dingo-Java-SDK</artifactId>
-    <version>4.0.0-SNAPSHOT</version>
+    <version>quickBI-v3.0.0-SNAPSHOT</version>
     <name>Dingo-Java-SDK</name>
     <description>dingo-sdk</description>
     <url>https://github.com/dingodb/dingo-store.git</url>

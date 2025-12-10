@@ -2,9 +2,9 @@ name: Java_Maven_Build
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, quickBI-v3.0.0 ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, quickBI-v3.0.0 ]
 
 jobs:
   build:
