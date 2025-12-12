@@ -203,7 +203,7 @@ function start_server() {
 
   echo "${root_dir}/bin/dingodb_server -role=${role}"
 
-  nohup ${root_dir}/bin/dingodb_server -role=${role} 2>&1 >./log/out &
+  nohup ${root_dir}/bin/dingodb_server -role=${role} >./log/out 2>&1 &
 }
 
 function start_program() {
