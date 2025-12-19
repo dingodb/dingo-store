@@ -4,11 +4,7 @@ import io.dingodb.sdk.common.DingoClientException.ExhaustedRetryException;
 import io.dingodb.sdk.common.DingoClientException.InvalidRouteTableException;
 import io.dingodb.sdk.common.DingoClientException.RequestErrorException;
 import io.dingodb.sdk.common.utils.ErrorCodeUtils;
-import io.dingodb.sdk.service.JsonMessageUtils;
-import io.dingodb.sdk.service.Caller;
-import io.dingodb.sdk.service.ChannelProvider;
-import io.dingodb.sdk.service.Service;
-import io.dingodb.sdk.service.ServiceCallCycles;
+import io.dingodb.sdk.service.*;
 import io.dingodb.sdk.service.entity.Message.Request;
 import io.dingodb.sdk.service.entity.Message.Response;
 import io.dingodb.sdk.service.entity.error.Errno;
@@ -99,6 +95,8 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
                     errMsgs.compute(
                         channel.authority() + ">>" + error.getErrmsg(), (k, v) -> v == null ? 1 : v + 1
                     );
+                    log.error(JsonMessageUtils.toJson(methodName, requestId, request, response, options) +
+                            getRegionId(channelProvider));
                     boolean isPreWriteFailed = isPreWriteFailed(request);
                     switch (handler.onErrStrategy(
                             isPreWriteRequestFailed(errCode, isPreWriteFailed) ?
@@ -156,6 +154,13 @@ public class ServiceCaller<S extends Service<S>> implements Caller<S> {
             return (((TxnPrewriteRequest) request).isTryOnePc() || ((TxnPrewriteRequest) request).isUseAsyncCommit());
         }
         return false;
+    }
+
+    private String getRegionId(ChannelProvider channelProvider) {
+        if (channelProvider instanceof RegionChannelProvider) {
+            return ",regionId:" + ((RegionChannelProvider) channelProvider).getRegionId();
+        }
+        return "";
     }
 
     private void waitRetry() {
