@@ -48,8 +48,12 @@ class ToolClient : public std::enable_shared_from_this<ToolClient> {
   static butil::Status GetGCSafePoint();
   static butil::Status DisableBalance();
   static butil::Status EnableBalance();
+  static butil::Status QueryBalance();
+  static butil::Status CoreBalance(const std::string& balance_type, const std::string& action);
   static butil::Status DisableSplitAndMerge();
   static butil::Status EnableSplitAndMerge();
+  static butil::Status QuerySplitAndMerge();
+  static butil::Status CoreSplitAndMerge(const std::string& type, const std::string& action);
   static butil::Status RemoteVersion();
   static butil::Status LocalVersion();
   static butil::Status RegisterBackup();

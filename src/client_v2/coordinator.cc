@@ -2792,14 +2792,24 @@ void RunGetRestoreStatus(GetRestoreStatusOptions const &opt) {
 
 void SetUpEnableOrDisableBalance(CLI::App &app) {
   auto opt = std::make_shared<EnableOrDisableBalanceOptions>();
-  auto *cmd = app.add_subcommand("DisableBalance", "DisableBalance ")->group("Coordinator Command");
+  auto *cmd = app.add_subcommand("DisableBalance", "DisableBalance or EnableBalance")->group("Coordinator Command");
   cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
-  cmd->add_option("--balance_leader", opt->enable_balance_leader,
-                  "Request parameter enable_balance_leader true or false")
-      ->required();
-  cmd->add_option("--balance_region", opt->enable_balance_region,
-                  "Request parameter enable_balance_region true or false")
-      ->required();
+
+  auto *group = cmd->add_option_group("DisableBalance Options, must set one of --balance_leader, --balance_region");
+
+  group
+      ->add_option("--balance_leader", opt->enable_balance_leader,
+                   "Request parameter enable_balance_leader true or false or query")
+      ->default_val("")
+      ->default_str("");
+  group
+      ->add_option("--balance_region", opt->enable_balance_region,
+                   "Request parameter enable_balance_region true or false or query")
+      ->default_val("")
+      ->default_str("");
+
+  group->require_option(1, 2);
+
   cmd->callback([opt]() { RunEnableOrDisableBalance(*opt); });
 }
 
@@ -2807,30 +2817,73 @@ void RunEnableOrDisableBalance(EnableOrDisableBalanceOptions const &opt) {
   if (Helper::SetUp(opt.coor_url) < 0) {
     exit(-1);
   }
+
+  dingodb::pb::coordinator::GetCoordinatorMapRequest get_coordinator_map_request;
+  dingodb::pb::coordinator::GetCoordinatorMapResponse get_coordinator_map_response;
+
+  get_coordinator_map_request.set_cluster_id(1);
+  get_coordinator_map_request.set_get_coordinator_map(true);
+
+  butil::Status status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "GetCoordinatorMap", get_coordinator_map_request, get_coordinator_map_response);
+
+  if (!status.ok()) {
+    std::cout << "GetCoordinatorMap failed: " << status.error_str() << std::endl;
+    return;
+  }
+
+  if (get_coordinator_map_response.coordinator_map().coordinators_size() == 0) {
+    std::cout << "GetCoordinatorMap failed: no coordinators found" << std::endl;
+    return;
+  }
+
   dingodb::pb::coordinator::ControlConfigRequest request;
   dingodb::pb::coordinator::ControlConfigResponse response;
 
   request.mutable_request_info()->set_request_id(0);
 
-  dingodb::pb::common::ControlConfigVariable config_balance_leader;
-  config_balance_leader.set_name("FLAGS_enable_balance_leader");
-  config_balance_leader.set_value(opt.enable_balance_leader);
-  request.mutable_control_config_variable()->Add(std::move(config_balance_leader));
-
-  dingodb::pb::common::ControlConfigVariable config_balance_region;
-  config_balance_region.set_name("FLAGS_enable_balance_region");
-  config_balance_region.set_value(opt.enable_balance_region);
-  request.mutable_control_config_variable()->Add(std::move(config_balance_region));
-
-  butil::Status status =
-      CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest("ControlConfig", request, response);
-  if (!status.ok()) {
-    std::cout << status.error_cstr();
+  if (!opt.enable_balance_leader.empty()) {
+    dingodb::pb::common::ControlConfigVariable config_balance_leader;
+    config_balance_leader.set_name("FLAGS_enable_balance_leader");
+    config_balance_leader.set_value(opt.enable_balance_leader);
+    request.mutable_control_config_variable()->Add(std::move(config_balance_leader));
   }
 
-  for (const auto &config : response.control_config_variable()) {
-    if (config.is_error_occurred()) {
-      std::cout << "ControlConfig not support variable: " << config.name() << " skip.";
+  if (!opt.enable_balance_region.empty()) {
+    dingodb::pb::common::ControlConfigVariable config_balance_region;
+    config_balance_region.set_name("FLAGS_enable_balance_region");
+    config_balance_region.set_value(opt.enable_balance_region);
+    request.mutable_control_config_variable()->Add(std::move(config_balance_region));
+  }
+
+  int i = 0;
+
+  for (const auto &coordinator : get_coordinator_map_response.coordinator_map().coordinators()) {
+    response.Clear();
+
+    std::string addr = fmt::format("{}:{}", coordinator.location().host(), coordinator.location().port());
+
+    std::shared_ptr<ServerInteraction> interaction = std::make_shared<ServerInteraction>();
+    bool ret = interaction->Init({addr});
+    if (!ret) {
+      std::cout << "Failed to initialize interaction with " << addr << std::endl;
+      continue;
+    }
+
+    std::string name = fmt::format("[{}] CoordinatorService ControlConfig  RunEnableOrDisableBalance {}", i++, addr);
+    request.mutable_request_info()->set_request_id(1);
+
+    std::cout << name << " request: " << request.DebugString() << std::endl;
+    butil::Status status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
+    std::cout << name << " response: " << response.DebugString() << std::endl;
+    if (!status.ok()) {
+      std::cout << status.error_cstr() << std::endl;
+      continue;
+    }
+
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      std::cout << "error : " << response.DebugString() << std::endl;
+      continue;
     }
   }
 }
