@@ -855,7 +855,7 @@ class CoordinatorControl : public MetaControl {
                     pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddSnapshotVectorIndexTask(pb::coordinator::Task *region_save_vector_task, int64_t store_id, int64_t region_id,
                                   int64_t snapshot_log_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCheckSplitResultTask(pb::coordinator::Job *job, int64_t store_id, int64_t split_to_region_id);
+  static void AddCheckSplitResultTask(pb::coordinator::Task *check_split_result_task, int64_t store_id, int64_t split_to_region_id);
   static void AddCheckStoreVectorIndexTask(pb::coordinator::Task *check_vector_task, int64_t store_id,
                                            int64_t region_id, int64_t vector_index_version);
   static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
@@ -870,7 +870,11 @@ class CoordinatorControl : public MetaControl {
   static void AddCheckTombstoneRegionTask(pb::coordinator::Task *check_tombstone_region_task, int64_t store_id,
                                           int64_t region_id);
 
-  static void AddCheckSplitChildRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id, int64_t region_id);
+  static void AddCheckSplitChildRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id,
+                                           int64_t region_id);
+
+  static void AddCheckSplitParentRegionTask(pb::coordinator::Task *check_region_task, int64_t store_id,
+                                            int64_t region_id);
 
   void GenDeleteRegionStoreOperation(pb::coordinator::StoreOperation &store_operation, int64_t store_id,
                                      int64_t region_id, pb::coordinator_internal::MetaIncrement &meta_increment);
