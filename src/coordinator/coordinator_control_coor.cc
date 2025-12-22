@@ -2872,12 +2872,20 @@ butil::Status CoordinatorControl::SplitRegionWithJob(int64_t split_from_region_i
     // AddCheckStoreRegionTask(check_region_task, it.store_id(), new_region_id);
   }
 
+  auto* check_parent_region_task = new_job->add_tasks();
+  for (const auto& peer : region_metrics.region_definition().peers()) {
+    AddCheckSplitParentRegionTask(check_parent_region_task, peer.store_id(), split_from_region_id);
+  }
+
   // build split_region task
   AddSplitTask(new_job, leader_store_id, split_from_region_id, new_region_id, split_watershed_key, store_create_region,
                meta_increment);
 
   // check if split_to_region'state change to NORMAL, this state change means split is fininshed.
-  AddCheckSplitResultTask(new_job, leader_store_id, new_region_id);
+  auto* check_split_result_task = new_job->add_tasks();
+  for (const auto& it : store_operations) {
+    AddCheckSplitResultTask(check_split_result_task, it.store_id(), new_region_id);
+  }
 
   return butil::Status::OK();
 }
@@ -5303,17 +5311,16 @@ void CoordinatorControl::AddSplitTask(pb::coordinator::Job* job, int64_t store_i
   region_cmd_to_add->set_is_notify(true);  // notify store to do immediately heartbeat
 }
 
-void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::Job* job, int64_t store_id,
+void CoordinatorControl::AddCheckSplitResultTask(pb::coordinator::Task* check_split_result_task, int64_t store_id,
                                                  int64_t split_to_region_id) {
-  auto* check_split_result_task = job->add_tasks();
-
   auto* store_operation = check_split_result_task->add_store_operations();
   store_operation->set_store_id(store_id);
-  // build split_region task
-  auto* split_result_check = store_operation->mutable_pre_check();
-  split_result_check->set_type(pb::coordinator::TaskPreCheckType::REGION_CHECK);
-  split_result_check->mutable_region_check()->set_region_id(split_to_region_id);
-  split_result_check->mutable_region_check()->set_state(pb::common::RegionState::REGION_NORMAL);
+
+  auto* region_check = store_operation->mutable_pre_check();
+  region_check->set_type(pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(split_to_region_id);
+  region_check->mutable_store_region_check()->set_store_region_state(::dingodb::pb::common::StoreRegionState::NORMAL);
 }
 
 void CoordinatorControl::AddCheckMergeResultTask(pb::coordinator::Job* job, int64_t store_id,
@@ -5397,6 +5404,19 @@ void CoordinatorControl::AddCheckSplitChildRegionTask(pb::coordinator::Task* che
   region_check->mutable_store_region_check()->set_store_id(store_id);
   region_check->mutable_store_region_check()->set_region_id(region_id);
   region_check->mutable_store_region_check()->set_store_region_state(::dingodb::pb::common::StoreRegionState::STANDBY);
+}
+
+void CoordinatorControl::AddCheckSplitParentRegionTask(pb::coordinator::Task* check_region_task, int64_t store_id,
+                                                       int64_t region_id) {
+  // generate store operation for stores
+  auto* store_operation = check_region_task->add_store_operations();
+  store_operation->set_store_id(store_id);
+
+  auto* region_check = store_operation->mutable_pre_check();
+  region_check->set_type(pb::coordinator::TaskPreCheckType::STORE_REGION_CHECK);
+  region_check->mutable_store_region_check()->set_store_id(store_id);
+  region_check->mutable_store_region_check()->set_region_id(region_id);
+  region_check->mutable_store_region_check()->set_store_region_state(::dingodb::pb::common::StoreRegionState::NORMAL);
 }
 
 void CoordinatorControl::AddCheckChangePeerResultTask(pb::coordinator::Job* job, int64_t store_id, int64_t region_id,
