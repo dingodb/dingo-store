@@ -2443,6 +2443,7 @@ void Helper::HandleBoolControlConfigVariable(const pb::common::ControlConfigVari
   bool is_false = Helper::StringConvertFalse(variable.value());
 
   if (!is_true && !is_false) {
+    config.set_value(gflags_var ? "true" : "false");
     config.set_is_already_set(false);
     config.set_is_error_occurred(true);
     DINGO_LOG(ERROR) << "ControlConfig variable: " << variable.name() << " value: " << variable.value()
