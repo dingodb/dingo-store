@@ -77,6 +77,12 @@ butil::Status ToolClient::Run() {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
+  } else if ("QueryBalance" == tool_client_params_.br_client_method) {
+    status = QueryBalance();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
   } else if ("EnableSplitAndMerge" == tool_client_params_.br_client_method) {
     status = EnableSplitAndMerge();
     if (!status.ok()) {
@@ -85,6 +91,12 @@ butil::Status ToolClient::Run() {
     }
   } else if ("DisableSplitAndMerge" == tool_client_params_.br_client_method) {
     status = DisableSplitAndMerge();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("QuerySplitAndMerge" == tool_client_params_.br_client_method) {
+    status = QuerySplitAndMerge();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -267,81 +279,85 @@ butil::Status ToolClient::GetGCSafePoint() {
   return butil::Status::OK();
 }
 
-butil::Status ToolClient::DisableBalance() {
-  auto coordinator_interaction = br::InteractionManager::GetInstance().GetCoordinatorInteraction();
-  dingodb::pb::coordinator::ControlConfigRequest request;
-  dingodb::pb::coordinator::ControlConfigResponse response;
+butil::Status ToolClient::DisableBalance() { return CoreBalance("false", "DisableBalance"); }
 
-  request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+butil::Status ToolClient::EnableBalance() { return CoreBalance("true", "EnableBalance"); }
 
-  dingodb::pb::common::ControlConfigVariable config_balance_leader;
-  config_balance_leader.set_name("FLAGS_enable_balance_leader");
-  config_balance_leader.set_value("false");
-  request.mutable_control_config_variable()->Add(std::move(config_balance_leader));
+butil::Status ToolClient::QueryBalance() { return CoreBalance("query", "QueryBalance"); }
 
-  dingodb::pb::common::ControlConfigVariable config_balance_region;
-  config_balance_region.set_name("FLAGS_enable_balance_region");
-  config_balance_region.set_value("false");
-  request.mutable_control_config_variable()->Add(std::move(config_balance_region));
-
-  ToolUtils::PrintRequest("DisableBalance", request);
-
-  butil::Status status =
-      coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
-  ToolUtils::PrintResponse("DisableBalance", response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
-
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status ToolClient::EnableBalance() {
+butil::Status ToolClient::CoreBalance(const std::string& balance_type, const std::string& action) {
+  butil::Status return_status;
   auto coordinator_interaction = br::InteractionManager::GetInstance().GetCoordinatorInteraction();
   dingodb::pb::coordinator::ControlConfigRequest request;
   dingodb::pb::coordinator::ControlConfigResponse response;
 
   dingodb::pb::common::ControlConfigVariable config_balance_leader;
   config_balance_leader.set_name("FLAGS_enable_balance_leader");
-  config_balance_leader.set_value("true");
+  config_balance_leader.set_value(balance_type);
   request.mutable_control_config_variable()->Add(std::move(config_balance_leader));
 
   dingodb::pb::common::ControlConfigVariable config_balance_region;
   config_balance_region.set_name("FLAGS_enable_balance_region");
-  config_balance_region.set_value("true");
+  config_balance_region.set_value(balance_type);
   request.mutable_control_config_variable()->Add(std::move(config_balance_region));
 
-  if (!request.control_config_variable().empty()) {
-    request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+  std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
+  int i = 0;
 
-    ToolUtils::PrintRequest("EnableBalance", request);
+  for (const auto& addr : addrs) {
+    response.Clear();
 
-    butil::Status status =
-        coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
-    ToolUtils::PrintResponse("EnableBalance", response);
+    std::shared_ptr<ServerInteraction> interaction;
+    butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+      return_status = status;
+      continue;
+    }
+
+    std::string name = fmt::format("[{}] CoordinatorService {} {}", i++, action, addr);
+    request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+
+    ToolUtils::PrintRequest(name, request);
+
+    status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
+    ToolUtils::PrintResponse(name, response);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return_status = status;
+      continue;
     }
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
       DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
+      return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+      continue;
     }
   }
 
-  return butil::Status::OK();
+  return return_status;
 }
 
-butil::Status ToolClient::DisableSplitAndMerge() {
+butil::Status ToolClient::DisableSplitAndMerge() { return CoreSplitAndMerge("false", "DisableSplitAndMerge"); }
+
+butil::Status ToolClient::EnableSplitAndMerge() { return CoreSplitAndMerge("true", "EnableSplitAndMerge"); }
+
+butil::Status ToolClient::QuerySplitAndMerge() { return CoreSplitAndMerge("query", "QuerySplitAndMerge"); }
+
+butil::Status ToolClient::CoreSplitAndMerge(const std::string& type, const std::string& action) {
+  butil::Status return_status;
   auto store_interaction = br::InteractionManager::GetInstance().GetStoreInteraction();
   auto index_interaction = br::InteractionManager::GetInstance().GetIndexInteraction();
+
+  bool is_exist_store = (store_interaction != nullptr ? !store_interaction->IsEmpty() : false);
+  bool is_exist_index = (index_interaction != nullptr ? !index_interaction->IsEmpty() : false);
+
+  if (!is_exist_store && !is_exist_index) {
+    DINGO_LOG(INFO) << "Store and Index not exist, skip DisableSplitAndMerge";
+    std::cout << "Store and Index not exist, skip DisableSplitAndMerge" << std::endl;
+    return butil::Status::OK();
+  }
+
   dingodb::pb::store::ControlConfigRequest request;
   dingodb::pb::store::ControlConfigResponse response;
 
@@ -349,93 +365,86 @@ butil::Status ToolClient::DisableSplitAndMerge() {
 
   dingodb::pb::common::ControlConfigVariable config_auto_split;
   config_auto_split.set_name("FLAGS_region_enable_auto_split");
-  config_auto_split.set_value("false");
+  config_auto_split.set_value(type);
   request.mutable_control_config_variable()->Add(std::move(config_auto_split));
 
   dingodb::pb::common::ControlConfigVariable config_auto_merge;
   config_auto_merge.set_name("FLAGS_region_enable_auto_merge");
-  config_auto_merge.set_value("false");
+  config_auto_merge.set_value(type);
   request.mutable_control_config_variable()->Add(std::move(config_auto_merge));
 
-  ToolUtils::PrintRequest("DisableSplitAndMerge", request);
+  // store exist
+  if (is_exist_store) {
+    std::vector<std::string> addrs = store_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      response.Clear();
 
-  butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-  ToolUtils::PrintResponse("DisableSplitAndMerge", response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
+      std::shared_ptr<ServerInteraction> interaction;
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
 
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
+      std::string name = fmt::format("[{}] StoreService {} {}", i++, action, addr);
 
-  ToolUtils::PrintRequest("DisableSplitAndMerge", request);
+      ToolUtils::PrintRequest(name, request);
 
-  status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-  ToolUtils::PrintResponse("DisableSplitAndMerge", response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
+      status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
+      ToolUtils::PrintResponse(name, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
 
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
-
-  return butil::Status::OK();
-}
-
-butil::Status ToolClient::EnableSplitAndMerge() {
-  auto store_interaction = br::InteractionManager::GetInstance().GetStoreInteraction();
-  auto index_interaction = br::InteractionManager::GetInstance().GetIndexInteraction();
-  dingodb::pb::store::ControlConfigRequest request;
-  dingodb::pb::store::ControlConfigResponse response;
-
-  dingodb::pb::common::ControlConfigVariable config_auto_split;
-  config_auto_split.set_name("FLAGS_region_enable_auto_split");
-  config_auto_split.set_value("true");
-  request.mutable_control_config_variable()->Add(std::move(config_auto_split));
-
-  dingodb::pb::common::ControlConfigVariable config_auto_merge;
-  config_auto_merge.set_name("FLAGS_region_enable_auto_merge");
-  config_auto_merge.set_value("true");
-  request.mutable_control_config_variable()->Add(std::move(config_auto_merge));
-
-  if (!request.control_config_variable().empty()) {
-    request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
-
-    ToolUtils::PrintRequest("EnableSplitAndMerge", request);
-
-    butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-    ToolUtils::PrintResponse("EnableSplitAndMerge", response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
-
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
-
-    ToolUtils::PrintRequest("EnableSplitAndMerge", request);
-
-    status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-    ToolUtils::PrintResponse("EnableSplitAndMerge", response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
-
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+        continue;
+      }
     }
   }
-  return butil::Status::OK();
+
+  // index exist
+  if (is_exist_index) {
+    response.Clear();
+    std::vector<std::string> addrs = index_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      response.Clear();
+      std::shared_ptr<ServerInteraction> interaction;
+
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      std::string name = fmt::format("[{}] IndexService {} {}", i++, action, addr);
+
+      ToolUtils::PrintRequest(name, request);
+
+      status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
+      ToolUtils::PrintResponse(name, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+        continue;
+      }
+    }
+  }
+
+  return return_status;
 }
 
 butil::Status ToolClient::RemoteVersion() {

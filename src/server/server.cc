@@ -105,7 +105,10 @@ DEFINE_int32(recycle_job_interval_s, 60, "recycle job list interval seconds");
 DEFINE_int32(server_scrub_document_index_interval_s, 60, "scrub document index interval seconds");
 
 DEFINE_bool(enable_balance_leader, true, "enable balance leader");
+BRPC_VALIDATE_GFLAG(enable_balance_leader, brpc::PassValidate);
+
 DEFINE_bool(enable_balance_region, true, "enable balance region");
+BRPC_VALIDATE_GFLAG(enable_balance_region, brpc::PassValidate);
 
 DEFINE_bool(enable_timing_get_tso, false, "enable get tso");
 DEFINE_int32(get_tso_interval_ms, 1000, "get tso interval");

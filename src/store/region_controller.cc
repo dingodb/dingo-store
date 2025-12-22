@@ -1088,7 +1088,18 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
   }
 
   if (region->State() != pb::common::StoreRegionState::NORMAL) {
-    return butil::Status(pb::error::EREGION_STATE, "Region state not allow transfer leader.");
+    if (is_force) {
+      if (region->State() != pb::common::StoreRegionState::STANDBY) {
+        return butil::Status(
+            pb::error::EREGION_STATE,
+            fmt::format("Region state not not normal and is not standby allow force transfer leader: {}",
+                        pb::common::StoreRegionState_Name(region->State())));
+      }
+    } else {
+      return butil::Status(pb::error::EREGION_STATE,
+                           fmt::format("Region state not normal not allow transfer leader: {}",
+                                       pb::common::StoreRegionState_Name(region->State())));
+    }
   }
 
   if (region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {

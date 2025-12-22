@@ -598,8 +598,10 @@ int main(int argc, char* argv[]) {
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=GcStop\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableBalance\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableBalance\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=QueryBalance\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableSplitAndMerge\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableSplitAndMerge\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=QuerySplitAndMerge\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterBackup\n");
     printf(
         "./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=UnregisterBackup "
