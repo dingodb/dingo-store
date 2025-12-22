@@ -1643,8 +1643,8 @@ butil::Status CoordinatorControl::SelectStore(pb::common::StoreType store_type, 
 
     if (selected_stores_for_regions.size() != replica_num) {
       selected_stores_for_regions.clear();
-      DINGO_LOG(INFO) << "Store ids size not match, store_ids.size=" << store_ids.size()
-                      << ", replica_num=" << replica_num;
+      DINGO_LOG(ERROR) << "Store ids size not match, store_ids.size=" << store_ids.size()
+                       << ", replica_num=" << replica_num;
       return butil::Status(pb::error::Errno::EILLEGAL_PARAMTETERS, "store_ids size not match replica_num");
     }
 
@@ -2446,6 +2446,13 @@ butil::Status CoordinatorControl::DropRegion(int64_t region_id,
 butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
                                                   std::vector<pb::coordinator::StoreOperation>& store_operations,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
+  auto validate_ret = ValidateJobConflict(region_id, region_id);
+  if (!validate_ret.ok()) {
+    DINGO_LOG(ERROR) << fmt::format("validate task list conflict failed, region_id:{}, error_code:{}, error_msg:{}",
+                                    region_id, validate_ret.error_code(), validate_ret.error_str());
+    return validate_ret;
+  }
+
   // set region state to DELETE
   bool need_update_epoch = false;
   {
