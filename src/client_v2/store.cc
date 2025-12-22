@@ -86,6 +86,7 @@ void SetUpStoreSubCommands(CLI::App& app) {
   SetUpModifyRegionMeta(app);
   SetUpCompact(app);
   SetUpQueryMemoryLocks(app);
+  SetUpStoreEnableOrDisableSplitAndMerge(app);
 }
 
 static bool SetUpStore(const std::string& url, const std::vector<std::string>& addrs, int64_t region_id) {
@@ -2188,6 +2189,105 @@ void RunQueryMemoryLocks(QueryMemoryLocksOptions const& opt) {
     return;
   }
   std::cout << "region memory locks: " << response.DebugString() << std::endl;
+}
+
+void SetUpStoreEnableOrDisableSplitAndMerge(CLI::App& app) {
+  auto opt = std::make_shared<StoreEnableOrDisableSplitAndMergeOptions>();
+  auto* cmd =
+      app.add_subcommand("StoreEnableOrDisableSplitAndMerge", "Store EnableSplitAndMerge or DisableSplitAndMerge")
+          ->group("Store Command");
+  cmd->add_option("--coor_url", opt->coor_url, "Coordinator url, default:file://./coor_list");
+
+  auto* group = cmd->add_option_group(
+      "StoreEnableOrDisableSplitAndMerge Options, must set one of --region_enable_auto_split, "
+      "--region_enable_auto_merge");
+
+  group
+      ->add_option("--region_enable_auto_split", opt->region_enable_auto_split,
+                   "Request parameter region_enable_auto_split true or false or query")
+      ->default_val("")
+      ->default_str("");
+  group
+      ->add_option("--region_enable_auto_merge", opt->region_enable_auto_merge,
+                   "Request parameter region_enable_auto_merge true or false or query")
+      ->default_val("")
+      ->default_str("");
+
+  group->require_option(1, 2);
+
+  cmd->callback([opt]() { RunStoreEnableOrDisableSplitAndMerge(*opt); });
+}
+
+void RunStoreEnableOrDisableSplitAndMerge(StoreEnableOrDisableSplitAndMergeOptions const& opt) {
+  if (Helper::SetUp(opt.coor_url) < 0) {
+    exit(-1);
+  }
+
+  dingodb::pb::coordinator::GetStoreMapRequest get_store_map_request;
+  dingodb::pb::coordinator::GetStoreMapResponse get_store_map_response;
+
+  get_store_map_request.mutable_request_info()->set_request_id(1);
+  get_store_map_request.add_filter_store_types(::dingodb::pb::common::StoreType::NODE_TYPE_STORE);
+  butil::Status status = CoordinatorInteraction::GetInstance().GetCoorinatorInteraction()->SendRequest(
+      "GetStoreMap", get_store_map_request, get_store_map_response);
+  if (!status.ok()) {
+    std::cout << "Fail to get store map, status=" << status.error_str() << std::endl;
+    return;
+  }
+
+  if (get_store_map_response.storemap().stores_size() == 0) {
+    std::cout << "GetStoreMap failed: no stores found" << std::endl;
+    return;
+  }
+
+  dingodb::pb::store::ControlConfigRequest request;
+  dingodb::pb::store::ControlConfigResponse response;
+
+  int i = 0;
+
+  request.mutable_request_info()->set_request_id(1);
+
+  if (!opt.region_enable_auto_split.empty()) {
+    dingodb::pb::common::ControlConfigVariable region_enable_auto_split;
+    region_enable_auto_split.set_name("FLAGS_region_enable_auto_split");
+    region_enable_auto_split.set_value(opt.region_enable_auto_split);
+    request.mutable_control_config_variable()->Add(std::move(region_enable_auto_split));
+  }
+
+  if (!opt.region_enable_auto_merge.empty()) {
+    dingodb::pb::common::ControlConfigVariable region_enable_auto_merge;
+    region_enable_auto_merge.set_name("FLAGS_region_enable_auto_merge");
+    region_enable_auto_merge.set_value(opt.region_enable_auto_merge);
+    request.mutable_control_config_variable()->Add(std::move(region_enable_auto_merge));
+  }
+
+  for (const auto& store : get_store_map_response.storemap().stores()) {
+    response.Clear();
+
+    std::string addr = fmt::format("{}:{}", store.server_location().host(), store.server_location().port());
+
+    std::shared_ptr<ServerInteraction> interaction = std::make_shared<ServerInteraction>();
+    bool ret = interaction->Init({addr});
+    if (!ret) {
+      std::cout << "Failed to initialize interaction with " << addr << std::endl;
+      continue;
+    }
+
+    std::string name = fmt::format("[{}] StoreService ControlConfig  EnableOrDisableSplitAndMerge {}", i++, addr);
+
+    std::cout << name << " request: " << request.DebugString() << std::endl;
+    butil::Status status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
+    std::cout << name << " response: " << response.DebugString() << std::endl;
+    if (!status.ok()) {
+      std::cout << status.error_cstr() << std::endl;
+      continue;
+    }
+
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      std::cout << "error : " << response.DebugString() << std::endl;
+      continue;
+    }
+  }
 }
 
 void SendKvGet(KvGetOptions const& opt, std::string& value) {

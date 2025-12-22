@@ -592,6 +592,15 @@ struct QueryMemoryLocksOptions {
 void SetUpQueryMemoryLocks(CLI::App &app);
 void RunQueryMemoryLocks(QueryMemoryLocksOptions const &opt);
 
+struct StoreEnableOrDisableSplitAndMergeOptions {
+  std::string coor_url;
+  std::string region_enable_auto_split;
+  std::string region_enable_auto_merge;
+};
+
+void SetUpStoreEnableOrDisableSplitAndMerge(CLI::App &app);
+void RunStoreEnableOrDisableSplitAndMerge(StoreEnableOrDisableSplitAndMergeOptions const &opt);
+
 // raw kv
 void SendKvGet(KvGetOptions const &opt, std::string &value);
 void SendKvBatchGet(KvBatchGetOptions const &opt);

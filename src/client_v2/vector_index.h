@@ -399,6 +399,15 @@ struct VectorCountMemoryOptions {
 void SetUpVectorCountMemory(CLI::App &app);
 void RunVectorCountMemory(VectorCountMemoryOptions const &opt);
 
+struct IndexEnableOrDisableSplitAndMergeOptions {
+  std::string coor_url;
+  std::string region_enable_auto_split;
+  std::string region_enable_auto_merge;
+};
+
+void SetUpIndexEnableOrDisableSplitAndMerge(CLI::App &app);
+void RunIndexEnableOrDisableSplitAndMerge(IndexEnableOrDisableSplitAndMergeOptions const &opt);
+
 // vector
 int64_t SendVectorCountMemory(VectorCountMemoryOptions const &opt);
 void SendVectorDump(VectorDumpOptions const &opt);

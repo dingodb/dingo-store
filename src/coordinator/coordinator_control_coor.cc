@@ -3610,11 +3610,14 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithJob(int64_t region_id,
   if (region.state() != pb::common::RegionState::REGION_NORMAL) {
     if (is_force) {
       if (region.state() != pb::common::RegionState::REGION_STANDBY) {
-        return butil::Status(pb::error::Errno::EREGION_STATE,
-                             " region state is not normal, and is not standby for force transfer leader");
+        return butil::Status(
+            pb::error::Errno::EREGION_STATE,
+            fmt::format(" region state is not normal, and is not standby for force transfer leader : {}",
+                        pb::common::RegionState_Name(region.state())));
       }
     } else {
-      return butil::Status(pb::error::Errno::EREGION_STATE, " region state is not normal");
+      return butil::Status(pb::error::Errno::EREGION_STATE, fmt::format(" region state is not normal : {}",
+                                                                        pb::common::RegionState_Name(region.state())));
     }
   }
 
