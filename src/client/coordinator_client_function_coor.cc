@@ -1763,8 +1763,12 @@ void SendTransferLeaderRegion(std::shared_ptr<dingodb::CoordinatorInteraction> c
 
   transfer_leader_request.set_region_id(FLAGS_region_id);
   transfer_leader_request.set_leader_store_id(FLAGS_store_id);
+  // add is_force flag. default false.
+  // if is_force is true, transfer leader will be forced even the region is in standby.
+  transfer_leader_request.set_is_force(FLAGS_is_force);
 
-  DINGO_LOG(INFO) << "transfer leader: region_id=" << FLAGS_region_id << ", store_id=" << FLAGS_store_id;
+  DINGO_LOG(INFO) << "transfer leader: region_id=" << FLAGS_region_id << ", store_id=" << FLAGS_store_id
+                  << ", is_force=" << (FLAGS_is_force ? "true" : "false");
 
   auto status2 =
       coordinator_interaction->SendRequest("TransferLeaderRegion", transfer_leader_request, transfer_leader_response);
