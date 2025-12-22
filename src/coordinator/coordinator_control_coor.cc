@@ -3608,8 +3608,16 @@ butil::Status CoordinatorControl::TransferLeaderRegionWithJob(int64_t region_id,
   }
 
   if (region.state() != pb::common::RegionState::REGION_NORMAL) {
-    return butil::Status(pb::error::Errno::EREGION_STATE, " region state is not normal");
+    if (is_force) {
+      if (region.state() != pb::common::RegionState::REGION_STANDBY) {
+        return butil::Status(pb::error::Errno::EREGION_STATE,
+                             " region state is not normal, and is not standby for force transfer leader");
+      }
+    } else {
+      return butil::Status(pb::error::Errno::EREGION_STATE, " region state is not normal");
+    }
   }
+
   if (region.definition().store_engine() != pb::common::STORE_ENG_RAFT_STORE) {
     return butil::Status(pb::error::Errno::ECHANGE_PEER_STORE_ENGINE_NOT_MATCH, "region store engine not match");
   }
