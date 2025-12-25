@@ -295,6 +295,8 @@ butil::Status VectorIndexUtils::DoCalcIpDistanceByFaiss(const ::dingodb::pb::com
 
   distance = vector_distance(op_left_vectors.float_values().data(), op_right_vectors.float_values().data());
 
+  distance = 1.0f - distance;
+
   ResultOpVectorAssignmentWrapper(op_left_vectors, op_right_vectors, is_return_normlize, result_op_left_vectors,
                                   result_op_right_vectors);
 
@@ -319,6 +321,8 @@ butil::Status VectorIndexUtils::DoCalcCosineDistanceByFaiss(
 
   distance = vector_distance(tmp_result_op_left_vectors.float_values().data(),
                              tmp_result_op_right_vectors.float_values().data());
+
+  distance = 1.0f - distance;
 
   ResultOpVectorAssignmentWrapper(tmp_result_op_left_vectors, tmp_result_op_right_vectors, is_return_normlize,
                                   result_op_left_vectors, result_op_right_vectors);
