@@ -223,9 +223,9 @@ butil::Status RelExprHelper::TransToOperand(
   return butil::Status();
 }
 
-butil::Status RelExprHelper::TransToOperandV2(
-    BaseSchema::Type type, const std::any& column,
-    std::unique_ptr<std::vector<expr::Operand>>& operand_ptr) {
+butil::Status RelExprHelper::TransToOperandV2(BaseSchema::Type type, const std::any& column,
+                                              std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
+                                              long precison, long scale) {
   if (!operand_ptr) {
     std::string s = fmt::format("operand_ptr is nullptr. not support");
     DINGO_LOG(ERROR) << s;
@@ -239,8 +239,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       try {
         operand_ptr->emplace_back(ToOperandV2<bool>(column));
       } catch (const std::bad_any_cast& bad) {
-        std::string s =
-            fmt::format("{}  any_cast std::optional<bool> failed", bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<bool> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -250,8 +249,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       try {
         operand_ptr->emplace_back(ToOperandV2<int32_t>(column));
       } catch (const std::bad_any_cast& bad) {
-        std::string s = fmt::format(
-            "{}  any_cast std::optional<int32_t> failed", bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<int32_t> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -261,8 +259,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       try {
         operand_ptr->emplace_back(ToOperandV2<float>(column));
       } catch (const std::bad_any_cast& bad) {
-        std::string s =
-            fmt::format("{}  any_cast std::optional<float> failed", bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<float> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -272,8 +269,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       try {
         operand_ptr->emplace_back(ToOperandV2<int64_t>(column));
       } catch (const std::bad_any_cast& bad) {
-        std::string s = fmt::format(
-            "{}  any_cast std::optional<int64_t> failed", bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<int64_t> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -283,8 +279,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       try {
         operand_ptr->emplace_back(ToOperandV2<double>(column));
       } catch (const std::bad_any_cast& bad) {
-        std::string s = fmt::format("{}  any_cast std::optional<double> failed",
-                                    bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<double> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -293,16 +288,13 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kString: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::string>(
-              std::any_cast<std::string>(column));
+          auto col_value = std::make_shared<std::string>(std::any_cast<std::string>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
         }
       } catch (const std::bad_any_cast& bad) {
-        std::string s = fmt::format(
-            "{}  any_cast std::optional<std::shared_ptr<std::string>> failed",
-            bad.what());
+        std::string s = fmt::format("{}  any_cast std::optional<std::shared_ptr<std::string>> failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -313,14 +305,16 @@ butil::Status RelExprHelper::TransToOperandV2(
         if (column.has_value()) {
           std::string col_value = std::any_cast<std::string>(column);
           Decimal decimal = Decimal(col_value);
-          operand_ptr->emplace_back(std::make_shared<Decimal>(std::move(decimal)));
+          DecimalP decimal_p = DecimalP(decimal);
+          decimal_p.setDecimalPrecision(precison);
+          decimal_p.setDecimalScale(scale);
+
+          operand_ptr->emplace_back(decimal_p);
         } else {
           operand_ptr->emplace_back(nullptr);
         }
       } catch (const std::bad_any_cast& bad) {
-        std::string s = fmt::format(
-            "{}  any_cast DecimalP failed",
-            bad.what());
+        std::string s = fmt::format("{}  any_cast DecimalP failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
@@ -329,8 +323,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kBoolList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<bool>>(
-              std::any_cast<std::vector<bool>>(column));
+          auto col_value = std::make_shared<std::vector<bool>>(std::any_cast<std::vector<bool>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -346,8 +339,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kIntegerList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<int32_t>>(
-              std::any_cast<std::vector<int32_t>>(column));
+          auto col_value = std::make_shared<std::vector<int32_t>>(std::any_cast<std::vector<int32_t>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -363,8 +355,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kFloatList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<float>>(
-              std::any_cast<std::vector<float>>(column));
+          auto col_value = std::make_shared<std::vector<float>>(std::any_cast<std::vector<float>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -380,8 +371,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kLongList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<int64_t>>(
-              std::any_cast<std::vector<int64_t>>(column));
+          auto col_value = std::make_shared<std::vector<int64_t>>(std::any_cast<std::vector<int64_t>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -397,8 +387,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kDoubleList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<double>>(
-              std::any_cast<std::vector<double>>(column));
+          auto col_value = std::make_shared<std::vector<double>>(std::any_cast<std::vector<double>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -414,8 +403,7 @@ butil::Status RelExprHelper::TransToOperandV2(
     case BaseSchema::Type::kStringList: {
       try {
         if (column.has_value()) {
-          auto col_value = std::make_shared<std::vector<std::string>>(
-              std::any_cast<std::vector<std::string>>(column));
+          auto col_value = std::make_shared<std::vector<std::string>>(std::any_cast<std::vector<std::string>>(column));
           operand_ptr->emplace_back(col_value);
         } else {
           operand_ptr->emplace_back(nullptr);
@@ -429,8 +417,7 @@ butil::Status RelExprHelper::TransToOperandV2(
       break;
     }
     default: {
-      std::string s = fmt::format("CloneColumn unsupported type  {}",
-                                  BaseSchema::GetTypeString(type));
+      std::string s = fmt::format("CloneColumn unsupported type  {}", BaseSchema::GetTypeString(type));
       DINGO_LOG(ERROR) << s;
       return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
     }
@@ -438,7 +425,6 @@ butil::Status RelExprHelper::TransToOperandV2(
 
   return butil::Status();
 }
-
 butil::Status RelExprHelper::TransFromOperand(
     BaseSchema::Type type,
     const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr,
@@ -881,13 +867,15 @@ butil::Status RelExprHelper::TransToOperandWrapper(
   } else {
     for (const auto& record : original_record) {
       BaseSchema::Type type =
-          (*original_serial_schemas)[selection_column_indexes[i++]]->GetType();
-
-      status = RelExprHelper::TransToOperandV2(type, record, operand_ptr);
+          (*original_serial_schemas)[selection_column_indexes[i]]->GetType();
+      long precison = (*original_serial_schemas)[selection_column_indexes[i]]->GetPrecision();
+      long scale = (*original_serial_schemas)[selection_column_indexes[i]]->GetScale();
+      status = RelExprHelper::TransToOperandV2(type, record, operand_ptr, precison, scale);
       if (!status.ok()) {
         DINGO_LOG(ERROR) << status.error_cstr();
         return status;
       }
+      i++;
     }
   }
   return butil::Status();

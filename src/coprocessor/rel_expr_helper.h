@@ -94,7 +94,7 @@ class RelExprHelper {
                                         std::vector<std::any>& columns);  // NOLINT
 
   static butil::Status TransToOperandV2(BaseSchema::Type type, const std::any& column,
-                                      std::unique_ptr<std::vector<expr::Operand>>& operand_ptr);  // NOLINT
+                                      std::unique_ptr<std::vector<expr::Operand>>& operand_ptr, long precision, long scale);  // NOLINT
 
   static butil::Status TransFromOperandV2(BaseSchema::Type type,
                                         const std::unique_ptr<std::vector<expr::Operand>>& operand_ptr, size_t index,
