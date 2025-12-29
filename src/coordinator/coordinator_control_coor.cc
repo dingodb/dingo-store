@@ -2446,13 +2446,6 @@ butil::Status CoordinatorControl::DropRegion(int64_t region_id,
 butil::Status CoordinatorControl::DropRegionFinal(int64_t region_id,
                                                   std::vector<pb::coordinator::StoreOperation>& store_operations,
                                                   pb::coordinator_internal::MetaIncrement& meta_increment) {
-  auto validate_ret = ValidateJobConflict(region_id, region_id);
-  if (!validate_ret.ok()) {
-    DINGO_LOG(ERROR) << fmt::format("validate task list conflict failed, region_id:{}, error_code:{}, error_msg:{}",
-                                    region_id, validate_ret.error_code(), validate_ret.error_str());
-    return validate_ret;
-  }
-
   // set region state to DELETE
   bool need_update_epoch = false;
   {

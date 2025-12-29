@@ -855,7 +855,8 @@ class CoordinatorControl : public MetaControl {
                     pb::coordinator_internal::MetaIncrement &meta_increment);
   void AddSnapshotVectorIndexTask(pb::coordinator::Task *region_save_vector_task, int64_t store_id, int64_t region_id,
                                   int64_t snapshot_log_id, pb::coordinator_internal::MetaIncrement &meta_increment);
-  static void AddCheckSplitResultTask(pb::coordinator::Task *check_split_result_task, int64_t store_id, int64_t split_to_region_id);
+  static void AddCheckSplitResultTask(pb::coordinator::Task *check_split_result_task, int64_t store_id,
+                                      int64_t split_to_region_id);
   static void AddCheckStoreVectorIndexTask(pb::coordinator::Task *check_vector_task, int64_t store_id,
                                            int64_t region_id, int64_t vector_index_version);
   static void AddCheckVectorIndexSnapshotLogIdTask(pb::coordinator::Job *job, int64_t store_id, int64_t region_id,
@@ -1012,9 +1013,9 @@ class CoordinatorControl : public MetaControl {
 
   butil::Status GetAllPresentId(std::vector<std::pair<pb::coordinator::IdEpochType, int64_t>> &id_epoch_type_values);
 
- private:
   butil::Status ValidateJobConflict(int64_t region_id, int64_t second_region_id);
 
+ private:
   butil::Status GenerateTableIdAndPartIds(int64_t schema_id, int64_t part_count, pb::meta::EntityType entity_type,
                                           pb::coordinator_internal::MetaIncrement &meta_increment,
                                           pb::meta::TableIdWithPartIds *ids);
