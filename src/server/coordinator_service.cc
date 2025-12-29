@@ -1424,6 +1424,16 @@ void DoDropRegion(google::protobuf::RpcController * /*controller*/, const pb::co
 
   auto region_id = request->region_id();
 
+  auto validate_ret = coordinator_control->ValidateJobConflict(region_id, region_id);
+  if (!validate_ret.ok()) {
+    std::string s = fmt::format("validate task list conflict failed, region_id:{}, error_code:{}, error_msg:{}",
+                                region_id, validate_ret.error_code(), validate_ret.error_str());
+    DINGO_LOG(ERROR) << s;
+    response->mutable_error()->set_errcode(static_cast<pb::error::Errno>(validate_ret.error_code()));
+    response->mutable_error()->set_errmsg(s);
+    return;
+  }
+
   // auto ret = coordinator_control->DropRegion(region_id, true, meta_increment);
   auto ret = coordinator_control->DropRegion(region_id, meta_increment);
   if (!ret.ok()) {
