@@ -24,7 +24,8 @@
 #include "gflags/gflags.h"
 namespace dingodb {
 
-DEFINE_int32(dingo_max_print_html_table, 2000, "Max number of rows to print html table");
+DEFINE_int32(dingo_max_print_html_table, 3000, "Max number of rows to print html table");
+BRPC_VALIDATE_GFLAG(dingo_max_print_html_table, brpc::PositiveInteger);
 
 void TableImpl::GetTabInfo(brpc::TabInfoList* info_list) const {
   brpc::TabInfo* info = info_list->add();
@@ -64,10 +65,7 @@ void TableImpl::default_method(google::protobuf::RpcController* controller,
          << "  .green-text {\n"
          << "    color: green;\n"
          << "  }\n"
-         << "  .bold-text {"
-         << "    font-weight: bold;"
-         << "  }"
-         << "</style>\n";
+         << "  .bold-text {" << "    font-weight: bold;" << "  }" << "</style>\n";
 
       os << brpc::TabsHead() << "</head><body>";
       server->PrintTabsBody(os, "table");
