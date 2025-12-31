@@ -2089,6 +2089,8 @@ std::vector<pb::common::Schema> Utils::TransformColumnSchema(const pb::meta::Tab
       schema.set_is_key(true);
     }
     schema.set_is_nullable(column.nullable());
+    schema.set_precision(static_cast<int64_t>(column.precision()));
+    schema.set_scale(static_cast<int64_t>(column.scale()));
     column_schemas.push_back(schema);
   }
 
