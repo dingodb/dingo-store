@@ -2302,6 +2302,7 @@ pb::common::Schema::Type Helper::TransformSchemaType(const std::string& name) {
       std::make_pair("FLOAT", dingodb::pb::common::Schema::FLOAT),
       std::make_pair("LONG", dingodb::pb::common::Schema::LONG),
       std::make_pair("DECIMAL", dingodb::pb::common::Schema::DECIMAL),
+      std::make_pair("TINYINT", dingodb::pb::common::Schema::INTEGER),
 
       std::make_pair("ARRAY_BOOL", dingodb::pb::common::Schema::BOOLLIST),
       std::make_pair("ARRAY_BOOLEAN", dingodb::pb::common::Schema::BOOLLIST),
@@ -2316,6 +2317,7 @@ pb::common::Schema::Type Helper::TransformSchemaType(const std::string& name) {
       std::make_pair("ARRAY_CHAR", dingodb::pb::common::Schema::STRINGLIST),
       std::make_pair("ARRAY_VARCHAR", dingodb::pb::common::Schema::STRINGLIST),
       std::make_pair("ARRAY_DECIMAL", dingodb::pb::common::Schema::DECIMALLIST),
+      std::make_pair("ARRAY_TINYINT", dingodb::pb::common::Schema::INTEGERLIST),
 
       std::make_pair("MULTISET_BOOL", dingodb::pb::common::Schema::BOOLLIST),
       std::make_pair("MULTISET_BOOLEAN", dingodb::pb::common::Schema::BOOLLIST),
@@ -2330,6 +2332,7 @@ pb::common::Schema::Type Helper::TransformSchemaType(const std::string& name) {
       std::make_pair("MULTISET_CHAR", dingodb::pb::common::Schema::STRINGLIST),
       std::make_pair("MULTISET_VARCHAR", dingodb::pb::common::Schema::STRINGLIST),
       std::make_pair("MULTISET_DECIMAL", dingodb::pb::common::Schema::DECIMALLIST),
+      std::make_pair("MULTISET_TINYINT", dingodb::pb::common::Schema::INTEGERLIST),
   };
 
   auto it = schema_type_map.find(Helper::ToUpper(name));
