@@ -191,13 +191,15 @@ butil::Status RestoreRegionData::SendRegionRequest(const std::string& service_na
       if (status.ok()) {
         if (response.error().errcode() == dingodb::pb::error::OK) {
           break;
-        } else if (response.error().errcode() != dingodb::pb::error::EREGION_VERSION) {
+        } else if (response.error().errcode() != dingodb::pb::error::EREGION_VERSION &&
+                   response.error().errcode() != dingodb::pb::error::ERAFT_NOT_CONSISTENT_READ) {
           std::string s = group_debug_info_ + " " + Utils::FormatResponseError(response);
           DINGO_LOG(ERROR) << s;
           return butil::Status(response.error().errcode(), s);
         }
       } else {
-        if (status.error_code() != dingodb::pb::error::EREGION_VERSION) {
+        if (status.error_code() != dingodb::pb::error::EREGION_VERSION &&
+            status.error_code() != dingodb::pb::error::ERAFT_NOT_CONSISTENT_READ) {
           std::string s = group_debug_info_ + " " + Utils::FormatStatusError(status);
           DINGO_LOG(ERROR) << s;
           return butil::Status(status.error_code(), s);
