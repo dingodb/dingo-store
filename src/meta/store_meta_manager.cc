@@ -880,7 +880,7 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
       break;
     case pb::common::StoreRegionState::STANDBY:
       if (new_state == pb::common::StoreRegionState::NORMAL || new_state == pb::common::StoreRegionState::TOMBSTONE ||
-          new_state == pb::common::StoreRegionState::ORPHAN) {
+          new_state == pb::common::StoreRegionState::ORPHAN || new_state == pb::common::StoreRegionState::DELETING) {
         region->SetState(new_state);
         successed = true;
       }
@@ -929,9 +929,9 @@ void StoreRegionMeta::UpdateState(store::RegionPtr region, pb::common::StoreRegi
     }
   }
 
-  DINGO_LOG(DEBUG) << fmt::format("[region.meta][region({})] update region state {} to {} {}", region->Id(),
-                                  pb::common::StoreRegionState_Name(cur_state),
-                                  pb::common::StoreRegionState_Name(new_state), (successed ? "true" : "false"));
+  DINGO_LOG(INFO) << fmt::format("[region.meta][region({})] update region state {} to {} {}", region->Id(),
+                                 pb::common::StoreRegionState_Name(cur_state),
+                                 pb::common::StoreRegionState_Name(new_state), (successed ? "true" : "false"));
 }
 
 void StoreRegionMeta::UpdateState(int64_t region_id, pb::common::StoreRegionState new_state) {
