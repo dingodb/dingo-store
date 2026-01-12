@@ -29,7 +29,7 @@ raft:
   host: $RAFT_HOST$
   port: $RAFT_PORT$
   path: $BASE_PATH$/data/raft
-  election_timeout_s: 6
+  election_timeout_s: 15
   snapshot_interval_s: 120
   segmentlog_max_segment_size: 33554432 # 32MB
   leader_num_weight: 1
