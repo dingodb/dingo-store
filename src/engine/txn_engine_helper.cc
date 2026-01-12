@@ -70,9 +70,9 @@ DEFINE_bool(dingo_log_switch_txn_detail, false, "txn detail log");
 DEFINE_bool(dingo_log_switch_txn_gc_detail, false, "txn gc detail log");
 DEFINE_bool(dingo_log_switch_backup_detail, false, "backup detail log");
 
-DEFINE_int64(max_restore_data_memory_size, 20 * 1024 * 1024, "max restore data memory size");
+DEFINE_int64(max_restore_data_memory_size, 10 * 1024 * 1024, "max restore data memory size");
 BRPC_VALIDATE_GFLAG(max_restore_data_memory_size, brpc::PositiveInteger);
-DEFINE_int64(max_restore_count, 100000, "max restore count");
+DEFINE_int64(max_restore_count, 32768, "max restore count");
 BRPC_VALIDATE_GFLAG(max_restore_count, brpc::PositiveInteger);
 
 DECLARE_int64(stream_message_max_bytes);
