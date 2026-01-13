@@ -183,6 +183,12 @@ DECLARE_int64(br_backup_region_timeout_ms);
 // backup enable sdk txn region backup. default true.
 DECLARE_bool(br_backup_enable_sdk_txn_region_backup);
 
+// backup & restore waiting for the region to select a new leader timeout. default 600s(10 minutes).
+DECLARE_int32(br_backup_restore_wait_for_region_leader_select_timeout_s);
+
+// backup & restore waiting for the region to select a new leader tick timeout. default 1s.
+DECLARE_int32(br_backup_restore_wait_for_region_leader_select_tick_timeout_s);
+
 }  // namespace br
 
 #endif  // DINGODB_BR_PARAMETER_H_

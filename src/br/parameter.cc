@@ -141,4 +141,12 @@ DEFINE_int64(br_backup_region_timeout_ms, 600000, "backup region timeout ms. def
 // backup enable sdk txn region backup. default true.
 DEFINE_bool(br_backup_enable_sdk_txn_region_backup, true, "br backup enable sdk txn region backup. default true.");
 
+// backup & restore waiting for the region to select a new leader timeout. default 600s(10 minutes).
+DEFINE_int32(br_backup_restore_wait_for_region_leader_select_timeout_s, 600,
+             "backup & restore waiting for the region to select a new leader timeout. default 600s(10 minutes).");
+
+// backup & restore waiting for the region to select a new leader tick timeout. default 1s.
+DEFINE_int32(br_backup_restore_wait_for_region_leader_select_tick_timeout_s, 1,
+             "backup & restore waiting for the region to select a new leader tick timeout. default 1s.");
+
 }  // namespace br
