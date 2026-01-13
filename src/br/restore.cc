@@ -827,7 +827,7 @@ butil::Status Restore::DisableBalanceToCoordinator(ServerInteractionPtr coordina
   std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
 
   for (const auto& addr : addrs) {
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
     response.Clear();
 
     std::shared_ptr<ServerInteraction> interaction;
@@ -838,7 +838,7 @@ butil::Status Restore::DisableBalanceToCoordinator(ServerInteractionPtr coordina
     }
 
     status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
     if (!status.ok()) {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
@@ -893,7 +893,7 @@ butil::Status Restore::EnableBalanceToCoordinator(ServerInteractionPtr coordinat
     std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
 
     for (const auto& addr : addrs) {
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
       response.Clear();
 
       std::shared_ptr<ServerInteraction> interaction;
@@ -904,7 +904,7 @@ butil::Status Restore::EnableBalanceToCoordinator(ServerInteractionPtr coordinat
       }
 
       status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
       if (!status.ok()) {
         DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
@@ -949,7 +949,7 @@ butil::Status Restore::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr 
   if (is_exist_store) {
     std::vector<std::string> addrs = store_interaction->GetAddrs();
     for (const auto& addr : addrs) {
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
       response.Clear();
 
       std::shared_ptr<ServerInteraction> interaction;
@@ -960,7 +960,7 @@ butil::Status Restore::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr 
       }
 
       status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
       if (!status.ok()) {
         DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
@@ -993,7 +993,7 @@ butil::Status Restore::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr 
   if (is_exist_index) {
     std::vector<std::string> addrs = index_interaction->GetAddrs();
     for (const auto& addr : addrs) {
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
       response.Clear();
       std::shared_ptr<ServerInteraction> interaction;
 
@@ -1004,7 +1004,7 @@ butil::Status Restore::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr 
       }
 
       status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
       if (!status.ok()) {
         DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
         return status;
@@ -1070,7 +1070,7 @@ butil::Status Restore::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
     if (is_exist_store) {
       std::vector<std::string> addrs = store_interaction->GetAddrs();
       for (const auto& addr : addrs) {
-        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
         response.Clear();
 
         std::shared_ptr<ServerInteraction> interaction;
@@ -1081,7 +1081,7 @@ butil::Status Restore::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
         }
 
         status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
-        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
         if (!status.ok()) {
           DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
           return status;
@@ -1097,7 +1097,7 @@ butil::Status Restore::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
     if (is_exist_index) {
       std::vector<std::string> addrs = index_interaction->GetAddrs();
       for (const auto& addr : addrs) {
-        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << request.DebugString();
         response.Clear();
         std::shared_ptr<ServerInteraction> interaction;
 
@@ -1108,7 +1108,7 @@ butil::Status Restore::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
         }
 
         status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
-        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_restore_detail_detail) << response.DebugString();
         if (!status.ok()) {
           DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
           return status;
@@ -1399,11 +1399,11 @@ butil::Status Restore::DoFinish() {
     UnregisterRestoreToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
   }
 
-  // forbidden gc start
+  // gc start
   if (is_gc_enable_after_finish_) {
-    // SetGcStart();
-    std::cout << "forbidden gc start ok" << std::endl;
-    DINGO_LOG(INFO) << "forbidden gc start ok";
+    SetGcStart();
+    std::cout << "gc start ok" << std::endl;
+    DINGO_LOG(INFO) << "gc start ok";
   }
 
   butil::Status status = EnableBalanceToCoordinator(br::InteractionManager::GetInstance().GetCoordinatorInteraction());
