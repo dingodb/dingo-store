@@ -116,6 +116,7 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
 
   butil::Status status;
   int retry_count = 0;
+  int32_t region_leader_select_timeout_s = FLAGS_br_backup_restore_wait_for_region_leader_select_timeout_s;
   do {
     brpc::Controller cntl;
     cntl.set_timeout_ms(time_out_ms);
@@ -142,14 +143,79 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
 
     if (response.error().errcode() != dingodb::pb::error::OK) {
       if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER ||
-          response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
+          response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND ||
+          response.error().errcode() == dingodb::pb::error::ERAFT_NOT_CONSISTENT_READ) {
         ++retry_count;
         if (response.error().leader_location().port() != 0) {
           NextLeader(response.error().leader_location());
         } else {
+          if ((region_leader_select_timeout_s % 60) == 0) {
+            if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER) {
+              DINGO_LOG(WARNING) << fmt::format(
+                  "{} response port == 0, ERAFT_NOTLEADER waiting for region leader ready. left:{}s tick:{}s. "
+                  "response:{}",
+                  api_name, region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+            }
+
+            if (response.error().errcode() == dingodb::pb::error::ERAFT_NOT_CONSISTENT_READ) {
+              DINGO_LOG(WARNING) << fmt::format(
+                  "{} response port == 0, ERAFT_NOT_CONSISTENT_READ waiting for region leader consistent read ready. "
+                  "left:{}s "
+                  "tick:{}s. response:{}",
+                  api_name, region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+            }
+
+            if (response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
+              DINGO_LOG(WARNING) << fmt::format(
+                  "{} response port == 0, EREGION_NOT_FOUND waiting for region create ready. left:{}s tick:{}s. "
+                  "response:{}",
+                  api_name, region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+            }
+          }
+
           NextLeader(GetLeader());
+          // sleep FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s second,. default 1s.
+          bthread_usleep(FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s * 1000 * 1000);
+
+          region_leader_select_timeout_s -= FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s;
+
+          if (region_leader_select_timeout_s <= 0) {
+            if (response.error().errcode() == dingodb::pb::error::ERAFT_NOTLEADER) {
+              std::string s = fmt::format(
+                  "{} response failed, ERAFT_NOTLEADER region leader select timeout, total wait time:{}s "
+                  "tick:{}s response:{}",
+                  api_name, FLAGS_br_backup_restore_wait_for_region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+              DINGO_LOG(ERROR) << s;
+            }
+
+            if (response.error().errcode() == dingodb::pb::error::ERAFT_NOT_CONSISTENT_READ) {
+              std::string s = fmt::format(
+                  "{} response failed, ERAFT_NOT_CONSISTENT_READ region leader consistent read timeout, total wait "
+                  "time:{}s tick:{}s response:{}",
+                  api_name, FLAGS_br_backup_restore_wait_for_region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+              DINGO_LOG(ERROR) << s;
+            }
+
+            if (response.error().errcode() == dingodb::pb::error::EREGION_NOT_FOUND) {
+              std::string s = fmt::format(
+                  "{} response failed, EREGION_NOT_FOUND wait for region create timeout, total wait time:{}s "
+                  "tick:{}s response:{}",
+                  api_name, FLAGS_br_backup_restore_wait_for_region_leader_select_timeout_s,
+                  FLAGS_br_backup_restore_wait_for_region_leader_select_tick_timeout_s, response.DebugString());
+              DINGO_LOG(ERROR) << s;
+            }
+
+            latency_ = cntl.latency_us();
+            break;
+          }
+
+          retry_count = 0;
         }
-        // bthread_usleep(1000 * 100);
 
       } else {
         DINGO_LOG(ERROR) << fmt::format("{} response failed, error {} {}", api_name,
@@ -163,15 +229,14 @@ butil::Status ServerInteraction::SendRequest(const std::string& service_name, co
       latency_ = cntl.latency_us();
       return butil::Status();
     }
-
   } while (retry_count < FLAGS_br_server_interaction_max_retry);
 
   DINGO_LOG(ERROR) << fmt::format(
       "{} response failed, retry_count:{} status.error_code:{}({}) status.error_cstr:{} response.error.errcode:{}({}) "
-      "response.error.errmsg:{}",
+      "response.error.errmsg:{} response:{}",
       api_name, retry_count, dingodb::pb::error::Errno_Name(status.error_code()), status.error_code(),
       status.error_cstr(), dingodb::pb::error::Errno_Name(response.error().errcode()),
-      static_cast<int64_t>(response.error().errcode()), response.error().errmsg());
+      static_cast<int64_t>(response.error().errcode()), response.error().errmsg(), response.DebugString());
 
   return status;
 }
