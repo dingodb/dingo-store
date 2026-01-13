@@ -996,35 +996,45 @@ butil::Status Backup::DisableBalanceToCoordinator(ServerInteractionPtr coordinat
   config_balance_region.set_value("false");
   request.mutable_control_config_variable()->Add(std::move(config_balance_region));
 
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+  std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
 
-  butil::Status status =
-      coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
-  if (!status.ok()) {
-    DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-    return status;
-  }
+  for (const auto& addr : addrs) {
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    response.Clear();
 
-  if (response.error().errcode() != dingodb::pb::error::OK) {
-    DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-    return butil::Status(response.error().errcode(), response.error().errmsg());
-  }
-
-  DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
-
-  for (const auto& config : response.control_config_variable()) {
-    if (config.is_error_occurred()) {
-      DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
-      return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
-                           config.name().c_str());
+    std::shared_ptr<ServerInteraction> interaction;
+    butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_enable_balance_leader") {
-      balance_leader_enable_after_finish_ = true;
+    status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
+    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
     }
 
-    if (!config.is_already_set() && config.name() == "FLAGS_enable_balance_region") {
-      balance_region_enable_after_finish_ = true;
+    if (response.error().errcode() != dingodb::pb::error::OK) {
+      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+      return butil::Status(response.error().errcode(), response.error().errmsg());
+    }
+
+    for (const auto& config : response.control_config_variable()) {
+      if (config.is_error_occurred()) {
+        DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
+        return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
+                             config.name().c_str());
+      }
+
+      if (!config.is_already_set() && config.name() == "FLAGS_enable_balance_leader") {
+        balance_leader_enable_after_finish_ = true;
+      }
+
+      if (!config.is_already_set() && config.name() == "FLAGS_enable_balance_region") {
+        balance_region_enable_after_finish_ = true;
+      }
     }
   }
 
@@ -1052,21 +1062,31 @@ butil::Status Backup::EnableBalanceToCoordinator(ServerInteractionPtr coordinato
   if (!request.control_config_variable().empty()) {
     request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
 
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
 
-    butil::Status status =
-        coordinator_interaction->AllSendRequest("CoordinatorService", "ControlConfig", request, response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
+    for (const auto& addr : addrs) {
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      response.Clear();
+
+      std::shared_ptr<ServerInteraction> interaction;
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
+
+      status = interaction->SendRequest("CoordinatorService", "ControlConfig", request, response);
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
+      }
+
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
     }
-
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
-
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
   }
 
   return butil::Status::OK();
@@ -1099,74 +1119,96 @@ butil::Status Backup::DisableSplitAndMergeToStoreAndIndex(ServerInteractionPtr s
 
   // store exist
   if (is_exist_store) {
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    std::vector<std::string> addrs = store_interaction->GetAddrs();
+    for (const auto& addr : addrs) {
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      response.Clear();
 
-    butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
-
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
-
-    for (const auto& config : response.control_config_variable()) {
-      if (config.is_error_occurred()) {
-        DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
-        return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
-                             config.name().c_str());
+      std::shared_ptr<ServerInteraction> interaction;
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
       }
 
-      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
-        region_auto_split_enable_after_finish_ = true;
+      status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
       }
 
-      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
-        region_auto_merge_enable_after_finish_ = true;
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
+
+      for (const auto& config : response.control_config_variable()) {
+        if (config.is_error_occurred()) {
+          DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
+          return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
+                               config.name().c_str());
+        }
+
+        if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
+          region_auto_split_enable_after_finish_ = true;
+        }
+
+        if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
+          region_auto_merge_enable_after_finish_ = true;
+        }
       }
     }
-
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
   }  //   if (is_exist_store) {
 
   // index exist
   if (is_exist_index) {
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+    std::vector<std::string> addrs = index_interaction->GetAddrs();
+    for (const auto& addr : addrs) {
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      response.Clear();
+      std::shared_ptr<ServerInteraction> interaction;
 
-    butil::Status status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-    if (!status.ok()) {
-      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-      return status;
-    }
-
-    if (response.error().errcode() != dingodb::pb::error::OK) {
-      DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-      return butil::Status(response.error().errcode(), response.error().errmsg());
-    }
-
-    DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
-
-    for (const auto& config : response.control_config_variable()) {
-      if (config.is_error_occurred()) {
-        DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
-        return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
-                             config.name().c_str());
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
       }
 
-      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
-        region_auto_split_enable_after_finish_ = true;
+      status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
+      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return status;
       }
 
-      if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
-        region_auto_merge_enable_after_finish_ = true;
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return butil::Status(response.error().errcode(), response.error().errmsg());
+      }
+
+      for (const auto& config : response.control_config_variable()) {
+        if (config.is_error_occurred()) {
+          DINGO_LOG(ERROR) << "ControlConfig not support variable: " << config.name() << " skip.";
+          return butil::Status(dingodb::pb::error::EINTERNAL, "ControlConfig not support variable: %s skip.",
+                               config.name().c_str());
+        }
+
+        if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_split") {
+          region_auto_split_enable_after_finish_ = true;
+        }
+
+        if (!config.is_already_set() && config.name() == "FLAGS_region_enable_auto_merge") {
+          region_auto_merge_enable_after_finish_ = true;
+        }
       }
     }
+
   }  //   if (is_exist_index) {
 
   return butil::Status::OK();
 }
+
 butil::Status Backup::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr store_interaction,
                                                          ServerInteractionPtr index_interaction) const {
   bool is_exist_store = (store_interaction != nullptr ? !store_interaction->IsEmpty() : false);
@@ -1198,35 +1240,56 @@ butil::Status Backup::EnableSplitAndMergeToStoreAndIndex(ServerInteractionPtr st
     request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
 
     if (is_exist_store) {
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      std::vector<std::string> addrs = store_interaction->GetAddrs();
+      for (const auto& addr : addrs) {
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+        response.Clear();
 
-      butil::Status status = store_interaction->AllSendRequest("StoreService", "ControlConfig", request, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
-      }
+        std::shared_ptr<ServerInteraction> interaction;
+        butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
 
-      if (response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-        return butil::Status(response.error().errcode(), response.error().errmsg());
+        status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
+
+        if (response.error().errcode() != dingodb::pb::error::OK) {
+          DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+          return butil::Status(response.error().errcode(), response.error().errmsg());
+        }
       }
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
     }  // if (is_exist_store) {
 
     if (is_exist_index) {
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+      std::vector<std::string> addrs = index_interaction->GetAddrs();
+      for (const auto& addr : addrs) {
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << request.DebugString();
+        response.Clear();
+        std::shared_ptr<ServerInteraction> interaction;
 
-      butil::Status status = index_interaction->AllSendRequest("IndexService", "ControlConfig", request, response);
-      if (!status.ok()) {
-        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
-        return status;
-      }
-      if (response.error().errcode() != dingodb::pb::error::OK) {
-        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
-        return butil::Status(response.error().errcode(), response.error().errmsg());
-      }
+        butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
 
-      DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+        status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
+        DINGO_LOG_IF(INFO, FLAGS_br_log_switch_backup_detail_detail) << response.DebugString();
+        if (!status.ok()) {
+          DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+          return status;
+        }
+        if (response.error().errcode() != dingodb::pb::error::OK) {
+          DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+          return butil::Status(response.error().errcode(), response.error().errmsg());
+        }
+      }
     }
   }
   return butil::Status::OK();
