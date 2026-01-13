@@ -134,8 +134,9 @@ butil::Status Storage::ValidateLeader(int64_t region_id) {
     }
 
     if (!node->ConsistentReadable()) {
-      return butil::Status(pb::error::ERAFT_NOT_CONSISTENT_READ,
-                           fmt::format("{} wait for replay raft log.", node->GetLeaderId().to_string()));
+      return butil::Status(
+          pb::error::ERAFT_NOT_CONSISTENT_READ,
+          fmt::format("region:{}, {} wait for replay raft log.", region_id, node->GetLeaderId().to_string()));
     }
   }
 
@@ -159,8 +160,9 @@ butil::Status Storage::ValidateLeader(store::RegionPtr region) {
     }
 
     if (!node->ConsistentReadable()) {
-      return butil::Status(pb::error::ERAFT_NOT_CONSISTENT_READ,
-                           fmt::format("{} wait for replay raft log.", node->GetLeaderId().to_string()));
+      return butil::Status(
+          pb::error::ERAFT_NOT_CONSISTENT_READ,
+          fmt::format("region:{}, {} wait for replay raft log.", region->Id(), node->GetLeaderId().to_string()));
     }
   }
 
