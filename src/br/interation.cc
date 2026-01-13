@@ -78,7 +78,7 @@ int ServerInteraction::GetLeader() { return leader_index_.load(); }
 
 void ServerInteraction::NextLeader(int leader_index) {
   int const next_leader_index = (leader_index + 1) % endpoints_.size();
-  leader_index_.compare_exchange_weak(leader_index, next_leader_index);
+  leader_index_.store(next_leader_index);
 }
 
 void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location) {
@@ -88,13 +88,13 @@ void ServerInteraction::NextLeader(const dingodb::pb::common::Location& location
     return;
   }
 
-  for (int i = 0; i < endpoints_.size(); ++i) {
-    auto endpoints = Helper::StringToEndpoints(location.host() + ":" + std::to_string(location.port()));
-    if (endpoints.empty()) {
-      bthread_usleep(500 * 1000L);
-      return;
-    }
+  auto endpoints = Helper::StringToEndpoints(location.host() + ":" + std::to_string(location.port()));
+  if (endpoints.empty()) {
+    bthread_usleep(500 * 1000L);
+    return;
+  }
 
+  for (int i = 0; i < endpoints_.size(); ++i) {
     if (endpoints[0].ip == endpoints_[i].ip && endpoints[0].port == endpoints_[i].port) {
       leader_index_.store(i);
       return;
