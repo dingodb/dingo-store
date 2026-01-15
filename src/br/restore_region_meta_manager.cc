@@ -131,14 +131,41 @@ butil::Status RestoreRegionMetaManager::Run() {
   FormatBackupMetaRegionName(backup_meta_region_names);
   PaddingBackupMetaRegionName(backup_meta_region_names);
 
-  std::cerr << "Full Restore " << backup_meta_region_names[0] << " " << backup_meta_region_names[1] << " "
-            << backup_meta_region_names[2] << " " << backup_meta_region_names[3] << " " << "<";
-  DINGO_LOG(INFO) << "Full Restore " << backup_meta_region_names[0] << " " << backup_meta_region_names[1] << " "
-                  << backup_meta_region_names[2] << " " << backup_meta_region_names[3] << " " << "<";
+  int64_t calc_start_time_ms = dingodb::Helper::TimestampMs();
+  int64_t calc_end_time_ms = calc_start_time_ms;
+
+  const std::string& progress_head = std::string("Full Restore ") + backup_meta_region_names[0] + " " +
+                                     backup_meta_region_names[1] + " " + backup_meta_region_names[2] + " " +
+                                     backup_meta_region_names[3];
+
+  auto lambda_output_progress_function = [regions_size, this, calc_start_time_ms, &calc_end_time_ms, progress_head,
+                                          &backup_meta_region_names]() {
+    if (regions_size > 0) {
+      calc_end_time_ms = dingodb::Helper::TimestampMs();
+      int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+      std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+      int64_t elapsed_time_per_region_ms =
+          (already_restore_region_metas_.load() != 0) ? elapsed_time_ms / already_restore_region_metas_.load() : 0;
+
+      std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+      std::cout << "\r" << progress_head << " <" << already_restore_region_metas_ << "/" << regions_size << " "
+                << elapsed_time_str << " " << elapsed_time_per_region_str << "/r" << "> " << std::fixed
+                << std::setprecision(2)
+                << static_cast<double>(already_restore_region_metas_.load()) / regions_size * 100 << "%" << " ["
+                << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_ << "]" << std::flush;
+    } else {
+      std::cout << "\r" << progress_head << " <" << "0/0 0.00s 0.00ms/r" << "> " << " 100.00%" << " ["
+                << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_ << "]" << std::flush;
+    }
+  };
+
+  DINGO_LOG(INFO) << progress_head << " <";
+  lambda_output_progress_function();
 
   while (true) {
-    std::cerr << "-";
-    DINGO_LOG(INFO) << "-";
+    // std::cerr << "-";
+    // DINGO_LOG(INFO) << "-";
     if (is_need_exit_) {
       break;
     }
@@ -146,6 +173,8 @@ butil::Status RestoreRegionMetaManager::Run() {
     if (already_restore_region_metas_ >= regions_size) {
       break;
     }
+
+    lambda_output_progress_function();
 
     {
       BAIDU_SCOPED_LOCK(mutex_);
@@ -187,12 +216,19 @@ butil::Status RestoreRegionMetaManager::Run() {
     sleep(1);
   }
 
-  std::cerr << ">" << " 100.00%" << " [" << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_
-            << "]";
-  DINGO_LOG(INFO) << ">" << " 100.00%" << " [" << backup_meta_region_names[0][0] << ":" << already_restore_region_metas_
-                  << "]";
-
+  lambda_output_progress_function();
   std::cout << std::endl;
+
+  int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+  std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+  int64_t elapsed_time_per_region_ms =
+      (already_restore_region_metas_.load() != 0) ? elapsed_time_ms / already_restore_region_metas_.load() : 0;
+
+  std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+  DINGO_LOG(INFO) << already_restore_region_metas_ << "/" << regions_size << " " << elapsed_time_str << " "
+                  << elapsed_time_per_region_str << "/r" << "> " << " 100.00%" << " [" << backup_meta_region_names[0][0]
+                  << ":" << already_restore_region_metas_ << "]" << std::flush;
 
   if (last_error_.ok()) {
     last_error_ = WaitForRegionFinish();

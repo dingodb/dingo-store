@@ -60,6 +60,9 @@ class Utils {
 
   static std::string FormatTimeMs(int64_t time_ms);
 
+  // such as : 1.23s, 2.34m, 3.45h
+  static std::string FormatDurationFromMs(int64_t time_ms);
+
  private:
   Utils() = default;
   ~Utils() = default;
