@@ -152,10 +152,43 @@ butil::Status RestoreRegionDataManager::Run() {
   FormatBackupMetaRegionCfName(backup_meta_region_cf_names);
   PaddingBackupMetaRegionCfName(backup_meta_region_cf_names);
 
-  std::cerr << "Full Restore " << backup_meta_region_cf_names[0] << " " << backup_meta_region_cf_names[1] << " "
-            << backup_meta_region_cf_names[4] << " " << backup_meta_region_cf_names[5] << " " << "<";
-  DINGO_LOG(INFO) << "Full Restore " << backup_meta_region_cf_names[0] << " " << backup_meta_region_cf_names[1] << " "
-                  << backup_meta_region_cf_names[4] << " " << backup_meta_region_cf_names[5] << " " << "<";
+  // std::cerr << "Full Restore " << backup_meta_region_cf_names[0] << " " << backup_meta_region_cf_names[1] << " "
+  //           << backup_meta_region_cf_names[4] << " " << backup_meta_region_cf_names[5] << " " << "<";
+  // DINGO_LOG(INFO) << "Full Restore " << backup_meta_region_cf_names[0] << " " << backup_meta_region_cf_names[1] << "
+  // "
+  //                 << backup_meta_region_cf_names[4] << " " << backup_meta_region_cf_names[5] << " " << "<";
+
+  int64_t calc_start_time_ms = dingodb::Helper::TimestampMs();
+  int64_t calc_end_time_ms = calc_start_time_ms;
+
+  const std::string& progress_head = std::string("Full Restore ") + backup_meta_region_cf_names[0] + " " +
+                                     backup_meta_region_cf_names[1] + " " + backup_meta_region_cf_names[4] + " " +
+                                     backup_meta_region_cf_names[5];
+
+  auto lambda_output_progress_function = [sst_meta_groups_size, this, calc_start_time_ms, &calc_end_time_ms,
+                                          progress_head, &backup_meta_region_cf_names]() {
+    if (sst_meta_groups_size > 0) {
+      calc_end_time_ms = dingodb::Helper::TimestampMs();
+      int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+      std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+      int64_t elapsed_time_per_region_ms =
+          (already_restore_region_datas_.load() != 0) ? elapsed_time_ms / already_restore_region_datas_.load() : 0;
+
+      std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+      std::cout << "\r" << progress_head << " <" << already_restore_region_datas_ << "/" << sst_meta_groups_size << " "
+                << elapsed_time_str << " " << elapsed_time_per_region_str << "/r" << "> " << std::fixed
+                << std::setprecision(2)
+                << static_cast<double>(already_restore_region_datas_.load()) / sst_meta_groups_size * 100 << "%" << " ["
+                << backup_meta_region_cf_names[0][0] << ":" << already_restore_region_datas_ << "]" << std::flush;
+    } else {
+      std::cout << "\r" << progress_head << " <" << "0/0 0.00s 0.00ms/r" << "> " << " 100.00%" << " ["
+                << backup_meta_region_cf_names[0][0] << ":" << already_restore_region_datas_ << "]" << std::flush;
+    }
+  };
+
+  DINGO_LOG(INFO) << progress_head << " <";
+  lambda_output_progress_function();
 
   while (true) {
     if (is_need_exit_) {
@@ -164,13 +197,15 @@ butil::Status RestoreRegionDataManager::Run() {
 
     int64_t diff = already_restore_region_datas_ - last_already_handle_regions;
     for (int i = 0; i < diff; i++) {
-      std::cerr << "-";
-      s += "-";
+      // std::cerr << "-";
+      // s += "-";
     }
 
     if (already_restore_region_datas_ >= sst_meta_groups_size) {
       break;
     }
+
+    lambda_output_progress_function();
 
     {
       BAIDU_SCOPED_LOCK(mutex_);
@@ -214,12 +249,26 @@ butil::Status RestoreRegionDataManager::Run() {
     sleep(1);
   }
 
-  std::cerr << ">" << " 100.00%" << " [" << backup_meta_region_cf_names[0][0] << ":" << already_restore_region_datas_
-            << "]";
-  DINGO_LOG(INFO) << s;
-  DINGO_LOG(INFO) << ">" << " 100.00%" << " [" << backup_meta_region_cf_names[0][0] << ":"
-                  << already_restore_region_datas_ << "]";
+  lambda_output_progress_function();
   std::cout << std::endl;
+
+  int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+  std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+  int64_t elapsed_time_per_region_ms =
+      (already_restore_region_datas_.load() != 0) ? elapsed_time_ms / already_restore_region_datas_.load() : 0;
+
+  std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+  DINGO_LOG(INFO) << already_restore_region_datas_ << "/" << sst_meta_groups_size << " " << elapsed_time_str << " "
+                  << elapsed_time_per_region_str << "/r" << "> " << " 100.00%" << " ["
+                  << backup_meta_region_cf_names[0][0] << ":" << already_restore_region_datas_ << "]" << std::flush;
+
+  // std::cerr << ">" << " 100.00%" << " [" << backup_meta_region_cf_names[0][0] << ":" << already_restore_region_datas_
+  //           << "]";
+  // DINGO_LOG(INFO) << s;
+  // DINGO_LOG(INFO) << ">" << " 100.00%" << " [" << backup_meta_region_cf_names[0][0] << ":"
+  //                 << already_restore_region_datas_ << "]";
+  // std::cout << std::endl;
 
   return last_error_;
 }

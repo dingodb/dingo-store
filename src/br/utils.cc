@@ -15,8 +15,10 @@
 #include "br/utils.h"
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <iomanip>
+#include <sstream>
 #include <string>
 
 #include "common/logging.h"
@@ -371,6 +373,31 @@ std::string Utils::FormatTimeMs(int64_t time_ms) {
 
   // hours > 0
   return fmt::format("{} h {} m {} s {} ms", hours, minutes, seconds, milliseconds);
+}
+
+std::string Utils::FormatDurationFromMs(int64_t time_ms) {
+  struct Unit {
+    double factor;
+    const char* suffix;
+  };
+
+  static const Unit kUnits[] = {
+      {1.0, "ms"}, {1000.0, "s"}, {60'000.0, "m"}, {3'600'000.0, "h"}, {86'400'000.0, "d"},
+  };
+
+  const Unit* unit = &kUnits[0];
+  for (int i = sizeof(kUnits) / sizeof(kUnits[0]) - 1; i >= 0; --i) {
+    if (time_ms >= kUnits[i].factor) {
+      unit = &kUnits[i];
+      break;
+    }
+  }
+
+  double value = time_ms / unit->factor;
+
+  std::ostringstream oss;
+  oss << std::fixed << std::setprecision(2) << value << unit->suffix;
+  return oss.str();
 }
 
 }  // namespace br

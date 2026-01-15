@@ -88,15 +88,44 @@ butil::Status BackupMetaBase::Run() {
 
   int64_t total_store_regions_count = wait_for_handle_store_regions_->size();
 
-  std::cerr << "Full Backup Sql Meta " << "<";
-  DINGO_LOG(INFO) << "Full Backup Sql Meta " << "<";
+  int64_t calc_start_time_ms = dingodb::Helper::TimestampMs();
+  int64_t calc_end_time_ms = calc_start_time_ms;
+
+  const std::string& progress_head = "Full Backup Sql Meta";
+
+  auto lambda_output_progress_function = [total_store_regions_count, this, calc_start_time_ms, &calc_end_time_ms,
+                                          progress_head]() {
+    if (total_store_regions_count > 0) {
+      calc_end_time_ms = dingodb::Helper::TimestampMs();
+      int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+      std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+      int64_t elapsed_time_per_region_ms =
+          (already_handle_store_regions_.load() != 0) ? elapsed_time_ms / already_handle_store_regions_.load() : 0;
+
+      std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+      std::cout << "\r" << progress_head << " <" << already_handle_store_regions_ << "/" << total_store_regions_count
+                << " " << elapsed_time_str << " " << elapsed_time_per_region_str << "/r" << "> " << std::fixed
+                << std::setprecision(2)
+                << static_cast<double>(already_handle_store_regions_.load()) / total_store_regions_count * 100 << "%"
+                << " [" << "S:" << already_handle_store_regions_ << "]" << std::flush;
+    } else {
+      std::cout << "\r" << progress_head << " <" << "0/0 0.00s 0.00ms/r" << "> " << " 100.00%" << " ["
+                << "S:" << already_handle_store_regions_ << "]" << std::flush;
+    }
+  };
+
+  DINGO_LOG(INFO) << progress_head << " <";
+  lambda_output_progress_function();
+
   while (!is_need_exit_) {
-    std::cerr << "-";
-    DINGO_LOG(INFO) << "-";
+    // std::cerr << "-";
+    // DINGO_LOG(INFO) << "-";
     if (already_handle_store_regions_ >= total_store_regions_count) {
       break;
     }
 
+    lambda_output_progress_function();
     // store
     status = DoBackupRegionInternal(store_interaction_, "StoreService", wait_for_handle_store_regions_,
                                     already_handle_store_regions_, save_store_region_map_);
@@ -106,10 +135,19 @@ butil::Status BackupMetaBase::Run() {
     }
   }
 
-  std::cerr << ">" << " 100.00%" << " [" << "S:" << wait_for_handle_store_regions_->size() << "]";
-  DINGO_LOG(INFO) << ">" << " 100.00%" << " [" << "S:" << wait_for_handle_store_regions_->size() << "]";
-
+  lambda_output_progress_function();
   std::cout << std::endl;
+
+  int64_t elapsed_time_ms = calc_end_time_ms - calc_start_time_ms;
+  std::string elapsed_time_str = Utils::FormatDurationFromMs(elapsed_time_ms);
+  int64_t elapsed_time_per_region_ms =
+      (already_handle_store_regions_.load() != 0) ? elapsed_time_ms / already_handle_store_regions_.load() : 0;
+
+  std::string elapsed_time_per_region_str = Utils::FormatDurationFromMs(elapsed_time_per_region_ms);
+
+  DINGO_LOG(INFO) << already_handle_store_regions_ << "/" << total_store_regions_count << " " << elapsed_time_str << " "
+                  << elapsed_time_per_region_str << "/r" << "> " << " 100.00%" << " ["
+                  << "S:" << already_handle_store_regions_ << "]";
 
   DINGO_LOG(INFO) << "backup sql meta  " << "total_regions : " << already_handle_store_regions_
                   << ", store_regions : " << already_handle_store_regions_;
