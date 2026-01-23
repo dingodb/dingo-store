@@ -2463,12 +2463,11 @@ void DoTxnCheckTxnStatus(StoragePtr storage, google::protobuf::RpcController* co
   auto region = done->GetRegion();
   int64_t region_id = request->context().region_id();
   int64_t new_max_ts = request->lock_ts();
-  if (request->current_ts() > new_max_ts) {
-    new_max_ts = request->current_ts();
-  }
+
   if (request->caller_start_ts() > new_max_ts) {
     new_max_ts = request->caller_start_ts();
   }
+
   region->SetTxnAccessMaxTs(new_max_ts);
   auto status = ValidateTxnCheckTxnStatusRequest(request, region);
   if (BAIDU_UNLIKELY(!status.ok())) {
