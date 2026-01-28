@@ -158,7 +158,8 @@ class TxnEngineHelper {
 
   static butil::Status DoRollback(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                   std::shared_ptr<Context> ctx, std::vector<std::string> &keys_to_rollback_with_data,
-                                  std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts);
+                                  std::vector<std::string> &keys_to_rollback_without_data,
+                                  std::vector<std::string> &keys_miss_lock_to_rollback, int64_t start_ts);
 
   static butil::Status MarkRollBackOnMissingLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                                  std::shared_ptr<Context> ctx, std::string primary_key,
@@ -200,15 +201,18 @@ class TxnEngineHelper {
                                       int64_t caller_start_ts, int64_t current_ts, bool force_sync_commit,
                                       bool rollback_if_not_exist);
 
-  static butil::Status TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Context> ctx,
-                                              store::RegionPtr region, int64_t start_ts,
+  static butil::Status TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                              std::shared_ptr<Context> ctx, store::RegionPtr region, int64_t start_ts,
                                               const std::vector<std::string> &keys);
 
   static butil::Status ResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                    std::shared_ptr<Context> ctx, int64_t start_ts, int64_t commit_ts,
                                    const std::vector<std::string> &keys, const std::map<int64_t, int64_t> &txn_infos);
 
-  static butil::Status BatchResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine, std::shared_ptr<Context> ctx, store::RegionPtr region, const std::map<int64_t, int64_t> &txn_infos, pb::store::TxnResultInfo* txn_result);
+  static butil::Status BatchResolveLock(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                        std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                        const std::map<int64_t, int64_t> &txn_infos,
+                                        pb::store::TxnResultInfo *txn_result);
 
   static butil::Status HeartBeat(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
                                  std::shared_ptr<Context> ctx, const std::string &primary_lock, int64_t start_ts,

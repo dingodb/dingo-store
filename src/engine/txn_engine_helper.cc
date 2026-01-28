@@ -3394,7 +3394,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
                      Helper::StringToHex(primary_key))
       << ", region_epoch: " << ctx->RegionEpoch().ShortDebugString() << ", lock_ts: " << lock_ts
       << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts
-      << ", force_sync_commit: " << force_sync_commit;
+      << ", force_sync_commit: " << force_sync_commit << ", rollback_if_not_exist: " << rollback_if_not_exist;
 
   // we need to do if primay_key is in this region'range in service before apply to raft state machine
   // use reader to get if the lock is exists, if lock is exists, check if the lock is expired its ttl, if expired do
@@ -3460,9 +3460,9 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
       if (force_sync_commit) {
         DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
             << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
-            << "fallback is set, check_txn_status treats it as a non-async-commit txn" << "primary_key: " << primary_key
-            << ", lock_info: " << lock_info.ShortDebugString() << ", lock_ts: " << lock_ts
-            << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
+            << "fallback is set, check_txn_status treats it as a non-async-commit txn"
+            << "primary_key: " << primary_key << ", lock_info: " << lock_info.ShortDebugString()
+            << ", lock_ts: " << lock_ts << ", caller_start_ts: " << caller_start_ts << ", current_ts: " << current_ts;
       } else {
         *txn_result->mutable_locked() = lock_info;
         // async-commit locks can't be resolved until they expire.
@@ -3552,6 +3552,7 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     // lock is expired, do rollback
     std::vector<std::string> keys_to_rollback_with_data;
     std::vector<std::string> keys_to_rollback_without_data;
+    std::vector<std::string> keys_miss_lock_to_rollback;
     if (lock_info.short_value().empty()) {
       keys_to_rollback_with_data.push_back(primary_key);
     } else {
@@ -3560,8 +3561,8 @@ butil::Status TxnEngineHelper::CheckTxnStatus(RawEnginePtr raw_engine, std::shar
     DINGO_LOG(INFO) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                     << ", do rollback, primary_key: " << Helper::StringToHex(primary_key) << ", lock_ts: " << lock_ts
                     << ", lock_info: " << lock_info.ShortDebugString();
-    auto ret =
-        DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, lock_ts);
+    auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                          keys_miss_lock_to_rollback, lock_ts);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus,", region->Id())
                        << ", rollback failed, primary_key: " << Helper::StringToHex(primary_key)
@@ -3693,6 +3694,7 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
 
   std::vector<std::string> keys_to_rollback_with_data;
   std::vector<std::string> keys_to_rollback_without_data;
+  std::vector<std::string> keys_miss_lock_to_rollback;
   for (const auto &key : keys) {
     pb::store::LockInfo lock_info;
     auto ret = txn_reader.GetLockInfo(key, lock_info);
@@ -3702,14 +3704,44 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
                        << ", status: " << ret.error_str();
     }
 
-    // if lock is not exist, nothing to do
+    // when concurrency prewrite, prewrite secondary key success,but prewrite primary meet write conflict,rollback
+    // transaction,primary key lock not exist. we need record rollback for primary key for speeding up transaction
+    // conflict handling.
     if (lock_info.primary_lock().empty()) {
-      DINGO_LOG(WARNING) << fmt::format("[txn][region({})] BatchRollback", region->Id())
-                         << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
-                         << ", start_ts: " << start_ts;
+      DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback", region->Id())
+                      << ", txn_not_found with lock_info empty, key: " << Helper::StringToHex(key)
+                      << ", start_ts: " << start_ts;
 
-      // auto *txn_not_found = txn_result->mutable_txn_not_found();
-      // txn_not_found->set_start_ts(start_ts);
+      // the lock is not exists, check if it is rollbacked or committed
+      // try to get if there is a rollback to lock_ts
+      pb::store::WriteInfo write_info;
+      auto ret1 = txn_reader.GetRollbackInfo(start_ts, key, write_info);
+      if (!ret1.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
+                         << ", get rollback info failed, key: " << Helper::StringToHex(key)
+                         << ", start_ts: " << start_ts << ", status: " << ret1.error_str();
+      }
+
+      if (write_info.start_ts() == start_ts) {
+        // has been rollbacked.
+        continue;
+      }
+
+      // if there is not a rollback to lock_ts, try to get the commit_ts
+      int64_t commit_ts = 0;
+      auto ret2 =
+          txn_reader.GetWriteInfo(start_ts, Constant::kMaxVer, start_ts, key, false, true, true, write_info, commit_ts);
+      if (!ret2.ok()) {
+        DINGO_LOG(FATAL) << fmt::format("[txn][region({})] BatchRollback,", region->Id())
+                         << ", get write info failed, key: " << Helper::StringToHex(key) << ", lock_ts: " << start_ts
+                         << ", status: " << ret2.error_str();
+      }
+
+      if (commit_ts == 0) {
+        keys_miss_lock_to_rollback.push_back(key);
+        DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchRollback,start_ts:{} key:{} MarkRollBackOnMissingLock.",
+                                       region->Id(), start_ts, Helper::StringToHex(key));
+      }
       continue;
     }
 
@@ -3752,8 +3784,8 @@ butil::Status TxnEngineHelper::BatchRollback(RawEnginePtr raw_engine, std::share
   }
 
   // do rollback
-  auto ret =
-      DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
+  auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                        keys_miss_lock_to_rollback, start_ts);
   if (!ret.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchRollback, ", region->Id())
                      << ", rollback failed, status: " << ret.error_str();
@@ -3769,14 +3801,17 @@ bvar::LatencyRecorder g_txn_do_rollback_latency("dingo_txn_do_rollback");
 butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shared_ptr<Engine> raft_engine,
                                           std::shared_ptr<Context> ctx,
                                           std::vector<std::string> &keys_to_rollback_with_data,
-                                          std::vector<std::string> &keys_to_rollback_without_data, int64_t start_ts) {
+                                          std::vector<std::string> &keys_to_rollback_without_data,
+                                          std::vector<std::string> &keys_miss_lock_to_rollback, int64_t start_ts) {
   BvarLatencyGuard bvar_guard(&g_txn_do_rollback_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
       << "[txn]Rollback start_ts: " << start_ts << ", keys_count_with_data: " << keys_to_rollback_with_data.size()
-      << ", keys_count_without_data: " << keys_to_rollback_without_data.size();
+      << ", keys_count_without_data: " << keys_to_rollback_without_data.size()
+      << ", keys_miss_lock_to_rollback:" << keys_miss_lock_to_rollback.size();
 
-  if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty()) {
+  if (keys_to_rollback_without_data.empty() && keys_to_rollback_with_data.empty() &&
+      keys_miss_lock_to_rollback.empty()) {
     DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail) << "[txn]Rollback nothing to do, start_ts: " << start_ts;
     return butil::Status::OK();
   }
@@ -3807,6 +3842,18 @@ butil::Status TxnEngineHelper::DoRollback(RawEnginePtr /*raw_engine*/, std::shar
     // delete data
     kv_deletes_data.emplace_back(mvcc::Codec::EncodeKey(key, start_ts));
 
+    // add write
+    pb::store::WriteInfo write_info;
+    write_info.set_start_ts(start_ts);
+    write_info.set_op(::dingodb::pb::store::Op::Rollback);
+
+    pb::common::KeyValue kv;
+    kv.set_key(mvcc::Codec::EncodeKey(key, start_ts));
+    kv.set_value(write_info.SerializeAsString());
+    kv_puts_write.emplace_back(kv);
+  }
+
+  for (const auto &key : keys_miss_lock_to_rollback) {
     // add write
     pb::store::WriteInfo write_info;
     write_info.set_start_ts(start_ts);
@@ -3908,9 +3955,9 @@ bvar::LatencyRecorder g_txn_check_secondary_locks_latency("dingo_txn_check_secon
 ///
 /// If all prewritten locks exist, the lock information is returned.
 /// Otherwise, it returns the commit timestamp of the transaction.
-butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Context> ctx,
-                                                      store::RegionPtr region, int64_t start_ts,
-                                                      const std::vector<std::string> &keys) {
+butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, std::shared_ptr<Engine> raft_engine,
+                                                      std::shared_ptr<Context> ctx, store::RegionPtr region,
+                                                      int64_t start_ts, const std::vector<std::string> &keys) {
   BvarLatencyGuard bvar_guard(&g_txn_check_secondary_locks_latency);
 
   DINGO_LOG_IF(INFO, FLAGS_dingo_log_switch_txn_detail)
@@ -3992,14 +4039,19 @@ butil::Status TxnEngineHelper::TxnCheckSecondaryLocks(RawEnginePtr raw_engine, s
       }
 
       if (commit_ts == 0) {
-        // it seems there is a lock previously exists, but it is not committed, and there is no rollback, there must
-        // be some error, return TxnNotFound
+        auto ret3 = MarkRollBackOnMissingLock(raw_engine, raft_engine, ctx, key, start_ts);
+        if (!ret3.ok()) {
+          DINGO_LOG(ERROR) << fmt::format("[txn][region({})] CheckTxnStatus", region->Id())
+                           << ", MarkRollBackOnMissingLock failed";
+          return butil::Status(pb::error::Errno::EINTERNAL, "MarkRollBackOnMissingLock failed");
+        }
+
         auto *txn_not_found = txn_result->mutable_txn_not_found();
         txn_not_found->set_primary_key(key);
         txn_not_found->set_start_ts(start_ts);
-        DINGO_LOG(ERROR)
+        DINGO_LOG(WARNING)
             << fmt::format("[txn][region({})] CheckSecondaryLocks,", region->Id())
-            << ", cannot found the transaction, maybe some error ocurred, return txn_not_found, secondary_key: "
+            << ", cannot found the transaction, mark rollback on missing lock, return txn_not_found, secondary_key: "
             << Helper::StringToHex(key) << ", start_ts: " << start_ts
             << ", lock_info: " << lock_info.ShortDebugString();
         return butil::Status::OK();
@@ -4026,6 +4078,7 @@ butil::Status TxnEngineHelper::BatchResolveLock(RawEnginePtr raw_engine, std::sh
     std::vector<pb::store::LockInfo> lock_infos_to_commit;
     std::vector<std::string> keys_to_rollback_with_data;
     std::vector<std::string> keys_to_rollback_without_data;
+    std::vector<std::string> keys_miss_lock_to_rollback;
 
     auto stream = Stream::New(FLAGS_stream_message_max_limit_size);
     std::vector<pb::store::LockInfo> tmp_lock_infos;
@@ -4087,8 +4140,8 @@ butil::Status TxnEngineHelper::BatchResolveLock(RawEnginePtr raw_engine, std::sh
         DINGO_LOG(INFO) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id()) << "primary key:" << key
                         << ", do rollback without data, start_ts: " << start_ts;
       }
-      auto ret =
-          DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
+      auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                            keys_miss_lock_to_rollback, start_ts);
       if (!ret.ok()) {
         DINGO_LOG(ERROR) << fmt::format("[txn][region({})] BatchResolveLock, ", region->Id())
                          << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
@@ -4153,6 +4206,7 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
   std::vector<pb::store::LockInfo> lock_infos_to_commit;
   std::vector<std::string> keys_to_rollback_with_data;
   std::vector<std::string> keys_to_rollback_without_data;
+  std::vector<std::string> keys_miss_lock_to_rollback;
 
   // if keys is not empty, we only do resolve lock for these keys
   if (!keys.empty()) {
@@ -4266,8 +4320,8 @@ butil::Status TxnEngineHelper::ResolveLock(RawEnginePtr raw_engine, std::shared_
       DINGO_LOG(INFO) << fmt::format("[txn][region({})] ResolveLock, ", region->Id()) << "primary key:" << key
                       << ", do rollback without data, start_ts: " << start_ts;
     }
-    auto ret =
-        DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data, start_ts);
+    auto ret = DoRollback(raw_engine, raft_engine, ctx, keys_to_rollback_with_data, keys_to_rollback_without_data,
+                          keys_miss_lock_to_rollback, start_ts);
     if (!ret.ok()) {
       DINGO_LOG(ERROR) << fmt::format("[txn][region({})] ResolveLock, ", region->Id())
                        << ", rollback failed, start_ts: " << start_ts << ", status: " << ret.error_str();
