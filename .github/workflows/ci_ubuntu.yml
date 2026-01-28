@@ -26,9 +26,9 @@ jobs:
 
     - name: Set Limit
       run: |
-          prlimit --pid $$ --nofile=1048576:1048576
-          sysctl fs.inotify.max_user_instances=1280
-          sysctl fs.inotify.max_user_watches=655360
+          prlimit --pid $$ --nofile=1048576:1048576|| echo "Failed to set nofile limit (non-fatal)"
+          sysctl fs.inotify.max_user_instances=1280 || true
+          sysctl fs.inotify.max_user_watches=655360 || true
     - name: Clone Submodule
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
