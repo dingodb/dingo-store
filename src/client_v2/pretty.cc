@@ -16,6 +16,10 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/dom/table.hpp>
+#include <iomanip>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -110,6 +114,113 @@ static void PrintTable(const std::vector<std::vector<std::string>>& rows) {
   std::cout << std::endl;
 }
 
+static void PrintTableAdaptive(const std::vector<std::vector<std::string>>& rows) {
+  if (rows.empty()) return;
+  std::cout << std::endl;
+
+  size_t col_count = rows[0].size();
+
+  // 1. Calculate the maximum content width for each column
+  std::vector<size_t> col_widths(col_count, 0);
+  for (const auto& row : rows) {
+    for (size_t i = 0; i < row.size() && i < col_count; ++i) {
+      col_widths[i] = std::max(col_widths[i], row[i].size());
+    }
+  }
+
+  // 2. Detect whether output is to a terminal
+  bool is_tty = isatty(STDOUT_FILENO);
+
+  if (!is_tty) {
+    // When outputting to a file, use plain text format to ensure complete content
+    // Print top border
+    std::cout << "+";
+    for (size_t i = 0; i < col_count; ++i) {
+      std::cout << std::string(col_widths[i] + 2, '-');
+      std::cout << "+";
+    }
+    std::cout << "\n";
+
+    // Print each row
+    for (size_t r = 0; r < rows.size(); ++r) {
+      std::cout << "|";
+      for (size_t i = 0; i < col_count; ++i) {
+        std::string cell = (i < rows[r].size()) ? rows[r][i] : "";
+        std::cout << " " << std::left << std::setw(col_widths[i]) << cell << " |";
+      }
+      std::cout << "\n";
+
+      // Print separator line after header
+      if (r == 0) {
+        std::cout << "+";
+        for (size_t i = 0; i < col_count; ++i) {
+          std::cout << std::string(col_widths[i] + 2, '=');
+          std::cout << "+";
+        }
+        std::cout << "\n";
+      }
+    }
+
+    // Print bottom border
+    std::cout << "+";
+    for (size_t i = 0; i < col_count; ++i) {
+      std::cout << std::string(col_widths[i] + 2, '-');
+      std::cout << "+";
+    }
+    std::cout << "\n" << std::endl;
+    return;
+  }
+
+  // When outputting to terminal, use FTXUI rendering
+  bool need_truncate = false;
+  struct winsize w {};
+  int terminal_width = 120;  // Default width
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 && w.ws_col > 0) {
+    terminal_width = static_cast<int>(w.ws_col);
+  }
+
+  // Calculate total width, scale proportionally if exceeds terminal width
+  size_t total_width = 0;
+  for (auto cw : col_widths) total_width += cw;
+  total_width += col_count * 3 + 4;  // Borders and separators
+
+  if (total_width > static_cast<size_t>(terminal_width)) {
+    need_truncate = true;
+    double scale = static_cast<double>(terminal_width - col_count * 3 - 4) / (total_width - col_count * 3 - 4);
+    for (auto& cw : col_widths) {
+      cw = std::max(static_cast<size_t>(3), static_cast<size_t>(cw * scale));
+    }
+  }
+
+  // Build Element table with fixed column widths
+  std::vector<std::vector<ftxui::Element>> elements;
+  for (const auto& row : rows) {
+    std::vector<ftxui::Element> element_row;
+    for (size_t i = 0; i < col_count; ++i) {
+      std::string cell_content = (i < row.size()) ? row[i] : "";
+      if (need_truncate) {
+        element_row.push_back(ftxui::text(cell_content) | ftxui::size(ftxui::WIDTH, ftxui::EQUAL, col_widths[i]));
+      } else {
+        element_row.push_back(ftxui::text(cell_content) |
+                              ftxui::size(ftxui::WIDTH, ftxui::GREATER_THAN, col_widths[i]));
+      }
+    }
+    elements.push_back(std::move(element_row));
+  }
+
+  auto table = ftxui::Table(elements);
+  table.SelectAll().Border(ftxui::LIGHT);
+  table.SelectRow(0).Decorate(ftxui::bold);
+  table.SelectRow(0).SeparatorVertical(ftxui::LIGHT);
+  table.SelectRow(0).Border(ftxui::DOUBLE);
+
+  auto document = table.Render();
+  auto screen = ftxui::Screen::Create(ftxui::Dimension::Fit(document));
+  ftxui::Render(screen, document);
+  screen.Print();
+  std::cout << std::endl;
+}
+
 static void PrintTable(const std::vector<std::vector<ftxui::Element>>& rows) {
   if (rows.empty()) {
     return;
@@ -189,7 +300,9 @@ void Pretty::Show(dingodb::pb::coordinator::GetStoreMapResponse& response) {
     rows.push_back(row);
   }
 
-  PrintTable(rows);
+  // PrintTable(rows);
+
+  PrintTableAdaptive(rows);
 
   // print summary
   std::string summary = "Summary:";
