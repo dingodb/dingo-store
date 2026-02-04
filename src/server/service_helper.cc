@@ -104,6 +104,9 @@ butil::Status ServiceHelper::ValidateRegionState(store::RegionPtr region) {
   if (region->State() == pb::common::StoreRegionState::DELETED) {
     return butil::Status(pb::error::EREGION_DELETED, "Region(%lu) is deleted", region->Id());
   }
+  if (region->State() == pb::common::StoreRegionState::MERGING) {
+    return butil::Status(pb::error::EREGION_MERGEING, "Region(%lu) is merging", region->Id());
+  }
   if (region->State() == pb::common::StoreRegionState::ORPHAN) {
     return butil::Status(pb::error::EREGION_ORPHAN, "Region(%lu) is orphan", region->Id());
   }
