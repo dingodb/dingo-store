@@ -940,7 +940,6 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   FAIL_POINT("before_commit_merge_modify_epoch");
 
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::MERGING);
-  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::MERGING);
 
   {
     auto old_target_range = target_region->Range(false);
@@ -982,7 +981,6 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
 
   // Set source region TOMBSTONE state
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
-  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::NORMAL);
 
   // Do snapshot
   LaunchAyncSaveSnapshot(target_region);
@@ -1363,8 +1361,8 @@ int VectorAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr regi
           }
         }
       }  //   if (is_ready) {
-    }  // if (document_index_wrapper) {
-  }  // if (enable_scalar_speed_up_with_document) {
+    }    // if (document_index_wrapper) {
+  }      // if (enable_scalar_speed_up_with_document) {
 #endif
 
   return 0;
@@ -1534,8 +1532,8 @@ int VectorDeleteHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr r
           }
         }
       }  // if (is_ready && !request.ids().empty()) {
-    }  // if (document_index_wrapper) {
-  }  // if (enable_scalar_speed_up_with_document) {
+    }    // if (document_index_wrapper) {
+  }      // if (enable_scalar_speed_up_with_document) {
 
 #endif
 
@@ -1682,7 +1680,7 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
           }
         }
       }  // for (const auto &kv : kvs_scalar) {
-    }  // if (enable_scalar_speed_up_with_document)
+    }    // if (enable_scalar_speed_up_with_document)
 
 #endif
     kv_puts_with_cf.insert_or_assign(Constant::kVectorScalarCF, kvs_scalar);
@@ -1746,7 +1744,7 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
       }
 
     }  // for (const auto &vector : request.vectors()) {
-  }  // if (enable_scalar_speed_up_with_document)
+  }    // if (enable_scalar_speed_up_with_document)
 
 #endif
 
@@ -1895,7 +1893,7 @@ int VectorBatchAddHandler::Handle(std::shared_ptr<Context> ctx, store::RegionPtr
       }  // if (is_ready && !request.delete_vector_ids().empty()) {
 
     }  // if (document_index_wrapper) {
-  }  // if (enable_scalar_speed_up_with_document) {
+  }    // if (enable_scalar_speed_up_with_document) {
 #endif
 
   return 0;

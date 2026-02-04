@@ -115,14 +115,6 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
       bthread_usleep(1000 * 1000);
     }
 
-    if (region_->State() == pb::common::StoreRegionState::DELETING ||
-        region_->State() == pb::common::StoreRegionState::DELETED ||
-        region_->State() == pb::common::StoreRegionState::ORPHAN ||
-        region_->State() == pb::common::StoreRegionState::TOMBSTONE) {
-      DINGO_LOG(WARNING) << fmt::format("[raft.sm][region({})] region is {} ,direct return. ", region_->Id(),
-                                        pb::common::StoreRegionState_Name(region_->State()));
-      return;
-    }
     // Parse raft command
     auto raft_cmd = std::make_shared<pb::raft::RaftCmdRequest>();
     if (iter.done()) {
@@ -145,6 +137,8 @@ void StoreStateMachine::on_apply(braft::Iterator& iter) {
     auto region_state = region_->State();
     if (BAIDU_UNLIKELY(region_state == pb::common::StoreRegionState::DELETING ||
                        region_state == pb::common::StoreRegionState::DELETED ||
+                       region_state == pb::common::StoreRegionState::MERGING ||
+                       region_state == pb::common::StoreRegionState::ORPHAN ||
                        region_state == pb::common::StoreRegionState::TOMBSTONE)) {
       std::string s = fmt::format("Region({}) is {} state, abandon apply log", region_->Id(),
                                   pb::common::StoreRegionState_Name(region_state));
