@@ -883,7 +883,6 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
   FAIL_POINT("before_commit_merge_modify_epoch");
 
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::MERGING);
-  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::MERGING);
 
   {
     auto old_target_range = target_region->Range(false);
@@ -925,7 +924,6 @@ int CommitMergeHandler::Handle(std::shared_ptr<Context>, store::RegionPtr target
 
   // Set source region TOMBSTONE state
   store_region_meta->UpdateState(source_region, pb::common::StoreRegionState::TOMBSTONE);
-  store_region_meta->UpdateState(target_region, pb::common::StoreRegionState::NORMAL);
 
   // Do snapshot
   LaunchAyncSaveSnapshot(target_region);
