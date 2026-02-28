@@ -317,6 +317,14 @@ butil::Status RelExprHelper::TransToOperandV2(BaseSchema::Type type, const std::
         std::string s = fmt::format("{}  any_cast DecimalP failed", bad.what());
         DINGO_LOG(ERROR) << s;
         return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      } catch (const std::runtime_error& bad) {
+        std::string s = fmt::format("{}  Decimal string failed", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
+      } catch (const std::exception& bad) {
+        std::string s = fmt::format("{}  other Decimal failed", bad.what());
+        DINGO_LOG(ERROR) << s;
+        return butil::Status(pb::error::EILLEGAL_PARAMTETERS, s);
       }
       break;
     }
