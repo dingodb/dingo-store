@@ -53,6 +53,8 @@ namespace client_v2 {
 
 const uint32_t kStringReserveSize = 32;
 
+static void PrintTableAdaptive(const std::vector<std::vector<std::string>>& rows);
+
 std::string TruncateString(const std::string& str) {
   if (str.size() <= kStringReserveSize) {
     return str;
@@ -1662,36 +1664,25 @@ void Pretty::Show(dingodb::pb::coordinator::QueryRegionResponse& response) {
   if (ShowError(response.error())) {
     return;
   }
-  std::vector<std::vector<ftxui::Element>> rows = {{
-      ftxui::paragraph("Id"),
-      ftxui::paragraph("Epoch"),
-      ftxui::paragraph("Type"),
-      ftxui::paragraph("State"),
-      ftxui::paragraph("LeaderStoreId"),
-      ftxui::paragraph("CreateTime"),
-      ftxui::paragraph("StartKey"),
-      ftxui::paragraph("EndKey"),
-      ftxui::paragraph("TableId"),
-      ftxui::paragraph("SchemaId"),
-      ftxui::paragraph("TenantId"),
-
-  }};
+  std::vector<std::vector<std::string>> rows = {
+      {"Id", "Epoch", "Type", "State", "LeaderStoreId", "CreateTime", "StartKey", "EndKey", "TableId", "SchemaId",
+       "TenantId"}};
   const auto& region = response.region();
-  std::vector<ftxui::Element> row = {
-      ftxui::paragraph(fmt::format("{}", region.id())),
-      ftxui::paragraph(fmt::format("{}", region.epoch())),
-      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::RegionType_Name(region.region_type()))),
-      ftxui::paragraph(fmt::format("{}", dingodb::pb::common::RegionState_Name(region.state()))),
-      ftxui::paragraph(fmt::format("{}", region.leader_store_id())),
-      ftxui::paragraph(dingodb::Helper::FormatMsTime(region.create_timestamp())),
-      ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(region.definition().range().start_key()))),
-      ftxui::paragraph(fmt::format("{}", dingodb::Helper::StringToHex(region.definition().range().end_key()))),
-      ftxui::paragraph(fmt::format("{}", region.definition().table_id())),
-      ftxui::paragraph(fmt::format("{}", region.definition().schema_id())),
-      ftxui::paragraph(fmt::format("{}", region.definition().tenant_id())),
+  std::vector<std::string> row = {
+      fmt::format("{}", region.id()),
+      fmt::format("{}", region.epoch()),
+      dingodb::pb::common::RegionType_Name(region.region_type()),
+      dingodb::pb::common::RegionState_Name(region.state()),
+      fmt::format("{}", region.leader_store_id()),
+      dingodb::Helper::FormatMsTime(region.create_timestamp()),
+      dingodb::Helper::StringToHex(region.definition().range().start_key()),
+      dingodb::Helper::StringToHex(region.definition().range().end_key()),
+      fmt::format("{}", region.definition().table_id()),
+      fmt::format("{}", region.definition().schema_id()),
+      fmt::format("{}", region.definition().tenant_id()),
   };
   rows.push_back(row);
-  PrintTable(rows);
+  PrintTableAdaptive(rows);
 }
 
 void Pretty::Show(dingodb::pb::index::VectorGetBorderIdResponse& response) {
