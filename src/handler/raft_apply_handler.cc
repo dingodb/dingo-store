@@ -196,6 +196,11 @@ static void LaunchAyncSaveSnapshot(store::RegionPtr region) {  // NOLINT
 
   if (!is_success) {
     store_region_meta->UpdateNeedBootstrapDoSnapshot(region, false);
+    if (region->Type() == pb::common::STORE_REGION) {
+      store_region_meta->UpdateTemporaryDisableChange(region, false);
+    }
+    DINGO_LOG(ERROR) << fmt::format(
+        "[split.spliting][region({})] snapshot permanently failed, clearing TemporaryDisableChange", region->Id());
   }
 }
 
@@ -268,7 +273,7 @@ bool HandlePreCreateRegionSplit(const pb::raft::SplitRequest &request, store::Re
                                     Helper::StringToHex(old_from_range.end_key()));
     return false;
   }
-  if (request.split_key() < old_from_range.start_key() || request.split_key() > old_from_range.end_key()) {
+  if (request.split_key() <= old_from_range.start_key() || request.split_key() >= old_from_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format(
         "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
         request.job_id(), from_region->Id(), to_region->Id(), Helper::StringToHex(request.split_key()),
@@ -523,7 +528,7 @@ bool HandlePostCreateRegionSplit(const pb::raft::SplitRequest &request, store::R
     return false;
   }
 
-  if (request.split_key() < old_parent_range.start_key() || request.split_key() > old_parent_range.end_key()) {
+  if (request.split_key() <= old_parent_range.start_key() || request.split_key() >= old_parent_range.end_key()) {
     DINGO_LOG(FATAL) << fmt::format(
         "[split.spliting][job_id({}).region({}->{})] from region invalid split key {} region range: [{}-{})",
         request.job_id(), parent_region_id, child_region_id, Helper::StringToHex(request.split_key()),
