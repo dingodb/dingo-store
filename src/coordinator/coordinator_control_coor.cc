@@ -2634,7 +2634,7 @@ butil::Status CoordinatorControl::SplitRegion(int64_t split_from_region_id, int6
   std::vector<int64_t> split_to_region_peers;
   split_from_region_peers.reserve(split_from_region.definition().peers_size());
   for (int i = 0; i < split_from_region.definition().peers_size(); i++) {
-    split_from_region_peers.push_back(split_to_region.definition().peers(i).store_id());
+    split_from_region_peers.push_back(split_from_region.definition().peers(i).store_id());
   }
   split_to_region_peers.reserve(split_to_region.definition().peers_size());
   for (int i = 0; i < split_to_region.definition().peers_size(); i++) {
