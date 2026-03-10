@@ -243,12 +243,12 @@ TEST_F(SnapshotFailureCleanupTest, SetAndClear_TemporaryDisableChange) {
   EXPECT_FALSE(region->TemporaryDisableChange());
 }
 
-// For STORE_REGION: both flags are set during split, both should be cleared on failure.
+// Both flags are set during split for ALL region types, both should be cleared on failure.
+// TemporaryDisableChange is cleared unconditionally (not just for STORE_REGION) because
+// on snapshot failure, INDEX_REGION and DOCUMENT_REGION also won't reach their async
+// cleanup paths (SaveVectorIndexTask / LoadOrBuildDocumentIndexTask).
 TEST_F(SnapshotFailureCleanupTest, BothFlagsCleared_SimulatesSnapshotFailure) {
   auto region = CreateStoreRegion(1001);
-
-  // Verify this is a STORE_REGION (default when no index_parameter is set)
-  ASSERT_EQ(dingodb::pb::common::STORE_REGION, region->Type());
 
   // Simulate entering the split snapshot path: set both flags
   region->SetNeedBootstrapDoSnapshot(true);
@@ -257,49 +257,15 @@ TEST_F(SnapshotFailureCleanupTest, BothFlagsCleared_SimulatesSnapshotFailure) {
   EXPECT_TRUE(region->NeedBootstrapDoSnapshot());
   EXPECT_TRUE(region->TemporaryDisableChange());
 
-  // Simulate snapshot failure cleanup (replicating raft_apply_handler.cc:197-201)
+  // Simulate snapshot failure cleanup (replicating raft_apply_handler.cc:197-200)
+  // TemporaryDisableChange is cleared unconditionally for all region types.
   bool is_success = false;
   if (!is_success) {
     region->SetNeedBootstrapDoSnapshot(false);
-    if (region->Type() == dingodb::pb::common::STORE_REGION) {
-      region->SetTemporaryDisableChange(false);
-    }
+    region->SetTemporaryDisableChange(false);
   }
 
   // Both flags should now be cleared
   EXPECT_FALSE(region->NeedBootstrapDoSnapshot());
   EXPECT_FALSE(region->TemporaryDisableChange());
-}
-
-// For non-STORE_REGION: only NeedBootstrapDoSnapshot is cleared;
-// TemporaryDisableChange is NOT cleared (conditional on region type).
-//
-// NOTE: Creating an INDEX_REGION or DOCUMENT_REGION via Region::New() requires
-// a valid index_parameter with vector/document index configuration and related
-// infrastructure (VectorIndexWrapper, DocumentIndexWrapper). This is complex to
-// set up in a unit test without the full server context. Instead, we test the
-// conditional logic directly by simulating the type check.
-TEST_F(SnapshotFailureCleanupTest, NonStoreRegion_OnlyBootstrapCleared) {
-  auto region = CreateStoreRegion(1002);
-
-  // Set both flags
-  region->SetNeedBootstrapDoSnapshot(true);
-  region->SetTemporaryDisableChange(true);
-
-  // Simulate snapshot failure cleanup for a non-STORE_REGION.
-  // We simulate by using a different type value in the conditional check,
-  // as if region->Type() returned INDEX_REGION.
-  bool is_success = false;
-  dingodb::pb::common::RegionType simulated_type = dingodb::pb::common::INDEX_REGION;
-  if (!is_success) {
-    region->SetNeedBootstrapDoSnapshot(false);
-    if (simulated_type == dingodb::pb::common::STORE_REGION) {
-      region->SetTemporaryDisableChange(false);
-    }
-  }
-
-  // NeedBootstrapDoSnapshot should be cleared
-  EXPECT_FALSE(region->NeedBootstrapDoSnapshot());
-  // TemporaryDisableChange should NOT be cleared for non-STORE_REGION
-  EXPECT_TRUE(region->TemporaryDisableChange());
 }
