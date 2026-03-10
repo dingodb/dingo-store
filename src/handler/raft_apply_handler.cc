@@ -196,9 +196,7 @@ static void LaunchAyncSaveSnapshot(store::RegionPtr region) {  // NOLINT
 
   if (!is_success) {
     store_region_meta->UpdateNeedBootstrapDoSnapshot(region, false);
-    if (region->Type() == pb::common::STORE_REGION) {
-      store_region_meta->UpdateTemporaryDisableChange(region, false);
-    }
+    store_region_meta->UpdateTemporaryDisableChange(region, false);
     DINGO_LOG(ERROR) << fmt::format(
         "[split.spliting][region({})] snapshot permanently failed, clearing TemporaryDisableChange", region->Id());
   }
