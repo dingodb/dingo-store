@@ -409,6 +409,10 @@ bool SstWriterAdaptor::FinishSst() {
     if (!s.ok()) {
       DINGO_LOG(ERROR) << "finish sst file path: " << path << " failed, err: " << s.ToString()
                        << ", region_id: " << region_id_;
+      bool ret = butil::DeleteFile(butil::FilePath(path), false);
+      if (!ret) {
+        DINGO_LOG(ERROR) << "delete malformed sst file path: " << path << " failed, region_id: " << region_id_;
+      }
       return false;
     }
   } else {
@@ -474,13 +478,13 @@ int SstWriterAdaptor::IobufToSst(butil::IOBuf data) {
       return -1;
     }
     data.pop_front(value_size);
-    count_++;
 
     auto s = writer_->Put(key, value);
     if (!s.ok()) {
       DINGO_LOG(ERROR) << "write sst file failed, err: " << s.ToString() << ", region_id: " << region_id_;
       return -1;
     }
+    count_++;
   }
   return 0;
 }
