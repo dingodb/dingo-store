@@ -55,6 +55,10 @@ class TxnReader {
   butil::Status CheckCommittedRecord(int64_t start_ts, const std::string &key, pb::store::WriteInfo &write_info,
                                      int64_t &commit_ts, bool &find_record);
 
+  const int64_t GetSkippedVersions() { return total_skipped_versions_; }
+
+  void ResetSkippedVersions() { total_skipped_versions_ = 0; }
+
  private:
   bool is_initialized_{false};
   RawEnginePtr raw_engine_;
@@ -62,6 +66,10 @@ class TxnReader {
   RawEngine::ReaderPtr reader_;
 
   std::shared_ptr<Iterator> write_iter_;
+  // Total versions skipped due to: newer commit_ts than start_ts (SI), rollback records,
+  // or old versions scanned past while advancing to the next user key.
+  // Includes seek_skipped_write_versions_.
+  int64_t total_skipped_versions_ = 0;
 };
 
 class TxnIterator {
@@ -81,7 +89,7 @@ class TxnIterator {
   }
 
   ~TxnIterator() = default;
-  butil::Status Init();
+  butil::Status Init(TrackerPtr tracker = nullptr);
   butil::Status Seek(const std::string &key);
   butil::Status InnerSeek(const std::string &key);
   butil::Status Next();
@@ -93,14 +101,18 @@ class TxnIterator {
   std::string GetLastLockKey() { return last_lock_key_; }
   std::string GetLastWriteKey() { return last_write_key_; }
 
+  const int64_t GetSkippedVersions() { return total_skipped_versions_; }
+
+  void ResetSkippedVersions() { total_skipped_versions_ = 0; }
+
   static butil::Status GetUserValueInWriteIter(std::shared_ptr<Iterator> write_iter, RawEngine::ReaderPtr reader,
                                                pb::store::IsolationLevel isolation_level, int64_t seek_ts,
                                                int64_t start_ts, const std::string &user_key,
                                                std::string &last_write_key, bool &is_value_found,
-                                               std::string &user_value);
+                                               std::string &user_value, int64_t &skipped_count);
   static std::string GetUserKey(std::shared_ptr<Iterator> write_iter);
   static butil::Status GotoNextUserKeyInWriteIter(std::shared_ptr<Iterator> write_iter, std::string prev_user_key,
-                                                  std::string &last_write_key);
+                                                  std::string &last_write_key, int64_t &skipped_count);
 
  private:
   butil::Status GetCurrentValue();
@@ -122,6 +134,11 @@ class TxnIterator {
   std::string key_{};
   std::string value_{};
 
+  // Total versions skipped due to: newer commit_ts than start_ts (SI), rollback records,
+  // or old versions scanned past while advancing to the next user key.
+  // Includes seek_skipped_write_versions_.
+  int64_t total_skipped_versions_ = 0;
+
   // The resolved locks are used to check the lock conflict.
   // If the lock is resolved, there will not be a conflict for provided resolved_locks.
   std::set<int64_t> resolved_locks_;
@@ -139,14 +156,15 @@ class TxnEngineHelper {
                                     std::vector<pb::store::LockInfo> &lock_infos, bool &has_more,
                                     std::string &end_scan_key);
 
-  static butil::Status BatchGet(RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
-                                int64_t start_ts, const std::vector<std::string> &keys,
-                                const std::set<int64_t> &resolved_locks, pb::store::TxnResultInfo &txn_result_info,
-                                std::vector<pb::common::KeyValue> &kvs);
+  static butil::Status BatchGet(std::shared_ptr<Context> ctx, RawEnginePtr raw_engine,
+                                const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
+                                const std::vector<std::string> &keys, const std::set<int64_t> &resolved_locks,
+                                pb::store::TxnResultInfo &txn_result_info, std::vector<pb::common::KeyValue> &kvs);
 
-  static butil::Status Scan(StreamPtr stream, RawEnginePtr raw_engine, const pb::store::IsolationLevel &isolation_level,
-                            int64_t start_ts, const pb::common::Range &range, int64_t limit, bool key_only,
-                            bool is_reverse, const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
+  static butil::Status Scan(std::shared_ptr<Context> ctx, StreamPtr stream, RawEnginePtr raw_engine,
+                            const pb::store::IsolationLevel &isolation_level, int64_t start_ts,
+                            const pb::common::Range &range, int64_t limit, bool key_only, bool is_reverse,
+                            const std::set<int64_t> &resolved_locks, bool disable_coprocessor,
                             const pb::common::CoprocessorV2 &coprocessor, pb::store::TxnResultInfo &txn_result_info,
                             std::vector<pb::common::KeyValue> &kvs, bool &has_more, std::string &end_scan_key);
 

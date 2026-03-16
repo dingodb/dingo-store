@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include "bvar/latency_recorder.h"
 #include "common/helper.h"
@@ -48,6 +49,12 @@ class Tracker {
     uint64_t document_index_write_time_ns{0};
 
     uint64_t read_store_time_ns{0};
+  };
+  // name,elapsed_time_us,skip_versions
+  using ElapsedTime = std::tuple<std::string, uint32_t, int32_t>;
+
+  struct Time {
+    std::vector<ElapsedTime> elapsed_times;
   };
 
   void SetTotalRpcTime() { metrics_.total_rpc_time_ns = Helper::TimestampNs() - start_time_; }
@@ -125,6 +132,13 @@ class Tracker {
   }
   inline uint64_t ReadStoreTime() const { return metrics_.read_store_time_ns; }
 
+  Time& GetTime() { return time_; }
+  const Time& GetTime() const { return time_; }
+
+  void RecordElapsedTime(const std::string& name, uint32_t elapsed_time, int32_t skip_versions) {
+    time_.elapsed_times.emplace_back(name, elapsed_time, skip_versions);
+  }
+
   // latency statistics
   static bvar::LatencyRecorder service_queue_latency;
   static bvar::LatencyRecorder prepair_commit_latency;
@@ -143,6 +157,7 @@ class Tracker {
 
   pb::common::RequestInfo request_info_;
   Metrics metrics_;
+  Time time_;
 };
 using TrackerPtr = std::shared_ptr<Tracker>;
 
