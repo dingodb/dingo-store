@@ -1709,7 +1709,7 @@ void DoTxnGet(StoragePtr storage, google::protobuf::RpcController* controller,
     *response->mutable_txn_result() = txn_result_info;
     return;
   }
-
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release());
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -1830,6 +1830,7 @@ void DoTxnScan(StoragePtr storage, google::protobuf::RpcController* controller,
     return;
   }
 
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release());
   std::shared_ptr<Context> ctx = std::make_shared<Context>();
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
@@ -2817,6 +2818,7 @@ void DoTxnBatchGet(StoragePtr storage, google::protobuf::RpcController* controll
   }
 
   std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done);
+  // std::shared_ptr<Context> ctx = std::make_shared<Context>(cntl, done_guard.release());
   ctx->SetRegionId(region_id);
   ctx->SetTracker(tracker);
   ctx->SetCfName(Constant::kStoreDataCF);

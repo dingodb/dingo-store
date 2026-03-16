@@ -233,6 +233,14 @@ inline void SetPbMessageResponseInfo(google::protobuf::Message* message, Tracker
   time_info->set_store_write_time_ns(tracker->StoreWriteTime());
   time_info->set_vector_index_write_time_ns(tracker->VectorIndexwriteTime());
   time_info->set_document_index_write_time_ns(tracker->DocumentIndexwriteTime());
+
+  const auto& time = tracker->GetTime();
+  for (const auto& [name, elapsed, skip_version] : time.elapsed_times) {
+    auto* mut_elapsed_time = time_info->add_elapsed_times();
+    mut_elapsed_time->set_name(name);
+    mut_elapsed_time->set_time_us(elapsed);
+    mut_elapsed_time->set_skip_version(skip_version);
+  }
 }
 
 template <typename T, typename U, bool need_region>
