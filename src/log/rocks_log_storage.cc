@@ -500,7 +500,7 @@ bool RocksLogStorage::SaveIndexMeta(int64_t region_id, const LogIndexMeta& log_i
   }
 
   rocksdb::WriteOptions options;
-  options.sync = true;
+  options.sync = braft::FLAGS_raft_sync;
   status = db_->Write(options, &batch);
   if (!status.ok()) {
     DINGO_LOG(ERROR) << fmt::format("[raft.log] write failed, error: {}", status.ToString());
