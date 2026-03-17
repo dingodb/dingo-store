@@ -99,6 +99,7 @@ class StoreStateMachine : public BaseStateMachine {
 
   // Protect apply serial
   bthread_mutex_t apply_mutex_;
+  bool is_independent_queue_;
 };
 
 }  // namespace dingodb
