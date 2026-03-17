@@ -38,6 +38,10 @@ const int kSaveAppliedIndexStep = 10;
 
 namespace dingodb {
 
+DEFINE_bool(store_state_machine_enable_independent_queue, false,
+            "store state machine enable independent queue. default false");
+BRPC_VALIDATE_GFLAG(store_state_machine_enable_independent_queue, brpc::PassValidate);
+
 StoreStateMachine::StoreStateMachine(RawEnginePtr engine, store::RegionPtr region, store::RaftMetaPtr raft_meta,
                                      store::RegionMetricsPtr region_metrics, EventListenerCollectionPtr listeners,
                                      WorkerSetPtr worker_set)
@@ -50,13 +54,25 @@ StoreStateMachine::StoreStateMachine(RawEnginePtr engine, store::RegionPtr regio
       applied_term_(raft_meta->Term()),
       applied_index_(raft_meta->AppliedId()),
       last_snapshot_index_(0),
-      worker_set_(worker_set) {
+      worker_set_(worker_set),
+      is_independent_queue_(false) {
   bthread_mutex_init(&apply_mutex_, nullptr);
   DINGO_LOG(DEBUG) << fmt::format("[new.StoreStateMachine][id({})]", str_node_id_);
+
+  if (FLAGS_store_state_machine_enable_independent_queue) {
+    worker_set_ = dingodb::SimpleWorkerSet::New("apply_worker" + std::to_string(region_->Id()), 1, 1024, false, false);
+    if (!worker_set_->Init()) {
+      DINGO_LOG(FATAL) << "Init raft apply WorkerSet failed!";
+    }
+    is_independent_queue_ = true;
+  }
 }
 
 StoreStateMachine::~StoreStateMachine() {
   DINGO_LOG(DEBUG) << fmt::format("[delete.StoreStateMachine][id({})]", str_node_id_);
+  if (worker_set_ != nullptr && is_independent_queue_) {
+    worker_set_->Destroy();
+  }
   bthread_mutex_destroy(&apply_mutex_);
 }
 
