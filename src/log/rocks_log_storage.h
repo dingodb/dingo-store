@@ -22,7 +22,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <thread>
 #include <utility>
 #include <vector>
 
@@ -31,6 +30,7 @@
 #include "bthread/execution_queue.h"
 #include "butil/iobuf.h"
 #include "common/synchronization.h"
+#include "log/index_term_map.h"
 #include "rocksdb/db.h"
 #include "rocksdb/listener.h"
 #include "rocksdb/options.h"
@@ -209,6 +209,8 @@ class RocksLogStorage {
 
   std::vector<LogEntry> GetConfigurations(int64_t region_id);
 
+  bool RegisterIdTermToMap(int64_t region_id, IndexTermMap& index_term_map);
+
   // delete logs from storage's head, [1, first_index_kept) will be discarded
   int TruncatePrefix(ClientType client_type, int64_t region_id, int64_t keep_first_index);
 
@@ -251,7 +253,7 @@ class RocksLogStorage {
   std::vector<ClientType> client_types_;
 
   RWLock rw_lock_;
-  // regoin index range cache, if not exist then take from rocksdb
+  // region index range cache, if not exist then take from rocksdb
   // region_id: [first_index, last_index]
   std::map<int64_t, LogIndexMeta> log_index_metas_;
 
@@ -265,8 +267,11 @@ class RocksLogStorage {
 class RocksLogStorageWrapper : public braft::LogStorage {
  public:
   explicit RocksLogStorageWrapper(int64_t region_id, RocksLogStoragePtr log_storage)
-      : region_id_(region_id), log_storage_(log_storage) {}
-  ~RocksLogStorageWrapper() override = default;
+      : region_id_(region_id), log_storage_(log_storage), index_term_map_(region_id) {
+    bthread_mutex_init(&mutex_, nullptr);
+  }
+
+  ~RocksLogStorageWrapper() override { bthread_mutex_destroy(&mutex_); };
 
   // init logstorage, check consistency and integrity
   int init(braft::ConfigurationManager* configuration_manager) override;
@@ -308,6 +313,8 @@ class RocksLogStorageWrapper : public braft::LogStorage {
 
   int64_t region_id_;
   RocksLogStoragePtr log_storage_;
+  IndexTermMap index_term_map_;
+  bthread_mutex_t mutex_;  // for index_term_map_
 };
 
 }  // namespace wal
