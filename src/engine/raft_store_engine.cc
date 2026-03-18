@@ -22,6 +22,7 @@
 #include <utility>
 #include <vector>
 
+#include "brpc/reloadable_flags.h"
 #include "butil/compiler_specific.h"
 #include "butil/endpoint.h"
 #include "butil/status.h"
@@ -55,6 +56,9 @@
 DECLARE_int32(init_election_timeout_ms);
 
 namespace dingodb {
+
+DEFINE_bool(print_raft_add_node, false, "print raft add node log. default false");
+BRPC_VALIDATE_GFLAG(print_raft_add_node, brpc::PassValidate);
 
 RaftStoreEngine::RaftStoreEngine(RawEnginePtr rocks_raw_engine, RawEnginePtr bdb_raw_engine,
                                  mvcc::TsProviderPtr ts_provider)
@@ -177,9 +181,15 @@ RawEnginePtr RaftStoreEngine::GetRawEngine(pb::common::RawEngine type) {
 }
 
 butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodeParameter& parameter) {
+  int64_t start_time = 0;
+  if (FLAGS_print_raft_add_node) {
+    start_time = butil::monotonic_time_ms();
+  }
+
   DINGO_LOG(INFO) << fmt::format("[raft.engine][region({})] add region.", region->Id());
 
   RawEnginePtr raw_engine = GetRawEngine(region->GetRawEngineType());
+
   // Build StateMachine
   auto state_machine =
       std::make_shared<StoreStateMachine>(raw_engine, region, parameter.raft_meta, parameter.region_metrics,
@@ -195,6 +205,11 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
   auto node = std::make_shared<RaftNode>(region->Id(), region->Name(), braft::PeerId(parameter.raft_endpoint),
                                          state_machine, log_storage);
 
+  int64_t after_state_machine_init_time = 0;
+  if (FLAGS_print_raft_add_node) {
+    after_state_machine_init_time = butil::monotonic_time_ms();
+  }
+
   if (node->Init(region, Helper::LocationsToString(Helper::ExtractRaftLocations(region->Peers())), parameter.raft_path,
                  parameter.election_timeout_ms) != 0) {
     if (parameter.is_restart) {
@@ -209,7 +224,24 @@ butil::Status RaftStoreEngine::AddNode(store::RegionPtr region, const AddNodePar
     return butil::Status(pb::error::ERAFT_INIT, "Raft init failed");
   }
 
+  int64_t after_node_init_time = 0;
+  if (FLAGS_print_raft_add_node) {
+    after_node_init_time = butil::monotonic_time_ms();
+  }
+
   raft_node_manager_->AddNode(region->Id(), node);
+
+  if (FLAGS_print_raft_add_node) {
+    int64_t end_time = butil::monotonic_time_ms();
+    int64_t elapsed_time = end_time - start_time;
+
+    DINGO_LOG_IF(INFO, elapsed_time > 1000) << fmt::format(
+        "[raft.engine][region({})] add node elapsed_time {} ms, state machine init {} ms, node init "
+        "{} ms , add node {} ms.",
+        region->Id(), elapsed_time, after_state_machine_init_time - start_time,
+        after_node_init_time - after_state_machine_init_time, elapsed_time - after_node_init_time);
+  }
+
   return butil::Status();
 }
 
