@@ -125,13 +125,13 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
   }
 
   // Add region to store region meta manager
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region, save region meta", region->Id());
+  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, save region meta", region->Id());
   auto store_region_meta = store_meta_manager->GetStoreRegionMeta();
   region->SetState(pb::common::StoreRegionState::NEW);
   store_region_meta->AddRegion(region);
 
   // Add region metrics
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region add region metrics", region->Id());
+  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region add region metrics", region->Id());
   auto region_metrics = StoreRegionMetrics::NewMetrics(region->Id());
 
   if (definition.store_engine() == pb::common::StorageEngine::STORE_ENG_RAFT_STORE) {
@@ -140,7 +140,7 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
     if (raft_store_engine == nullptr) {
       return butil::Status(pb::error::EINTERNAL, "Not found raft store engine");
     }
-    DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] create region, add raft node", region->Id());
+    DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, add raft node", region->Id());
 
     RaftControlAble::AddNodeParameter parameter;
     parameter.role = GetRole();
@@ -174,13 +174,16 @@ butil::Status CreateRegionTask::CreateRegion(const pb::common::RegionDefinition&
 
   Server::GetInstance().GetStoreMetricsManager()->GetStoreRegionMetrics()->AddMetrics(region_metrics);
 
-  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, update region state NORMAL",
-                                 region->Id());
   if (parent_region_id == 0) {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::NORMAL);
+    DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, update region state NORMAL",
+                                   region->Id());
   } else {
     store_region_meta->UpdateState(region, pb::common::StoreRegionState::STANDBY);
+    DINGO_LOG(INFO) << fmt::format("[control.region][region({})] create region, update region state STANDBY",
+                                   region->Id());
   }
+
 #if WITH_VECTOR_INDEX_USE_DOCUMENT_SPEEDUP
   // index region
   if (GetRole() == pb::common::INDEX) {
@@ -1167,8 +1170,8 @@ butil::Status TransferLeaderTask::ValidateTransferLeader(std::shared_ptr<StoreMe
 butil::Status TransferLeaderTask::TransferLeader(std::shared_ptr<Context>, int64_t region_id,
                                                  const pb::common::Peer& peer, bool is_force) {
   auto store_meta_manager = Server::GetInstance().GetStoreMetaManager();
-  DINGO_LOG(DEBUG) << fmt::format("[control.region][region({})] transfer leader, peer: {}", region_id,
-                                  peer.ShortDebugString());
+  DINGO_LOG(INFO) << fmt::format("[control.region][region({})] transfer leader, peer: {}", region_id,
+                                 peer.ShortDebugString());
 
   auto status = ValidateTransferLeader(store_meta_manager, region_id, peer, is_force);
   if (!status.ok()) {
