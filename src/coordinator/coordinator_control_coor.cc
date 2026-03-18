@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "braft/configuration.h"
+#include "brpc/reloadable_flags.h"
 #include "butil/containers/flat_map.h"
 #include "butil/scoped_lock.h"
 #include "butil/status.h"
@@ -82,6 +83,13 @@ DEFINE_int32(max_send_region_cmd_per_store, 100, "max send region cmd per store"
 
 DEFINE_int64(max_region_count, 40000, "max region of dingo");
 BRPC_VALIDATE_GFLAG(max_region_count, brpc::PositiveInteger);
+
+DEFINE_bool(print_recycle_orphan_region_not_table_or_index, true,
+            "print recycle orphan region not table or index. default true");
+BRPC_VALIDATE_GFLAG(print_recycle_orphan_region_not_table_or_index, brpc::PassValidate);
+
+DEFINE_bool(print_process_job_error, true, "print process job error. default true");
+BRPC_VALIDATE_GFLAG(print_process_job_error, brpc::PassValidate);
 
 // TODO: add epoch logic
 void CoordinatorControl::GetCoordinatorMap(int64_t cluster_id, int64_t& epoch, pb::common::Location& leader_location,
@@ -1398,9 +1406,10 @@ void CoordinatorControl::RecycleOrphanRegionOnCoordinator() {
         delete_region_ids.push_back(region.id());
       }
     } else {
-      DINGO_LOG(INFO) << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
-                      << " table_id: " << region.definition().table_id()
-                      << " index_id: " << region.definition().index_id() << " is not table or index";
+      DINGO_LOG_IF(INFO, FLAGS_print_recycle_orphan_region_not_table_or_index)
+          << "RecycleOrphanRegionOnCoordinator region_id: " << region.id()
+          << " table_id: " << region.definition().table_id() << " index_id: " << region.definition().index_id()
+          << " is not table or index";
     }
   }
 
@@ -5760,8 +5769,9 @@ butil::Status CoordinatorControl::ProcessJobList() {
     const auto& job = it.second;
     auto status = ProcessJob(job, meta_increment, store_operation_map);
     if (!status.ok()) {
-      DINGO_LOG(ERROR) << fmt::format("[joblist] ProcessJob failed, error:{}, job:{}", Helper::PrintStatus(status),
-                                      job.ShortDebugString());
+      // print too many
+      DINGO_LOG_IF(WARNING, FLAGS_print_process_job_error) << fmt::format(
+          "[joblist] ProcessJob failed, error:{}, job:{}", Helper::PrintStatus(status), job.ShortDebugString());
     }
   }
 
@@ -6770,8 +6780,8 @@ butil::Status CoordinatorControl::RpcSendPushStoreOperation(const pb::common::Lo
                                    location.ShortDebugString(), request.ShortDebugString());
 
     if (cntl.Failed()) {
-      DINGO_LOG(ERROR) << fmt::format("[joblist] rpc failed, will retry, error code:{}, error message:{}",
-                                      cntl.ErrorCode(), cntl.ErrorText());
+      DINGO_LOG(WARNING) << fmt::format("[joblist] rpc failed, will retry, error code:{}, error message:{}",
+                                        cntl.ErrorCode(), cntl.ErrorText());
       continue;
     }
 

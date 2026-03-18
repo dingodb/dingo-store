@@ -180,7 +180,7 @@ pb::common::Range DecodeRangeToPlaintext(std::shared_ptr<CoordinatorControl> coo
   const pb::common::RegionDefinition& region_definition = region.definition();
   const auto& origin_range = region_definition.range();
 
-  DINGO_LOG(INFO) << fmt::format(
+  DINGO_LOG(DEBUG) << fmt::format(
       "decode range info, region_id({}) partition_id({}) table_id({}) region_type({}) index_type({}) prefix({})",
       region.id(), region_definition.part_id(),
       region_definition.index_id() > 0 ? region_definition.index_id() : region_definition.table_id(),
