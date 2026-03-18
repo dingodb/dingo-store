@@ -23,6 +23,7 @@
 #include <string_view>
 #include <vector>
 
+#include "brpc/reloadable_flags.h"
 #include "common/constant.h"
 #include "common/helper.h"
 #include "config/config_helper.h"
@@ -40,6 +41,9 @@
 namespace dingodb {
 DECLARE_bool(enable_region_split_and_merge_for_lite);
 DECLARE_bool(region_enable_auto_split);
+
+DEFINE_bool(print_periodic_split_check, false, "print periodic split check. default false");
+BRPC_VALIDATE_GFLAG(print_periodic_split_check, brpc::PassValidate);
 
 MergedIterator::MergedIterator(RawEnginePtr raw_engine, const std::vector<std::string>& cf_names,
                                const std::string& end_key)
@@ -506,10 +510,11 @@ void PreSplitCheckTask::PreSplitCheck() {
 #endif
     } while (false);
 
-    DINGO_LOG(INFO) << fmt::format(
+    DINGO_LOG_IF(INFO, FLAGS_print_periodic_split_check) << fmt::format(
         "[split.check][region({})] presplit check result({}) reason({}) approximate size({}/{})", region->Id(),
         need_scan_check, reason, region_metric == nullptr ? 0 : region_metric->InnerRegionMetrics().region_size(),
         split_check_approximate_size);
+
     if (!need_scan_check) {
       continue;
     }

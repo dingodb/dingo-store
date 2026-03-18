@@ -38,10 +38,14 @@
 #include "server/server.h"
 #include "server/service_helper.h"
 #include "vector/vector_index_manager.h"
+#include "brpc/reloadable_flags.h"
 
 namespace dingodb {
 
 DECLARE_bool(region_enable_auto_merge);
+
+DEFINE_bool(print_periodic_merge_check, false, "print periodic merge check. default false");
+BRPC_VALIDATE_GFLAG(print_periodic_merge_check, brpc::PassValidate);
 
 static std::atomic<bool> g_sequential_scan(true);
 
@@ -491,9 +495,11 @@ void PreMergeCheckTask::PreMergeCheck() {
       }
 
     } while (false);
-    DINGO_LOG(INFO) << fmt::format(
-        "[merge.check][region({})] premerge check result({}) reason({}) split_after_merge_interval({})",
-        merge_from->Id(), need_scan_check, reason, interval);
+
+    DINGO_LOG_IF(INFO, FLAGS_print_periodic_merge_check)
+        << fmt::format("[merge.check][region({})] premerge check result({}) reason({}) split_after_merge_interval({})",
+                       merge_from->Id(), need_scan_check, reason, interval);
+
     if (!need_scan_check) {
       continue;
     }

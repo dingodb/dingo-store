@@ -430,7 +430,7 @@ bool StoreRegionMetrics::CollectApproximateSizeMetrics() {
     if (region_version <= last_update_metrics_version &&
         (log_index_id - last_update_metrics_log_index < FLAGS_collect_approximate_size_log_index_interval) &&
         region->GetStoreEngineType() == pb::common::STORE_ENG_RAFT_STORE) {
-      DINGO_LOG(INFO) << fmt::format(
+      DINGO_LOG(DEBUG) << fmt::format(
           "[metrics.region] skip collect approximate size metrics, region({}) log_index_id({}) region_version({}) "
           "last_update_metrics_log_index({}) last_update_metrics_version({})",
           region->Id(), log_index_id, region_version, last_update_metrics_log_index, last_update_metrics_version);
