@@ -4062,7 +4062,7 @@ void DoControlConfig(google::protobuf::RpcController * /*controller*/,
                      std::shared_ptr<Engine> /*raft_engine*/) {
   brpc::ClosureGuard done_guard(done);
 
-  DINGO_LOG(DEBUG) << request->ShortDebugString();
+  DINGO_LOG(INFO) << request->DebugString();
 
   for (const auto &variable : request->control_config_variable()) {
     pb::common::ControlConfigVariable config;
@@ -4073,6 +4073,8 @@ void DoControlConfig(google::protobuf::RpcController * /*controller*/,
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_leader);
     } else if ("FLAGS_enable_balance_region" == variable.name()) {
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_enable_balance_region);
+    } else if ("FLAGS_raft_sync" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
     } else {
       config.set_is_already_set(false);
       config.set_is_error_occurred(true);
