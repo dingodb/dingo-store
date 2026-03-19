@@ -62,6 +62,10 @@ class ToolClient : public std::enable_shared_from_this<ToolClient> {
   static butil::Status RegisterRestore();
   static butil::Status UnregisterRestore(const std::string& restore_task_id);
   static butil::Status RegisterRestoreStatus();
+  static butil::Status DisableRaftSync();
+  static butil::Status EnableRaftSync();
+  static butil::Status QueryRaftSync();
+  static butil::Status CoreRaftSync(const std::string& type, const std::string& action);
 
   ToolClientParams tool_client_params_;
 };

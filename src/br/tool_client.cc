@@ -149,6 +149,24 @@ butil::Status ToolClient::Run() {
       DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
       return status;
     }
+  } else if ("DisableRaftSync" == tool_client_params_.br_client_method) {
+    status = DisableRaftSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("EnableRaftSync" == tool_client_params_.br_client_method) {
+    status = EnableRaftSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
+  } else if ("QueryRaftSync" == tool_client_params_.br_client_method) {
+    status = QueryRaftSync();
+    if (!status.ok()) {
+      DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+      return status;
+    }
   } else {
     std::string s = fmt::format("tool client method not support. {}", tool_client_params_.br_client_method);
     DINGO_LOG(ERROR) << s;
@@ -664,6 +682,188 @@ butil::Status ToolClient::RegisterRestoreStatus() {
   }
 
   return butil::Status::OK();
+}
+
+butil::Status ToolClient::DisableRaftSync() { return CoreRaftSync("false", "DisableRaftSync"); }
+
+butil::Status ToolClient::EnableRaftSync() { return CoreRaftSync("true", "EnableRaftSync"); }
+
+butil::Status ToolClient::QueryRaftSync() { return CoreRaftSync("query", "QueryRaftSync"); }
+
+butil::Status ToolClient::CoreRaftSync(const std::string& type, const std::string& action) {
+  butil::Status return_status;
+  auto coordinator_interaction = br::InteractionManager::GetInstance().GetCoordinatorInteraction();
+  auto store_interaction = br::InteractionManager::GetInstance().GetStoreInteraction();
+  auto index_interaction = br::InteractionManager::GetInstance().GetIndexInteraction();
+  auto document_interaction = br::InteractionManager::GetInstance().GetDocumentInteraction();
+
+  bool is_exist_coordinator = (coordinator_interaction != nullptr ? !coordinator_interaction->IsEmpty() : false);
+  bool is_exist_store = (store_interaction != nullptr ? !store_interaction->IsEmpty() : false);
+  bool is_exist_index = (index_interaction != nullptr ? !index_interaction->IsEmpty() : false);
+  bool is_exist_document = (document_interaction != nullptr ? !document_interaction->IsEmpty() : false);
+
+  if (!is_exist_coordinator && !is_exist_store && !is_exist_index && !is_exist_document) {
+    DINGO_LOG(INFO) << "Coordinator, Store, Index and Document not exist, skip CoreRaftSync";
+    std::cout << "Coordinator, Store, Index and Document not exist, skip CoreRaftSync" << std::endl;
+    return butil::Status::OK();
+  }
+
+  dingodb::pb::store::ControlConfigRequest request;
+  dingodb::pb::store::ControlConfigResponse response;
+
+  request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+
+  dingodb::pb::common::ControlConfigVariable config_raft_sync;
+  config_raft_sync.set_name("FLAGS_raft_sync");
+  config_raft_sync.set_value(type);
+  request.mutable_control_config_variable()->Add(std::move(config_raft_sync));
+
+  // coordinator exist
+  if (is_exist_coordinator) {
+    dingodb::pb::coordinator::ControlConfigRequest coordinator_request;
+    dingodb::pb::coordinator::ControlConfigResponse coordinator_response;
+
+    coordinator_request.mutable_request_info()->set_request_id(br::Helper::GetRandInt());
+    coordinator_request.mutable_control_config_variable()->Add()->CopyFrom(request.control_config_variable(0));
+
+    std::vector<std::string> addrs = coordinator_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      coordinator_response.Clear();
+      std::shared_ptr<ServerInteraction> interaction;
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      std::string name = fmt::format("[{}] CoordinatorService {} {}", i++, action, addr);
+      ToolUtils::PrintRequest(name, coordinator_request);
+
+      status =
+          interaction->SendRequest("CoordinatorService", "ControlConfig", coordinator_request, coordinator_response);
+      ToolUtils::PrintResponse(name, coordinator_response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      if (coordinator_response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(coordinator_response);
+        return_status = butil::Status(coordinator_response.error().errcode(), coordinator_response.error().errmsg());
+        continue;
+      }
+    }
+  }
+
+  // store exist
+  if (is_exist_store) {
+    std::vector<std::string> addrs = store_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      response.Clear();
+
+      std::shared_ptr<ServerInteraction> interaction;
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      std::string name = fmt::format("[{}] StoreService {} {}", i++, action, addr);
+
+      ToolUtils::PrintRequest(name, request);
+
+      status = interaction->SendRequest("StoreService", "ControlConfig", request, response);
+      ToolUtils::PrintResponse(name, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+        continue;
+      }
+    }
+  }
+
+  // index exist
+  if (is_exist_index) {
+    std::vector<std::string> addrs = index_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      response.Clear();
+      std::shared_ptr<ServerInteraction> interaction;
+
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      std::string name = fmt::format("[{}] IndexService {} {}", i++, action, addr);
+
+      ToolUtils::PrintRequest(name, request);
+
+      status = interaction->SendRequest("IndexService", "ControlConfig", request, response);
+      ToolUtils::PrintResponse(name, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+        continue;
+      }
+    }
+  }
+
+  // document exist
+  if (is_exist_document) {
+    std::vector<std::string> addrs = document_interaction->GetAddrs();
+    int i = 0;
+    for (const auto& addr : addrs) {
+      response.Clear();
+      std::shared_ptr<ServerInteraction> interaction;
+
+      butil::Status status = ServerInteraction::CreateInteraction({addr}, interaction);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      std::string name = fmt::format("[{}] DocumentService {} {}", i++, action, addr);
+
+      ToolUtils::PrintRequest(name, request);
+
+      status = interaction->SendRequest("DocumentService", "ControlConfig", request, response);
+      ToolUtils::PrintResponse(name, response);
+      if (!status.ok()) {
+        DINGO_LOG(ERROR) << Utils::FormatStatusError(status);
+        return_status = status;
+        continue;
+      }
+
+      if (response.error().errcode() != dingodb::pb::error::OK) {
+        DINGO_LOG(ERROR) << Utils::FormatResponseError(response);
+        return_status = butil::Status(response.error().errcode(), response.error().errmsg());
+        continue;
+      }
+    }
+  }
+
+  return return_status;
 }
 
 }  // namespace br

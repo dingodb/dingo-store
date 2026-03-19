@@ -612,6 +612,10 @@ int main(int argc, char* argv[]) {
         "--br_client_method-param1=90f84eab-1f19-a41b-91d8-a32e5a31a913\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterRestoreStatus\n");
     printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=RegisterBackupStatus\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=DisableRaftSync\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=EnableRaftSync\n");
+    printf("./dingodb_br --br_type=tool --br_tool_type=client --br_client_method=QueryRaftSync\n");
+
     exit(-1);
   }
 

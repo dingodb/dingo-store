@@ -2589,6 +2589,48 @@ void DocumentServiceImpl::RestoreData(google::protobuf::RpcController* controlle
   }
 }
 
+static void DoControlConfig(StoragePtr storage, google::protobuf::RpcController* controller,
+                            const dingodb::pb::store::ControlConfigRequest* request,
+                            dingodb::pb::store::ControlConfigResponse* response, TrackClosure* done, bool is_sync) {
+  brpc::Controller* cntl = (brpc::Controller*)controller;
+  brpc::ClosureGuard done_guard(done);
+  auto tracker = done->Tracker();
+  tracker->SetServiceQueueWaitTime();
+
+  auto ctx = std::make_shared<Context>(cntl, is_sync ? nullptr : done_guard.release(), request, response);
+  ctx->SetTracker(tracker);
+
+  std::vector<pb::common::ControlConfigVariable> variables;
+  for (const auto& variable : request->control_config_variable()) {
+    variables.push_back(variable);
+  }
+
+  auto status = storage->ControlConfig(ctx, variables, response);
+  if (BAIDU_UNLIKELY(!status.ok())) {
+    ServiceHelper::SetError(response->mutable_error(), status.error_code(), status.error_str());
+    if (!is_sync) done->Run();
+  }
+}
+
+// not for backup & restore, only for sync disk
+void DocumentServiceImpl::ControlConfig(google::protobuf::RpcController* controller,
+                                        const pb::store::ControlConfigRequest* request,
+                                        pb::store::ControlConfigResponse* response, google::protobuf::Closure* done) {
+  auto* svr_done = new ServiceClosure<pb::store::ControlConfigRequest, pb::store::ControlConfigResponse, false>(
+      __func__, done, request, response);
+
+  // Run in queue.
+  auto task = std::make_shared<ServiceTask>([this, controller, request, response, svr_done]() {
+    DoControlConfig(storage_, controller, request, response, svr_done, true);
+  });
+  bool ret = write_worker_set_->ExecuteRR(task);
+  if (BAIDU_UNLIKELY(!ret)) {
+    brpc::ClosureGuard done_guard(svr_done);
+    ServiceHelper::SetError(response->mutable_error(), pb::error::EREQUEST_FULL,
+                            "WorkerSet queue is full, please wait and retry");
+  }
+}
+
 static butil::Status ValidateTxnDumpRequest(const pb::store::TxnDumpRequest* request, store::RegionPtr region) {
   // check if region_epoch is match
   auto epoch_ret = ServiceHelper::ValidateRegionEpoch(request->context().region_epoch(), region);
