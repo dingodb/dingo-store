@@ -2063,6 +2063,8 @@ butil::Status Storage::ControlConfig(std::shared_ptr<Context> /*ctx*/,
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_region_enable_auto_split);
     } else if ("FLAGS_region_enable_auto_merge" == variable.name()) {
       Helper::HandleBoolControlConfigVariable(variable, config, FLAGS_region_enable_auto_merge);
+    } else if ("FLAGS_raft_sync" == variable.name()) {
+      Helper::HandleBoolControlConfigVariable(variable, config, braft::FLAGS_raft_sync);
     } else {
       config.set_is_already_set(false);
       config.set_is_error_occurred(true);
